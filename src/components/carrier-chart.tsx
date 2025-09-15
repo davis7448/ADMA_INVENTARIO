@@ -20,6 +20,14 @@ type CarrierChartProps = {
 const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function CarrierChart({ data }: CarrierChartProps) {
+  if (!data || data.length === 0) {
+    return (
+        <div className="flex h-[250px] w-full items-center justify-center text-muted-foreground">
+            No se encontraron datos.
+        </div>
+    );
+  }
+
   const chartConfig = data.reduce((acc, item, index) => {
     acc[item.name] = {
       label: item.name,
@@ -27,14 +35,6 @@ export default function CarrierChart({ data }: CarrierChartProps) {
     };
     return acc;
   }, {} as any);
-
-  if (data.length === 0) {
-    return (
-        <div className="flex h-[250px] w-full items-center justify-center text-muted-foreground">
-            No hay datos de despachos para este producto.
-        </div>
-    );
-  }
 
   return (
     <ChartContainer config={chartConfig} className="h-[250px] w-full">

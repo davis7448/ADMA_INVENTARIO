@@ -33,7 +33,7 @@ import type { Product, ProductPerformanceData, Vendedor, Platform, ProductVarian
 import SalesChart from './sales-chart';
 import CarrierChart from './carrier-chart';
 import ReturnsChart from './returns-chart';
-import { subDays, format, startOfDay } from 'date-fns';
+import { subDays, format } from 'date-fns';
 import { Button } from './ui/button';
 import { ProductReservationDialog } from './product-reservation-dialog';
 import { LinkIcon } from 'lucide-react';
@@ -90,17 +90,14 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
     return product.reservations.reduce((acc, res) => acc + res.quantity, 0);
   }, [product]);
 
-  const getChartDataForRange = (dataSet: Record<string, number> | undefined) => {
-    const data: { date: string; [key: string]: any }[] = [];
-    if (!dataSet) return [];
-    
+  const getChartDataForRange = (dataSet: Record<string, number> = {}, key: 'sales' | 'returns') => {
+    const data: any[] = [];
     for (let i = 29; i >= 0; i--) {
         const date = subDays(new Date(), i);
         const dayKey = format(date, 'yyyy-MM-dd');
         data.push({
             date: dayKey,
-            ...{ sales: dataSet[dayKey] || 0 },
-            ...{ returns: dataSet[dayKey] || 0 }
+            [key]: dataSet[dayKey] || 0
         });
     }
     return data;
@@ -108,42 +105,42 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   
   const salesData = useMemo(() => {
     if (!performanceData) return [];
-    const dataSet = selectedVariantId === 'total' || !performanceData.salesByVariant?.[selectedVariantId]
+    const dataSet = selectedVariantId === 'total'
       ? performanceData.salesByDay
-      : performanceData.salesByVariant[selectedVariantId].byDay;
-    return getChartDataForRange(dataSet).map(d => ({ date: d.date, sales: d.sales }));
+      : performanceData.salesByVariant?.[selectedVariantId]?.byDay;
+    return getChartDataForRange(dataSet, 'sales');
   }, [performanceData, selectedVariantId]);
   
   const returnsData = useMemo(() => {
     if (!performanceData) return [];
-    const dataSet = selectedVariantId === 'total' || !performanceData.returnsByVariant?.[selectedVariantId]
+    const dataSet = selectedVariantId === 'total'
       ? performanceData.returnsByDay
-      : performanceData.returnsByVariant[selectedVariantId].byDay;
-    return getChartDataForRange(dataSet).map(d => ({ date: d.date, returns: d.returns }));
+      : performanceData.returnsByVariant?.[selectedVariantId]?.byDay;
+    return getChartDataForRange(dataSet, 'returns');
   }, [performanceData, selectedVariantId]);
   
   const salesByCarrierData = useMemo(() => {
     if (!performanceData) return [];
-    if (selectedVariantId === 'total' || !performanceData.salesByVariant?.[selectedVariantId]) {
+    if (selectedVariantId === 'total') {
       return performanceData.salesByCarrier;
     }
-    return performanceData.salesByVariant[selectedVariantId].byCarrier;
+    return performanceData.salesByVariant?.[selectedVariantId]?.byCarrier || [];
   }, [performanceData, selectedVariantId]);
   
   const salesByPlatformData = useMemo(() => {
     if (!performanceData) return [];
-    if (selectedVariantId === 'total' || !performanceData.salesByVariant?.[selectedVariantId]) {
+    if (selectedVariantId === 'total') {
       return performanceData.salesByPlatform;
     }
-    return performanceData.salesByVariant[selectedVariantId].byPlatform;
+    return performanceData.salesByVariant?.[selectedVariantId]?.byPlatform || [];
   }, [performanceData, selectedVariantId]);
   
   const returnsByCarrierData = useMemo(() => {
     if (!performanceData) return [];
-    if (selectedVariantId === 'total' || !performanceData.returnsByVariant?.[selectedVariantId]) {
+    if (selectedVariantId === 'total') {
       return performanceData.returnsByCarrier;
     }
-    return performanceData.returnsByVariant[selectedVariantId].byCarrier;
+    return performanceData.returnsByVariant?.[selectedVariantId]?.byCarrier || [];
   }, [performanceData, selectedVariantId]);
 
 
