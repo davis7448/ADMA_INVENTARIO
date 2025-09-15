@@ -386,6 +386,13 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-4">
+                        <div className="grid grid-cols-12 gap-2 items-start px-2">
+                            <Label className="col-span-3">SKU</Label>
+                            <Label className="col-span-3">Nombre de Variante</Label>
+                            <Label className="col-span-2">Precio</Label>
+                            <Label className="col-span-2">Stock</Label>
+                            <Label className="col-span-2 text-right">Acciones</Label>
+                        </div>
                         {fields.map((field, index) => (
                           <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
                             <FormField
@@ -393,7 +400,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               name={`variants.${index}.sku`}
                               render={({ field }) => (
                                 <FormItem className="col-span-3">
-                                  <FormLabel className="sr-only">SKU</FormLabel>
                                   <FormControl>
                                     <Input placeholder="SKU" {...field} />
                                   </FormControl>
@@ -406,7 +412,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               name={`variants.${index}.name`}
                               render={({ field }) => (
                                 <FormItem className="col-span-3">
-                                  <FormLabel className="sr-only">Variant Name</FormLabel>
                                   <FormControl>
                                     <Input placeholder="Variant Name" {...field} />
                                   </FormControl>
@@ -419,7 +424,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               name={`variants.${index}.price`}
                               render={({ field }) => (
                                 <FormItem className="col-span-2">
-                                  <FormLabel className="sr-only">Price</FormLabel>
                                   <FormControl>
                                     <Input type="number" placeholder="Price" {...field} />
                                   </FormControl>
@@ -432,7 +436,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               name={`variants.${index}.stock`}
                               render={({ field }) => (
                                 <FormItem className="col-span-2">
-                                  <FormLabel className="sr-only">Stock</FormLabel>
                                   <FormControl>
                                     <Input type="number" placeholder="Stock" {...field} />
                                   </FormControl>
@@ -562,3 +565,5 @@ CAM-01-V,Verde,25.00,12"
     </>
   );
 }
+
+    
