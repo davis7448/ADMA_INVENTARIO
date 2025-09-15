@@ -149,20 +149,43 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     }
 
     const handleExportExcel = () => {
-        const dataToExport = filteredProducts.map(p => ({
-            'Nombre': p.name,
-            'SKU': p.sku || (p.productType === 'variable' ? 'N/A (Variable)' : 'N/A'),
-            'Tipo': p.productType,
-            'Categoría': categoryNames[p.categoryId] || 'Unknown',
-            'Rotación': p.rotationCategoryName || 'N/A',
-            'Stock Físico': p.stock,
-            'Stock Pendiente': p.pendingStock || 0,
-            'Stock Averiado': p.damagedStock || 0,
-            'Precio': p.price,
-            'Costo': canEdit ? p.cost : undefined, // Only include cost for admins
-            'Proveedor': supplierNames[p.vendorId] || 'Unknown',
-            'Fecha Compra': p.purchaseDate ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
-        }));
+        const dataToExport = filteredProducts.flatMap(p => {
+            const baseData = {
+                'Categoría': categoryNames[p.categoryId] || 'Unknown',
+                'Rotación': p.rotationCategoryName || 'N/A',
+                'Stock Pendiente': p.pendingStock || 0,
+                'Stock Averiado': p.damagedStock || 0,
+                'Costo': canEdit ? p.cost : undefined,
+                'Proveedor': supplierNames[p.vendorId] || 'Unknown',
+                'Fecha Compra': p.purchaseDate ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
+                'Link de Contenido': p.contentLink || '',
+            };
+
+            if (p.productType === 'variable' && p.variants && p.variants.length > 0) {
+                return p.variants.map(variant => ({
+                    'Nombre': `${p.name} - ${variant.name}`,
+                    'SKU': variant.sku,
+                    'Tipo': 'variable',
+                    ...baseData,
+                    'Stock Físico': variant.stock,
+                    'Precio': variant.price,
+                }));
+            } else {
+                return {
+                    'Nombre': p.name,
+                    'SKU': p.sku || 'N/A',
+                    'Tipo': 'simple',
+                    ...baseData,
+                    'Stock Físico': p.stock,
+                    'Precio': p.price,
+                };
+            }
+        });
+
+        // If user is not admin, remove the Cost property from all objects
+        if (!canEdit) {
+            dataToExport.forEach(item => delete item.Costo);
+        }
     
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
