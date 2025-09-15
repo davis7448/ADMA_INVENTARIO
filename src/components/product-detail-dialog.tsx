@@ -92,12 +92,12 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
 
   const salesData = useMemo(() => {
     if (!performanceData) return [];
-    
-    const dataSet = selectedVariantId === 'total' 
-        ? performanceData.salesByDay 
-        : performanceData.salesByVariant?.[selectedVariantId]?.byDay || {};
-
-    const data = Array.from({ length: 30 }).map((_, i) => {
+  
+    const dataSet = selectedVariantId === 'total' || !performanceData.salesByVariant?.[selectedVariantId]
+      ? performanceData.salesByDay
+      : performanceData.salesByVariant[selectedVariantId].byDay;
+  
+    return Array.from({ length: 30 }).map((_, i) => {
       const date = subDays(new Date(), i);
       const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
       return {
@@ -105,49 +105,47 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
         sales: dataSet[dayKey] || 0,
       };
     }).reverse();
-
-    return data;
   }, [performanceData, selectedVariantId]);
-
+  
   const returnsData = useMemo(() => {
     if (!performanceData) return [];
-    
-    const dataSet = selectedVariantId === 'total'
-        ? performanceData.returnsByDay
-        : performanceData.returnsByVariant?.[selectedVariantId]?.byDay || {};
-
-    const data = Array.from({ length: 30 }).map((_, i) => {
-        const date = subDays(new Date(), i);
-        const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
-        return {
-            date: dayKey,
-            returns: dataSet[dayKey] || 0,
-        };
+  
+    const dataSet = selectedVariantId === 'total' || !performanceData.returnsByVariant?.[selectedVariantId]
+      ? performanceData.returnsByDay
+      : performanceData.returnsByVariant[selectedVariantId].byDay;
+  
+    return Array.from({ length: 30 }).map((_, i) => {
+      const date = subDays(new Date(), i);
+      const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
+      return {
+        date: dayKey,
+        returns: dataSet[dayKey] || 0,
+      };
     }).reverse();
   }, [performanceData, selectedVariantId]);
-
+  
   const salesByCarrierData = useMemo(() => {
     if (!performanceData) return [];
-    const dataSet = selectedVariantId === 'total'
-        ? performanceData.salesByCarrier
-        : performanceData.salesByVariant?.[selectedVariantId]?.byCarrier || [];
-    return dataSet;
+    if (selectedVariantId === 'total' || !performanceData.salesByVariant?.[selectedVariantId]) {
+      return performanceData.salesByCarrier;
+    }
+    return performanceData.salesByVariant[selectedVariantId].byCarrier;
   }, [performanceData, selectedVariantId]);
-
+  
   const salesByPlatformData = useMemo(() => {
     if (!performanceData) return [];
-    const dataSet = selectedVariantId === 'total'
-        ? performanceData.salesByPlatform
-        : performanceData.salesByVariant?.[selectedVariantId]?.byPlatform || [];
-    return dataSet;
+    if (selectedVariantId === 'total' || !performanceData.salesByVariant?.[selectedVariantId]) {
+      return performanceData.salesByPlatform;
+    }
+    return performanceData.salesByVariant[selectedVariantId].byPlatform;
   }, [performanceData, selectedVariantId]);
-
+  
   const returnsByCarrierData = useMemo(() => {
     if (!performanceData) return [];
-    const dataSet = selectedVariantId === 'total'
-        ? performanceData.returnsByCarrier
-        : performanceData.returnsByVariant?.[selectedVariantId]?.byCarrier || [];
-    return dataSet;
+    if (selectedVariantId === 'total' || !performanceData.returnsByVariant?.[selectedVariantId]) {
+      return performanceData.returnsByCarrier;
+    }
+    return performanceData.returnsByVariant[selectedVariantId].byCarrier;
   }, [performanceData, selectedVariantId]);
 
 
