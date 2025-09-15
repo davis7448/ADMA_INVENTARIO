@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -290,7 +289,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <h1 className="text-3xl font-bold font-headline tracking-tight">Dashboard Operativo</h1>
         <Popover>
             <PopoverTrigger asChild>
@@ -298,7 +297,7 @@ export default function DashboardPage() {
                     id="date"
                     variant={"outline"}
                     className={cn(
-                        "w-[260px] justify-start text-left font-normal",
+                        "w-full sm:w-[260px] justify-start text-left font-normal",
                         !dateRange && "text-muted-foreground"
                     )}
                 >
@@ -330,77 +329,80 @@ export default function DashboardPage() {
         </Popover>
       </div>
 
-       <Card>
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <CardTitle>Filtros Avanzados</CardTitle>
-                    {hasActiveFilters && <Button variant="ghost" onClick={clearFilters}>Limpiar Filtros</Button>}
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="platform-filter">Plataforma</Label>
-                        <Select value={filterPlatform} onValueChange={setFilterPlatform}>
-                            <SelectTrigger id="platform-filter"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas las Plataformas</SelectItem>
-                                {allPlatforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="carrier-filter">Transportadora</Label>
-                        <Select value={filterCarrier} onValueChange={setFilterCarrier}>
-                            <SelectTrigger id="carrier-filter"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas las Transportadoras</SelectItem>
-                                {allCarriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="category-filter">Categoría</Label>
-                        <Select value={filterCategory} onValueChange={(value) => { setFilterCategory(value); setFilterProduct(''); }}>
-                            <SelectTrigger id="category-filter"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas las Categorías</SelectItem>
-                                {allCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Producto</Label>
-                        <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" role="combobox" aria-expanded={productComboboxOpen} className="w-full justify-between">
-                                    {filterProduct ? allProducts.find((p) => p.id === filterProduct)?.name : "Seleccionar producto..."}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Buscar producto..." />
-                                    <CommandEmpty>No se encontró el producto.</CommandEmpty>
-                                    <CommandGroup>
-                                        <CommandItem key="all-products" onSelect={() => { setFilterProduct(''); setProductComboboxOpen(false); }}>
-                                            <Check className={cn("mr-2 h-4 w-4", filterProduct === '' ? "opacity-100" : "opacity-0")} />
-                                            Todos los productos
-                                        </CommandItem>
-                                        {allProducts.map((p) => (
-                                            <CommandItem key={p.id} value={p.name} onSelect={() => { setFilterProduct(p.id === filterProduct ? '' : p.id); setProductComboboxOpen(false); }}>
-                                                <Check className={cn("mr-2 h-4 w-4", filterProduct === p.id ? "opacity-100" : "opacity-0")} />
-                                                {p.name}
-                                            </CommandItem>
-                                        ))}
-                                    </CommandGroup>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+      <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center">
+            <h3 className="text-lg font-semibold mb-2 sm:mb-0">Filtros Avanzados</h3>
+            {hasActiveFilters && (
+                <Button variant="ghost" onClick={clearFilters} className="text-sm">
+                    <X className="mr-2 h-4 w-4" />
+                    Limpiar Filtros
+                </Button>
+            )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-2">
+                <Label htmlFor="platform-filter">Plataforma</Label>
+                <Select value={filterPlatform} onValueChange={setFilterPlatform}>
+                    <SelectTrigger id="platform-filter"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todas las Plataformas</SelectItem>
+                        {allPlatforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="carrier-filter">Transportadora</Label>
+                <Select value={filterCarrier} onValueChange={setFilterCarrier}>
+                    <SelectTrigger id="carrier-filter"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todas las Transportadoras</SelectItem>
+                        {allCarriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="category-filter">Categoría</Label>
+                <Select value={filterCategory} onValueChange={(value) => { setFilterCategory(value); setFilterProduct(''); }}>
+                    <SelectTrigger id="category-filter"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todas las Categorías</SelectItem>
+                        {allCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2">
+                <Label>Producto</Label>
+                <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" aria-expanded={productComboboxOpen} className="w-full justify-between font-normal">
+                            <span className="truncate">
+                                {filterProduct ? allProducts.find((p) => p.id === filterProduct)?.name : "Seleccionar producto..."}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                        <Command>
+                            <CommandInput placeholder="Buscar producto..." />
+                            <CommandEmpty>No se encontró el producto.</CommandEmpty>
+                            <CommandGroup className="max-h-60 overflow-y-auto">
+                                <CommandItem key="all-products" onSelect={() => { setFilterProduct(''); setProductComboboxOpen(false); }}>
+                                    <Check className={cn("mr-2 h-4 w-4", filterProduct === '' ? "opacity-100" : "opacity-0")} />
+                                    Todos los productos
+                                </CommandItem>
+                                {allProducts.map((p) => (
+                                    <CommandItem key={p.id} value={p.name} onSelect={() => { setFilterProduct(p.id === filterProduct ? '' : p.id); setProductComboboxOpen(false); }}>
+                                        <Check className={cn("mr-2 h-4 w-4", filterProduct === p.id ? "opacity-100" : "opacity-0")} />
+                                        <span className="truncate">{p.name}</span>
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
+            </div>
+        </div>
+      </div>
 
 
       {loading ? (
@@ -602,3 +604,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
