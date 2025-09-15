@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -17,15 +16,24 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getInventoryMovements } from '@/lib/api';
+import { getInventoryMovements, getProducts } from '@/lib/api';
 import { format } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
-import type { InventoryMovement } from '@/lib/types';
+import type { InventoryMovement, Product } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
+import { Download } from 'lucide-react';
+import { generatePickingListPDF } from '@/lib/pdf';
+
+interface DispatchOrderProduct {
+    name: string;
+    sku: string;
+    quantity: number;
+}
 
 interface DispatchOrder {
   id: string;
@@ -33,13 +41,14 @@ interface DispatchOrder {
   totalItems: number;
   platform: string;
   carrier: string;
-  products: { name: string; quantity: number }[];
+  products: DispatchOrderProduct[];
 }
 
 export default function HistoryPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,13 +58,17 @@ export default function HistoryPage() {
   }, [user, router]);
 
   useEffect(() => {
-    async function fetchMovements() {
+    async function fetchData() {
         setLoading(true);
-        const fetchedMovements = await getInventoryMovements();
+        const [fetchedMovements, fetchedProducts] = await Promise.all([
+            getInventoryMovements(),
+            getProducts()
+        ]);
         setMovements(fetchedMovements);
+        setProducts(fetchedProducts);
         setLoading(false);
     }
-    fetchMovements();
+    fetchData();
   }, []);
   
   const sortedMovements = useMemo(() => 
@@ -66,6 +79,7 @@ export default function HistoryPage() {
   const dispatchOrders = useMemo(() => {
     const dispatches: Record<string, DispatchOrder> = {};
     const salidaMovements = movements.filter(m => m.type === 'Salida' && m.notes.includes('Dispatch ID:'));
+    const productsById = new Map(products.map(p => [p.id, p]));
     
     salidaMovements.forEach(m => {
         const match = m.notes.match(/Dispatch ID: (.*?)\./);
@@ -86,12 +100,20 @@ export default function HistoryPage() {
             };
         }
         
-        dispatches[dispatchId].products.push({ name: m.productName, quantity: m.quantity });
+        const product = productsById.get(m.productId);
+        
+        dispatches[dispatchId].products.push({ name: m.productName, sku: product?.sku || 'N/A', quantity: m.quantity });
         dispatches[dispatchId].totalItems += m.quantity;
     });
 
     return Object.values(dispatches).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [movements]);
+  }, [movements, products]);
+
+  const handleDownloadPdf = (order: DispatchOrder) => {
+    const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
+    generatePickingListPDF(order.id, productsForPdf, order.platform, order.carrier, new Date(order.date));
+  };
+
 
   const getBadgeClass = (type: 'Entrada' | 'Salida') => {
     switch (type) {
@@ -216,22 +238,32 @@ export default function HistoryPage() {
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent>
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Producto</TableHead>
-                                                    <TableHead className="text-right">Cantidad</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {order.products.map((p, i) => (
-                                                    <TableRow key={i}>
-                                                        <TableCell>{p.name}</TableCell>
-                                                        <TableCell className="text-right">{p.quantity}</TableCell>
+                                        <div className="space-y-4">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Producto</TableHead>
+                                                        <TableHead>SKU</TableHead>
+                                                        <TableHead className="text-right">Cantidad</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {order.products.map((p, i) => (
+                                                        <TableRow key={i}>
+                                                            <TableCell>{p.name}</TableCell>
+                                                            <TableCell>{p.sku}</TableCell>
+                                                            <TableCell className="text-right">{p.quantity}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                            <div className="flex justify-end">
+                                                <Button variant="outline" size="sm" onClick={() => handleDownloadPdf(order)}>
+                                                    <Download className="mr-2 h-4 w-4" />
+                                                    Descargar PDF
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </AccordionContent>
                                 </AccordionItem>
                             ))}

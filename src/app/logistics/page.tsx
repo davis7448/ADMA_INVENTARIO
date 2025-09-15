@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -57,10 +56,9 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { v4 as uuidv4 } from 'uuid';
-import { format } from 'date-fns';
+import { generatePickingListPDF } from '@/lib/pdf';
+
 
 interface DispatchedProduct extends Product {
     dispatchQuantity: number;
@@ -191,40 +189,6 @@ export default function LogisticsPage() {
 
     const handleRemoveProduct = (productId: string) => {
         setDispatchedProducts(prev => prev.filter(p => p.id !== productId));
-    };
-    
-    const generatePickingListPDF = (dispatchId: string, products: DispatchedProduct[], platformName: string, carrierName: string) => {
-        const doc = new jsPDF();
-        
-        doc.setFontSize(20);
-        doc.text("Picking List", 105, 20, { align: 'center' });
-
-        doc.setFontSize(12);
-        doc.text(`Dispatch ID: ${dispatchId}`, 15, 35);
-        doc.text(`Date: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 15, 42);
-        doc.text(`Platform: ${platformName}`, 15, 49);
-        doc.text(`Carrier: ${carrierName}`, 15, 56);
-
-        const tableColumn = ["SKU", "Product Name", "Quantity"];
-        const tableRows: (string|number)[][] = [];
-
-        products.forEach(product => {
-            const productData = [
-                product.sku,
-                product.name,
-                product.dispatchQuantity
-            ];
-            tableRows.push(productData);
-        });
-
-        // @ts-ignore - jspdf types might not be perfectly up to date with autoTable
-        doc.autoTable({
-            head: [tableColumn],
-            body: tableRows,
-            startY: 65,
-        });
-
-        doc.save(`picking-list-${dispatchId}.pdf`);
     };
 
     const handleCreateDispatch = () => {
