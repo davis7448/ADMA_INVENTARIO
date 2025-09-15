@@ -29,8 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, getInventoryMovementsByDate } from '@/lib/api';
-import type { Product, Carrier, Platform } from '@/lib/types';
+import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, getInventoryMovementsByDate, createDispatchOrder } from '@/lib/api';
+import type { Product, Carrier, Platform, DispatchOrderProduct } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -224,30 +224,48 @@ export default function LogisticsPage() {
 
         const dispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
 
-        const promises = dispatchedProducts.map(product => {
-            updateProductStock(product.id, product.dispatchQuantity, 'subtract');
-            return addInventoryMovement({
-                type: 'Salida',
-                productId: product.id,
-                productName: product.name,
-                quantity: product.dispatchQuantity,
-                notes: `Dispatch ID: ${dispatchId}. Plataforma: ${platformName}, Transportadora: ${carrierName}`
+        const productsForDispatch: DispatchOrderProduct[] = dispatchedProducts.map(p => ({
+            productId: p.id,
+            sku: p.sku,
+            name: p.name,
+            quantity: p.dispatchQuantity
+        }));
+
+        try {
+            await createDispatchOrder({
+                dispatchId,
+                platformId: platform,
+                carrierId: carrier,
+                products: productsForDispatch
             });
-        });
 
-        await Promise.all(promises);
-        
-        generatePickingListPDF(dispatchId, dispatchedProducts, platformName, carrierName);
+            const pdfProducts = dispatchedProducts.map(p => ({
+                sku: p.sku,
+                name: p.name,
+                dispatchQuantity: p.dispatchQuantity,
+            }))
+            
+            generatePickingListPDF(dispatchId, pdfProducts, platformName, carrierName);
+    
+            toast({
+                title: "Salida Creada y PDF Generado",
+                description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.dispatchQuantity, 0)} unidades. El stock ha sido actualizado.`
+            });
+    
+            setPlatform('');
+            setCarrier('');
+            setDispatchedProducts([]);
+            router.refresh();
 
-        toast({
-            title: "Salida Creada y PDF Generado",
-            description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.dispatchQuantity, 0)} unidades. El stock ha sido actualizado.`
-        });
-
-        setPlatform('');
-        setCarrier('');
-        setDispatchedProducts([]);
-        router.refresh();
+        } catch (error) {
+            console.error("Failed to create dispatch:", error);
+            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado';
+            toast({
+                variant: 'destructive',
+                title: 'Error al Crear Despacho',
+                description: errorMessage,
+            })
+        }
     }
 
     // --- ENTRADAS ---

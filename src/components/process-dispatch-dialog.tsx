@@ -1,0 +1,222 @@
+
+"use client";
+
+import { useState } from 'react';
+import type { DispatchOrder, Product } from '@/lib/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from './ui/textarea';
+import { Label } from './ui/label';
+import { useToast } from '@/hooks/use-toast';
+import { processDispatch } from '@/lib/api';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { Input } from './ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  } from '@/components/ui/select';
+import { Trash2 } from 'lucide-react';
+
+interface ProcessDispatchDialogProps {
+  order: DispatchOrder;
+  productsById: Record<string, Product>;
+  children: React.ReactNode;
+  onDispatchProcessed: () => void;
+}
+
+interface ExceptionItem {
+  productId: string;
+  quantity: number;
+}
+
+export function ProcessDispatchDialog({ order, productsById, children, onDispatchProcessed }: ProcessDispatchDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [trackingNumbers, setTrackingNumbers] = useState('');
+  const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const { toast } = useToast();
+
+  const handleAddException = () => {
+    setExceptions([...exceptions, { productId: '', quantity: 1 }]);
+  };
+
+  const handleExceptionChange = (index: number, field: 'productId' | 'quantity', value: string | number) => {
+    const newExceptions = [...exceptions];
+    if (field === 'productId') {
+        newExceptions[index].productId = value as string;
+    } else {
+        newExceptions[index].quantity = Number(value);
+    }
+    setExceptions(newExceptions);
+  };
+
+  const handleRemoveException = (index: number) => {
+    setExceptions(exceptions.filter((_, i) => i !== index));
+  }
+
+  const handleSubmit = async () => {
+    setIsProcessing(true);
+    
+    // Basic validation
+    const trackingList = trackingNumbers.split('\n').map(t => t.trim()).filter(t => t);
+    if (trackingList.length === 0) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Debe ingresar al menos un número de guía.' });
+        setIsProcessing(false);
+        return;
+    }
+    
+    for (const ex of exceptions) {
+        const orderProduct = order.products.find(p => p.productId === ex.productId);
+        if (!orderProduct) {
+            toast({ variant: 'destructive', title: 'Error', description: `El producto de excepción con ID ${ex.productId} no está en la orden.` });
+            setIsProcessing(false);
+            return;
+        }
+        if (ex.quantity > orderProduct.quantity) {
+            toast({ variant: 'destructive', title: 'Error', description: `La cantidad de la excepción para ${productsById[ex.productId]?.name} supera la cantidad de la orden.` });
+            setIsProcessing(false);
+            return;
+        }
+    }
+
+
+    try {
+        await processDispatch(order.id, trackingList, exceptions);
+        toast({ title: 'Éxito', description: 'La orden ha sido despachada correctamente.' });
+        onDispatchProcessed();
+        setOpen(false);
+        setTrackingNumbers('');
+        setExceptions([]);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+        toast({ variant: 'destructive', title: 'Error al procesar', description: errorMessage });
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent className="sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Procesar Despacho: {order.dispatchId}</DialogTitle>
+          <DialogDescription>
+            Ingresa los números de guía y registra cualquier excepción de productos que no se pudieron enviar.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 max-h-[60vh] overflow-y-auto">
+            <div>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Productos en la Orden</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead>SKU</TableHead>
+                                    <TableHead className="text-right">Cant.</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {order.products.map(p => (
+                                    <TableRow key={p.productId}>
+                                        <TableCell>{p.name}</TableCell>
+                                        <TableCell>{p.sku}</TableCell>
+                                        <TableCell className="text-right">{p.quantity}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            </div>
+            <div className="space-y-6">
+                <div>
+                    <Label htmlFor="tracking-numbers">Números de Guía (uno por línea)</Label>
+                    <Textarea
+                        id="tracking-numbers"
+                        placeholder="Pistolea o pega aquí los números de guía"
+                        value={trackingNumbers}
+                        onChange={(e) => setTrackingNumbers(e.target.value)}
+                        rows={10}
+                    />
+                </div>
+                <div>
+                    <Card>
+                        <CardHeader>
+                            <div className="flex justify-between items-center">
+                                <CardTitle>Excepciones (No Enviados)</CardTitle>
+                                <Button variant="outline" size="sm" onClick={handleAddException}>Añadir Excepción</Button>
+                            </div>
+                            <CardDescription>Productos que no salieron en este despacho. Se devolverán al stock.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {exceptions.map((ex, index) => (
+                                <div key={index} className="flex items-center gap-2">
+                                    <Select 
+                                        value={ex.productId} 
+                                        onValueChange={(val) => handleExceptionChange(index, 'productId', val)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Seleccionar producto" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {order.products.map(p => (
+                                                <SelectItem key={p.productId} value={p.productId}>{p.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Input 
+                                        type="number" 
+                                        className="w-24"
+                                        placeholder="Cant."
+                                        value={ex.quantity}
+                                        onChange={(e) => handleExceptionChange(index, 'quantity', e.target.value)}
+                                        min="1"
+                                    />
+                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveException(index)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </div>
+                            ))}
+                            {exceptions.length === 0 && (
+                                <p className="text-sm text-muted-foreground text-center">No hay excepciones registradas.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button onClick={handleSubmit} disabled={isProcessing}>
+            {isProcessing ? 'Procesando...' : 'Confirmar Despacho'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -42,6 +42,7 @@ type NavItem = {
         ],
     },
     { href: '/logistics', label: 'Logística', roles: ['admin', 'logistics'] },
+    { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics'] },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
   ];
 

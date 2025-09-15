@@ -1,4 +1,5 @@
 
+
 export type Product = {
   id: string;
   sku: string;
@@ -15,7 +16,7 @@ export type Product = {
 
 export type Supplier = {
   id: string;
-  name: string;
+  name:string;
   contact: {
     email: string;
     phone: string;
@@ -81,3 +82,21 @@ export type Platform = {
     name: string;
 };
 
+export interface DispatchOrderProduct {
+    productId: string;
+    name: string;
+    sku: string;
+    quantity: number;
+}
+  
+export interface DispatchOrder {
+    id: string; // Firestore document ID
+    dispatchId: string; // Human-readable ID
+    date: string;
+    totalItems: number;
+    platformId: string;
+    carrierId: string;
+    products: DispatchOrderProduct[];
+    status: 'Pendiente' | 'Despachada' | 'Parcial';
+    trackingNumbers: string[];
+}
