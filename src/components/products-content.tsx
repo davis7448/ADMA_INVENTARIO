@@ -290,9 +290,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             </TableRow>
                         </TableHeader>
                         <Accordion type="single" collapsible className="w-full" asChild>
-                            <>
+                            <TableBody>
                             {loading ? (
-                                <TableBody>
+                                <>
                                 {Array.from({ length: 5 }).map((_, i) => (
                                     <TableRow key={i}>
                                         <TableCell colSpan={canEdit ? 11 : 10}>
@@ -300,11 +300,11 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                         </TableCell>
                                     </TableRow>
                                 ))}
-                                </TableBody>
+                                </>
                             ) : filteredProducts.length > 0 ? (
                                 filteredProducts.map((product) => (
                                     <AccordionItem value={product.id} key={product.id} asChild>
-                                        <TableBody>
+                                        <tbody className="w-full">
                                             <TableRow 
                                                 className={cn("data-[state=closed]:border-b", product.productType === 'simple' && 'cursor-pointer hover:bg-muted/50')}
                                                 onClick={() => handleRowClick(product)}
@@ -395,19 +395,19 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                     </TableCell>
                                                 </TableRow>
                                             )}
-                                        </TableBody>
+                                        </tbody>
                                     </AccordionItem>
                                 ))
                             ) : (
-                                <TableBody>
+                                
                                     <TableRow>
                                         <TableCell colSpan={canEdit ? 11 : 10} className="text-center h-24">
                                             No se encontraron productos con los filtros actuales.
                                         </TableCell>
                                     </TableRow>
-                                </TableBody>
+                                
                             )}
-                            </>
+                            </TableBody>
                         </Accordion>
                     </Table>
                 </div>
