@@ -395,8 +395,8 @@ function DispatchPageContent() {
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
-                                    <div className="flex items-center border-b">
-                                        <AccordionTrigger className="flex-grow">
+                                    <div className="flex w-full items-center border-b">
+                                        <AccordionTrigger className="w-[80%]">
                                             <div className="grid grid-cols-2 w-full items-center text-sm">
                                                 <div className="text-left">
                                                     <p className="font-semibold">{order.dispatchId}</p>
@@ -410,7 +410,7 @@ function DispatchPageContent() {
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
-                                        <div className="pr-4" onClick={(e) => e.stopPropagation()}>
+                                        <div className="w-[20%] flex justify-end pr-4" onClick={(e) => e.stopPropagation()}>
                                             <ProcessDispatchDialog
                                                 order={orderForDialog}
                                                 productsById={productsById}
