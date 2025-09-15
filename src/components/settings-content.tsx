@@ -10,23 +10,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { getRotationCategories, updateRotationCategories } from '@/lib/api';
-import type { RotationCategory } from '@/lib/types';
-import { useAuth } from '@/hooks/use-auth';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { Input } from './ui/input';
-import { Button } from './ui/button';
 import { Label } from './ui/label';
+import { getRotationCategories, updateRotationCategories, getUsers } from '@/lib/api';
+import type { RotationCategory, User } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-
+import { Skeleton } from '@/components/ui/skeleton';
+import { UserManagement } from './user-management';
 
 interface SettingsContentProps {
     initialRotationCategories: RotationCategory[];
@@ -34,10 +26,24 @@ interface SettingsContentProps {
 
 export function SettingsContent({ initialRotationCategories }: SettingsContentProps) {
     const [rotationCategories, setRotationCategories] = useState<RotationCategory[]>(initialRotationCategories);
-    const [loading, setLoading] = useState(false);
+    const [users, setUsers] = useState<User[]>([]);
+    const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const { user } = useAuth();
     const { toast } = useToast();
+
+    const fetchData = async () => {
+        setLoading(true);
+        const fetchedUsers = await getUsers();
+        setUsers(fetchedUsers);
+        setLoading(false);
+    }
+
+    useEffect(() => {
+        if (user?.role === 'admin') {
+            fetchData();
+        }
+    }, [user]);
 
     const handleThresholdChange = (id: string, value: string) => {
         const numericValue = value === '' ? 0 : parseInt(value, 10);
@@ -75,9 +81,14 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-bold font-headline tracking-tight">Configuración</h1>
-              <p className="text-muted-foreground">Gestiona los parámetros y clasificaciones del sistema.</p>
+              <p className="text-muted-foreground">Gestiona los parámetros y usuarios del sistema.</p>
             </div>
           </div>
+          
+          {canEdit && (
+            <UserManagement initialUsers={users} onUsersUpdate={fetchData} loading={loading} />
+          )}
+
           <Card>
             <CardHeader>
                 <CardTitle>Clasificación de Rotación de Productos</CardTitle>

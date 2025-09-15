@@ -1,6 +1,6 @@
 
 
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -333,6 +333,12 @@ export const getUsers = async (): Promise<User[]> => {
 
 export const addUser = async (user: Omit<User, 'id'>): Promise<string> => {
     const usersCol = collection(db, 'users');
+    // Ensure email is unique
+    const q = query(usersCol, where("email", "==", user.email));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        throw new Error("A user with this email already exists.");
+    }
     const docRef = await addDoc(usersCol, user);
     return docRef.id;
 };
@@ -350,6 +356,15 @@ export const findUserByEmail = async (email: string): Promise<User | null> => {
     return { id: userDoc.id, ...userDoc.data() } as User;
 };
 
+export const updateUserRoleInDb = async (userId: string, role: User['role']) => {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { role });
+};
+
+export const sendPasswordReset = async (email: string) => {
+    const auth = getAuth();
+    await sendPasswordResetEmail(auth, email);
+};
 
 // Inventory Movement Functions
 export const getInventoryMovements = async (days?: number): Promise<InventoryMovement[]> => {

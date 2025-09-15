@@ -207,3 +207,21 @@ export type CreateReservationFormState = {
   };
   success: boolean;
 };
+
+// User Management Schemas
+export const CreateUserFormSchema = z.object({
+    name: z.string().min(1, 'Name is required.'),
+    email: z.string().email('Invalid email address.'),
+    password: z.string().min(6, 'Password must be at least 6 characters.'),
+    role: z.enum(['admin', 'logistics', 'commercial'], {
+        required_error: 'Role is required.',
+    }),
+});
+
+export type CreateUserFormValues = z.infer<typeof CreateUserFormSchema>;
+
+export type CreateUserFormState = {
+    message: string;
+    errors?: z.ZodError<CreateUserFormValues>['formErrors']['fieldErrors'];
+    success: boolean;
+};
