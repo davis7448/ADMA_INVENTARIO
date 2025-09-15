@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventoryMovements, getPlatforms } from '@/lib/api';
 import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform } from '@/lib/types';
-import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X } from 'lucide-react';
+import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -34,8 +34,8 @@ import DashboardReturnsChart from '@/components/dashboard-returns-chart';
 import { Progress } from '@/components/ui/progress';
 import DashboardPlatformCarrierChart from '@/components/dashboard-platform-carrier-chart';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Badge } from '@/components/ui/badge';
 
 
 export default function DashboardPage() {
@@ -51,12 +51,11 @@ export default function DashboardPage() {
   const [allMovements, setAllMovements] = useState<InventoryMovement[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter states
-  const [filterPlatform, setFilterPlatform] = useState('all');
-  const [filterCarrier, setFilterCarrier] = useState('all');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [filterProduct, setFilterProduct] = useState('');
-  const [productComboboxOpen, setProductComboboxOpen] = useState(false);
+  // Filter states - now arrays for multi-select
+  const [filterPlatforms, setFilterPlatforms] = useState<string[]>([]);
+  const [filterCarriers, setFilterCarriers] = useState<string[]>([]);
+  const [filterCategories, setFilterCategories] = useState<string[]>([]);
+  const [filterProducts, setFilterProducts] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -82,31 +81,32 @@ export default function DashboardPage() {
   }, []);
 
   const clearFilters = () => {
-    setFilterPlatform('all');
-    setFilterCarrier('all');
-    setFilterCategory('all');
-    setFilterProduct('');
+    setFilterPlatforms([]);
+    setFilterCarriers([]);
+    setFilterCategories([]);
+    setFilterProducts([]);
   };
 
-  const hasActiveFilters = filterPlatform !== 'all' || filterCarrier !== 'all' || filterCategory !== 'all' || filterProduct !== '';
+  const hasActiveFilters = filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0;
 
   const filteredData = useMemo(() => {
     const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
     const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
-    const productIdsInCategory = filterCategory === 'all' 
-        ? null 
-        : allProducts.filter(p => p.categoryId === filterCategory).map(p => p.id);
+    const productIdsInCategory = filterCategories.length > 0 
+        ? allProducts.filter(p => filterCategories.includes(p.categoryId)).map(p => p.id)
+        : null;
 
     let ordersInPeriod = allOrders.filter(order => {
         const orderDate = new Date(order.date);
         const dateMatch = orderDate >= fromDate && orderDate <= toDate;
-        const platformMatch = filterPlatform === 'all' || order.platformId === filterPlatform;
-        const carrierMatch = filterCarrier === 'all' || order.carrierId === filterCarrier;
+        
+        const platformMatch = filterPlatforms.length === 0 || filterPlatforms.includes(order.platformId);
+        const carrierMatch = filterCarriers.length === 0 || filterCarriers.includes(order.carrierId);
         
         let productMatch = true;
-        if (filterProduct) {
-            productMatch = order.products.some(p => p.productId === filterProduct);
+        if (filterProducts.length > 0) {
+            productMatch = order.products.some(p => filterProducts.includes(p.productId));
         } else if (productIdsInCategory) {
             productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
         }
@@ -129,8 +129,8 @@ export default function DashboardPage() {
         }
 
         let productMatch = true;
-        if (filterProduct) {
-            productMatch = m.productId === filterProduct;
+        if (filterProducts.length > 0) {
+            productMatch = filterProducts.includes(m.productId);
         } else if (productIdsInCategory) {
             productMatch = productIdsInCategory.includes(m.productId);
         }
@@ -285,7 +285,74 @@ export default function DashboardPage() {
       mostUsedCarrier,
       platformWithMostOrders,
     };
-  }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allPlatforms, allMovements, filterPlatform, filterCarrier, filterCategory, filterProduct]);
+  }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allPlatforms, allMovements, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
+
+  interface MultiSelectFilterProps<T extends { id: string; name: string }> {
+    title: string;
+    options: T[];
+    selected: string[];
+    onSelectedChange: (selected: string[]) => void;
+  }
+  
+  function MultiSelectFilter<T extends { id: string; name: string }>({
+    title,
+    options,
+    selected,
+    onSelectedChange,
+  }: MultiSelectFilterProps<T>) {
+    const handleSelect = (id: string) => {
+      const isSelected = selected.includes(id);
+      if (isSelected) {
+        onSelectedChange(selected.filter((s) => s !== id));
+      } else {
+        onSelectedChange([...selected, id]);
+      }
+    };
+  
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="w-full justify-start font-normal">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            {title}
+            {selected.length > 0 && (
+              <Badge variant="secondary" className="ml-auto rounded-sm px-2">
+                {selected.length}
+              </Badge>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder={`Buscar ${title.toLowerCase()}...`} />
+            <CommandList>
+              <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+              <CommandGroup>
+                {options.map((option) => (
+                  <CommandItem
+                    key={option.id}
+                    onSelect={() => handleSelect(option.id)}
+                  >
+                    <div
+                      className={cn(
+                        "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                        selected.includes(option.id)
+                          ? "bg-primary text-primary-foreground"
+                          : "opacity-50 [&_svg]:invisible"
+                      )}
+                    >
+                      <Check className="h-4 w-4" />
+                    </div>
+                    <span>{option.name}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -331,67 +398,11 @@ export default function DashboardPage() {
 
       <div className="p-4 border rounded-lg bg-muted/50">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-            <div className="space-y-2">
-                <Label htmlFor="platform-filter">Plataforma</Label>
-                <Select value={filterPlatform} onValueChange={setFilterPlatform}>
-                    <SelectTrigger id="platform-filter"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todas las Plataformas</SelectItem>
-                        {allPlatforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="carrier-filter">Transportadora</Label>
-                <Select value={filterCarrier} onValueChange={setFilterCarrier}>
-                    <SelectTrigger id="carrier-filter"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todas las Transportadoras</SelectItem>
-                        {allCarriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="category-filter">Categoría</Label>
-                <Select value={filterCategory} onValueChange={(value) => { setFilterCategory(value); setFilterProduct(''); }}>
-                    <SelectTrigger id="category-filter"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todas las Categorías</SelectItem>
-                        {allCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-2">
-                <Label>Producto</Label>
-                <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" role="combobox" aria-expanded={productComboboxOpen} className="w-full justify-between font-normal">
-                            <span className="truncate">
-                                {filterProduct ? allProducts.find((p) => p.id === filterProduct)?.name : "Seleccionar producto..."}
-                            </span>
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                        <Command>
-                            <CommandInput placeholder="Buscar producto..." />
-                            <CommandEmpty>No se encontró el producto.</CommandEmpty>
-                            <CommandGroup className="max-h-60 overflow-y-auto">
-                                <CommandItem key="all-products" onSelect={() => { setFilterProduct(''); setProductComboboxOpen(false); }}>
-                                    <Check className={cn("mr-2 h-4 w-4", filterProduct === '' ? "opacity-100" : "opacity-0")} />
-                                    Todos los productos
-                                </CommandItem>
-                                {allProducts.map((p) => (
-                                    <CommandItem key={p.id} value={p.name} onSelect={() => { setFilterProduct(p.id === filterProduct ? '' : p.id); setProductComboboxOpen(false); }}>
-                                        <Check className={cn("mr-2 h-4 w-4", filterProduct === p.id ? "opacity-100" : "opacity-0")} />
-                                        <span className="truncate">{p.name}</span>
-                                    </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        </Command>
-                    </PopoverContent>
-                </Popover>
-            </div>
+            <MultiSelectFilter title="Plataformas" options={allPlatforms} selected={filterPlatforms} onSelectedChange={setFilterPlatforms} />
+            <MultiSelectFilter title="Transportadoras" options={allCarriers} selected={filterCarriers} onSelectedChange={setFilterCarriers} />
+            <MultiSelectFilter title="Categorías" options={allCategories} selected={filterCategories} onSelectedChange={setFilterCategories} />
+            <MultiSelectFilter title="Productos" options={allProducts} selected={filterProducts} onSelectedChange={setFilterProducts} />
+            
             {hasActiveFilters && (
                 <Button variant="ghost" onClick={clearFilters} className="text-sm">
                     <X className="mr-2 h-4 w-4" />
@@ -601,7 +612,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
-
-    
