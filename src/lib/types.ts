@@ -145,3 +145,10 @@ export type RotationCategory = {
     description: string;
     salesThreshold: number;
 };
+
+export interface ProductPerformanceData {
+    salesByCarrier: { name: string; value: number }[];
+    salesByPlatform: { name: string; value: number }[];
+    salesByDay: Record<string, number>;
+    returnsByDay: Record<string, number>;
+}

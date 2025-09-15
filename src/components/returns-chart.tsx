@@ -19,6 +19,13 @@ type ReturnsChartProps = {
 };
 
 export default function ReturnsChart({ data }: ReturnsChartProps) {
+    if (data.every(d => d.returns === 0)) {
+        return (
+            <div className="flex h-[250px] w-full items-center justify-center text-muted-foreground">
+                No se registraron devoluciones en los últimos 30 días.
+            </div>
+        );
+    }
   return (
     <ChartContainer config={chartConfig} className="h-[250px] w-full">
       <ResponsiveContainer width="100%" height="100%">

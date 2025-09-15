@@ -28,6 +28,14 @@ export default function CarrierChart({ data }: CarrierChartProps) {
     return acc;
   }, {} as any);
 
+  if (data.length === 0) {
+    return (
+        <div className="flex h-[250px] w-full items-center justify-center text-muted-foreground">
+            No hay datos de despachos para este producto.
+        </div>
+    );
+  }
+
   return (
     <ChartContainer config={chartConfig} className="h-[250px] w-full">
       <ResponsiveContainer width="100%" height="100%">

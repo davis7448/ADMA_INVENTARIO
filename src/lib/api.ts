@@ -4,9 +4,9 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData } from './types';
 import {v4 as uuidv4} from 'uuid';
-import { startOfDay, endOfDay } from 'date-fns';
+import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
 // Image Upload Function
 export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => {
@@ -621,4 +621,56 @@ export const updateRotationCategories = async (categories: RotationCategory[]): 
         batch.update(docRef, { salesThreshold: category.salesThreshold });
     });
     await batch.commit();
+};
+
+export const getProductPerformanceData = async (productId: string): Promise<ProductPerformanceData> => {
+    const [dispatchOrders, movements, carriers, platforms] = await Promise.all([
+        getDispatchOrders(),
+        getInventoryMovementsByProductId(productId),
+        getCarriers(),
+        getPlatforms(),
+    ]);
+
+    const carrierMap = new Map(carriers.map(c => [c.id, c.name]));
+    const platformMap = new Map(platforms.map(p => [p.id, p.name]));
+
+    const salesByCarrier: Record<string, number> = {};
+    const salesByPlatform: Record<string, number> = {};
+    const salesByDay: Record<string, number> = {};
+    const returnsByDay: Record<string, number> = {};
+
+    // Process dispatch orders for sales data
+    for (const order of dispatchOrders) {
+        const productInOrder = order.products.find(p => p.productId === productId);
+        if (productInOrder) {
+            const carrierName = carrierMap.get(order.carrierId) || 'Unknown Carrier';
+            const platformName = platformMap.get(order.platformId) || 'Unknown Platform';
+
+            salesByCarrier[carrierName] = (salesByCarrier[carrierName] || 0) + productInOrder.quantity;
+            salesByPlatform[platformName] = (salesByPlatform[platformName] || 0) + productInOrder.quantity;
+            
+            const day = format(startOfDay(new Date(order.date)), 'yyyy-MM-dd');
+            salesByDay[day] = (salesByDay[day] || 0) + productInOrder.quantity;
+        }
+    }
+    
+    // Process movements for returns data
+    const thirtyDaysAgo = subDays(new Date(), 30);
+    const returnMovements = movements.filter(m => 
+        m.type === 'Entrada' && 
+        m.notes.toLowerCase().includes('devolución') && 
+        new Date(m.date) >= thirtyDaysAgo
+    );
+
+    for (const movement of returnMovements) {
+        const day = format(startOfDay(new Date(movement.date)), 'yyyy-MM-dd');
+        returnsByDay[day] = (returnsByDay[day] || 0) + movement.quantity;
+    }
+
+    return {
+        salesByCarrier: Object.entries(salesByCarrier).map(([name, value]) => ({ name, value })),
+        salesByPlatform: Object.entries(salesByPlatform).map(([name, value]) => ({ name, value })),
+        salesByDay,
+        returnsByDay,
+    };
 };

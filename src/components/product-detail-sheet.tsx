@@ -17,11 +17,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getProductById, getInventoryMovementsByProductId } from '@/lib/api';
-import type { Product, InventoryMovement } from '@/lib/types';
+import { getProductById, getProductPerformanceData } from '@/lib/api';
+import type { Product, ProductPerformanceData } from '@/lib/types';
 import SalesChart from './sales-chart';
+import CarrierChart from './carrier-chart';
+import ReturnsChart from './returns-chart';
 import { subDays, format, startOfDay } from 'date-fns';
 
 interface ProductDetailSheetProps {
@@ -32,7 +33,7 @@ interface ProductDetailSheetProps {
 
 export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDetailSheetProps) {
   const [product, setProduct] = useState<Product | null>(null);
-  const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [performanceData, setPerformanceData] = useState<ProductPerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,24 +41,18 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
       setLoading(true);
       Promise.all([
         getProductById(productId),
-        getInventoryMovementsByProductId(productId),
-      ]).then(([productData, movementData]) => {
+        getProductPerformanceData(productId),
+      ]).then(([productData, perfData]) => {
         setProduct(productData);
-        setMovements(movementData);
+        setPerformanceData(perfData);
         setLoading(false);
       });
     }
   }, [productId]);
 
   const salesData = useMemo(() => {
-    const thirtyDaysAgo = subDays(new Date(), 30);
-    const salesMovements = movements.filter(m => m.type === 'Salida' && new Date(m.date) >= thirtyDaysAgo);
-
-    const salesByDay = salesMovements.reduce((acc, m) => {
-      const day = format(startOfDay(new Date(m.date)), 'yyyy-MM-dd');
-      acc[day] = (acc[day] || 0) + m.quantity;
-      return acc;
-    }, {} as Record<string, number>);
+    if (!performanceData) return [];
+    const salesByDay = performanceData.salesByDay;
 
     const data = Array.from({ length: 30 }).map((_, i) => {
       const date = subDays(new Date(), i);
@@ -69,11 +64,27 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
     }).reverse();
 
     return data;
-  }, [movements]);
+  }, [performanceData]);
+
+  const returnsData = useMemo(() => {
+    if (!performanceData) return [];
+    const returnsByDay = performanceData.returnsByDay;
+
+    const data = Array.from({ length: 30 }).map((_, i) => {
+        const date = subDays(new Date(), i);
+        const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
+        return {
+            date: dayKey,
+            returns: returnsByDay[dayKey] || 0,
+        };
+    }).reverse();
+
+    return data;
+}, [performanceData]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-xl w-full overflow-y-auto">
+      <SheetContent className="sm:max-w-3xl w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Product Details</SheetTitle>
           <SheetDescription>Detailed information and performance for the selected product.</SheetDescription>
@@ -90,6 +101,8 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
                 <Skeleton className="h-20 w-full" />
                 <Skeleton className="h-20 w-full" />
               </div>
+               <Skeleton className="h-64 w-full" />
+               <Skeleton className="h-64 w-full" />
                <Skeleton className="h-64 w-full" />
             </div>
           ) : (
@@ -158,6 +171,36 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
                 <CardContent>
                   <SalesChart data={salesData} />
                 </CardContent>
+              </Card>
+
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Sales by Carrier</CardTitle>
+                      <CardDescription>Distribution of units dispatched by each carrier.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <CarrierChart data={performanceData?.salesByCarrier || []} />
+                  </CardContent>
+              </Card>
+
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Sales by Platform</CardTitle>
+                      <CardDescription>Distribution of units dispatched for each platform.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <CarrierChart data={performanceData?.salesByPlatform || []} />
+                  </CardContent>
+              </Card>
+
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Returns</CardTitle>
+                      <CardDescription>Product returns over the last 30 days.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <ReturnsChart data={returnsData} />
+                  </CardContent>
               </Card>
             </>
           )}
