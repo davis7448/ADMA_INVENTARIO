@@ -396,8 +396,8 @@ function DispatchPageContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <div className="flex items-center border-b">
-                                        <AccordionTrigger className="flex-grow p-0">
-                                             <div className="grid grid-cols-2 w-full items-center text-sm px-4">
+                                        <AccordionTrigger className="flex-grow">
+                                             <div className="grid grid-cols-2 w-full items-center text-sm">
                                                 <div className="text-left">
                                                     <p className="font-semibold">{order.dispatchId}</p>
                                                     <p className="text-muted-foreground">
