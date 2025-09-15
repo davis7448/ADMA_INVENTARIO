@@ -366,7 +366,10 @@ export default function DashboardPage() {
                 {options.map((option) => (
                   <CommandItem
                     key={option.id}
-                    onSelect={() => handleSelect(option.id)}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      handleSelect(option.id);
+                    }}
                   >
                     <div
                       className={cn(
