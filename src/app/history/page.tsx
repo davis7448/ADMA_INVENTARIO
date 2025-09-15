@@ -202,23 +202,22 @@ export default function HistoryPage() {
   };
   const hasActiveFilters = filterProductId || filterPlatformId || filterCarrierId || dateRange;
 
-  const handleExportExcel = () => {
-    const flattenedData = dispatchOrders.flatMap(order => 
-        order.products.map(product => ({
-            'ID Despacho': order.id,
-            'Fecha': format(new Date(order.date), "dd/MM/yyyy HH:mm"),
-            'Plataforma': order.platform,
-            'Transportadora': order.carrier,
-            'SKU Producto': product.sku,
-            'Nombre Producto': product.name,
-            'Cantidad': product.quantity,
-        }))
-    );
+  const handleExportMovementsExcel = () => {
+    const productsById = new Map(products.map(p => [p.id, p]));
+    const flattenedData = filteredMovements.map(movement => ({
+        'ID Movimiento': movement.id,
+        'Fecha': format(new Date(movement.date), "dd/MM/yyyy HH:mm"),
+        'Tipo': movement.type,
+        'SKU Producto': productsById.get(movement.productId)?.sku || 'N/A',
+        'Nombre Producto': movement.productName,
+        'Cantidad': movement.quantity,
+        'Notas': movement.notes,
+    }));
 
     const worksheet = XLSX.utils.json_to_sheet(flattenedData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Despachos");
-    XLSX.writeFile(workbook, `Historial-Despachos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Movimientos");
+    XLSX.writeFile(workbook, `Historial-Movimientos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
   const getBadgeClass = (type: 'Entrada' | 'Salida') => {
@@ -370,10 +369,18 @@ export default function HistoryPage() {
           <TabsContent value="movements">
             <Card>
                 <CardHeader>
-                <CardTitle>Movimientos Recientes</CardTitle>
-                <CardDescription>
-                    Mostrando las últimas entradas y salidas de inventario.
-                </CardDescription>
+                  <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle>Movimientos Recientes</CardTitle>
+                        <CardDescription>
+                            Mostrando las últimas entradas y salidas de inventario.
+                        </CardDescription>
+                      </div>
+                      <Button variant="outline" onClick={handleExportMovementsExcel}>
+                          <FileSpreadsheet className="mr-2 h-4 w-4" />
+                          Exportar a Excel
+                      </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                 {renderFilters()}
@@ -433,18 +440,10 @@ export default function HistoryPage() {
           <TabsContent value="dispatches">
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <CardTitle>Órdenes de Despacho Generadas</CardTitle>
-                            <CardDescription>
-                                Un historial de todos los picking lists generados. Filtra para encontrar órdenes específicas.
-                            </CardDescription>
-                        </div>
-                        <Button variant="outline" onClick={handleExportExcel}>
-                            <FileSpreadsheet className="mr-2 h-4 w-4" />
-                            Exportar a Excel
-                        </Button>
-                    </div>
+                  <CardTitle>Órdenes de Despacho Generadas</CardTitle>
+                  <CardDescription>
+                      Un historial de todos los picking lists generados. Filtra para encontrar órdenes específicas.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                     {renderFilters()}
@@ -518,3 +517,5 @@ export default function HistoryPage() {
     </div>
   );
 }
+
+    
