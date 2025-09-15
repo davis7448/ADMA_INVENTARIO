@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/select';
 import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms } from '@/lib/api';
 import type { Product, Carrier, Platform } from '@/lib/types';
-import { Barcode, Trash2 } from 'lucide-react';
+import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
@@ -74,6 +74,8 @@ export default function LogisticsPage() {
     const [carrier, setCarrier] = useState('');
     const [dispatchedProducts, setDispatchedProducts] = useState<DispatchedProduct[]>([]);
     const barcodeRef = useRef<HTMLInputElement>(null);
+    const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Entradas State
     const [receivedProducts, setReceivedProducts] = useState<ReceivedProduct[]>([]);
@@ -115,6 +117,22 @@ export default function LogisticsPage() {
     }, []);
 
     // --- SALIDAS ---
+
+    const addProductToDispatch = (product: Product) => {
+        setDispatchedProducts(prev => {
+            const existingProduct = prev.find(p => p.id === product.id);
+            if (existingProduct) {
+              return prev.map(p => 
+                p.id === product.id 
+                  ? { ...p, dispatchQuantity: p.dispatchQuantity + 1 } 
+                  : p
+              );
+            }
+            return [...prev, { ...product, dispatchQuantity: 1 }];
+          });
+          toast({ title: "Producto Agregado", description: `${product.name} añadido al despacho.` });
+    }
+
     const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -122,24 +140,28 @@ export default function LogisticsPage() {
           const product = allProductsList.find(p => p.sku === barcode);
     
           if (product) {
-            setDispatchedProducts(prev => {
-              const existingProduct = prev.find(p => p.id === product.id);
-              if (existingProduct) {
-                return prev.map(p => 
-                  p.id === product.id 
-                    ? { ...p, dispatchQuantity: p.dispatchQuantity + 1 } 
-                    : p
-                );
-              }
-              return [...prev, { ...product, dispatchQuantity: 1 }];
-            });
-            toast({ title: "Producto Agregado", description: `${product.name} añadido al despacho.` });
+            addProductToDispatch(product);
           } else {
             toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
           }
           if(barcodeRef.current) barcodeRef.current.value = '';
         }
     };
+
+    const handleProductSearchSelect = (product: Product) => {
+        addProductToDispatch(product);
+        setIsSearchDialogOpen(false);
+        setSearchQuery('');
+    };
+
+    const filteredProducts = useMemo(() => {
+        if (!searchQuery) return allProductsList;
+        return allProductsList.filter(p => 
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [searchQuery, allProductsList]);
+
 
     const handleRemoveProduct = (productId: string) => {
         setDispatchedProducts(prev => prev.filter(p => p.id !== productId));
@@ -388,6 +410,55 @@ export default function LogisticsPage() {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <Dialog open={isSearchDialogOpen} onOpenChange={setIsSearchDialogOpen}>
+            <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>Buscar Producto</DialogTitle>
+                    <DialogDescription>
+                        Busca un producto por nombre o SKU para agregarlo al despacho.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <Input 
+                        placeholder="Buscar por nombre o SKU..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        autoFocus
+                    />
+                    <div className="max-h-[400px] overflow-y-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead>SKU</TableHead>
+                                    <TableHead className="text-right">Stock</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredProducts.length > 0 ? (
+                                    filteredProducts.map(product => (
+                                        <TableRow 
+                                            key={product.id}
+                                            onClick={() => handleProductSearchSelect(product)}
+                                            className="cursor-pointer hover:bg-muted"
+                                        >
+                                            <TableCell className="font-medium">{product.name}</TableCell>
+                                            <TableCell>{product.sku}</TableCell>
+                                            <TableCell className="text-right">{product.stock}</TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center">No se encontraron productos.</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
         
         <div className="space-y-6">
             <div>
@@ -435,17 +506,23 @@ export default function LogisticsPage() {
                             </div>
                             <div>
                                 <Label htmlFor="barcode-salida">Escanear Código de Barras (SKU)</Label>
-                                <div className="relative">
-                                    <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                    <Input 
-                                        id="barcode-salida"
-                                        ref={barcodeRef}
-                                        placeholder="Escanear SKU del producto y presionar Enter" 
-                                        className="pl-8"
-                                        onKeyDown={handleBarcodeScan}
-                                    />
+                                <div className="flex gap-2">
+                                    <div className="relative flex-grow">
+                                        <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input 
+                                            id="barcode-salida"
+                                            ref={barcodeRef}
+                                            placeholder="Escanear SKU y presionar Enter" 
+                                            className="pl-8"
+                                            onKeyDown={handleBarcodeScan}
+                                        />
+                                    </div>
+                                    <Button variant="outline" size="icon" onClick={() => setIsSearchDialogOpen(true)}>
+                                        <Search className="h-4 w-4" />
+                                        <span className="sr-only">Buscar Producto</span>
+                                    </Button>
                                 </div>
-                                <p className="text-sm text-muted-foreground mt-1">Usa el SKU del producto (ej: WM-ERGO-01) como código de barras.</p>
+                                <p className="text-sm text-muted-foreground mt-1">Usa el SKU del producto (ej: WM-ERGO-01) como código de barras o usa el buscador.</p>
                             </div>
                             <Card>
                                 <CardHeader>
@@ -703,3 +780,5 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
