@@ -74,7 +74,7 @@ interface ReturnedProduct extends Product {
     trackingNumber: string;
 }
 
-type SearchContext = 'salidas' | 'averias';
+type SearchContext = 'salidas' | 'entradas' | 'averias';
 
 
 export default function LogisticsPage() {
@@ -173,6 +173,17 @@ export default function LogisticsPage() {
         setIsSearchDialogOpen(true);
     };
 
+    const addProductToEntry = (product: Product) => {
+        setReceivedProducts(prev => {
+            const existing = prev.find(p => p.id === product.id);
+            if (existing) {
+                return prev.map(p => p.id === product.id ? { ...p, receiveQuantity: p.receiveQuantity + 1 } : p);
+            }
+            return [...prev, { ...product, receiveQuantity: 1 }];
+        });
+        toast({ title: 'Producto Agregado', description: `${product.name} añadido a la recepción.` });
+    }
+
     const handleProductSearchSelect = (product: Product) => {
         setIsSearchDialogOpen(false);
         setSearchQuery('');
@@ -183,6 +194,8 @@ export default function LogisticsPage() {
             setTimeout(() => setIsConfirmDialogOpen(true), 150);
         } else if (searchContext === 'averias') {
             setDamagedSku(product.sku);
+        } else if (searchContext === 'entradas') {
+            addProductToEntry(product);
         }
     };
 
@@ -299,14 +312,7 @@ export default function LogisticsPage() {
             const product = allProductsList.find(p => p.sku === barcode);
 
             if (product) {
-                setReceivedProducts(prev => {
-                    const existing = prev.find(p => p.id === product.id);
-                    if (existing) {
-                        return prev.map(p => p.id === product.id ? { ...p, receiveQuantity: p.receiveQuantity + 1 } : p);
-                    }
-                    return [...prev, { ...product, receiveQuantity: 1 }];
-                });
-                toast({ title: 'Producto Agregado', description: `${product.name} añadido a la recepción.` });
+                addProductToEntry(product);
             } else {
                 toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado.' });
             }
@@ -730,16 +736,22 @@ export default function LogisticsPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div>
-                                <Label htmlFor="barcode-entrada">Escanear Código de Barras (SKU)</Label>
-                                <div className="relative">
-                                    <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                    <Input 
-                                        id="barcode-entrada"
-                                        ref={entryBarcodeRef}
-                                        placeholder="Escanear SKU para agregar producto" 
-                                        className="pl-8"
-                                        onKeyDown={handleEntryBarcodeScan}
-                                    />
+                                <Label htmlFor="barcode-entrada">Escanear o Buscar Producto</Label>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-grow">
+                                        <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input 
+                                            id="barcode-entrada"
+                                            ref={entryBarcodeRef}
+                                            placeholder="Escanear SKU para agregar producto" 
+                                            className="pl-8"
+                                            onKeyDown={handleEntryBarcodeScan}
+                                        />
+                                    </div>
+                                    <Button variant="outline" size="icon" onClick={() => openSearchDialog('entradas')}>
+                                        <Search className="h-4 w-4" />
+                                        <span className="sr-only">Buscar Producto</span>
+                                    </Button>
                                 </div>
                             </div>
                              <Card>
@@ -772,7 +784,7 @@ export default function LogisticsPage() {
                                                 ))
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={3} className="text-center">Escanea un producto para comenzar.</TableCell>
+                                                    <TableCell colSpan={3} className="text-center">Escanea o busca un producto para comenzar.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
