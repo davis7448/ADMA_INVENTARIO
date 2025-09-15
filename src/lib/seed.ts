@@ -21,8 +21,8 @@ import users from './seed-data/users.json';
 import inventoryMovements from './seed-data/inventory-movements.json';
 
 // Initialize Firebase Admin SDK
-const app = getApps().length
-  ? getApps()[0]
+const app: App = getApps().length
+  ? getApps()[0]!
   : initializeApp({ projectId: firebaseConfig.projectId });
 
 const db = getFirestore(app);
@@ -45,7 +45,6 @@ async function seedAuthenticationUsers() {
                     // This is fine, means we are creating a new user.
                 } else {
                     console.error(`Error deleting user ${user.email}:`, error.message);
-                    // Continue to try and create, maybe it's a recoverable state
                 }
             }
 
@@ -126,5 +125,3 @@ async function main() {
 }
 
 main();
-
-
