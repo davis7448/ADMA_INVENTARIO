@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -16,23 +17,26 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const success = login(email);
+    const success = await login(email);
     if (!success) {
       setError('Invalid email. Please try again.');
     }
     setLoading(false);
   };
 
-  const handleDemoLogin = (demoEmail: string) => {
+  const handleDemoLogin = async (demoEmail: string) => {
     setEmail(demoEmail);
-    const success = login(demoEmail);
+    setLoading(true);
+    setError(null);
+    const success = await login(demoEmail);
      if (!success) {
       setError('Invalid email. Please try again.');
     }
+    setLoading(false);
   }
 
   return (

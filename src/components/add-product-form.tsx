@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useTransition } from 'react';
@@ -36,12 +37,23 @@ import { addProductAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
+import type { Supplier } from '@/lib/types';
 
-export function AddProductForm() {
+interface AddProductFormProps {
+  onProductAdded: () => void;
+}
+
+export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
-  const suppliers = getSuppliers();
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  useEffect(() => {
+    if (open) {
+        getSuppliers().then(setSuppliers);
+    }
+  }, [open]);
 
   const form = useForm<AddProductFormValues>({
     resolver: zodResolver(AddProductFormSchema),
@@ -78,6 +90,7 @@ export function AddProductForm() {
           description: result.message,
         });
         setOpen(false); 
+        onProductAdded();
       } else {
         toast({
           title: 'Error',

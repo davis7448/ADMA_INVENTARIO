@@ -1,3 +1,4 @@
+
 "use server";
 
 import { z } from 'zod';
@@ -21,15 +22,12 @@ export async function addProductAction(
   }
 
   try {
-    const newProductId = `prod-${Date.now()}`;
-    const newProduct: Product = {
-      id: newProductId,
+    const newProduct: Omit<Product, 'id'> = {
       ...validatedFields.data,
-      // The imageUrl is now coming directly from the form as a Data URI
-      imageHint: 'new product',
+      imageHint: 'new product', // This could be improved with AI
     };
     
-    addProduct(newProduct);
+    const newProductId = await addProduct(newProduct);
     
     revalidatePath('/products');
 

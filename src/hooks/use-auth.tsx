@@ -1,13 +1,14 @@
+
 "use client";
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { User } from '@/lib/types';
-import { getUsers } from '@/lib/api';
+import { findUserByEmail, getUsers } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string) => boolean;
+  login: (email: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
@@ -19,7 +20,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
-  const users = getUsers();
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -36,8 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, loading, pathname, router]);
 
 
-  const login = (email: string) => {
-    const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  const login = async (email: string) => {
+    const foundUser = await findUserByEmail(email);
     if (foundUser) {
       localStorage.setItem('user', JSON.stringify(foundUser));
       setUser(foundUser);
@@ -57,7 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   if (loading) {
      // You can return a loading spinner here
-    return <div>Loading...</div>;
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <div>Loading...</div>
+        </div>
+    );
   }
   
   if (!user && pathname !== '/login') {
