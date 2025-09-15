@@ -73,7 +73,7 @@ interface ReturnedProduct extends Product {
     trackingNumber: string;
 }
 
-type SearchContext = 'salidas' | 'entradas' | 'averias';
+type SearchContext = 'salidas' | 'entradas' | 'averias' | 'devoluciones';
 
 
 export default function LogisticsPage() {
@@ -195,6 +195,9 @@ export default function LogisticsPage() {
             setDamagedSku(product.sku);
         } else if (searchContext === 'entradas') {
             addProductToEntry(product);
+        } else if (searchContext === 'devoluciones') {
+            setProductToAdd(product);
+            setIsReturnDialogOpen(true);
         }
     };
 
@@ -842,16 +845,22 @@ export default function LogisticsPage() {
                                         </Select>
                                     </div>
                                      <div>
-                                        <Label htmlFor="return-barcode">Escanear Código de Barras (SKU)</Label>
-                                        <div className="relative">
-                                            <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <Input 
-                                                id="return-barcode"
-                                                ref={returnBarcodeRef}
-                                                placeholder="Escanear SKU para agregar producto a la devolución" 
-                                                className="pl-8"
-                                                onKeyDown={handleReturnBarcodeScan}
-                                            />
+                                        <Label htmlFor="return-barcode">Escanear o Buscar Producto</Label>
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-grow">
+                                                <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                <Input 
+                                                    id="return-barcode"
+                                                    ref={returnBarcodeRef}
+                                                    placeholder="Escanear SKU para agregar producto" 
+                                                    className="pl-8"
+                                                    onKeyDown={handleReturnBarcodeScan}
+                                                />
+                                            </div>
+                                            <Button variant="outline" size="icon" onClick={() => openSearchDialog('devoluciones')}>
+                                                <Search className="h-4 w-4" />
+                                                <span className="sr-only">Buscar Producto</span>
+                                            </Button>
                                         </div>
                                     </div>
                                      <Card>
