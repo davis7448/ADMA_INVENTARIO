@@ -19,7 +19,6 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { getInventoryMovements, getProducts, getPlatforms, getCarriers, getDispatchOrders } from '@/lib/api';
-import { format, startOfDay, endOfDay } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
@@ -28,38 +27,22 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Download, X, Calendar as CalendarIcon, Check, ChevronsUpDown, FileSpreadsheet } from 'lucide-react';
+import { Download, FileSpreadsheet } from 'lucide-react';
 import { generatePickingListPDF } from '@/lib/pdf';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
-import { Calendar } from '@/components/ui/calendar';
-import type { DateRange } from 'react-day-picker';
-import { cn, formatToTimeZone } from '@/lib/utils';
+import { formatToTimeZone } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
 
 export default function HistoryPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
-  const [allDispatchOrders, setAllDispatchOrders] = useState<DispatchOrder[]>([]);
+  const [dispatchOrders, setDispatchOrders] = useState<DispatchOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter states
-  const [filterProductId, setFilterProductId] = useState<string>('');
-  const [filterPlatformId, setFilterPlatformId] = useState<string>('');
-  const [filterCarrierId, setFilterCarrierId] = useState<string>('');
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [comboboxOpen, setComboboxOpen] = useState(false);
 
   useEffect(() => {
     if (user && user.role !== 'logistics' && user.role !== 'admin') {
@@ -84,7 +67,7 @@ export default function HistoryPage() {
             getCarriers()
         ]);
         setMovements(fetchedMovements);
-        setAllDispatchOrders(fetchedDispatchOrders);
+        setDispatchOrders(fetchedDispatchOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         setProducts(fetchedProducts);
         setPlatforms(fetchedPlatforms);
         setCarriers(fetchedCarriers);
@@ -112,70 +95,15 @@ export default function HistoryPage() {
     [...movements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [movements]
   );
-  
-  const filteredMovements = useMemo(() => {
-    let allMovements = [...sortedMovements];
-
-    if (filterProductId) {
-        allMovements = allMovements.filter(m => m.productId === filterProductId);
-    }
-    if (filterPlatformId) {
-        const platformName = platforms.find(p => p.id === filterPlatformId)?.name;
-        allMovements = allMovements.filter(m => m.notes.includes(`Plataforma: ${platformName}`));
-    }
-    if (filterCarrierId) {
-        const carrierName = carriers.find(c => c.id === filterCarrierId)?.name;
-        allMovements = allMovements.filter(m => m.notes.includes(`Transportadora: ${carrierName}`));
-    }
-    if (dateRange?.from) {
-        allMovements = allMovements.filter(m => new Date(m.date) >= startOfDay(dateRange.from!));
-    }
-    if (dateRange?.to) {
-        allMovements = allMovements.filter(m => new Date(m.date) <= endOfDay(dateRange.to!));
-    }
-
-    return allMovements;
-  }, [sortedMovements, platforms, carriers, filterProductId, filterPlatformId, filterCarrierId, dateRange]);
-
-
-  const dispatchOrders = useMemo(() => {
-    let allOrders = [...allDispatchOrders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    if (filterProductId) {
-        allOrders = allOrders.filter(order => order.products.some(p => p.productId === filterProductId));
-    }
-    if (filterPlatformId) {
-        allOrders = allOrders.filter(order => order.platformId === filterPlatformId);
-    }
-    if (filterCarrierId) {
-        allOrders = allOrders.filter(order => order.carrierId === filterCarrierId);
-    }
-    if (dateRange?.from) {
-        allOrders = allOrders.filter(order => new Date(order.date) >= startOfDay(dateRange.from!));
-    }
-    if (dateRange?.to) {
-        allOrders = allOrders.filter(order => new Date(order.date) <= endOfDay(dateRange.to!));
-    }
-    
-    return allOrders;
-  }, [allDispatchOrders, filterProductId, filterPlatformId, filterCarrierId, dateRange]);
 
   const handleDownloadPdf = (order: DispatchOrder) => {
     const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
     generatePickingListPDF(order.dispatchId, productsForPdf, platformNames[order.platformId], carrierNames[order.carrierId], new Date(order.date));
   };
   
-  const clearFilters = () => {
-    setFilterProductId('');
-    setFilterPlatformId('');
-    setFilterCarrierId('');
-    setDateRange(undefined);
-  };
-  const hasActiveFilters = filterProductId || filterPlatformId || filterCarrierId || dateRange;
-
   const handleExportMovementsExcel = () => {
     const productsById = new Map(products.map(p => [p.id, p]));
-    const flattenedData = filteredMovements.map(movement => ({
+    const flattenedData = sortedMovements.map(movement => ({
         'ID Movimiento': movement.movementId,
         'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
         'Tipo': movement.type,
@@ -234,119 +162,6 @@ export default function HistoryPage() {
     }
   };
   
-  const renderFilters = () => (
-    <div className="mb-4 space-y-4">
-        <div className="flex flex-wrap items-center gap-4">
-            <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={comboboxOpen}
-                        className="w-full md:w-[250px] justify-between"
-                    >
-                        {filterProductId
-                            ? products.find((p) => p.id === filterProductId)?.name
-                            : "Filtrar por producto..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                    <Command>
-                        <CommandInput placeholder="Buscar producto..." />
-                        <CommandEmpty>No se encontró el producto.</CommandEmpty>
-                        <CommandGroup>
-                            {products.map((p) => (
-                                <CommandItem
-                                    key={p.id}
-                                    value={p.name}
-                                    onSelect={() => {
-                                        setFilterProductId(p.id === filterProductId ? '' : p.id)
-                                        setComboboxOpen(false)
-                                    }}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            filterProductId === p.id ? "opacity-100" : "opacity-0"
-                                        )}
-                                    />
-                                    {p.name}
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </Command>
-                </PopoverContent>
-            </Popover>
-            
-            <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant={"outline"}
-                        className={cn(
-                        "w-full md:w-[240px] justify-start text-left font-normal",
-                        !dateRange && "text-muted-foreground"
-                        )}
-                    >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRange?.from ? (
-                        dateRange.to ? (
-                            <>
-                            {format(dateRange.from, "LLL dd, y")} -{" "}
-                            {format(dateRange.to, "LLL dd, y")}
-                            </>
-                        ) : (
-                            format(dateRange.from, "LLL dd, y")
-                        )
-                        ) : (
-                        <span>Rango de fechas</span>
-                        )}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        initialFocus
-                        mode="range"
-                        defaultMonth={dateRange?.from}
-                        selected={dateRange}
-                        onSelect={setDateRange}
-                        numberOfMonths={2}
-                    />
-                </PopoverContent>
-            </Popover>
-
-            <Select value={filterPlatformId} onValueChange={setFilterPlatformId}>
-                <SelectTrigger className="w-full md:w-[180px]">
-                    <SelectValue placeholder="Plataforma" />
-                </SelectTrigger>
-                <SelectContent>
-                    {platforms.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-
-            <Select value={filterCarrierId} onValueChange={setFilterCarrierId}>
-                <SelectTrigger className="w-full md:w-[180px]">
-                    <SelectValue placeholder="Transportadora" />
-                </SelectTrigger>
-                <SelectContent>
-                    {carriers.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        </div>
-        <div className="flex items-center gap-4">
-             {hasActiveFilters && (
-                <Button variant="ghost" onClick={clearFilters}>
-                    <X className="mr-2 h-4 w-4" />
-                    Limpiar filtros
-                </Button>
-            )}
-        </div>
-    </div>
-  );
 
   if (user?.role !== 'logistics' && user?.role !== 'admin') {
     return (
@@ -386,7 +201,6 @@ export default function HistoryPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                {renderFilters()}
                 <Table>
                     <TableHeader>
                     <TableRow>
@@ -410,8 +224,8 @@ export default function HistoryPage() {
                                 <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                             </TableRow>
                         ))
-                    ) : filteredMovements.length > 0 ? (
-                        filteredMovements.map((movement) => (
+                    ) : sortedMovements.length > 0 ? (
+                        sortedMovements.map((movement) => (
                         <TableRow key={movement.id}>
                              <TableCell className="font-mono text-xs">{movement.movementId || 'N/A'}</TableCell>
                             <TableCell className="font-medium">
@@ -430,10 +244,7 @@ export default function HistoryPage() {
                     ) : (
                         <TableRow>
                         <TableCell colSpan={6} className="text-center">
-                            {hasActiveFilters
-                                ? "No se encontraron movimientos para los filtros seleccionados."
-                                : "No hay movimientos de inventario registrados."
-                            }
+                            No hay movimientos de inventario registrados.
                         </TableCell>
                         </TableRow>
                     )}
@@ -450,7 +261,7 @@ export default function HistoryPage() {
                       <div>
                         <CardTitle>Órdenes de Despacho Generadas</CardTitle>
                         <CardDescription>
-                            Un historial de todos los picking lists generados. Filtra para encontrar órdenes específicas.
+                            Un historial de todos los picking lists generados.
                         </CardDescription>
                       </div>
                       <Button variant="outline" onClick={handleExportExcel}>
@@ -460,7 +271,6 @@ export default function HistoryPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                    {renderFilters()}
                     {loading ? (
                         <div className="space-y-4">
                             <Skeleton className="h-12 w-full" />
@@ -501,7 +311,7 @@ export default function HistoryPage() {
                                                 </TableHeader>
                                                 <TableBody>
                                                     {order.products.map((p) => (
-                                                        <TableRow key={p.productId} className={p.productId === filterProductId ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
+                                                        <TableRow key={p.productId}>
                                                             <TableCell>{p.name}</TableCell>
                                                             <TableCell>{p.sku}</TableCell>
                                                             <TableCell className="text-right">{p.quantity}</TableCell>
@@ -551,10 +361,7 @@ export default function HistoryPage() {
                         </Accordion>
                     ) : (
                         <div className="text-center text-muted-foreground py-8">
-                            {hasActiveFilters
-                                ? "No se encontraron órdenes de despacho para los filtros seleccionados."
-                                : "No se han generado órdenes de despacho."
-                            }
+                           No se han generado órdenes de despacho.
                         </div>
                     )}
                 </CardContent>
@@ -564,9 +371,5 @@ export default function HistoryPage() {
     </div>
   );
 }
-
-
-
-    
 
     
