@@ -32,6 +32,8 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
   const [selectedGuides, setSelectedGuides] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
+  const allExceptions = order.exceptions || [];
+
   const handleCheckboxChange = (trackingNumber: string, checked: boolean) => {
     setSelectedGuides(prev => ({ ...prev, [trackingNumber]: checked }));
   };
@@ -39,6 +41,18 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
   const guidesToCancel = Object.entries(selectedGuides)
     .filter(([, isSelected]) => isSelected)
     .map(([trackingNumber]) => trackingNumber);
+
+  const handleSelectAll = () => {
+    const allSelected = allExceptions.reduce((acc, ex) => {
+        acc[ex.trackingNumber] = true;
+        return acc;
+    }, {} as Record<string, boolean>);
+    setSelectedGuides(allSelected);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedGuides({});
+  };
 
   const handleSubmit = async () => {
     if (guidesToCancel.length === 0) {
@@ -60,8 +74,6 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
         setIsProcessing(false);
     }
   };
-  
-  const allExceptions = order.exceptions || [];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -77,7 +89,13 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
         <div className="py-4 space-y-4">
             {allExceptions.length > 0 ? (
                 <div className="space-y-2">
-                    <Label className="font-semibold">Guías de Excepción Pendientes:</Label>
+                    <div className="flex justify-between items-center mb-2">
+                        <Label className="font-semibold">Guías de Excepción Pendientes:</Label>
+                        <div className="flex gap-2">
+                             <Button variant="link" size="sm" className="p-0 h-auto" onClick={handleSelectAll}>Seleccionar todo</Button>
+                             <Button variant="link" size="sm" className="p-0 h-auto" onClick={handleDeselectAll}>Deseleccionar todo</Button>
+                        </div>
+                    </div>
                     {allExceptions.map((ex) => (
                         <div key={ex.trackingNumber} className="flex items-center space-x-2">
                             <Checkbox
