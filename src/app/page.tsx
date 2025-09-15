@@ -47,28 +47,15 @@ export default function DashboardPage() {
     const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
     const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
-    const carrierMap = new Map(allCarriers.map(c => [c.id, c.name]));
-
     const ordersInPeriod = allOrders.filter(order => {
       const orderDate = new Date(order.date);
       return orderDate >= fromDate && orderDate <= toDate;
     });
 
-    const pendingAndPartialOrders = allOrders.filter(
+    const pendingAndPartialInPeriod = ordersInPeriod.filter(
         order => order.status === 'Pendiente' || order.status === 'Parcial'
     );
-    const totalPendingOrders = pendingAndPartialOrders.length;
-    
-    const pendingByCarrier = pendingAndPartialOrders.reduce((acc, order) => {
-        const carrierName = carrierMap.get(order.carrierId) || 'Desconocido';
-        acc[carrierName] = (acc[carrierName] || 0) + 1;
-        return acc;
-    }, {} as Record<string, number>);
-
-    const pendingChartData = Object.entries(pendingByCarrier)
-        .map(([name, value]) => ({ name, orders: value }))
-        .sort((a,b) => b.orders - a.orders);
-
+    const totalPendingOrders = pendingAndPartialInPeriod.length;
 
     const ordersByDay = ordersInPeriod.reduce((acc, order) => {
         const day = format(new Date(order.date), 'yyyy-MM-dd');
@@ -76,13 +63,26 @@ export default function DashboardPage() {
         return acc;
     }, {} as Record<string, number>);
 
+    const pendingByDay: Record<string, number> = pendingAndPartialInPeriod.reduce((acc, order) => {
+        const day = format(new Date(order.date), 'yyyy-MM-dd');
+        acc[day] = (acc[day] || 0) + 1;
+        return acc;
+    }, {});
+
+
     const chartData = [];
+    const pendingChartData = [];
     let currentDate = new Date(fromDate);
+    
     while (currentDate <= toDate) {
         const dayKey = format(currentDate, 'yyyy-MM-dd');
         chartData.push({
             date: dayKey,
             orders: ordersByDay[dayKey] || 0,
+        });
+        pendingChartData.push({
+            date: dayKey,
+            orders: pendingByDay[dayKey] || 0,
         });
         currentDate.setDate(currentDate.getDate() + 1);
     }
@@ -167,7 +167,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">{filteredData.totalPendingOrders}</div>
-                <p className="text-xs text-muted-foreground">Órdenes totales esperando procesamiento o resolución.</p>
+                <p className="text-xs text-muted-foreground">Órdenes en espera de procesamiento en el período.</p>
                  <div className="h-32 mt-4">
                     <DashboardPendingChart data={filteredData.pendingChartData} />
                 </div>
