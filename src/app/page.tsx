@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventoryMovements, getPlatforms } from '@/lib/api';
 import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform } from '@/lib/types';
-import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft } from 'lucide-react';
+import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -34,6 +34,9 @@ import DashboardCategoryChart from '@/components/dashboard-category-chart';
 import DashboardReturnsChart from '@/components/dashboard-returns-chart';
 import { Progress } from '@/components/ui/progress';
 import DashboardPlatformCarrierChart from '@/components/dashboard-platform-carrier-chart';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 
 
 export default function DashboardPage() {
@@ -48,6 +51,14 @@ export default function DashboardPage() {
   const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
   const [allMovements, setAllMovements] = useState<InventoryMovement[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filter states
+  const [filterPlatform, setFilterPlatform] = useState('all');
+  const [filterCarrier, setFilterCarrier] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterProduct, setFilterProduct] = useState('');
+  const [productComboboxOpen, setProductComboboxOpen] = useState(false);
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -71,13 +82,37 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  const clearFilters = () => {
+    setFilterPlatform('all');
+    setFilterCarrier('all');
+    setFilterCategory('all');
+    setFilterProduct('');
+  };
+
+  const hasActiveFilters = filterPlatform !== 'all' || filterCarrier !== 'all' || filterCategory !== 'all' || filterProduct !== '';
+
   const filteredData = useMemo(() => {
     const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
     const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
-    const ordersInPeriod = allOrders.filter(order => {
-      const orderDate = new Date(order.date);
-      return orderDate >= fromDate && orderDate <= toDate;
+    const productIdsInCategory = filterCategory === 'all' 
+        ? null 
+        : allProducts.filter(p => p.categoryId === filterCategory).map(p => p.id);
+
+    let ordersInPeriod = allOrders.filter(order => {
+        const orderDate = new Date(order.date);
+        const dateMatch = orderDate >= fromDate && orderDate <= toDate;
+        const platformMatch = filterPlatform === 'all' || order.platformId === filterPlatform;
+        const carrierMatch = filterCarrier === 'all' || order.carrierId === filterCarrier;
+        
+        let productMatch = true;
+        if (filterProduct) {
+            productMatch = order.products.some(p => p.productId === filterProduct);
+        } else if (productIdsInCategory) {
+            productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
+        }
+
+        return dateMatch && platformMatch && carrierMatch && productMatch;
     });
 
     const totalItemsDispatched = ordersInPeriod.reduce((sum, order) => sum + order.totalItems, 0);
@@ -90,8 +125,19 @@ export default function DashboardPage() {
     const returnMovementsInPeriod = allMovements.filter(m => {
         const movementDate = new Date(m.date);
         const isReturn = m.type === 'Entrada' && (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia'));
-        return isReturn && movementDate >= fromDate && movementDate <= toDate;
+        if (!isReturn || !(movementDate >= fromDate && movementDate <= toDate)) {
+            return false;
+        }
+
+        let productMatch = true;
+        if (filterProduct) {
+            productMatch = m.productId === filterProduct;
+        } else if (productIdsInCategory) {
+            productMatch = productIdsInCategory.includes(m.productId);
+        }
+        return productMatch;
     });
+
     const totalReturns = returnMovementsInPeriod.reduce((sum, m) => sum + m.quantity, 0);
 
     const returnsByDay = returnMovementsInPeriod.reduce((acc, m) => {
@@ -240,7 +286,7 @@ export default function DashboardPage() {
       mostUsedCarrier,
       platformWithMostOrders,
     };
-  }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allPlatforms, allMovements]);
+  }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allPlatforms, allMovements, filterPlatform, filterCarrier, filterCategory, filterProduct]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -283,6 +329,79 @@ export default function DashboardPage() {
             </PopoverContent>
         </Popover>
       </div>
+
+       <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle>Filtros Avanzados</CardTitle>
+                    {hasActiveFilters && <Button variant="ghost" onClick={clearFilters}>Limpiar Filtros</Button>}
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="platform-filter">Plataforma</Label>
+                        <Select value={filterPlatform} onValueChange={setFilterPlatform}>
+                            <SelectTrigger id="platform-filter"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todas las Plataformas</SelectItem>
+                                {allPlatforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="carrier-filter">Transportadora</Label>
+                        <Select value={filterCarrier} onValueChange={setFilterCarrier}>
+                            <SelectTrigger id="carrier-filter"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todas las Transportadoras</SelectItem>
+                                {allCarriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="category-filter">Categoría</Label>
+                        <Select value={filterCategory} onValueChange={(value) => { setFilterCategory(value); setFilterProduct(''); }}>
+                            <SelectTrigger id="category-filter"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todas las Categorías</SelectItem>
+                                {allCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Producto</Label>
+                        <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" role="combobox" aria-expanded={productComboboxOpen} className="w-full justify-between">
+                                    {filterProduct ? allProducts.find((p) => p.id === filterProduct)?.name : "Seleccionar producto..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Buscar producto..." />
+                                    <CommandEmpty>No se encontró el producto.</CommandEmpty>
+                                    <CommandGroup>
+                                        <CommandItem key="all-products" onSelect={() => { setFilterProduct(''); setProductComboboxOpen(false); }}>
+                                            <Check className={cn("mr-2 h-4 w-4", filterProduct === '' ? "opacity-100" : "opacity-0")} />
+                                            Todos los productos
+                                        </CommandItem>
+                                        {allProducts.map((p) => (
+                                            <CommandItem key={p.id} value={p.name} onSelect={() => { setFilterProduct(p.id === filterProduct ? '' : p.id); setProductComboboxOpen(false); }}>
+                                                <Check className={cn("mr-2 h-4 w-4", filterProduct === p.id ? "opacity-100" : "opacity-0")} />
+                                                {p.name}
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+
 
       {loading ? (
          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
