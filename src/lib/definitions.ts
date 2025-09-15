@@ -9,6 +9,7 @@ export const AddProductFormSchema = z.object({
   price: z.coerce.number().min(0, 'Price must be a non-negative number.'),
   stock: z.coerce.number().min(0, 'Stock must be a non-negative number.'),
   restockThreshold: z.coerce.number().min(0, 'Threshold must be a non-negative number.'),
+  imageUrl: z.string().min(1, 'Product image is required.'),
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;
@@ -25,6 +26,7 @@ export type AddProductFormState = {
     price?: string[];
     stock?: string[];
     restockThreshold?: string[];
+    imageUrl?: string[];
   };
   success: boolean;
 };

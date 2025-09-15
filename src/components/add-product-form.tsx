@@ -54,8 +54,20 @@ export function AddProductForm() {
       price: 0,
       stock: 0,
       restockThreshold: 0,
+      imageUrl: '',
     },
   });
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        form.setValue('imageUrl', reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const onSubmit = (values: AddProductFormValues) => {
     startTransition(async () => {
@@ -147,6 +159,19 @@ export function AddProductForm() {
                         </FormItem>
                     )}
                 />
+                 <FormField
+                    control={form.control}
+                    name="imageUrl"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Product Image</FormLabel>
+                            <FormControl>
+                               <Input type="file" accept="image/*" onChange={handleImageChange} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -192,7 +217,7 @@ export function AddProductForm() {
                             <FormItem>
                                 <FormLabel>Price</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                                    <Input type="number" step="0.01" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>

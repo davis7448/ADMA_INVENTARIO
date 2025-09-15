@@ -25,7 +25,7 @@ export async function addProductAction(
     const newProduct: Product = {
       id: newProductId,
       ...validatedFields.data,
-      imageUrl: `https://picsum.photos/seed/${newProductId}/600/400`,
+      // The imageUrl is now coming directly from the form as a Data URI
       imageHint: 'new product',
     };
     
@@ -34,7 +34,7 @@ export async function addProductAction(
     revalidatePath('/products');
 
     return {
-      message: 'Product added successfully.',
+      message: `Product added successfully. New Product ID: ${newProductId}`,
       success: true,
     };
   } catch (error) {
