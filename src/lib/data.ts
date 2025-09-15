@@ -117,12 +117,17 @@ export const addProduct = (product: Product) => {
   products.unshift(product);
 };
 
-export const updateProductStock = (productId: string, quantity: number) => {
-    const productIndex = products.findIndex(p => p.id === productId);
-    if (productIndex !== -1) {
+export const updateProductStock = (productId: string, quantity: number, operation: 'add' | 'subtract') => {
+  const productIndex = products.findIndex(p => p.id === productId);
+  if (productIndex !== -1) {
+    if (operation === 'add') {
+      products[productIndex].stock += quantity;
+    } else {
       products[productIndex].stock -= quantity;
     }
+  }
 };
+
 
 export let inventoryMovements: InventoryMovement[] = [];
 

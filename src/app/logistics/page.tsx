@@ -51,6 +51,10 @@ interface DispatchedProduct extends Product {
     dispatchQuantity: number;
 }
 
+interface ReceivedProduct extends Product {
+    receiveQuantity: number;
+}
+
 interface ReturnedProduct extends Product {
     trackingNumber: string;
 }
@@ -61,21 +65,29 @@ const carriers = ['DHL', 'FedEx', 'UPS', 'Estafeta'];
 export default function LogisticsPage() {
     const { user } = useAuth();
     const router = useRouter();
+    const { toast } = useToast();
 
+    // Salidas State
     const [platform, setPlatform] = useState('');
     const [carrier, setCarrier] = useState('');
     const [dispatchedProducts, setDispatchedProducts] = useState<DispatchedProduct[]>([]);
     const barcodeRef = useRef<HTMLInputElement>(null);
-    const { toast } = useToast();
 
-    // State for returns
+    // Entradas State
+    const [receivedProducts, setReceivedProducts] = useState<ReceivedProduct[]>([]);
+    const entryBarcodeRef = useRef<HTMLInputElement>(null);
+    
+    // Devoluciones State
     const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
     const [returnCarrier, setReturnCarrier] = useState('');
     const [returnedProducts, setReturnedProducts] = useState<ReturnedProduct[]>([]);
     const [currentTrackingNumber, setCurrentTrackingNumber] = useState('');
     const [productToAdd, setProductToAdd] = useState<Product | null>(null);
     const returnBarcodeRef = useRef<HTMLInputElement>(null);
-    const trackingDialogCloseRef = useRef<HTMLButtonElement>(null);
+
+    // Averías State
+    const [damagedSku, setDamagedSku] = useState('');
+    const [damageDescription, setDamageDescription] = useState('');
 
 
     useEffect(() => {
@@ -84,7 +96,7 @@ export default function LogisticsPage() {
         }
     }, [user, router]);
 
-
+    // --- SALIDAS ---
     const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -109,7 +121,7 @@ export default function LogisticsPage() {
           }
           if(barcodeRef.current) barcodeRef.current.value = '';
         }
-      };
+    };
 
     const handleRemoveProduct = (productId: string) => {
         setDispatchedProducts(prev => prev.filter(p => p.id !== productId));
@@ -125,9 +137,8 @@ export default function LogisticsPage() {
             return;
         }
 
-        // Update stock and create inventory movement for each dispatched product
         dispatchedProducts.forEach(product => {
-            updateProductStock(product.id, product.dispatchQuantity);
+            updateProductStock(product.id, product.dispatchQuantity, 'subtract');
             addInventoryMovement({
                 type: 'Salida',
                 productId: product.id,
@@ -148,6 +159,60 @@ export default function LogisticsPage() {
         router.refresh();
     }
 
+    // --- ENTRADAS ---
+    const handleEntryBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const barcode = e.currentTarget.value;
+            const product = products.find(p => p.sku === barcode);
+
+            if (product) {
+                setReceivedProducts(prev => {
+                    const existing = prev.find(p => p.id === product.id);
+                    if (existing) {
+                        return prev.map(p => p.id === product.id ? { ...p, receiveQuantity: p.receiveQuantity + 1 } : p);
+                    }
+                    return [...prev, { ...product, receiveQuantity: 1 }];
+                });
+                toast({ title: 'Producto Agregado', description: `${product.name} añadido a la recepción.` });
+            } else {
+                toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado.' });
+            }
+            if (entryBarcodeRef.current) entryBarcodeRef.current.value = '';
+        }
+    };
+    
+    const handleReceivedQuantityChange = (productId: string, quantity: number) => {
+        if (quantity >= 0) {
+            setReceivedProducts(prev => prev.map(p => p.id === productId ? { ...p, receiveQuantity: quantity } : p));
+        }
+    };
+
+    const handleRegisterEntry = () => {
+        if (receivedProducts.length === 0) {
+            toast({ variant: 'destructive', title: 'Error', description: 'No hay productos para registrar.' });
+            return;
+        }
+
+        receivedProducts.forEach(product => {
+            if(product.receiveQuantity > 0) {
+                updateProductStock(product.id, product.receiveQuantity, 'add');
+                addInventoryMovement({
+                    type: 'Entrada',
+                    productId: product.id,
+                    productName: product.name,
+                    quantity: product.receiveQuantity,
+                    notes: 'Recepción de mercancía de proveedor.'
+                });
+            }
+        });
+
+        toast({ title: 'Entrada Registrada', description: 'El stock ha sido actualizado correctamente.' });
+        setReceivedProducts([]);
+        router.refresh();
+    };
+
+    // --- DEVOLUCIONES ---
     const handleReturnBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -185,8 +250,7 @@ export default function LogisticsPage() {
         }
     };
 
-
-     const handleRemoveReturnedProduct = (sku: string, trackingNumber: string) => {
+    const handleRemoveReturnedProduct = (sku: string, trackingNumber: string) => {
         setReturnedProducts(prev => prev.filter(p => !(p.sku === sku && p.trackingNumber === trackingNumber)));
     };
 
@@ -199,14 +263,53 @@ export default function LogisticsPage() {
             });
             return;
         }
+
+        returnedProducts.forEach(product => {
+            updateProductStock(product.id, 1, 'add');
+            addInventoryMovement({
+                type: 'Entrada',
+                productId: product.id,
+                productName: product.name,
+                quantity: 1,
+                notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${returnCarrier}`
+            });
+        });
         
         toast({
             title: 'Devolución Procesada',
-            description: `Se ha procesado una devolución con ${returnedProducts.length} producto(s) de la transportadora ${returnCarrier}.`
+            description: `Se ha procesado una devolución con ${returnedProducts.length} producto(s). El stock ha sido actualizado.`
         });
         
         setReturnCarrier('');
         setReturnedProducts([]);
+        router.refresh();
+    };
+
+    // --- AVERÍAS ---
+    const handleRegisterDamage = () => {
+        const product = products.find(p => p.sku.toLowerCase() === damagedSku.toLowerCase());
+        if (!product) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado con ese SKU.' });
+            return;
+        }
+        if (!damageDescription) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, describe el daño.' });
+            return;
+        }
+
+        updateProductStock(product.id, 1, 'subtract');
+        addInventoryMovement({
+            type: 'Salida',
+            productId: product.id,
+            productName: product.name,
+            quantity: 1,
+            notes: `Producto averiado: ${damageDescription}`
+        });
+
+        toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name} y se ha ajustado el stock.` });
+        setDamagedSku('');
+        setDamageDescription('');
+        router.refresh();
     };
 
 
@@ -351,8 +454,10 @@ export default function LogisticsPage() {
                                         <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                         <Input 
                                             id="barcode-entrada"
+                                            ref={entryBarcodeRef}
                                             placeholder="Escanear SKU para agregar producto" 
                                             className="pl-8"
+                                            onKeyDown={handleEntryBarcodeScan}
                                         />
                                     </div>
                                 </div>
@@ -368,16 +473,34 @@ export default function LogisticsPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                <TableRow>
-                                                    <TableCell colSpan={3} className="text-center">Escanea un producto para comenzar.</TableCell>
-                                                </TableRow>
+                                                {receivedProducts.length > 0 ? (
+                                                    receivedProducts.map(product => (
+                                                        <TableRow key={product.id}>
+                                                            <TableCell className="font-medium">{product.name}</TableCell>
+                                                            <TableCell>{product.sku}</TableCell>
+                                                            <TableCell>
+                                                                <Input 
+                                                                    type="number"
+                                                                    className="w-24 text-center mx-auto"
+                                                                    value={product.receiveQuantity}
+                                                                    onChange={(e) => handleReceivedQuantityChange(product.id, parseInt(e.target.value, 10))}
+                                                                    min="0"
+                                                                />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="text-center">Escanea un producto para comenzar.</TableCell>
+                                                    </TableRow>
+                                                )}
                                             </TableBody>
                                         </Table>
                                     </CardContent>
                                 </Card>
                             </CardContent>
                             <CardFooter>
-                                <Button>Registrar Entrada</Button>
+                                <Button onClick={handleRegisterEntry}>Registrar Entrada</Button>
                             </CardFooter>
                         </Card>
                     </TabsContent>
@@ -469,15 +592,25 @@ export default function LogisticsPage() {
                                     <CardContent className="space-y-4">
                                          <div>
                                             <Label htmlFor="damage-product-sku">SKU del Producto Averiado</Label>
-                                            <Input id="damage-product-sku" placeholder="Ej: WM-ERGO-01" />
+                                            <Input 
+                                                id="damage-product-sku" 
+                                                placeholder="Ej: WM-ERGO-01" 
+                                                value={damagedSku}
+                                                onChange={(e) => setDamagedSku(e.target.value)}
+                                            />
                                         </div>
                                         <div>
-                                            <Label>Descripción del Daño</Label>
-                                            <Textarea placeholder="Describe el daño o el problema del producto..." />
+                                            <Label htmlFor="damage-description">Descripción del Daño</Label>
+                                            <Textarea 
+                                                id="damage-description"
+                                                placeholder="Describe el daño o el problema del producto..." 
+                                                value={damageDescription}
+                                                onChange={(e) => setDamageDescription(e.target.value)}
+                                            />
                                         </div>
                                     </CardContent>
                                     <CardFooter>
-                                        <Button variant="destructive">Registrar Avería</Button>
+                                        <Button variant="destructive" onClick={handleRegisterDamage}>Registrar Avería</Button>
                                     </CardFooter>
                                 </Card>
                             </TabsContent>
