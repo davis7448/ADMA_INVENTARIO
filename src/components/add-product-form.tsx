@@ -1,10 +1,9 @@
 
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useActionState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -39,7 +38,6 @@ import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category } from '@/lib/types';
-import { useFormStatus } from 'react-dom';
 
 interface AddProductFormProps {
   onProductAdded: () => void;
@@ -50,13 +48,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const formRef = useRef<HTMLFormElement>(null);
-  
-  const [state, formAction] = useActionState(addProductAction, {
-    message: '',
-    errors: {},
-    success: false,
-  });
+  const [isPending, startTransition] = useTransition();
 
   const form = useForm<AddProductFormValues>({
     resolver: zodResolver(AddProductFormSchema),
@@ -83,48 +75,52 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   }, [open]);
 
   useEffect(() => {
-    if (state.success) {
-      toast({
-        title: 'Success!',
-        description: state.message,
-      });
-      setOpen(false); 
-      onProductAdded();
-    } else if (state.message && !state.success) {
-       toast({
-        title: 'Error',
-        description: state.message || 'Something went wrong.',
-        variant: 'destructive',
-      });
-       if (state.errors) {
-            Object.entries(state.errors).forEach(([key, value]) => {
-                if (key !== '_form' && value) {
-                    form.setError(key as keyof AddProductFormValues, {
-                        type: 'manual',
-                        message: value[0],
-                    });
-                }
-            });
-        }
-    }
-  }, [state, onProductAdded, form, toast]);
-
-
-  useEffect(() => {
     if (!open) {
       form.reset();
-      formRef.current?.reset();
     }
   }, [open, form]);
-  
-  function SubmitButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button type="submit" disabled={pending}>
-            {pending ? 'Adding Product...' : 'Add Product'}
-        </Button>
-    );
-  }
+
+  const onSubmit = (values: AddProductFormValues) => {
+    const formData = new FormData();
+    Object.entries(values).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+            if (key === 'image' && value instanceof File) {
+                formData.append(key, value);
+            } else if (typeof value !== 'object') {
+                formData.append(key, String(value));
+            }
+        }
+    });
+
+    startTransition(async () => {
+        const result = await addProductAction(formData);
+
+        if (result.success) {
+            toast({
+              title: 'Success!',
+              description: result.message,
+            });
+            setOpen(false); 
+            onProductAdded();
+        } else {
+            toast({
+              title: 'Error',
+              description: result.message || 'Something went wrong.',
+              variant: 'destructive',
+            });
+            if (result.errors) {
+                Object.entries(result.errors).forEach(([key, errorMessages]) => {
+                    if (key in values && errorMessages) {
+                         form.setError(key as keyof AddProductFormValues, {
+                            type: 'manual',
+                            message: errorMessages[0],
+                        });
+                    }
+                });
+            }
+        }
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -139,11 +135,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-            <form
-                ref={formRef} 
-                action={formAction}
-                className="space-y-4"
-            >
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -213,7 +205,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Category</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a category" />
@@ -235,7 +227,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Supplier</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a supplier" />
@@ -273,7 +265,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Stock</FormLabel>
                                 <FormControl>
-                                    <Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} />
+                                    <Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -286,7 +278,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Restock Threshold</FormLabel>
                                 <FormControl>
-                                    <Input type="number" placeholder="e.g., 10" {...field} value={field.value ?? ''} />
+                                    <Input type="number" placeholder="e.g., 10" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -299,7 +291,9 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             Cancel
                         </Button>
                     </DialogClose>
-                    <SubmitButton />
+                     <Button type="submit" disabled={isPending}>
+                        {isPending ? 'Adding Product...' : 'Add Product'}
+                    </Button>
                 </DialogFooter>
             </form>
         </Form>

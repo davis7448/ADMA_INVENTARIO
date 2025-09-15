@@ -22,7 +22,6 @@ const AddProductActionSchema = z.object({
 
 
 export async function addProductAction(
-  prevState: AddProductFormState,
   formData: FormData
 ): Promise<AddProductFormState> {
 
@@ -76,5 +75,3 @@ export async function addProductAction(
     };
   }
 }
-
-    
