@@ -3,11 +3,6 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  // This allows the Next.js dev server to accept requests from any
-  // of the subdomains that Firebase Studio uses for its previews.
-  devServer: {
-    allowedHosts: ["*.cloudworkstations.dev"],
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
