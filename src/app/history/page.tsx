@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import {
@@ -522,7 +523,7 @@ export default function HistoryPage() {
                                                                     </TableRow>
                                                                 </TableHeader>
                                                                 <TableBody>
-                                                                    {ex.products.map(p => (
+                                                                    {ex.products && ex.products.map(p => (
                                                                         <TableRow key={p.productId}>
                                                                             <TableCell>{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
                                                                             <TableCell className="text-right">{p.quantity}</TableCell>
@@ -562,3 +563,6 @@ export default function HistoryPage() {
   );
 }
 
+
+
+    
