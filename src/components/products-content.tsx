@@ -121,6 +121,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                       <span className="sr-only">Image</span>
                     </TableHead>
                     <TableHead>Name</TableHead>
+                    <TableHead>Tipo</TableHead>
                     <TableHead>Rotación</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Category</TableHead>
@@ -143,6 +144,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <Skeleton className="h-16 w-16 rounded-md" />
                             </TableCell>
                             <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-10" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -166,6 +168,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             />
                         </TableCell>
                         <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell>
+                            <Badge variant={product.productType === 'simple' ? 'secondary' : 'outline'}>{product.productType}</Badge>
+                        </TableCell>
                         <TableCell>
                             <Tooltip>
                                 <TooltipTrigger>

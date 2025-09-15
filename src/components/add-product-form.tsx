@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import {
     Form,
     FormControl,
@@ -56,6 +57,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       name: '',
       sku: '',
       description: '',
+      productType: 'simple',
       categoryId: '',
       vendorId: '',
       price: undefined,
@@ -207,6 +209,36 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormLabel>Link de Contenido (Google Drive)</FormLabel>
                             <FormControl>
                                 <Input placeholder="https://docs.google.com/..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                 <FormField
+                    control={form.control}
+                    name="productType"
+                    render={({ field }) => (
+                        <FormItem className="space-y-3">
+                            <FormLabel>Product Type</FormLabel>
+                            <FormControl>
+                                <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                className="flex flex-row space-x-4"
+                                >
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="simple" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Simple</FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="variable" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Variable</FormLabel>
+                                </FormItem>
+                                </RadioGroup>
                             </FormControl>
                             <FormMessage />
                         </FormItem>

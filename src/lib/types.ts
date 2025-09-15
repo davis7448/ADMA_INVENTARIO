@@ -17,6 +17,7 @@ export type Product = {
   rotationCategoryName?: string;
   reservations?: Reservation[]; // This will now be populated on the fly
   contentLink?: string;
+  productType: 'simple' | 'variable';
 };
 
 export type Reservation = {
@@ -188,5 +189,3 @@ export type StaleReservationAlert = {
     vendedorName: string;
     quantity: number;
 };
-
-

@@ -10,6 +10,9 @@ export const AddProductFormSchema = z.object({
   name: z.string().min(1, 'Product name is required.'),
   sku: z.string().min(1, 'SKU is required.'),
   description: z.string().min(1, 'Description is required.'),
+  productType: z.enum(['simple', 'variable'], {
+    required_error: "You need to select a product type.",
+  }),
   categoryId: z.string().min(1, 'Category is required.'),
   vendorId: z.string().min(1, 'Supplier is required.'),
   price: z.preprocess(
@@ -47,6 +50,7 @@ export type AddProductFormState = {
     name?: string[];
     sku?: string[];
     description?: string[];
+    productType?: string[];
     categoryId?: string[];
     vendorId?: string[];
     price?: string[];
@@ -70,6 +74,7 @@ errors?: {
     name?: string[];
     sku?: string[];
     description?: string[];
+    productType?: string[];
     categoryId?: string[];
     vendorId?: string[];
     price?: string[];

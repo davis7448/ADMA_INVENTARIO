@@ -12,7 +12,8 @@
       "stock": 45,
       "pendingStock": 0,
       "restockThreshold": 10,
-      "vendorId": "sup-1"
+      "vendorId": "sup-1",
+      "productType": "simple"
     },
     {
       "id": "prod-2",
@@ -26,7 +27,8 @@
       "stock": 28,
       "pendingStock": 0,
       "restockThreshold": 5,
-      "vendorId": "sup-2"
+      "vendorId": "sup-2",
+      "productType": "simple"
     },
     {
       "id": "prod-3",
@@ -40,7 +42,8 @@
       "stock": 20,
       "pendingStock": 0,
       "restockThreshold": 8,
-      "vendorId": "sup-1"
+      "vendorId": "sup-1",
+      "productType": "simple"
     },
     {
       "id": "prod-4",
@@ -54,7 +57,8 @@
       "stock": 15,
       "pendingStock": 0,
       "restockThreshold": 5,
-      "vendorId": "sup-3"
+      "vendorId": "sup-3",
+      "productType": "simple"
     },
     {
       "id": "prod-5",
@@ -68,6 +72,7 @@
       "stock": 10,
       "pendingStock": 0,
       "restockThreshold": 3,
-      "vendorId": "sup-1"
+      "vendorId": "sup-1",
+      "productType": "simple"
     }
 ]
