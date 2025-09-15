@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -22,11 +23,13 @@ import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { InventoryMovement } from '@/lib/types';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function HistoryPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user && user.role !== 'logistics' && user.role !== 'admin') {
@@ -35,7 +38,13 @@ export default function HistoryPage() {
   }, [user, router]);
 
   useEffect(() => {
-    setMovements(getInventoryMovements());
+    async function fetchMovements() {
+        setLoading(true);
+        const fetchedMovements = await getInventoryMovements();
+        setMovements(fetchedMovements);
+        setLoading(false);
+    }
+    fetchMovements();
   }, []);
   
   const sortedMovements = [...movements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -69,7 +78,7 @@ export default function HistoryPage() {
         <CardHeader>
           <CardTitle>Movimientos Recientes</CardTitle>
           <CardDescription>
-            Mostrando los últimos {sortedMovements.length} movimientos de inventario.
+            Mostrando los últimos movimientos de inventario.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -84,7 +93,17 @@ export default function HistoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedMovements.length > 0 ? (
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12 mx-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                    </TableRow>
+                ))
+              ) : sortedMovements.length > 0 ? (
                 sortedMovements.map((movement) => (
                   <TableRow key={movement.id}>
                     <TableCell className="font-medium">
