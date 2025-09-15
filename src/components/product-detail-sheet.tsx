@@ -84,10 +84,11 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
               <Skeleton className="h-48 w-full rounded-lg" />
               <Skeleton className="h-8 w-3/4" />
               <Skeleton className="h-6 w-1/2" />
-              <div className="grid grid-cols-3 gap-4 pt-4">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
               </div>
                <Skeleton className="h-64 w-full" />
             </div>
@@ -96,19 +97,19 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex flex-col sm:flex-row gap-6">
-                    <div className="sm:w-1/3">
+                    <div className="sm:w-1/3 flex-shrink-0">
                       <Image
                         src={product.imageUrl}
                         alt={product.name}
                         width={200}
                         height={200}
-                        className="rounded-lg object-cover aspect-square"
+                        className="rounded-lg object-cover aspect-square w-full"
                       />
                     </div>
                     <div className="sm:w-2/3 space-y-2">
                       <h2 className="text-2xl font-bold font-headline">{product.name}</h2>
-                      <p className="text-sm text-muted-foreground">{product.sku}</p>
-                      <p className="pt-2">{product.description}</p>
+                      <p className="text-sm text-muted-foreground font-mono">{product.sku}</p>
+                      <p className="pt-2 text-muted-foreground">{product.description}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -120,7 +121,7 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
                         <CardDescription>Price</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-2xl font-bold">${product.price.toFixed(2)}</p>
+                        <p className="text-2xl font-bold">${product.price.toLocaleString('en-US')}</p>
                     </CardContent>
                 </Card>
                  <Card>
