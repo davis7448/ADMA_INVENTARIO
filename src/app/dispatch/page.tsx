@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -396,7 +395,7 @@ function DispatchPageContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <div className="flex w-full items-center border-b">
-                                        <AccordionTrigger className="w-[80%]">
+                                        <AccordionTrigger className="flex-grow">
                                             <div className="grid grid-cols-2 w-full items-center text-sm">
                                                 <div className="text-left">
                                                     <p className="font-semibold">{order.dispatchId}</p>
@@ -410,7 +409,7 @@ function DispatchPageContent() {
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
-                                        <div className="w-[20%] flex justify-end pr-4" onClick={(e) => e.stopPropagation()}>
+                                        <div className="pr-4" onClick={(e) => e.stopPropagation()}>
                                             <ProcessDispatchDialog
                                                 order={orderForDialog}
                                                 productsById={productsById}
@@ -492,3 +491,5 @@ export default function DispatchPage() {
         </AuthProviderWrapper>
     )
 }
+
+    
