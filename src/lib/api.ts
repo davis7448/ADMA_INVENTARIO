@@ -1,7 +1,7 @@
 
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform } from './types';
 import {v4 as uuidv4} from 'uuid';
@@ -247,14 +247,35 @@ export const getInventoryMovementsByDate = async (date: Date): Promise<Inventory
     return movementList;
 };
 
-export const addInventoryMovement = async (movement: Omit<InventoryMovement, 'id' | 'date'>) => {
-    const movementsCol = collection(db, 'inventoryMovements');
-    await addDoc(movementsCol, {
-        ...movement,
-        date: new Date(),
-    });
-};
+export const addInventoryMovement = async (movementData: Omit<InventoryMovement, 'id' | 'movementId' | 'date'>): Promise<number> => {
+  const counterRef = doc(db, 'counters', 'inventoryMovements');
+  const movementCollectionRef = collection(db, 'inventoryMovements');
 
+  try {
+    const newMovementId = await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      if (!counterDoc.exists()) {
+        throw new Error("Counter document does not exist!");
+      }
+
+      const newId = counterDoc.data().currentId + 1;
+      transaction.update(counterRef, { currentId: newId });
+
+      const newMovementRef = doc(movementCollectionRef);
+      transaction.set(newMovementRef, {
+        ...movementData,
+        movementId: newId,
+        date: new Date(),
+      });
+
+      return newId;
+    });
+    return newMovementId;
+  } catch (e) {
+    console.error("Transaction failed: ", e);
+    throw new Error("Failed to add inventory movement.");
+  }
+};
     
 
     

@@ -205,7 +205,7 @@ export default function HistoryPage() {
   const handleExportMovementsExcel = () => {
     const productsById = new Map(products.map(p => [p.id, p]));
     const flattenedData = filteredMovements.map(movement => ({
-        'ID Movimiento': movement.id,
+        'ID Movimiento': movement.movementId,
         'Fecha': format(new Date(movement.date), "dd/MM/yyyy HH:mm"),
         'Tipo': movement.type,
         'SKU Producto': productsById.get(movement.productId)?.sku || 'N/A',
@@ -387,6 +387,7 @@ export default function HistoryPage() {
                 <Table>
                     <TableHeader>
                     <TableRow>
+                        <TableHead>ID Mov.</TableHead>
                         <TableHead>Fecha</TableHead>
                         <TableHead>Producto</TableHead>
                         <TableHead>Tipo</TableHead>
@@ -398,6 +399,7 @@ export default function HistoryPage() {
                     {loading ? (
                         Array.from({ length: 5 }).map((_, i) => (
                             <TableRow key={i}>
+                                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                                 <TableCell><Skeleton className="h-4 w-40" /></TableCell>
                                 <TableCell><Skeleton className="h-6 w-20" /></TableCell>
@@ -408,6 +410,7 @@ export default function HistoryPage() {
                     ) : filteredMovements.length > 0 ? (
                         filteredMovements.map((movement) => (
                         <TableRow key={movement.id}>
+                             <TableCell className="font-mono text-xs">{movement.movementId}</TableCell>
                             <TableCell className="font-medium">
                             {format(new Date(movement.date), "dd/MM/yyyy HH:mm")}
                             </TableCell>
@@ -423,7 +426,7 @@ export default function HistoryPage() {
                         ))
                     ) : (
                         <TableRow>
-                        <TableCell colSpan={5} className="text-center">
+                        <TableCell colSpan={6} className="text-center">
                             {hasActiveFilters
                                 ? "No se encontraron movimientos para los filtros seleccionados."
                                 : "No hay movimientos de inventario registrados."

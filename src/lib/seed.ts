@@ -43,18 +43,25 @@ async function seedCollection<T extends { id: string }>(collectionName: string, 
 async function seedInventoryMovements() {
     console.log('Seeding inventoryMovements...');
     const collectionRef = db.collection('inventoryMovements');
+    const counterRef = db.collection('counters').doc('inventoryMovements');
     const batch = db.batch();
+    
+    let currentId = 1000;
+
     inventoryMovements.forEach((movement) => {
         const docRef = collectionRef.doc(); // Create new doc with random ID
         const randomDaysAgo = Math.floor(Math.random() * 30);
         const date = new Date();
         date.setDate(date.getDate() - randomDaysAgo);
 
-        batch.set(docRef, { ...movement, date });
+        batch.set(docRef, { ...movement, date, movementId: currentId++ });
     });
+
+    batch.set(counterRef, { currentId: currentId -1 });
 
     await batch.commit();
     console.log(`Seeded ${inventoryMovements.length} new documents into inventoryMovements.`);
+    console.log(`Set inventoryMovements counter to ${currentId - 1}.`);
 }
 
 async function main() {

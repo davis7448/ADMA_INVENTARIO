@@ -279,16 +279,16 @@ export default function LogisticsPage() {
         }
     };
 
-    const handleRegisterEntry = () => {
+    const handleRegisterEntry = async () => {
         if (receivedProducts.length === 0) {
             toast({ variant: 'destructive', title: 'Error', description: 'No hay productos para registrar.' });
             return;
         }
 
-        receivedProducts.forEach(product => {
+        const promises = receivedProducts.map(product => {
             if(product.receiveQuantity > 0) {
                 updateProductStock(product.id, product.receiveQuantity, 'add');
-                addInventoryMovement({
+                return addInventoryMovement({
                     type: 'Entrada',
                     productId: product.id,
                     productName: product.name,
@@ -297,6 +297,8 @@ export default function LogisticsPage() {
                 });
             }
         });
+        
+        await Promise.all(promises);
 
         toast({ title: 'Entrada Registrada', description: 'El stock ha sido actualizado correctamente.' });
         setReceivedProducts([]);
@@ -345,7 +347,7 @@ export default function LogisticsPage() {
         setReturnedProducts(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleProcessReturn = () => {
+    const handleProcessReturn = async () => {
         if (!returnCarrier || returnedProducts.length === 0) {
             toast({
                 variant: 'destructive',
@@ -355,9 +357,9 @@ export default function LogisticsPage() {
             return;
         }
 
-        returnedProducts.forEach(product => {
+        const promises = returnedProducts.map(product => {
             updateProductStock(product.id, 1, 'add');
-            addInventoryMovement({
+            return addInventoryMovement({
                 type: 'Entrada',
                 productId: product.id,
                 productName: product.name,
@@ -365,6 +367,8 @@ export default function LogisticsPage() {
                 notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${carriers.find(c => c.id === returnCarrier)?.name}`
             });
         });
+
+        await Promise.all(promises);
         
         toast({
             title: 'Devolución Procesada',
@@ -377,7 +381,7 @@ export default function LogisticsPage() {
     };
 
     // --- AVERÍAS ---
-    const handleRegisterDamage = () => {
+    const handleRegisterDamage = async () => {
         const product = allProductsList.find(p => p.sku.toLowerCase() === damagedSku.toLowerCase());
         if (!product) {
             toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado con ese SKU.' });
@@ -397,7 +401,7 @@ export default function LogisticsPage() {
         }
 
         updateProductStock(product.id, 1, 'subtract');
-        addInventoryMovement({
+        await addInventoryMovement({
             type: 'Salida',
             productId: product.id,
             productName: product.name,
