@@ -23,7 +23,7 @@ import inventoryMovements from './seed-data/inventory-movements.json';
 // Initialize Firebase Admin SDK
 const app: App = getApps().length
   ? getApps()[0]!
-  : initializeApp({ projectId: firebaseConfig.projectId });
+  : initializeApp();
 
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -125,3 +125,4 @@ async function main() {
 }
 
 main();
+
