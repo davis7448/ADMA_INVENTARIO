@@ -94,27 +94,29 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
 
   const totalReserved = useMemo(() => {
     if (!product.reservations) return 0;
-
+  
     if (product.productType === 'simple') {
-        return product.reservations.reduce((sum, r) => sum + r.quantity, 0);
+      return product.reservations.reduce((sum, r) => sum + r.quantity, 0);
     }
-    // For variable, we sum reservations for the selected variant
+  
+    // If a specific variant is selected, show reservations for it
     if (selectedVariant) {
-        return product.reservations
-            .filter(r => r.variantId === selectedVariant.id)
-            .reduce((sum, r) => sum + r.quantity, 0);
+      return product.reservations
+        .filter(r => r.variantId === selectedVariant.id)
+        .reduce((sum, r) => sum + r.quantity, 0);
     }
-    return 0; // Or sum all variant reservations if none is selected? Let's stick to selected one.
+  
+    // If no variant is selected, show the sum of all reservations for the product
+    return product.reservations.reduce((sum, r) => sum + r.quantity, 0);
   }, [product, selectedVariant]);
-
+  
   const stockFisico = useMemo(() => {
-    if (product.productType === 'simple') {
-        return product.stock;
-    }
+    // If a specific variant is selected, show its stock
     if (selectedVariant) {
-        return selectedVariant.stock;
+      return selectedVariant.stock;
     }
-    return product.stock; // Show total stock if no variant selected
+    // Otherwise, show the total stock of the parent product
+    return product.stock;
   }, [product, selectedVariant]);
   
   const availableToReserve = stockFisico - totalReserved;
