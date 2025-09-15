@@ -225,3 +225,17 @@ export type CreateUserFormState = {
     errors?: z.ZodError<CreateUserFormValues>['formErrors']['fieldErrors'];
     success: boolean;
 };
+
+export const UpdateProfileFormSchema = z.object({
+    name: z.string().min(1, 'Name is required.'),
+    phone: z.string().optional(),
+    avatar: z.any().optional(),
+});
+
+export type UpdateProfileFormValues = z.infer<typeof UpdateProfileFormSchema>;
+
+export type UpdateProfileFormState = {
+    message: string;
+    errors?: z.ZodError<UpdateProfileFormValues>['formErrors']['fieldErrors'];
+    success: boolean;
+};

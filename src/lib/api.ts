@@ -361,6 +361,11 @@ export const updateUserRoleInDb = async (userId: string, role: User['role']) => 
     await updateDoc(userRef, { role });
 };
 
+export const updateUserProfile = async (userId: string, profileUpdate: Partial<Omit<User, 'id'>>) => {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, profileUpdate);
+}
+
 export const sendPasswordReset = async (email: string) => {
     const auth = getAuth();
     await sendPasswordResetEmail(auth, email);

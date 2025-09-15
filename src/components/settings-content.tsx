@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -19,6 +20,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UserManagement } from './user-management';
+import { ProfileManagement } from './profile-management';
 
 interface SettingsContentProps {
     initialRotationCategories: RotationCategory[];
@@ -42,6 +44,8 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
     useEffect(() => {
         if (user?.role === 'admin') {
             fetchData();
+        } else {
+            setLoading(false);
         }
     }, [user]);
 
@@ -74,7 +78,7 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
         }
     }
 
-    const canEdit = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin';
 
     return (
         <div className="space-y-6">
@@ -85,7 +89,9 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
             </div>
           </div>
           
-          {canEdit && (
+          <ProfileManagement />
+
+          {isAdmin && (
             <UserManagement initialUsers={users} onUsersUpdate={fetchData} loading={loading} />
           )}
 
@@ -99,7 +105,7 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
             </CardHeader>
             <CardContent>
                 <div className="grid gap-6">
-                    {loading ? (
+                    {loading && isAdmin ? (
                         Array.from({ length: 4 }).map((_, i) => (
                             <div key={i} className="flex items-center justify-between">
                                 <div className="space-y-1">
@@ -123,7 +129,7 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
                                         value={category.salesThreshold}
                                         onChange={(e) => handleThresholdChange(category.id, e.target.value)}
                                         className="w-28 text-right"
-                                        disabled={!canEdit || isSaving}
+                                        disabled={!isAdmin || isSaving}
                                         min="0"
                                     />
                                     <span className="text-sm text-muted-foreground">unidades</span>
@@ -133,7 +139,7 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
                     )}
                 </div>
             </CardContent>
-            {canEdit && (
+            {isAdmin && (
                  <CardFooter className="border-t px-6 py-4">
                     <Button onClick={handleSaveChanges} disabled={isSaving}>
                         {isSaving ? 'Guardando...' : 'Guardar Cambios'}
