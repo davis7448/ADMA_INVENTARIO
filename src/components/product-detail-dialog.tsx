@@ -204,6 +204,16 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                         <CarrierChart data={performanceData?.salesByPlatform || []} />
                     </CardContent>
                 </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Returns by Carrier</CardTitle>
+                        <CardDescription>Distribution of units returned by each carrier.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <CarrierChart data={performanceData?.returnsByCarrier || []} />
+                    </CardContent>
+                </Card>
               </div>
             </>
           )}

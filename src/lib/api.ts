@@ -638,6 +638,7 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     const salesByPlatform: Record<string, number> = {};
     const salesByDay: Record<string, number> = {};
     const returnsByDay: Record<string, number> = {};
+    const returnsByCarrier: Record<string, number> = {};
 
     // Process dispatch orders for sales data
     for (const order of dispatchOrders) {
@@ -658,18 +659,24 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     const thirtyDaysAgo = subDays(new Date(), 30);
     const returnMovements = movements.filter(m => 
         m.type === 'Entrada' && 
-        m.notes.toLowerCase().includes('devolución') && 
+        (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia')) &&
         new Date(m.date) >= thirtyDaysAgo
     );
 
     for (const movement of returnMovements) {
         const day = format(startOfDay(new Date(movement.date)), 'yyyy-MM-dd');
         returnsByDay[day] = (returnsByDay[day] || 0) + movement.quantity;
+        
+        // Extract carrier from notes
+        const carrierMatch = movement.notes.match(/Transportadora: (.*?)$/);
+        const carrierName = carrierMatch ? carrierMatch[1].trim() : 'Unknown';
+        returnsByCarrier[carrierName] = (returnsByCarrier[carrierName] || 0) + movement.quantity;
     }
 
     return {
         salesByCarrier: Object.entries(salesByCarrier).map(([name, value]) => ({ name, value })),
         salesByPlatform: Object.entries(salesByPlatform).map(([name, value]) => ({ name, value })),
+        returnsByCarrier: Object.entries(returnsByCarrier).map(([name, value]) => ({ name, value })),
         salesByDay,
         returnsByDay,
     };

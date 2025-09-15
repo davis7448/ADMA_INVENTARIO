@@ -149,6 +149,7 @@ export type RotationCategory = {
 export interface ProductPerformanceData {
     salesByCarrier: { name: string; value: number }[];
     salesByPlatform: { name: string; value: number }[];
+    returnsByCarrier: { name: string; value: number }[];
     salesByDay: Record<string, number>;
     returnsByDay: Record<string, number>;
 }
