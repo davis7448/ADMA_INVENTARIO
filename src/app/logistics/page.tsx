@@ -58,7 +58,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { generatePickingListPDF } from '@/lib/pdf';
-import { format } from 'date-fns';
+import { formatToTimeZone } from '@/lib/utils';
 
 
 interface DispatchedProduct extends Product {
@@ -228,7 +228,7 @@ export default function LogisticsPage() {
         const consecutiveId = nextId.toString().padStart(3, '0');
         const platformName = platforms.find(p => p.id === platform)?.name || 'N/A';
         const carrierName = carriers.find(c => c.id === carrier)?.name || 'N/A';
-        const formattedDate = format(today, 'dd/MM/yy');
+        const formattedDate = formatToTimeZone(today, 'dd/MM/yy');
 
         const dispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
 

@@ -33,7 +33,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from './ui/command';
 import { Calendar } from './ui/calendar';
 import type { DateRange } from 'react-day-picker';
-import { cn } from '@/lib/utils';
+import { cn, formatToTimeZone } from '@/lib/utils';
 import { Check, ChevronsUpDown, Calendar as CalendarIcon, X } from 'lucide-react';
 import { Label } from './ui/label';
 
@@ -139,7 +139,7 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
                     <Label htmlFor="tracking-filter">Filtrar por guías (una por línea)</Label>
                     <Textarea
                         id="tracking-filter"
-                        placeholder="GUIA001&#10;GUIA002&#10;GUIA003"
+                        placeholder="GUIA001\nGUIA002\nGUIA003"
                         value={filterTrackingNumbers}
                         onChange={(e) => setFilterTrackingNumbers(e.target.value)}
                         rows={3}
@@ -215,7 +215,7 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
                                                 <TableBody>
                                                     {item.exceptionDetails.map((detail, index) => (
                                                         <TableRow key={index}>
-                                                            <TableCell>{format(new Date(detail.date), 'dd/MM/yyyy')}</TableCell>
+                                                            <TableCell>{formatToTimeZone(new Date(detail.date), 'dd/MM/yyyy')}</TableCell>
                                                             <TableCell>{detail.dispatchId}</TableCell>
                                                             <TableCell>
                                                                 <Badge variant="secondary">{detail.trackingNumber}</Badge>

@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatToTimeZone } from '@/lib/utils';
 
 async function AuditAlertsContent() {
     const alerts: AuditAlert[] = await getAuditAlerts();
@@ -56,7 +56,7 @@ async function AuditAlertsContent() {
                                 alerts.map((alert) => (
                                     <TableRow key={alert.id} className="hover:bg-destructive/5">
                                         <TableCell className="font-medium">
-                                            {format(new Date(alert.date), 'dd/MM/yyyy HH:mm')}
+                                            {formatToTimeZone(new Date(alert.date), 'dd/MM/yyyy HH:mm')}
                                         </TableCell>
                                         <TableCell>
                                             <div className="font-semibold">{alert.productName}</div>

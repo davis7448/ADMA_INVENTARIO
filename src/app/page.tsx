@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { DollarSign, Archive, Package, Truck, AlertTriangle } from 'lucide-react';
 import { getProducts, getSuppliers, getInventoryMovements } from '@/lib/api';
 import type { Product, InventoryMovement } from '@/lib/types';
-import { format } from 'date-fns';
+import { formatToTimeZone } from '@/lib/utils';
 import InventoryChart from '@/components/inventory-chart';
 
 export default async function DashboardPage() {
@@ -123,7 +123,7 @@ export default async function DashboardPage() {
                     <TableCell>
                       <div className="font-medium">{movement.productName}</div>
                       <div className="text-sm text-muted-foreground">
-                        {format(new Date(movement.date), "dd/MM/yyyy")}
+                        {formatToTimeZone(new Date(movement.date), "dd/MM/yyyy")}
                       </div>
                     </TableCell>
                     <TableCell>

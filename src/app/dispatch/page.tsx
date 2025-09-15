@@ -23,7 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format } from 'date-fns';
+import { formatToTimeZone } from '@/lib/utils';
 import { ProcessDispatchDialog } from '@/components/process-dispatch-dialog';
 
 function DispatchPageContent() {
@@ -128,7 +128,7 @@ function DispatchPageContent() {
                 orders.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell className="font-medium">{order.dispatchId}</TableCell>
-                    <TableCell>{format(new Date(order.date), 'dd/MM/yyyy HH:mm')}</TableCell>
+                    <TableCell>{formatToTimeZone(new Date(order.date), 'dd/MM/yyyy HH:mm')}</TableCell>
                     <TableCell>{platformNames[order.platformId] || 'N/A'}</TableCell>
                     <TableCell>{carrierNames[order.carrierId] || 'N/A'}</TableCell>
                     <TableCell>{order.totalItems}</TableCell>

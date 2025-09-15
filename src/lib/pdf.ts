@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
-import { format } from 'date-fns';
+import { formatToTimeZone } from '@/lib/utils';
 
 interface PdfProduct {
     sku: string;
@@ -22,7 +22,7 @@ export const generatePickingListPDF = (
 
     doc.setFontSize(12);
     doc.text(`Dispatch ID: ${dispatchId}`, 15, 35);
-    doc.text(`Date: ${format(date, 'dd/MM/yyyy HH:mm')}`, 15, 42);
+    doc.text(`Date: ${formatToTimeZone(date, 'dd/MM/yyyy HH:mm')}`, 15, 42);
     doc.text(`Platform: ${platformName}`, 15, 49);
     doc.text(`Carrier: ${carrierName}`, 15, 56);
 

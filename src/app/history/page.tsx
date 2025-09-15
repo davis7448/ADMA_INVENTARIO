@@ -41,7 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
-import { cn } from '@/lib/utils';
+import { cn, formatToTimeZone } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 
 export default function HistoryPage() {
@@ -177,7 +177,7 @@ export default function HistoryPage() {
     const productsById = new Map(products.map(p => [p.id, p]));
     const flattenedData = filteredMovements.map(movement => ({
         'ID Movimiento': movement.movementId,
-        'Fecha': format(new Date(movement.date), "dd/MM/yyyy HH:mm"),
+        'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
         'Tipo': movement.type,
         'SKU Producto': productsById.get(movement.productId)?.sku || 'N/A',
         'Nombre Producto': movement.productName,
@@ -195,7 +195,7 @@ export default function HistoryPage() {
     const flattenedData = dispatchOrders.flatMap(order => 
         order.products.map(product => ({
             'ID Despacho': order.dispatchId,
-            'Fecha': format(new Date(order.date), "dd/MM/yyyy HH:mm"),
+            'Fecha': formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm"),
             'Plataforma': platformNames[order.platformId] || 'N/A',
             'Transportadora': carrierNames[order.carrierId] || 'N/A',
             'SKU Producto': product.sku,
@@ -415,7 +415,7 @@ export default function HistoryPage() {
                         <TableRow key={movement.id}>
                              <TableCell className="font-mono text-xs">{movement.movementId || 'N/A'}</TableCell>
                             <TableCell className="font-medium">
-                            {format(new Date(movement.date), "dd/MM/yyyy HH:mm")}
+                            {formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm")}
                             </TableCell>
                             <TableCell>{movement.productName}</TableCell>
                             <TableCell>
@@ -476,7 +476,7 @@ export default function HistoryPage() {
                                             <div className="text-left">
                                                 <p className="font-semibold">{order.dispatchId}</p>
                                                 <p className="text-sm text-muted-foreground">
-                                                    {format(new Date(order.date), "dd/MM/yyyy HH:mm")} - {order.totalItems} items
+                                                    {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")} - {order.totalItems} items
                                                 </p>
                                             </div>
                                             <div className="text-center px-4">
