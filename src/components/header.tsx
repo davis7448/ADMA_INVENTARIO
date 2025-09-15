@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Bell, Menu, Package } from 'lucide-react';
@@ -79,7 +80,9 @@ export default function AppHeader() {
             <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account ({user.role})</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Settings</DropdownMenuItem>
+            <Link href="/settings">
+              <DropdownMenuItem>Settings</DropdownMenuItem>
+            </Link>
             <DropdownMenuItem>Support</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout}>Logout</DropdownMenuItem>
