@@ -400,12 +400,12 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                           <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
                             <FormField
                               control={form.control}
-                              name={`variants.${index}.name`}
+                              name={`variants.${index}.sku`}
                               render={({ field }) => (
                                 <FormItem className="col-span-3">
-                                  <FormLabel className="sr-only">Variant Name</FormLabel>
+                                  <FormLabel className="sr-only">SKU</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="Variant Name" {...field} />
+                                    <Input placeholder="SKU" {...field} />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -413,12 +413,12 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                             />
                             <FormField
                               control={form.control}
-                              name={`variants.${index}.sku`}
+                              name={`variants.${index}.name`}
                               render={({ field }) => (
                                 <FormItem className="col-span-3">
-                                  <FormLabel className="sr-only">SKU</FormLabel>
+                                  <FormLabel className="sr-only">Variant Name</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="SKU" {...field} />
+                                    <Input placeholder="Variant Name" {...field} />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
