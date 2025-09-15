@@ -103,17 +103,10 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         }
         
         const data = productSnap.data();
-        const currentStock = data.stock || 0;
         const currentDamagedStock = data.damagedStock || 0;
-
-        if (currentStock < quantity) {
-            throw new Error(`No hay suficiente stock para marcar como averiado. Stock actual: ${currentStock}, se intentan marcar como averiados: ${quantity}`);
-        }
-
-        const newStock = currentStock - quantity;
         const newDamagedStock = currentDamagedStock + quantity;
 
-        transaction.update(productRef, { stock: newStock, damagedStock: newDamagedStock });
+        transaction.update(productRef, { damagedStock: newDamagedStock });
     });
 };
 
