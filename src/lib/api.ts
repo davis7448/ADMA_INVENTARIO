@@ -1,9 +1,9 @@
 
 
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
-import { db, storage } from './firebase';
+import { db } from './firebase';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant, GetStockAlertsResult, StockAlertItem } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
@@ -16,6 +16,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
   }
   const fileExtension = imageFile.name.split('.').pop();
   const fileName = `${uuidv4()}.${fileExtension}`;
+  const storage = getStorage();
   const storageRef = ref(storage, `product-images/${fileName}`);
 
   try {
