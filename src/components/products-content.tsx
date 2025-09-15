@@ -47,7 +47,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from './ui/switch';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { cn } from '@/lib/utils';
 import React from 'react';
 
@@ -65,6 +64,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+    const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
     // Filter states
     const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +78,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         // This should be refetched from the server page component to get updated rotation
         window.location.reload();
     }
+
+    const handleToggleRow = (productId: string) => {
+        setExpandedRow(prev => (prev === productId ? null : productId));
+    };
 
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
@@ -286,7 +290,6 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                        <Accordion type="single" collapsible className="w-full">
                             {loading ? (
                                 <>
                                 {Array.from({ length: 5 }).map((_, i) => (
@@ -299,7 +302,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 </>
                             ) : filteredProducts.length > 0 ? (
                                 filteredProducts.map((product) => (
-                                    <AccordionItem value={product.id} key={product.id} className="border-b-0">
+                                    <React.Fragment key={product.id}>
                                         <TableRow 
                                             className={cn(product.productType === 'simple' && 'cursor-pointer hover:bg-muted/50')}
                                             onClick={() => handleRowClick(product)}
@@ -353,44 +356,49 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                             )}
                                             <TableCell className="w-[50px] pr-4 text-right">
                                                 {product.productType === 'variable' && (
-                                                    <AccordionTrigger className="p-1 rounded-md hover:bg-accent [&[data-state=open]>svg]:rotate-180" onClick={(e) => e.stopPropagation()}>
-                                                        <ChevronDown className="h-5 w-5 shrink-0 transition-transform duration-200" />
-                                                    </AccordionTrigger>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          handleToggleRow(product.id);
+                                                        }}
+                                                      >
+                                                        <ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform duration-200", expandedRow === product.id && "rotate-180")} />
+                                                      </Button>
                                                 )}
                                             </TableCell>
                                         </TableRow>
-                                        {product.productType === 'variable' && product.variants && product.variants.length > 0 && (
+                                        {product.productType === 'variable' && expandedRow === product.id && (
                                             <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                                <TableCell colSpan={canEdit ? 11 : 10} className="p-0">
-                                                    <AccordionContent>
-                                                        <div className="p-4">
-                                                            <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
-                                                            <Table>
-                                                                <TableHeader>
-                                                                    <TableRow className="hover:bg-transparent">
-                                                                        <TableHead>Nombre</TableHead>
-                                                                        <TableHead>SKU</TableHead>
-                                                                        <TableHead>Precio</TableHead>
-                                                                        <TableHead>Stock</TableHead>
-                                                                    </TableRow>
-                                                                </TableHeader>
-                                                                <TableBody>
-                                                                {product.variants.map((variant) => (
-                                                                    <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
-                                                                        <TableCell>{variant.name}</TableCell>
-                                                                        <TableCell>{variant.sku}</TableCell>
-                                                                        <TableCell>${variant.price.toFixed(0)}</TableCell>
-                                                                        <TableCell>{variant.stock}</TableCell>
-                                                                    </TableRow>
-                                                                ))}
-                                                                </TableBody>
-                                                            </Table>
-                                                        </div>
-                                                    </AccordionContent>
+                                                <TableCell colSpan={canEdit ? 11 : 10}>
+                                                    <div className="p-4">
+                                                        <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="hover:bg-transparent">
+                                                                    <TableHead>Nombre</TableHead>
+                                                                    <TableHead>SKU</TableHead>
+                                                                    <TableHead>Precio</TableHead>
+                                                                    <TableHead>Stock</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                            {product.variants?.map((variant) => (
+                                                                <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
+                                                                    <TableCell>{variant.name}</TableCell>
+                                                                    <TableCell>{variant.sku}</TableCell>
+                                                                    <TableCell>${variant.price.toFixed(0)}</TableCell>
+                                                                    <TableCell>{variant.stock}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         )}
-                                    </AccordionItem>
+                                    </React.Fragment>
                                 ))
                             ) : (
                                 <TableRow>
@@ -399,7 +407,6 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                     </TableCell>
                                 </TableRow>
                             )}
-                        </Accordion>
                         </TableBody>
                     </Table>
                 </div>
