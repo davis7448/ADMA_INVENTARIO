@@ -317,7 +317,8 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         // Decrease stock
         const productRef = doc(db, 'products', product.productId);
         const productSnap = await getDoc(productRef);
-        const currentStock = productSnap.data()?.stock || 0;
+        const productData = productSnap.data() as Product | undefined;
+        const currentStock = productData?.stock || 0;
 
         if (currentStock < product.quantity) {
           throw new Error(`No hay suficiente stock para ${product.name}. Stock actual: ${currentStock}, se requieren: ${product.quantity}`);
@@ -371,6 +372,7 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
 export const processDispatch = async (orderId: string, trackingNumbers: string[], exceptions: DispatchException[]) => {
     const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);
+
     const orderSnap = await getDoc(orderRef);
     if (!orderSnap.exists()) {
         throw new Error('Order not found');
@@ -386,7 +388,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     // 2. Update the dispatch order status, tracking numbers, and exceptions
     batch.update(orderRef, {
         status: status,
-        trackingNumbers: [...orderData.trackingNumbers, ...trackingNumbers],
+        trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
         exceptions: newExceptions
     });
 
@@ -397,25 +399,10 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             const productSnap = await getDoc(productRef);
             
             if (productSnap.exists()) {
-                const productData = productSnap.data();
-                
-                // Audit Alert Logic: Check if stock was available when exception was created
-                const orderProduct = orderData.products.find(p => p.productId === exProd.productId);
-                if (orderProduct && orderData.status === 'Pendiente') { // Only for the first processing run
-                    const stockAtDispatchTime = (productData.stock || 0) + orderProduct.quantity;
-                     if (stockAtDispatchTime < orderProduct.quantity) {
-                        const auditAlertRef = doc(collection(db, 'auditAlerts'));
-                        batch.set(auditAlertRef, {
-                            date: new Date(),
-                            productId: exProd.productId,
-                            productName: productData.name,
-                            productSku: productData.sku,
-                            message: `Se generó una excepción de ${exProd.quantity} unidad(es) para el despacho ${orderData.dispatchId} cuando el stock (${stockAtDispatchTime}) ya era insuficiente para la cantidad pedida (${orderProduct.quantity}).`,
-                            dispatchId: orderData?.dispatchId,
-                            exceptionTrackingNumber: ex.trackingNumber
-                        });
-                     }
-                }
+                const productData = productSnap.data() as Product;
+                // Move stock to pending
+                const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
+                batch.update(productRef, { pendingStock: newPendingStock });
             }
         }
     }
@@ -441,16 +428,22 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
         throw new Error("No matching exceptions found to cancel.");
     }
 
-    // 1. Return stock to main inventory and create inventory movements
+    // 1. Move stock from pending back to main inventory and create inventory movements
     for (const ex of exceptionsToCancel) {
         for (const exProd of ex.products) {
             const productRef = doc(db, 'products', exProd.productId);
             const productSnap = await getDoc(productRef);
 
             if (productSnap.exists()) {
-                const productData = productSnap.data();
-                // Add stock back
-                batch.update(productRef, { stock: (productData.stock || 0) + exProd.quantity });
+                const productData = productSnap.data() as Product;
+                // Decrease pending stock, increase main stock
+                const newPendingStock = (productData.pendingStock || 0) - exProd.quantity;
+                const newStock = (productData.stock || 0) + exProd.quantity;
+
+                batch.update(productRef, { 
+                    stock: newStock < 0 ? 0 : newStock,
+                    pendingStock: newPendingStock < 0 ? 0 : newPendingStock
+                });
 
                 // Create "Entrada" movement for the cancellation
                 const movementRef = doc(collection(db, 'inventoryMovements'));
@@ -535,4 +528,3 @@ export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => 
 
     return pendingItems;
 };
-
