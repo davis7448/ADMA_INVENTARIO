@@ -96,6 +96,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                     <TableHead className="hidden md:table-cell">Supplier</TableHead>
                     <TableHead className="hidden md:table-cell">Stock</TableHead>
                     <TableHead className="hidden md:table-cell">Pendiente</TableHead>
+                    <TableHead className="hidden md:table-cell">Averiado</TableHead>
                     <TableHead>Price</TableHead>
                     {canEdit && (
                       <TableHead>
@@ -116,6 +117,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                             <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-32" /></TableCell>
                             <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
+                             <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
                              <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                             {canEdit && <TableCell><Skeleton className="h-8 w-8" /></TableCell>}
@@ -140,7 +142,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{supplierNames[product.vendorId] || 'Unknown'}</TableCell>
                         <TableCell className="hidden md:table-cell">{product.stock}</TableCell>
-                        <TableCell className="hidden md:table-cell text-center text-destructive font-semibold">{product.pendingStock || 0}</TableCell>
+                        <TableCell className="hidden md:table-cell text-center text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
+                        <TableCell className="hidden md:table-cell text-center text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
                         <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
                         {canEdit && (
                             <TableCell>

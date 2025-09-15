@@ -32,7 +32,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 export const getProducts = async (): Promise<Product[]> => {
   const productsCol = collection(db, 'products');
   const productSnapshot = await getDocs(productsCol);
-  const productList = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+  const productList = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), damagedStock: doc.data().damagedStock || 0 } as Product));
   return productList;
 };
 
@@ -40,7 +40,8 @@ export const getProductById = async (id: string): Promise<Product | null> => {
   const productDoc = doc(db, 'products', id);
   const productSnap = await getDoc(productDoc);
   if (productSnap.exists()) {
-    return { id: productSnap.id, ...productSnap.data() } as Product;
+    const data = productSnap.data();
+    return { id: productSnap.id, ...data, damagedStock: data.damagedStock || 0 } as Product;
   } else {
     return null;
   }
@@ -48,7 +49,7 @@ export const getProductById = async (id: string): Promise<Product | null> => {
 
 export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> => {
   const productsCol = collection(db, 'products');
-  const docRef = await addDoc(productsCol, product);
+  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0 });
   return docRef.id;
 };
 
@@ -72,12 +73,48 @@ export const updateProductStock = async (productId: string, quantity: number, op
     } else {
       const calculatedStock = currentStock - quantity;
       if (calculatedStock < 0) {
-        throw new Error(`Not enough stock for product ${productSnap.data().name}. Current stock: ${currentStock}, trying to subtract: ${quantity}`);
+        // Create an audit alert for stock discrepancy
+        const auditAlertRef = doc(collection(db, 'auditAlerts'));
+        const auditAlert: Omit<AuditAlert, 'id' | 'date'> = {
+            productId: productId,
+            productName: productSnap.data().name,
+            productSku: productSnap.data().sku,
+            message: `Intento de despachar ${quantity} unidades cuando solo habían ${currentStock} en stock.`,
+            dispatchId: 'N/A',
+            exceptionTrackingNumber: 'N/A',
+        };
+        transaction.set(auditAlertRef, {...auditAlert, date: new Date()});
+
+        throw new Error(`No hay suficiente stock para ${productSnap.data().name}. Stock actual: ${currentStock}, se requieren: ${quantity}. Se ha generado una alerta de auditoría.`);
       }
       newStock = calculatedStock;
     }
     transaction.update(productRef, { stock: newStock });
   });
+};
+
+export const registerDamagedProduct = async (productId: string, quantity: number) => {
+    const productRef = doc(db, 'products', productId);
+    
+    await runTransaction(db, async (transaction) => {
+        const productSnap = await transaction.get(productRef);
+        if (!productSnap.exists()) {
+            throw new Error(`Product with ID ${productId} does not exist!`);
+        }
+        
+        const data = productSnap.data();
+        const currentStock = data.stock || 0;
+        const currentDamagedStock = data.damagedStock || 0;
+
+        if (currentStock < quantity) {
+            throw new Error(`No hay suficiente stock para marcar como averiado. Stock actual: ${currentStock}, se intentan marcar como averiados: ${quantity}`);
+        }
+
+        const newStock = currentStock - quantity;
+        const newDamagedStock = currentDamagedStock + quantity;
+
+        transaction.update(productRef, { stock: newStock, damagedStock: newDamagedStock });
+    });
 };
 
 // Supplier Functions
@@ -316,32 +353,38 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
     for (const product of products) {
         // Decrease stock
         const productRef = doc(db, 'products', product.productId);
-        const productSnap = await getDoc(productRef);
-        const productData = productSnap.data() as Product | undefined;
-        const currentStock = productData?.stock || 0;
-
-        if (currentStock < product.quantity) {
-          throw new Error(`No hay suficiente stock para ${product.name}. Stock actual: ${currentStock}, se requieren: ${product.quantity}`);
-        }
         
-        batch.update(productRef, { 
-            stock: currentStock - product.quantity 
+        await runTransaction(db, async (transaction) => {
+            const productSnap = await transaction.get(productRef);
+            if (!productSnap.exists()) {
+                throw `Product with id ${product.productId} not found`;
+            }
+            const productData = productSnap.data() as Product | undefined;
+            const currentStock = productData?.stock || 0;
+
+            if (currentStock < product.quantity) {
+            throw new Error(`No hay suficiente stock para ${product.name}. Stock actual: ${currentStock}, se requieren: ${product.quantity}`);
+            }
+            
+            transaction.update(productRef, { 
+                stock: currentStock - product.quantity 
+            });
+
+            // Create inventory movement
+            const movementRef = doc(collection(db, 'inventoryMovements'));
+            const movementData: Omit<InventoryMovement, 'id'| 'date' | 'movementId'> = {
+                type: 'Salida' as const,
+                productId: product.productId,
+                productName: product.name,
+                quantity: product.quantity,
+                notes: notes,
+            };
+            
+            // This won't have a sequential ID if done in a batch like this.
+            // For simplicity, we'll let Firestore assign a random ID.
+            // A Cloud Function trigger would be needed for sequential IDs on batched movements.
+            transaction.set(movementRef, {...movementData, date: new Date(), movementId: 0});
         });
-
-        // Create inventory movement
-        const movementRef = doc(collection(db, 'inventoryMovements'));
-        const movementData: Omit<InventoryMovement, 'id'| 'date' | 'movementId'> = {
-            type: 'Salida' as const,
-            productId: product.productId,
-            productName: product.name,
-            quantity: product.quantity,
-            notes: notes,
-        };
-        
-        // This won't have a sequential ID if done in a batch like this.
-        // For simplicity, we'll let Firestore assign a random ID.
-        // A Cloud Function trigger would be needed for sequential IDs on batched movements.
-        batch.set(movementRef, {...movementData, date: new Date(), movementId: 0});
     }
     
     // Commit the batch
@@ -396,14 +439,16 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     for (const ex of exceptions) {
         for (const exProd of ex.products) {
             const productRef = doc(db, 'products', exProd.productId);
-            const productSnap = await getDoc(productRef);
-            
-            if (productSnap.exists()) {
-                const productData = productSnap.data() as Product;
-                // Move stock to pending
-                const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
-                batch.update(productRef, { pendingStock: newPendingStock });
-            }
+            await runTransaction(db, async (transaction) => {
+                const productSnap = await transaction.get(productRef);
+                
+                if (productSnap.exists()) {
+                    const productData = productSnap.data() as Product;
+                    // Move stock to pending
+                    const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
+                    transaction.update(productRef, { pendingStock: newPendingStock });
+                }
+            });
         }
     }
 
@@ -432,31 +477,34 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
     for (const ex of exceptionsToCancel) {
         for (const exProd of ex.products) {
             const productRef = doc(db, 'products', exProd.productId);
-            const productSnap = await getDoc(productRef);
+            
+            await runTransaction(db, async (transaction) => {
+                const productSnap = await transaction.get(productRef);
 
-            if (productSnap.exists()) {
-                const productData = productSnap.data() as Product;
-                // Decrease pending stock, increase main stock
-                const newPendingStock = (productData.pendingStock || 0) - exProd.quantity;
-                const newStock = (productData.stock || 0) + exProd.quantity;
+                if (productSnap.exists()) {
+                    const productData = productSnap.data() as Product;
+                    // Decrease pending stock, increase main stock
+                    const newPendingStock = (productData.pendingStock || 0) - exProd.quantity;
+                    const newStock = (productData.stock || 0) + exProd.quantity;
 
-                batch.update(productRef, { 
-                    stock: newStock < 0 ? 0 : newStock,
-                    pendingStock: newPendingStock < 0 ? 0 : newPendingStock
-                });
+                    transaction.update(productRef, { 
+                        stock: newStock < 0 ? 0 : newStock,
+                        pendingStock: newPendingStock < 0 ? 0 : newPendingStock
+                    });
 
-                // Create "Entrada" movement for the cancellation
-                const movementRef = doc(collection(db, 'inventoryMovements'));
-                batch.set(movementRef, {
-                    type: 'Entrada',
-                    productId: exProd.productId,
-                    productName: productData.name || 'Unknown Product',
-                    quantity: exProd.quantity,
-                    date: new Date(),
-                    notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}.`,
-                    movementId: 0,
-                });
-            }
+                    // Create "Entrada" movement for the cancellation
+                    const movementRef = doc(collection(db, 'inventoryMovements'));
+                    transaction.set(movementRef, {
+                        type: 'Entrada',
+                        productId: exProd.productId,
+                        productName: productData.name || 'Unknown Product',
+                        quantity: exProd.quantity,
+                        date: new Date(),
+                        notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}.`,
+                        movementId: 0,
+                    });
+                }
+            });
         }
     }
 

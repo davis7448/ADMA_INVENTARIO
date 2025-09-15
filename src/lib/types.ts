@@ -11,6 +11,7 @@ export type Product = {
   price: number;
   stock: number;
   pendingStock: number;
+  damagedStock: number;
   restockThreshold: number;
   vendorId: string;
 };
