@@ -176,4 +176,16 @@ export type Vendedor = {
   };
 };
 
+export type StaleReservationAlert = {
+    id: string; // Firestore document ID
+    alertDate: string;
+    reservationId: string;
+    reservationDate: string;
+    productId: string;
+    productName: string;
+    productSku: string;
+    vendedorName: string;
+    quantity: number;
+};
+
 

@@ -13,19 +13,22 @@ import {
     DropdownMenuTrigger,
   } from '@/components/ui/dropdown-menu';
 import { Button } from './ui/button';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Bell } from 'lucide-react';
 import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
   } from "@/components/ui/collapsible"
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { getStaleReservationAlerts } from '@/lib/api';
+import { Badge } from './ui/badge';
 
 type NavItem = {
     href?: string;
     label: string;
     roles: string[];
     children?: NavItem[];
+    badge?: 'stale_alerts';
   };
   
   const navItems: NavItem[] = [
@@ -53,11 +56,23 @@ type NavItem = {
     },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
     { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
+    { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin'], badge: 'stale_alerts' },
   ];
 
 export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
   const pathname = usePathname();
   const { user } = useAuth();
+  const [staleAlertsCount, setStaleAlertsCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchAlerts() {
+        if (user?.role === 'admin') {
+            const alerts = await getStaleReservationAlerts();
+            setStaleAlertsCount(alerts.length);
+        }
+    }
+    fetchAlerts();
+  }, [user, pathname]); // Re-check on path change too
 
   const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
 
@@ -70,6 +85,13 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
       ? (isMobile ? "text-primary bg-muted" : "text-primary")
       : "text-muted-foreground"
   );
+
+  const renderBadge = (badgeType?: 'stale_alerts') => {
+    if (badgeType === 'stale_alerts' && staleAlertsCount > 0) {
+        return <Badge variant="destructive" className="ml-2">{staleAlertsCount}</Badge>;
+    }
+    return null;
+  }
 
   const renderNavItem = (item: NavItem) => {
     if (item.children) {
@@ -114,9 +136,10 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
     const NavLink = (
       <Link
         href={item.href!}
-        className={linkClass(item.href)}
+        className={cn(linkClass(item.href), "flex items-center")}
       >
         {item.label}
+        {renderBadge(item.badge)}
       </Link>
     );
 

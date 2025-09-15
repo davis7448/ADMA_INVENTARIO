@@ -1,3 +1,4 @@
+
 import {
   Card,
   CardContent,
@@ -15,12 +16,16 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DollarSign, Archive, Package, Truck, AlertTriangle } from 'lucide-react';
-import { getProducts, getSuppliers, getInventoryMovements } from '@/lib/api';
+import { getProducts, getSuppliers, getInventoryMovements, checkForStaleReservations } from '@/lib/api';
 import type { Product, InventoryMovement } from '@/lib/types';
 import { formatToTimeZone } from '@/lib/utils';
 import InventoryChart from '@/components/inventory-chart';
 
 export default async function DashboardPage() {
+  
+  // Run check for stale reservations when dashboard is loaded
+  await checkForStaleReservations();
+
   const [products, suppliers, movements] = await Promise.all([
     getProducts(),
     getSuppliers(),

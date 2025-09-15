@@ -2,9 +2,9 @@
 
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
@@ -698,6 +698,19 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 };
 
 // Reservation Functions
+export const getAllReservations = async (): Promise<Reservation[]> => {
+    const q = query(collection(db, 'reservations'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+            id: doc.id, 
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString(),
+        } as Reservation;
+    });
+}
+
 export const getReservationsByProductId = async (productId: string): Promise<Reservation[]> => {
     const q = query(collection(db, 'reservations'), where('productId', '==', productId));
     const snapshot = await getDocs(q);
@@ -741,6 +754,106 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
 };
 
 export const deleteReservation = async (reservationId: string) => {
-    const reservationRef = doc(db, 'reservations', reservationId);
-    await deleteDoc(reservationRef);
+    const q = query(collection(db, 'reservations'), where('id', '==', reservationId));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+        const docToDelete = snapshot.docs[0];
+        await deleteDoc(docToDelete.ref);
+    } else {
+        // Fallback for when the direct ID is passed
+        const reservationRef = doc(db, 'reservations', reservationId);
+         await deleteDoc(reservationRef);
+    }
 };
+
+// Stale Reservation Alert Functions
+export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert[]> => {
+    const alertsCol = collection(db, 'staleReservationAlerts');
+    const snapshot = await getDocs(alertsCol);
+    const alertList = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+        id: doc.id, 
+        ...data,
+        alertDate: (data.alertDate as Timestamp).toDate().toISOString(),
+        reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
+      } as StaleReservationAlert;
+    });
+    return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.alertDate).getTime());
+};
+
+export const checkForStaleReservations = async (): Promise<void> => {
+    const FIVE_DAYS_AGO = subDays(new Date(), 5);
+    const THIRTY_DAYS_AGO = subDays(new Date(), 30);
+    
+    const batch = writeBatch(db);
+
+    const [allReservations, allMovements, allAlerts, products, vendedores] = await Promise.all([
+        getAllReservations(),
+        getDocs(query(collection(db, 'inventoryMovements'), where('date', '>=', THIRTY_DAYS_AGO))),
+        getStaleReservationAlerts(),
+        getProducts(),
+        getVendedores(),
+    ]);
+
+    const productMap = new Map(products.map(p => [p.id, p]));
+    const vendedorMap = new Map(vendedores.map(v => [v.id, v.name]));
+    const existingAlertReservationIds = new Set(allAlerts.map(a => a.reservationId));
+
+    const movements = allMovements.docs.map(doc => doc.data() as InventoryMovement);
+
+    for (const reservation of allReservations) {
+        const reservationDate = new Date(reservation.date);
+
+        // Check if reservation is older than 5 days and not already alerted
+        if (reservationDate <= FIVE_DAYS_AGO && !existingAlertReservationIds.has(reservation.id)) {
+            // Check for any 'Salida' movement for this product after the reservation was made
+            const hasRecentSale = movements.some(m => 
+                m.productId === reservation.productId &&
+                m.type === 'Salida' &&
+                new Date(m.date) > reservationDate
+            );
+
+            if (!hasRecentSale) {
+                // This is a stale reservation, create an alert
+                const productInfo = productMap.get(reservation.productId);
+                const vendedorName = vendedorMap.get(reservation.vendedorId) || 'Desconocido';
+
+                if (productInfo) {
+                    const alertRef = doc(collection(db, 'staleReservationAlerts'));
+                    const newAlert: Omit<StaleReservationAlert, 'id'> = {
+                        alertDate: new Date().toISOString(),
+                        reservationId: reservation.id,
+                        reservationDate: reservation.date,
+                        productId: reservation.productId,
+                        productName: productInfo.name,
+                        productSku: productInfo.sku,
+                        vendedorName: vendedorName,
+                        quantity: reservation.quantity,
+                    };
+                    batch.set(alertRef, newAlert);
+                }
+            }
+        }
+    }
+    
+    await batch.commit();
+}
+
+export const resolveStaleReservationAlert = async (alertId: string): Promise<void> => {
+    const alertRef = doc(db, 'staleReservationAlerts', alertId);
+    const alertSnap = await getDoc(alertRef);
+
+    if (!alertSnap.exists()) {
+        throw new Error("Alert not found.");
+    }
+
+    const alertData = alertSnap.data() as StaleReservationAlert;
+    const reservationRef = doc(db, 'reservations', alertData.reservationId);
+
+    const batch = writeBatch(db);
+    batch.delete(reservationRef);
+    batch.delete(alertRef);
+    
+    await batch.commit();
+}
