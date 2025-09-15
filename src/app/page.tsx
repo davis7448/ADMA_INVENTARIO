@@ -18,8 +18,8 @@ import {
     TableRow,
   } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventoryMovements } from '@/lib/api';
-import type { DispatchOrder, Product, Carrier, Category, InventoryMovement } from '@/lib/types';
+import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventoryMovements, getPlatforms } from '@/lib/api';
+import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
@@ -32,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import DashboardCategoryChart from '@/components/dashboard-category-chart';
 import DashboardReturnsChart from '@/components/dashboard-returns-chart';
 import { Progress } from '@/components/ui/progress';
+import DashboardPlatformCarrierChart from '@/components/dashboard-platform-carrier-chart';
 
 
 export default function DashboardPage() {
@@ -43,23 +44,26 @@ export default function DashboardPage() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [allCarriers, setAllCarriers] = useState<Carrier[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
   const [allMovements, setAllMovements] = useState<InventoryMovement[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [orders, products, carriers, categories, movements] = await Promise.all([
+      const [orders, products, carriers, categories, platforms, movements] = await Promise.all([
           getDispatchOrders(), 
           getProducts(), 
           getCarriers(),
           getCategories(),
+          getPlatforms(),
           getInventoryMovements() // Fetch all movements
         ]);
       setAllOrders(orders);
       setAllProducts(products);
       setAllCarriers(carriers);
       setAllCategories(categories);
+      setAllPlatforms(platforms);
       setAllMovements(movements);
       setLoading(false);
     };
@@ -139,6 +143,9 @@ export default function DashboardPage() {
         acc[category.id] = category.name;
         return acc;
     }, {} as Record<string, string>);
+    
+    const platformNameMap = allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>);
+    const carrierNameMap = allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>);
 
     const salesByProduct: Record<string, number> = {};
     const salesByCategory: Record<string, number> = {};
@@ -174,6 +181,35 @@ export default function DashboardPage() {
         }))
         .sort((a, b) => b.value - a.value);
 
+    // Data for Platform/Carrier Chart
+    const platformCarrierData: any[] = [];
+    const platformCarrierMap: { [platformId: string]: { [carrierId: string]: number } } = {};
+    const platformOrderCount: { [platformId: string]: number } = {};
+    const carrierUsageCount: { [carrierId: string]: number } = {};
+
+    ordersInPeriod.forEach(order => {
+        const platformName = platformNameMap[order.platformId] || 'Unknown Platform';
+        const carrierName = carrierNameMap[order.carrierId] || 'Unknown Carrier';
+
+        if (!platformCarrierMap[platformName]) {
+            platformCarrierMap[platformName] = {};
+        }
+        platformCarrierMap[platformName][carrierName] = (platformCarrierMap[platformName][carrierName] || 0) + order.totalItems;
+
+        platformOrderCount[platformName] = (platformOrderCount[platformName] || 0) + 1;
+        carrierUsageCount[carrierName] = (carrierUsageCount[carrierName] || 0) + order.totalItems;
+    });
+
+    for (const platformName in platformCarrierMap) {
+        platformCarrierData.push({
+            name: platformName,
+            ...platformCarrierMap[platformName]
+        });
+    }
+
+    const mostUsedCarrier = Object.entries(carrierUsageCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+    const platformWithMostOrders = Object.entries(platformOrderCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
 
     return {
       totalItemsDispatched,
@@ -184,8 +220,12 @@ export default function DashboardPage() {
       chartData,
       productChartData,
       categoryChartData,
+      platformCarrierChartData: platformCarrierData,
+      allCarrierNames: Object.values(carrierNameMap),
+      mostUsedCarrier,
+      platformWithMostOrders,
     };
-  }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allMovements]);
+  }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allPlatforms, allMovements]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -372,6 +412,35 @@ export default function DashboardPage() {
                 ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground py-16">
                         No hay datos de ventas por categoría en el período seleccionado.
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Análisis de Distribución: Plataforma vs. Transportadora</CardTitle>
+                <CardDescription>
+                    Distribución porcentual de las transportadoras utilizadas por cada plataforma de venta.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {loading ? <Skeleton className="h-80" /> : filteredData.platformCarrierChartData.length > 0 ? (
+                    <>
+                        <div className="h-80">
+                           <DashboardPlatformCarrierChart 
+                                data={filteredData.platformCarrierChartData} 
+                                carriers={filteredData.allCarrierNames}
+                            />
+                        </div>
+                         <div className="mt-4 text-center text-sm text-muted-foreground space-y-1">
+                            <p>La transportadora más usada en común es: <strong className="text-foreground">{filteredData.mostUsedCarrier}</strong>.</p>
+                            <p>La plataforma con más órdenes despachadas es: <strong className="text-foreground">{filteredData.platformWithMostOrders}</strong>.</p>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground py-16">
+                        No hay datos de despachos en el período seleccionado.
                     </div>
                 )}
             </CardContent>
