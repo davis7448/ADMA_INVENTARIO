@@ -67,9 +67,9 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       description: '',
       categoryId: '',
       vendorId: '',
-      price: 0,
-      stock: 0,
-      restockThreshold: 0,
+      price: undefined,
+      stock: undefined,
+      restockThreshold: undefined,
       imageUrl: '',
     },
   });
@@ -222,7 +222,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a supplier" />
-                                        </SelectTrigger>
+                                        </Trigger>
                                     </FormControl>
                                     <SelectContent>
                                         {suppliers.map(supplier => (
@@ -243,7 +243,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Price</FormLabel>
                                 <FormControl>
-                                    <Input type="number" step="0.01" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                                    <Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -256,7 +256,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Stock</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                                    <Input type="number" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -269,7 +269,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Restock Threshold</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                                    <Input type="number" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
