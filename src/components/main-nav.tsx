@@ -32,24 +32,10 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
       ? "text-lg p-2 rounded-md" 
       : "text-sm",
     pathname === href 
-      ? "text-primary bg-muted" 
-      : "text-muted-foreground hover:bg-muted/50"
+      ? (isMobile ? "text-primary bg-muted" : "text-primary")
+      : "text-muted-foreground"
   );
-
-  const NavContent = () => (
-    <>
-      {filteredNavItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={linkClass(item.href)}
-          >
-            {item.label}
-          </Link>
-      ))}
-    </>
-  );
-
+  
   if (isMobile) {
     return (
       <nav className={navClass}>
@@ -73,10 +59,7 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
         <Link
           key={item.href}
           href={item.href}
-          className={cn(
-            "text-sm font-medium transition-colors hover:text-primary",
-            pathname === item.href ? "text-primary" : "text-muted-foreground"
-          )}
+          className={linkClass(item.href)}
         >
           {item.label}
         </Link>
