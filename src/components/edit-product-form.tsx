@@ -189,7 +189,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                     )}
                 />
                 <div className="flex gap-4 items-center">
-                    <Image src={product.imageUrl} alt={product.name} width={64} height={64} className="rounded-md" />
+                    <Image src={product.imageUrl} alt={product.name} width={64} height={64} className="rounded-md object-cover" />
                     <FormField
                         control={form.control}
                         name="image"
@@ -315,3 +315,5 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
     </Dialog>
   );
 }
+
+    
