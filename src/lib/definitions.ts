@@ -6,7 +6,7 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
 
-export const AddProductFormSchema = z.object({
+const ProductFormSchemaBase = z.object({
   name: z.string().min(1, 'Product name is required.'),
   sku: z.string().optional(),
   description: z.string().min(1, 'Description is required.'),
@@ -27,6 +27,10 @@ export const AddProductFormSchema = z.object({
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Threshold must be a number.' }).int('Threshold must be a whole number.').min(0, 'Threshold must be a non-negative number.').optional()
   ),
+  contentLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
+});
+
+export const AddProductFormSchema = ProductFormSchemaBase.extend({
   image: z
     .any()
     .refine((file): file is File => file instanceof File && file.size > 0, 'Image is required.')
@@ -38,9 +42,7 @@ export const AddProductFormSchema = z.object({
         (file): file is File => file instanceof File && ACCEPTED_IMAGE_TYPES.includes(file.type),
         "Only .jpg, .jpeg, .png and .webp formats are supported."
     ),
-  contentLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
 }).refine(data => {
-    // If productType is 'simple', SKU is required.
     if (data.productType === 'simple') {
         return data.sku && data.sku.length > 0;
     }
@@ -71,8 +73,16 @@ export type AddProductFormState = {
   success: boolean;
 };
 
-export const EditProductFormSchema = AddProductFormSchema.omit({ image: true }).extend({
+export const EditProductFormSchema = ProductFormSchemaBase.extend({
     image: z.any().optional(),
+}).refine(data => {
+    if (data.productType === 'simple') {
+        return data.sku && data.sku.length > 0;
+    }
+    return true;
+}, {
+    message: 'SKU is required for simple products.',
+    path: ['sku'],
 });
   
 export type EditProductFormValues = z.infer<typeof EditProductFormSchema>;
