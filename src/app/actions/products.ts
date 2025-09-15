@@ -7,17 +7,17 @@ import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
 import type { AddProductFormState } from '@/lib/definitions';
 
-// Adjusted schema for server-side processing with FormData
+// This schema is used for parsing FormData on the server side.
 const AddProductActionSchema = z.object({
   name: z.string().min(1, 'Product name is required.'),
   sku: z.string().min(1, 'SKU is required.'),
   description: z.string().min(1, 'Description is required.'),
   categoryId: z.string().min(1, 'Category is required.'),
   vendorId: z.string().min(1, 'Supplier is required.'),
-  price: z.coerce.number().min(0).optional(),
-  stock: z.coerce.number().int().min(0).optional(),
-  restockThreshold: z.coerce.number().int().min(0).optional(),
-  image: z.any().refine(value => value instanceof File && value.size > 0, 'Image is required.'),
+  price: z.coerce.number().min(0, 'Price must be non-negative.').optional(),
+  stock: z.coerce.number().int().min(0, 'Stock must be non-negative.').optional(),
+  restockThreshold: z.coerce.number().int().min(0, 'Restock threshold must be non-negative.').optional(),
+  image: z.instanceof(File, { message: 'Image is required.' }).refine(file => file.size > 0, 'Image cannot be empty.'),
 });
 
 
@@ -76,5 +76,3 @@ export async function addProductAction(
     };
   }
 }
-
-    
