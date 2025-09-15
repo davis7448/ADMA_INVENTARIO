@@ -211,7 +211,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a supplier" />
-                                        </Trigger>
+                                        </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
                                         {suppliers.map(supplier => (
