@@ -17,17 +17,17 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getInventoryMovements, getProducts } from '@/lib/api';
-import { format } from 'date-fns';
+import { getInventoryMovements, getProducts, getPlatforms, getCarriers } from '@/lib/api';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
-import type { InventoryMovement, Product } from '@/lib/types';
+import type { InventoryMovement, Product, Platform, Carrier } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Download, X } from 'lucide-react';
+import { Download, X, Calendar as CalendarIcon, Check, ChevronsUpDown } from 'lucide-react';
 import { generatePickingListPDF } from '@/lib/pdf';
 import {
     Select,
@@ -35,7 +35,13 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
-  } from '@/components/ui/select';
+} from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { Calendar } from '@/components/ui/calendar';
+import type { DateRange } from 'react-day-picker';
+import { cn } from '@/lib/utils';
+
 
 interface DispatchOrderProduct {
     productId: string;
@@ -58,8 +64,16 @@ export default function HistoryPage() {
   const router = useRouter();
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filter states
   const [filterProductId, setFilterProductId] = useState<string>('');
+  const [filterPlatformId, setFilterPlatformId] = useState<string>('');
+  const [filterCarrierId, setFilterCarrierId] = useState<string>('');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [comboboxOpen, setComboboxOpen] = useState(false);
 
   useEffect(() => {
     if (user && user.role !== 'logistics' && user.role !== 'admin') {
@@ -70,12 +84,21 @@ export default function HistoryPage() {
   useEffect(() => {
     async function fetchData() {
         setLoading(true);
-        const [fetchedMovements, fetchedProducts] = await Promise.all([
+        const [
+            fetchedMovements, 
+            fetchedProducts, 
+            fetchedPlatforms, 
+            fetchedCarriers
+        ] = await Promise.all([
             getInventoryMovements(),
-            getProducts()
+            getProducts(),
+            getPlatforms(),
+            getCarriers()
         ]);
         setMovements(fetchedMovements);
         setProducts(fetchedProducts);
+        setPlatforms(fetchedPlatforms);
+        setCarriers(fetchedCarriers);
         setLoading(false);
     }
     fetchData();
@@ -116,20 +139,42 @@ export default function HistoryPage() {
         dispatches[dispatchId].totalItems += m.quantity;
     });
 
-    const allOrders = Object.values(dispatches).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    let allOrders = Object.values(dispatches).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    if (!filterProductId) {
-        return allOrders;
+    if (filterProductId) {
+        allOrders = allOrders.filter(order => order.products.some(p => p.productId === filterProductId));
+    }
+    if (filterPlatformId) {
+        const platformName = platforms.find(p => p.id === filterPlatformId)?.name;
+        allOrders = allOrders.filter(order => order.platform === platformName);
+    }
+    if (filterCarrierId) {
+        const carrierName = carriers.find(c => c.id === filterCarrierId)?.name;
+        allOrders = allOrders.filter(order => order.carrier === carrierName);
+    }
+    if (dateRange?.from) {
+        allOrders = allOrders.filter(order => new Date(order.date) >= startOfDay(dateRange.from!));
+    }
+    if (dateRange?.to) {
+        allOrders = allOrders.filter(order => new Date(order.date) <= endOfDay(dateRange.to!));
     }
     
-    return allOrders.filter(order => order.products.some(p => p.productId === filterProductId));
+    return allOrders;
 
-  }, [movements, products, filterProductId]);
+  }, [movements, products, platforms, carriers, filterProductId, filterPlatformId, filterCarrierId, dateRange]);
 
   const handleDownloadPdf = (order: DispatchOrder) => {
     const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
     generatePickingListPDF(order.id, productsForPdf, order.platform, order.carrier, new Date(order.date));
   };
+  
+  const clearFilters = () => {
+    setFilterProductId('');
+    setFilterPlatformId('');
+    setFilterCarrierId('');
+    setDateRange(undefined);
+  };
+  const hasActiveFilters = filterProductId || filterPlatformId || filterCarrierId || dateRange;
 
 
   const getBadgeClass = (type: 'Entrada' | 'Salida') => {
@@ -232,21 +277,111 @@ export default function HistoryPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="mb-4 flex items-center gap-4">
-                        <Select value={filterProductId} onValueChange={setFilterProductId}>
-                            <SelectTrigger className="w-full md:w-[300px]">
-                                <SelectValue placeholder="Filtrar por producto..." />
+                    <div className="mb-4 flex flex-wrap items-center gap-4">
+                        <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    aria-expanded={comboboxOpen}
+                                    className="w-full md:w-[250px] justify-between"
+                                >
+                                    {filterProductId
+                                        ? products.find((p) => p.id === filterProductId)?.name
+                                        : "Filtrar por producto..."}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                <Command>
+                                    <CommandInput placeholder="Buscar producto..." />
+                                    <CommandEmpty>No se encontró el producto.</CommandEmpty>
+                                    <CommandGroup>
+                                        {products.map((p) => (
+                                            <CommandItem
+                                                key={p.id}
+                                                value={p.name}
+                                                onSelect={() => {
+                                                    setFilterProductId(p.id === filterProductId ? '' : p.id)
+                                                    setComboboxOpen(false)
+                                                }}
+                                            >
+                                                <Check
+                                                    className={cn(
+                                                        "mr-2 h-4 w-4",
+                                                        filterProductId === p.id ? "opacity-100" : "opacity-0"
+                                                    )}
+                                                />
+                                                {p.name}
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                        
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                    "w-full md:w-[240px] justify-start text-left font-normal",
+                                    !dateRange && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {dateRange?.from ? (
+                                    dateRange.to ? (
+                                        <>
+                                        {format(dateRange.from, "LLL dd, y")} -{" "}
+                                        {format(dateRange.to, "LLL dd, y")}
+                                        </>
+                                    ) : (
+                                        format(dateRange.from, "LLL dd, y")
+                                    )
+                                    ) : (
+                                    <span>Rango de fechas</span>
+                                    )}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    initialFocus
+                                    mode="range"
+                                    defaultMonth={dateRange?.from}
+                                    selected={dateRange}
+                                    onSelect={setDateRange}
+                                    numberOfMonths={2}
+                                />
+                            </PopoverContent>
+                        </Popover>
+
+                        <Select value={filterPlatformId} onValueChange={setFilterPlatformId}>
+                            <SelectTrigger className="w-full md:w-[180px]">
+                                <SelectValue placeholder="Plataforma" />
                             </SelectTrigger>
                             <SelectContent>
-                                {products.map(p => (
+                                {platforms.map(p => (
                                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                        {filterProductId && (
-                            <Button variant="ghost" onClick={() => setFilterProductId('')}>
+
+                        <Select value={filterCarrierId} onValueChange={setFilterCarrierId}>
+                            <SelectTrigger className="w-full md:w-[180px]">
+                                <SelectValue placeholder="Transportadora" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {carriers.map(c => (
+                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+
+                        {hasActiveFilters && (
+                            <Button variant="ghost" onClick={clearFilters}>
                                 <X className="mr-2 h-4 w-4" />
-                                Limpiar filtro
+                                Limpiar filtros
                             </Button>
                         )}
                     </div>
@@ -307,8 +442,8 @@ export default function HistoryPage() {
                         </Accordion>
                     ) : (
                         <div className="text-center text-muted-foreground py-8">
-                            {filterProductId 
-                                ? "No se encontraron órdenes de despacho para el producto seleccionado."
+                            {hasActiveFilters
+                                ? "No se encontraron órdenes de despacho para los filtros seleccionados."
                                 : "No se han generado órdenes de despacho."
                             }
                         </div>
