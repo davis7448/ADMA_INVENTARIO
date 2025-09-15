@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -34,9 +33,11 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { format, startOfDay, endOfDay } from 'date-fns';
-import { Check, ChevronsUpDown, Calendar as CalendarIcon, X } from 'lucide-react';
+import { Check, ChevronsUpDown, Calendar as CalendarIcon, X, Search } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 interface GroupedPendingProduct {
     product: Product;
@@ -60,7 +61,11 @@ function DispatchPageContent() {
   const [filterProductId, setFilterProductId] = useState<string>('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [filterTrackingNumbers, setFilterTrackingNumbers] = useState('');
-  const [comboboxOpen, setComboboxOpen] = useState(false);
+  
+  // Search Dialog State
+  const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
 
   const fetchData = async () => {
     setLoading(true);
@@ -117,6 +122,20 @@ function DispatchPageContent() {
     
     return allOrders;
   }, [partialOrders, filterProductId, dateRange, filterTrackingNumbers]);
+  
+  const filteredProductsForSearch = useMemo(() => {
+    if (!searchQuery) return products;
+    return products.filter(p => 
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [searchQuery, products]);
+
+  const handleProductSearchSelect = (productId: string) => {
+    setFilterProductId(productId === filterProductId ? '' : productId);
+    setIsSearchDialogOpen(false);
+    setSearchQuery('');
+  };
 
 
   const handleDispatchProcessed = () => {
@@ -148,47 +167,19 @@ function DispatchPageContent() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-2">
                 <Label>Filtrar por producto</Label>
-                <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={comboboxOpen}
-                            className="w-full justify-between"
-                        >
-                            {filterProductId
-                                ? products.find((p) => p.id === filterProductId)?.name
-                                : "Filtrar por producto pendiente..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                        <Command>
-                            <CommandInput placeholder="Buscar producto..." />
-                            <CommandEmpty>No se encontró el producto.</CommandEmpty>
-                            <CommandGroup>
-                                {products.map((p) => (
-                                    <CommandItem
-                                        key={p.id}
-                                        value={p.name}
-                                        onSelect={() => {
-                                            setFilterProductId(p.id === filterProductId ? '' : p.id)
-                                            setComboboxOpen(false)
-                                        }}
-                                    >
-                                        <Check
-                                            className={cn(
-                                                "mr-2 h-4 w-4",
-                                                filterProductId === p.id ? "opacity-100" : "opacity-0"
-                                            )}
-                                        />
-                                        {p.name}
-                                    </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        </Command>
-                    </PopoverContent>
-                </Popover>
+                 <div className="flex gap-2">
+                    <Input 
+                        readOnly
+                        value={filterProductId ? productsById[filterProductId]?.name || '' : ''}
+                        placeholder="Seleccionar producto..."
+                        className="cursor-pointer"
+                        onClick={() => setIsSearchDialogOpen(true)}
+                    />
+                    <Button variant="outline" size="icon" onClick={() => setIsSearchDialogOpen(true)}>
+                        <Search className="h-4 w-4" />
+                        <span className="sr-only">Buscar Producto</span>
+                    </Button>
+                </div>
             </div>
             
              <div className="space-y-2">
@@ -280,6 +271,53 @@ function DispatchPageContent() {
   };
 
   return (
+    <>
+    <Dialog open={isSearchDialogOpen} onOpenChange={setIsSearchDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+                <DialogTitle>Buscar Producto</DialogTitle>
+                <DialogDescription>
+                    Busca un producto por nombre o SKU para filtrar los despachos parciales.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+                <Input 
+                    placeholder="Buscar por nombre o SKU..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoFocus
+                />
+                <div className="max-h-[400px] overflow-y-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Producto</TableHead>
+                                <TableHead>SKU</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredProductsForSearch.length > 0 ? (
+                                filteredProductsForSearch.map(product => (
+                                    <TableRow 
+                                        key={product.id}
+                                        onClick={() => handleProductSearchSelect(product.id)}
+                                        className={cn("cursor-pointer hover:bg-muted", filterProductId === product.id && "bg-muted")}
+                                    >
+                                        <TableCell className="font-medium">{product.name}</TableCell>
+                                        <TableCell>{product.sku}</TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={2} className="text-center">No se encontraron productos.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
+        </DialogContent>
+    </Dialog>
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold font-headline tracking-tight">Despacho de Guías</h1>
@@ -484,6 +522,7 @@ function DispatchPageContent() {
         </TabsContent>
       </Tabs>
     </div>
+    </>
   );
 }
 
@@ -499,3 +538,6 @@ export default function DispatchPage() {
 
     
 
+
+
+    
