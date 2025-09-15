@@ -16,6 +16,7 @@ import {
 import {
     Card,
     CardContent,
+    CardDescription,
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
@@ -116,11 +117,11 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
         return;
     }
 
-    const allProductsInExceptions = [...order.exceptions.flatMap(ex => ex.products), ...exceptions.flatMap(ex => ex.products)];
+    const allProductsInExceptions = [...(order.exceptions || []).flatMap(ex => ex.products), ...exceptions.flatMap(ex => ex.products)];
     const productQuantities: Record<string, number> = {};
 
     for(const p of allProductsInExceptions) {
-      productQuantities[p.productId] = (productQuantities[p.productId] || 0) + p.quantity;
+      if (p) productQuantities[p.productId] = (productQuantities[p.productId] || 0) + p.quantity;
     }
 
     for (const orderProduct of order.products) {
