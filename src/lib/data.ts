@@ -9,6 +9,7 @@ const findImage = (id: string) => {
 export let products: Product[] = [
   {
     id: 'prod-1',
+    sku: 'WM-ERGO-01',
     name: 'Ergo-Wireless Mouse',
     description: findImage('prod-1').description,
     imageUrl: findImage('prod-1').url,
@@ -21,6 +22,7 @@ export let products: Product[] = [
   },
   {
     id: 'prod-2',
+    sku: 'KB-MECH-RGB-01',
     name: 'Mechanical RGB Keyboard',
     description: findImage('prod-2').description,
     imageUrl: findImage('prod-2').url,
@@ -33,6 +35,7 @@ export let products: Product[] = [
   },
   {
     id: 'prod-3',
+    sku: 'MON-UW-4K-01',
     name: '4K Ultra-Wide Monitor',
     description: findImage('prod-3').description,
     imageUrl: findImage('prod-3').url,
@@ -45,6 +48,7 @@ export let products: Product[] = [
   },
   {
     id: 'prod-4',
+    sku: 'HP-NC-HIFI-01',
     name: 'Hi-Fi Noise-Cancelling Headphones',
     description: findImage('prod-4').description,
     imageUrl: findImage('prod-4').url,
@@ -57,6 +61,7 @@ export let products: Product[] = [
   },
   {
     id: 'prod-5',
+    sku: 'LAP-PRO-14-01',
     name: 'Pro Ultrabook 14"',
     description: findImage('prod-5').description,
     imageUrl: findImage('prod-5').url,
@@ -69,6 +74,7 @@ export let products: Product[] = [
   },
   {
     id: 'prod-6',
+    sku: 'SW-FIT-01',
     name: 'Smart Fitness Watch',
     description: findImage('prod-6').description,
     imageUrl: findImage('prod-6').url,
@@ -81,6 +87,7 @@ export let products: Product[] = [
   },
   {
     id: 'prod-7',
+    sku: 'ACC-HUB-USBC-01',
     name: 'Multi-port USB-C Hub',
     description: findImage('prod-7').description,
     imageUrl: findImage('prod-7').url,
@@ -93,6 +100,7 @@ export let products: Product[] = [
   },
   {
     id: 'prod-8',
+    sku: 'OFF-DESK-STD-01',
     name: 'Ergonomic Standing Desk',
     description: findImage('prod-8').description,
     imageUrl: findImage('prod-8').url,

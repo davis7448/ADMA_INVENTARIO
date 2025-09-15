@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 
 const AddProductFormSchema = z.object({
   name: z.string().min(1, 'Product name is required.'),
+  sku: z.string().min(1, 'SKU is required.'),
   description: z.string().min(1, 'Description is required.'),
   category: z.string().min(1, 'Category is required.'),
   vendorId: z.string().min(1, 'Supplier is required.'),
@@ -18,6 +19,7 @@ export type AddProductFormState = {
   message: string;
   errors?: {
     name?: string[];
+    sku?: string[];
     description?: string[];
     category?: string[];
     vendorId?: string[];
@@ -34,6 +36,7 @@ export async function addProduct(
 ): Promise<AddProductFormState> {
   const validatedFields = AddProductFormSchema.safeParse({
     name: formData.get('name'),
+    sku: formData.get('sku'),
     description: formData.get('description'),
     category: formData.get('category'),
     vendorId: formData.get('vendorId'),

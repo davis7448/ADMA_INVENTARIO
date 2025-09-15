@@ -39,6 +39,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const AddProductFormSchema = z.object({
   name: z.string().min(1, 'Product name is required.'),
+  sku: z.string().min(1, 'SKU is required.'),
   description: z.string().min(1, 'Description is required.'),
   category: z.string().min(1, 'Category is required.'),
   vendorId: z.string().min(1, 'Supplier is required.'),
@@ -75,6 +76,7 @@ export function AddProductForm() {
     resolver: zodResolver(AddProductFormSchema),
     defaultValues: {
       name: '',
+      sku: '',
       description: '',
       category: '',
       vendorId: '',
@@ -124,19 +126,34 @@ export function AddProductForm() {
         </DialogHeader>
         <Form {...form}>
           <form action={formAction} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Product Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Ergo-Wireless Mouse" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Product Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Ergo-Wireless Mouse" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="sku"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SKU</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., WM-ERGO-01" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="description"

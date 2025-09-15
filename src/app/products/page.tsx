@@ -60,6 +60,7 @@ export default function ProductsPage() {
                   <span className="sr-only">Image</span>
                 </TableHead>
                 <TableHead>Name</TableHead>
+                <TableHead>SKU</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="hidden md:table-cell">Supplier</TableHead>
                 <TableHead className="hidden md:table-cell">Stock</TableHead>
@@ -85,6 +86,7 @@ export default function ProductsPage() {
                     />
                   </TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>
+                  <TableCell>{product.sku}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{product.category}</Badge>
                   </TableCell>
