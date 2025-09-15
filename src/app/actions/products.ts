@@ -24,6 +24,9 @@ export async function addProductAction(
   try {
     const newProduct: Omit<Product, 'id'> = {
       ...validatedFields.data,
+      price: validatedFields.data.price ?? 0,
+      stock: validatedFields.data.stock ?? 0,
+      restockThreshold: validatedFields.data.restockThreshold ?? 0,
       imageHint: 'new product', // This could be improved with AI
     };
     

@@ -7,10 +7,19 @@ export const AddProductFormSchema = z.object({
   description: z.string().min(1, 'Description is required.'),
   categoryId: z.string().min(1, 'Category is required.'),
   vendorId: z.string().min(1, 'Supplier is required.'),
-  price: z.coerce.number().min(0, 'Price must be a non-negative number.'),
-  stock: z.coerce.number().min(0, 'Stock must be a non-negative number.'),
-  restockThreshold: z.coerce.number().min(0, 'Threshold must be a non-negative number.'),
-  imageUrl: z.string().min(1, 'Product image is required.'),
+  price: z.preprocess(
+    (val) => (String(val).trim() === '' ? undefined : val),
+    z.coerce.number({ invalid_type_error: 'Price must be a number.' }).min(0, 'Price must be a non-negative number.').optional()
+  ),
+  stock: z.preprocess(
+    (val) => (String(val).trim() === '' ? undefined : val),
+    z.coerce.number({ invalid_type_error: 'Stock must be a number.' }).int('Stock must be a whole number.').min(0, 'Stock must be a non-negative number.').optional()
+  ),
+  restockThreshold: z.preprocess(
+    (val) => (String(val).trim() === '' ? undefined : val),
+    z.coerce.number({ invalid_type_error: 'Threshold must be a number.' }).int('Threshold must be a whole number.').min(0, 'Threshold must be a non-negative number.').optional()
+  ),
+  imageUrl: z.string().url('Must be a valid URL.').min(1, 'Product image is required.'),
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;

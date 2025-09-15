@@ -74,17 +74,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     },
   });
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        form.setValue('imageUrl', reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const onSubmit = (values: AddProductFormValues) => {
     startTransition(async () => {
       const result = await addProductAction(values);
@@ -181,9 +170,9 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                     name="imageUrl"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Product Image</FormLabel>
+                            <FormLabel>Product Image URL</FormLabel>
                             <FormControl>
-                               <Input type="file" accept="image/*" onChange={handleImageChange} />
+                               <Input placeholder="https://example.com/image.png" {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -222,7 +211,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a supplier" />
-                                        </SelectTrigger>
+                                        </Trigger>
                                     </FormControl>
                                     <SelectContent>
                                         {suppliers.map(supplier => (
@@ -243,7 +232,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Price</FormLabel>
                                 <FormControl>
-                                    <Input type="number" step="0.01" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} />
+                                    <Input type="number" step="0.01" placeholder="e.g., 79.99" {...field} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -256,7 +245,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Stock</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} />
+                                    <Input type="number" placeholder="e.g., 100" {...field} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -269,7 +258,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Restock Threshold</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : +e.target.value)} />
+                                    <Input type="number" placeholder="e.g., 10" {...field} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
