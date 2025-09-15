@@ -329,17 +329,8 @@ export default function DashboardPage() {
         </Popover>
       </div>
 
-      <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center">
-            <h3 className="text-lg font-semibold mb-2 sm:mb-0">Filtros Avanzados</h3>
-            {hasActiveFilters && (
-                <Button variant="ghost" onClick={clearFilters} className="text-sm">
-                    <X className="mr-2 h-4 w-4" />
-                    Limpiar Filtros
-                </Button>
-            )}
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="p-4 border rounded-lg bg-muted/50">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
             <div className="space-y-2">
                 <Label htmlFor="platform-filter">Plataforma</Label>
                 <Select value={filterPlatform} onValueChange={setFilterPlatform}>
@@ -401,6 +392,12 @@ export default function DashboardPage() {
                     </PopoverContent>
                 </Popover>
             </div>
+            {hasActiveFilters && (
+                <Button variant="ghost" onClick={clearFilters} className="text-sm">
+                    <X className="mr-2 h-4 w-4" />
+                    Limpiar Filtros
+                </Button>
+            )}
         </div>
       </div>
 
@@ -604,5 +601,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
 
     
