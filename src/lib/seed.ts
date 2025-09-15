@@ -1,4 +1,5 @@
 
+
 /**
  * This is a script to seed the Firestore database with initial data.
  * Run it with `npm run seed`.
@@ -39,8 +40,11 @@ async function seedAuthenticationUsers() {
             // Check if user already exists
             try {
                 await auth.getUserByEmail(user.email);
-                console.log(`User ${user.email} already exists in Auth. Skipping.`);
-                continue; // Skip to next user
+                console.log(`User ${user.email} already exists in Auth. Updating...`);
+                // Optionally update user, or just ensure they exist. For seeding, we can just skip.
+                // For this case, we will delete and recreate to ensure consistency.
+                await auth.deleteUser(user.id);
+                console.log(`Deleted existing user ${user.email} to recreate.`);
             } catch (error: any) {
                 if (error.code !== 'auth/user-not-found') {
                     throw error; // Re-throw unexpected errors
@@ -58,9 +62,11 @@ async function seedAuthenticationUsers() {
             seededCount++;
         } catch (error: any) {
             if (error.code === 'auth/uid-already-exists') {
-                console.log(`User with UID ${user.id} already exists, skipping.`);
+                 // This is expected if we run seed multiple times, we can ignore it or update the user.
+                 // Forcing a recreate by deleting first is a more reliable seeding strategy.
+                console.log(`User with UID ${user.id} already exists, skipping creation.`);
             } else if (error.code === 'auth/email-already-exists') {
-                console.log(`User with email ${user.email} already exists, skipping.`);
+                console.log(`User with email ${user.email} already exists, skipping creation.`);
             } else {
                 console.error(`Error creating auth user ${user.email}:`, error.message);
             }
@@ -128,3 +134,4 @@ async function main() {
 }
 
 main();
+
