@@ -2,11 +2,11 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, uploadImageAndGetURL } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
-import type { AddProductFormState } from '@/lib/definitions';
-import { AddProductFormSchema } from '@/lib/definitions';
+import type { AddProductFormState, EditProductFormState } from '@/lib/definitions';
+import { AddProductFormSchema, EditProductFormSchema } from '@/lib/definitions';
 
 
 export async function addProductAction(
@@ -62,4 +62,65 @@ export async function addProductAction(
       success: false,
     };
   }
+}
+
+export async function updateProductAction(
+    productId: string,
+    formData: FormData
+  ): Promise<EditProductFormState> {
+    const validatedFields = EditProductFormSchema.safeParse({
+        name: formData.get('name'),
+        sku: formData.get('sku'),
+        description: formData.get('description'),
+        categoryId: formData.get('categoryId'),
+        vendorId: formData.get('vendorId'),
+        price: formData.get('price'),
+        stock: formData.get('stock'),
+        restockThreshold: formData.get('restockThreshold'),
+        image: formData.get('image'),
+    });
+  
+    if (!validatedFields.success) {
+        return {
+            message: 'Validation failed. Please check your inputs.',
+            errors: validatedFields.error.flatten().fieldErrors,
+            success: false,
+        };
+    }
+  
+    try {
+        const { image, ...productData } = validatedFields.data;
+        let imageUrl: string | undefined = undefined;
+
+        // If a new image is provided, upload it and get the new URL
+        if (image && image instanceof File && image.size > 0) {
+            imageUrl = await uploadImageAndGetURL(image);
+        }
+
+        const productUpdate: Partial<Omit<Product, 'id'>> = {
+            ...productData,
+            price: productData.price ?? 0,
+            stock: productData.stock ?? 0,
+            restockThreshold: productData.restockThreshold ?? 0,
+        };
+
+        if (imageUrl) {
+            productUpdate.imageUrl = imageUrl;
+        }
+
+        await updateProduct(productId, productUpdate);
+        revalidatePath('/products');
+
+        return {
+            message: 'Product updated successfully.',
+            success: true,
+        };
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        return {
+            message: errorMessage,
+            success: false,
+        };
+    }
 }

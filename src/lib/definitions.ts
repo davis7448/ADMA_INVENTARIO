@@ -55,6 +55,27 @@ export type AddProductFormState = {
   success: boolean;
 };
 
+export const EditProductFormSchema = AddProductFormSchema.omit({ image: true }).extend({
+    image: z.any().optional(),
+});
+  
+export type EditProductFormValues = z.infer<typeof EditProductFormSchema>;
+  
+export type EditProductFormState = Omit<AddProductFormState, 'errors'> & {
+errors?: {
+    _form?: string[];
+    name?: string[];
+    sku?: string[];
+    description?: string[];
+    categoryId?: string[];
+    vendorId?: string[];
+    price?: string[];
+    stock?: string[];
+    restockThreshold?: string[];
+    image?: string[];
+};
+};
+
 export const AddSupplierFormSchema = z.object({
   name: z.string().min(1, 'Supplier name is required.'),
   contact: z.object({
@@ -99,5 +120,3 @@ export type AddCategoryFormState = {
     };
     success: boolean;
 };
-
-    

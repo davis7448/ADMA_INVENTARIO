@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EditProductForm } from './edit-product-form';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -136,7 +137,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{supplierNames[product.vendorId] || 'Unknown'}</TableCell>
                         <TableCell className="hidden md:table-cell">{product.stock}</TableCell>
-                        <TableCell>${product.price.toFixed(2)}</TableCell>
+                        <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
                         {canEdit && (
                             <TableCell>
                             <DropdownMenu>
@@ -148,7 +149,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem>Edit</DropdownMenuItem>
+                                <EditProductForm product={product} onProductUpdated={refreshProducts}>
+                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Edit</DropdownMenuItem>
+                                </EditProductForm>
                                 <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -164,5 +167,3 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         </div>
     )
 }
-
-    

@@ -50,6 +50,11 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   return docRef.id;
 };
 
+export const updateProduct = async (productId: string, productUpdate: Partial<Omit<Product, 'id'>>) => {
+  const productRef = doc(db, 'products', productId);
+  await updateDoc(productRef, productUpdate);
+};
+
 export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract') => {
   const productRef = doc(db, 'products', productId);
   const productSnap = await getDoc(productRef);
@@ -192,5 +197,3 @@ export const addInventoryMovement = async (movement: Omit<InventoryMovement, 'id
         date: new Date(),
     });
 };
-
-    
