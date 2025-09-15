@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -19,8 +20,8 @@ import {
   } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventoryMovements, getPlatforms } from '@/lib/api';
-import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform } from '@/lib/types';
-import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle } from 'lucide-react';
+import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform, ProductVariant } from '@/lib/types';
+import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -36,6 +37,7 @@ import DashboardPlatformCarrierChart from '@/components/dashboard-platform-carri
 import { Label } from '@/components/ui/label';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
+import React from 'react';
 
 
 export default function DashboardPage() {
@@ -50,6 +52,8 @@ export default function DashboardPage() {
   const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
   const [allMovements, setAllMovements] = useState<InventoryMovement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedDashboardRow, setExpandedDashboardRow] = useState<string | null>(null);
+
 
   // Filter states - now arrays for multi-select
   const [filterPlatforms, setFilterPlatforms] = useState<string[]>([]);
@@ -79,6 +83,11 @@ export default function DashboardPage() {
     };
     fetchData();
   }, []);
+  
+  const handleToggleDashboardRow = (productId: string) => {
+    setExpandedDashboardRow(prev => (prev === productId ? null : productId));
+  };
+
 
   const clearFilters = () => {
     setFilterPlatforms([]);
@@ -181,9 +190,9 @@ export default function DashboardPage() {
     }
     
     const productInfoMap = allProducts.reduce((acc, product) => {
-        acc[product.id] = { name: product.name, categoryId: product.categoryId };
+        acc[product.id] = product; // Store the full product object
         return acc;
-    }, {} as Record<string, {name: string, categoryId: string}>);
+      }, {} as Record<string, Product>);
 
     const categoryNameMap = allCategories.reduce((acc, category) => {
         acc[category.id] = category.name;
@@ -193,30 +202,56 @@ export default function DashboardPage() {
     const platformNameMap = allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>);
     const carrierNameMap = allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>);
 
-    const salesByProduct: Record<string, number> = {};
+    const salesByProduct: Record<string, { total: number; variants: Record<string, number> }> = {};
     const salesByCategory: Record<string, number> = {};
     let totalItemsSold = 0;
 
     ordersInPeriod.forEach(order => {
         order.products.forEach(p => {
-            // Aggregate by product
-            salesByProduct[p.productId] = (salesByProduct[p.productId] || 0) + p.quantity;
-            
+            const product = productInfoMap[p.productId];
+            if (!product) return;
+
+            // Initialize if not present
+            if (!salesByProduct[p.productId]) {
+              salesByProduct[p.productId] = { total: 0, variants: {} };
+            }
+
+            // Aggregate by parent product
+            salesByProduct[p.productId].total += p.quantity;
+
+            // Aggregate by variant if applicable
+            if (p.variantId) {
+                if (!salesByProduct[p.productId].variants[p.variantId]) {
+                    salesByProduct[p.productId].variants[p.variantId] = 0;
+                }
+                salesByProduct[p.productId].variants[p.variantId] += p.quantity;
+            }
+
             // Aggregate by category
-            const categoryId = productInfoMap[p.productId]?.categoryId;
-            if (categoryId) {
-                salesByCategory[categoryId] = (salesByCategory[categoryId] || 0) + p.quantity;
+            if (product.categoryId) {
+                salesByCategory[product.categoryId] = (salesByCategory[product.categoryId] || 0) + p.quantity;
             }
             totalItemsSold += p.quantity;
         });
     });
 
     const productChartData = Object.entries(salesByProduct)
-        .map(([productId, count]) => ({
-            name: productInfoMap[productId]?.name || 'Unknown',
-            value: count,
-            percentage: totalItemsSold > 0 ? (count / totalItemsSold) * 100 : 0,
-        }))
+        .map(([productId, salesData]) => {
+            const product = productInfoMap[productId];
+            const variantsWithSales = product.variants?.map(v => ({
+                ...v,
+                sales: salesData.variants[v.id] || 0
+            })) || [];
+
+            return {
+                id: productId,
+                name: product.name || 'Unknown',
+                productType: product.productType,
+                value: salesData.total,
+                percentage: totalItemsSold > 0 ? (salesData.total / totalItemsSold) * 100 : 0,
+                variants: variantsWithSales
+            }
+        })
         .sort((a, b) => b.value - a.value);
 
     const categoryChartData = Object.entries(salesByCategory)
@@ -487,11 +522,13 @@ export default function DashboardPage() {
                                         <TableHead>Producto</TableHead>
                                         <TableHead className="text-right">Unidades</TableHead>
                                         <TableHead className="w-32 text-right">% del Total</TableHead>
+                                        <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expand</span></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {filteredData.productChartData.slice(0, 20).map(prod => (
-                                        <TableRow key={prod.name}>
+                                        <React.Fragment key={prod.id}>
+                                        <TableRow>
                                             <TableCell className="font-medium">{prod.name}</TableCell>
                                             <TableCell className="text-right">{prod.value}</TableCell>
                                             <TableCell className="text-right">
@@ -500,7 +537,49 @@ export default function DashboardPage() {
                                                     <Progress value={prod.percentage} className="h-2 w-16" />
                                                 </div>
                                             </TableCell>
+                                            <TableCell className="w-[50px] pr-4 text-right">
+                                                {prod.productType === 'variable' && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          handleToggleDashboardRow(prod.id);
+                                                        }}
+                                                      >
+                                                        <ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform duration-200", expandedDashboardRow === prod.id && "rotate-180")} />
+                                                      </Button>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
+                                         {prod.productType === 'variable' && expandedDashboardRow === prod.id && (
+                                            <TableRow className="bg-muted/20 hover:bg-muted/30">
+                                                <TableCell colSpan={4}>
+                                                    <div className="p-4">
+                                                        <h4 className="font-semibold mb-2 ml-4 text-sm">Desglose de Ventas por Variante</h4>
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="hover:bg-transparent">
+                                                                    <TableHead>Nombre</TableHead>
+                                                                    <TableHead>SKU</TableHead>
+                                                                    <TableHead className="text-right">Unidades Vendidas</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                            {prod.variants.map((variant) => (
+                                                                <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
+                                                                    <TableCell>{variant.name}</TableCell>
+                                                                    <TableCell>{variant.sku}</TableCell>
+                                                                    <TableCell className="text-right font-medium">{variant.sales}</TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                        </React.Fragment>
                                     ))}
                                 </TableBody>
                             </Table>
