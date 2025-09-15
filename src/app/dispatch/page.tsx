@@ -393,8 +393,11 @@ function DispatchPageContent() {
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
-                                    <div className="flex w-full items-center border-b">
-                                        <div className="pl-4 pr-2" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center border-b">
+                                        <div 
+                                          className="pl-4 pr-2"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
                                             <ProcessDispatchDialog
                                                 order={orderForDialog}
                                                 productsById={productsById}
@@ -404,18 +407,18 @@ function DispatchPageContent() {
                                             </ProcessDispatchDialog>
                                         </div>
                                         <AccordionTrigger className="flex-grow">
-                                            <div className="grid grid-cols-2 w-full items-center text-sm">
-                                                <div className="text-left">
-                                                    <p className="font-semibold">{order.dispatchId}</p>
-                                                    <p className="text-muted-foreground">
-                                                        {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
-                                                    </p>
-                                                </div>
-                                                <div className="text-center">
-                                                    <p className="font-medium">{platformNames[order.platformId]}</p>
-                                                    <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
-                                                </div>
-                                            </div>
+                                          <div className="grid grid-cols-2 w-full items-center text-sm">
+                                              <div className="text-left">
+                                                  <p className="font-semibold">{order.dispatchId}</p>
+                                                  <p className="text-muted-foreground">
+                                                      {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
+                                                  </p>
+                                              </div>
+                                              <div className="text-center">
+                                                  <p className="font-medium">{platformNames[order.platformId]}</p>
+                                                  <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                              </div>
+                                          </div>
                                         </AccordionTrigger>
                                     </div>
                                     <AccordionContent>
