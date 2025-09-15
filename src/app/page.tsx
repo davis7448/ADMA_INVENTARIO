@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { getDispatchOrders, getProducts, getCarriers, getCategories } from '@/lib/api';
 import type { DispatchOrder, Product, Carrier, Category } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, AlertTriangle, Percent } from 'lucide-react';
-import { DateRange } from 'react-day-picker';
+import type { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -221,17 +221,17 @@ export default function DashboardPage() {
                 </div>
             </CardContent>
             </Card>
-            <Card>
+            <Card className="flex flex-col">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium">Categoría Principal</CardTitle>
                     <CardDescription>
                         La categoría de productos más vendida en el período.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-col justify-between h-full pb-4">
+                <CardContent className="flex-1 flex flex-col justify-center">
                    {filteredData.mostMovedCategory ? (
                         <>
-                            <div className="flex items-baseline gap-2">
+                            <div className="flex items-baseline gap-2 justify-center">
                                <p className="text-2xl font-bold">{filteredData.mostMovedCategory.name}</p>
                                <p className="text-sm font-semibold text-green-500">
                                    ({filteredData.mostMovedCategoryPercentage.toFixed(1)}%)

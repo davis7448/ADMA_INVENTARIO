@@ -7,6 +7,8 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
 } from '@/components/ui/chart';
 
 type CategoryChartProps = {
@@ -19,13 +21,16 @@ type CategoryChartProps = {
 const CHART_COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function DashboardCategoryChart({ data }: CategoryChartProps) {
-  const chartConfig = data.reduce((acc, item, index) => {
-    acc[item.name] = {
-      label: item.name,
-      color: CHART_COLORS[index % CHART_COLORS.length],
-    };
-    return acc;
-  }, {} as any);
+  const chartConfig = React.useMemo(() => {
+    return data.reduce((acc, item, index) => {
+        acc[item.name] = {
+            label: item.name,
+            color: CHART_COLORS[index % CHART_COLORS.length],
+        };
+        return acc;
+    }, {} as any);
+  }, [data]);
+
 
   if (data.length === 0) {
     return null;
@@ -52,13 +57,17 @@ export default function DashboardCategoryChart({ data }: CategoryChartProps) {
             data={data}
             dataKey="value"
             nameKey="name"
-            innerRadius="60%"
+            innerRadius="50%"
             strokeWidth={2}
           >
             {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                <Cell key={`cell-${index}`} fill={chartConfig[entry.name]?.color} />
             ))}
           </Pie>
+           <ChartLegend
+            content={<ChartLegendContent nameKey="name" className="text-xs" />}
+            className="-translate-y-2 flex-wrap gap-2 [&>*]:basis-1/3 [&>*]:justify-center"
+          />
         </PieChart>
       </ResponsiveContainer>
     </ChartContainer>
