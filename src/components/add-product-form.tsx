@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -32,12 +32,13 @@ import {
     FormMessage,
   } from '@/components/ui/form';
 import { suppliers } from '@/lib/data';
-import { addProduct, AddProductFormSchema, AddProductFormValues, AddProductFormState } from '@/app/actions/products';
+import { addProduct } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
+import type { AddProductFormValues } from '@/lib/definitions';
+import { AddProductFormSchema } from '@/lib/definitions';
 
 export function AddProductForm() {
   const { toast } = useToast();
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
 
@@ -225,7 +226,7 @@ export function AddProductForm() {
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button type="button" variant="secondary" ref={closeButtonRef}>
+                        <Button type="button" variant="secondary">
                             Cancel
                         </Button>
                     </DialogClose>
