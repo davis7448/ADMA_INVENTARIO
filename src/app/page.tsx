@@ -75,6 +75,8 @@ export default function DashboardPage() {
       return orderDate >= fromDate && orderDate <= toDate;
     });
 
+    const totalItemsDispatched = ordersInPeriod.reduce((sum, order) => sum + order.totalItems, 0);
+
     const pendingAndPartialInPeriod = ordersInPeriod.filter(
         order => order.status === 'Pendiente' || order.status === 'Parcial'
     );
@@ -95,7 +97,7 @@ export default function DashboardPage() {
 
     const ordersByDay = ordersInPeriod.reduce((acc, order) => {
         const day = format(new Date(order.date), 'yyyy-MM-dd');
-        acc[day] = (acc[day] || 0) + 1;
+        acc[day] = (acc[day] || 0) + order.totalItems; // Aggregate by items now
         return acc;
     }, {} as Record<string, number>);
 
@@ -174,7 +176,7 @@ export default function DashboardPage() {
 
 
     return {
-      ordersInPeriod,
+      totalItemsDispatched,
       totalPendingOrders,
       totalReturns,
       returnsChartData,
@@ -237,13 +239,13 @@ export default function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card className="col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Órdenes Movilizadas</CardTitle>
+                <CardTitle className="text-sm font-medium">Productos Despachados</CardTitle>
                 <PackageCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold">{filteredData.ordersInPeriod.length}</div>
+                <div className="text-2xl font-bold">{filteredData.totalItemsDispatched}</div>
                 <p className="text-xs text-muted-foreground">
-                    Total de despachos generados en el período.
+                    Total de unidades despachadas en el período.
                 </p>
                 <div className="h-32 mt-4">
                     <DashboardOrdersChart data={filteredData.chartData} />
