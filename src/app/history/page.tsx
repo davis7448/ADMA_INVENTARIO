@@ -342,10 +342,6 @@ export default function HistoryPage() {
                     Limpiar filtros
                 </Button>
             )}
-            <Button variant="outline" onClick={handleExportExcel}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Exportar a Excel
-            </Button>
         </div>
     </div>
   );
@@ -437,10 +433,18 @@ export default function HistoryPage() {
           <TabsContent value="dispatches">
             <Card>
                 <CardHeader>
-                    <CardTitle>Órdenes de Despacho Generadas</CardTitle>
-                    <CardDescription>
-                        Un historial de todos los picking lists generados. Filtra por producto para encontrar órdenes específicas.
-                    </CardDescription>
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <CardTitle>Órdenes de Despacho Generadas</CardTitle>
+                            <CardDescription>
+                                Un historial de todos los picking lists generados. Filtra para encontrar órdenes específicas.
+                            </CardDescription>
+                        </div>
+                        <Button variant="outline" onClick={handleExportExcel}>
+                            <FileSpreadsheet className="mr-2 h-4 w-4" />
+                            Exportar a Excel
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     {renderFilters()}
@@ -514,4 +518,3 @@ export default function HistoryPage() {
     </div>
   );
 }
-
