@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -28,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms } from '@/lib/api';
+import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, getInventoryMovementsByDate } from '@/lib/api';
 import type { Product, Carrier, Platform } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -56,8 +57,8 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { v4 as uuidv4 } from 'uuid';
 import { generatePickingListPDF } from '@/lib/pdf';
+import { format } from 'date-fns';
 
 
 interface DispatchedProduct extends Product {
@@ -191,7 +192,7 @@ export default function LogisticsPage() {
         setDispatchedProducts(prev => prev.filter(p => p.id !== productId));
     };
 
-    const handleCreateDispatch = () => {
+    const handleCreateDispatch = async () => {
         if (!platform || !carrier || dispatchedProducts.length === 0) {
             toast({
               variant: 'destructive',
@@ -200,14 +201,32 @@ export default function LogisticsPage() {
             });
             return;
         }
+        
+        const today = new Date();
+        const movementsToday = await getInventoryMovementsByDate(today);
+        const dispatchMovementsToday = movementsToday.filter(m => m.type === 'Salida' && m.notes.includes('Dispatch ID:'));
+        
+        const existingDispatchIds = dispatchMovementsToday.map(m => {
+            const match = m.notes.match(/Dispatch ID: (.*?)\./);
+            return match ? match[1] : '';
+        });
 
-        const dispatchId = `DSP-${uuidv4()}`;
+        let nextId = 1;
+        if (existingDispatchIds.length > 0) {
+            const maxId = Math.max(...existingDispatchIds.map(id => parseInt(id.split(' - ')[0], 10) || 0));
+            nextId = maxId + 1;
+        }
+        
+        const consecutiveId = nextId.toString().padStart(3, '0');
         const platformName = platforms.find(p => p.id === platform)?.name || 'N/A';
         const carrierName = carriers.find(c => c.id === carrier)?.name || 'N/A';
+        const formattedDate = format(today, 'dd/MM/yy');
 
-        dispatchedProducts.forEach(product => {
+        const dispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
+
+        const promises = dispatchedProducts.map(product => {
             updateProductStock(product.id, product.dispatchQuantity, 'subtract');
-            addInventoryMovement({
+            return addInventoryMovement({
                 type: 'Salida',
                 productId: product.id,
                 productName: product.name,
@@ -215,6 +234,8 @@ export default function LogisticsPage() {
                 notes: `Dispatch ID: ${dispatchId}. Plataforma: ${platformName}, Transportadora: ${carrierName}`
             });
         });
+
+        await Promise.all(promises);
         
         generatePickingListPDF(dispatchId, dispatchedProducts, platformName, carrierName);
 
@@ -840,3 +861,5 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    

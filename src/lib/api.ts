@@ -5,6 +5,7 @@ import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Time
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform } from './types';
 import {v4 as uuidv4} from 'uuid';
+import { startOfDay, endOfDay } from 'date-fns';
 
 // Image Upload Function
 export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => {
@@ -225,6 +226,27 @@ export const getInventoryMovements = async (): Promise<InventoryMovement[]> => {
     return movementList;
 };
 
+export const getInventoryMovementsByDate = async (date: Date): Promise<InventoryMovement[]> => {
+    const movementsCol = collection(db, 'inventoryMovements');
+    const start = startOfDay(date);
+    const end = endOfDay(date);
+
+    const q = query(movementsCol, where('date', '>=', start), where('date', '<=', end));
+    const movementSnapshot = await getDocs(q);
+    
+    const movementList = movementSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
+        return {
+            id: doc.id,
+            ...data,
+            date,
+        } as InventoryMovement;
+    });
+
+    return movementList;
+};
+
 export const addInventoryMovement = async (movement: Omit<InventoryMovement, 'id' | 'date'>) => {
     const movementsCol = collection(db, 'inventoryMovements');
     await addDoc(movementsCol, {
@@ -232,3 +254,7 @@ export const addInventoryMovement = async (movement: Omit<InventoryMovement, 'id
         date: new Date(),
     });
 };
+
+    
+
+    
