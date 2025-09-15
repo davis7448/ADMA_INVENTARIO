@@ -26,15 +26,22 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+  } from "@/components/ui/tooltip"
 import { Button } from '@/components/ui/button';
 import { getProducts, getSuppliersByIds, getCategoriesByIds } from '@/lib/api';
 import type { Product } from '@/lib/types';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditProductForm } from './edit-product-form';
+import { cn } from '@/lib/utils';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -51,25 +58,36 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     
     const refreshProducts = async () => {
         setLoading(true);
-        const fetchedProducts = await getProducts();
-        setProducts(fetchedProducts);
-        
-        if (fetchedProducts.length > 0) {
-            const uniqueVendorIds = [...new Set(fetchedProducts.map(p => p.vendorId))];
-            const uniqueCategoryIds = [...new Set(fetchedProducts.map(p => p.categoryId))];
-             const [newSupplierNames, newCategoryNames] = await Promise.all([
-                getSuppliersByIds(uniqueVendorIds),
-                getCategoriesByIds(uniqueCategoryIds)
-            ]);
-            setSupplierNames(newSupplierNames);
-            setCategoryNames(newCategoryNames);
-        }
-        setLoading(false);
+        // This should be refetched from the server page component to get updated rotation
+        window.location.reload();
     }
 
     const canEdit = user?.role === 'admin';
 
+    const getRotationIcon = (categoryName?: string) => {
+        if (!categoryName) return null;
+
+        const iconProps = { className: "h-5 w-5" };
+
+        switch(categoryName) {
+            case 'Escalado':
+                return <TrendingUp {...iconProps} color="cyan" />;
+            case 'Alta rotación':
+                return <ArrowUpCircle {...iconProps} color="green" />;
+            case 'Activo':
+                return <CheckCircle {...iconProps} color="blue" />;
+            case 'Baja rotación':
+                return <ArrowDownCircle {...iconProps} color="orange" />;
+            case 'Inactivo':
+                return <XCircle {...iconProps} color="red" />;
+            default:
+                return null;
+        }
+    }
+
+
     return (
+        <TooltipProvider>
         <div className="space-y-6">
           <div className="flex justify-between items-start">
             <div>
@@ -91,6 +109,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                       <span className="sr-only">Image</span>
                     </TableHead>
                     <TableHead>Name</TableHead>
+                    <TableHead>Rotación</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead className="hidden md:table-cell">Supplier</TableHead>
@@ -113,12 +132,13 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <Skeleton className="h-16 w-16 rounded-md" />
                             </TableCell>
                             <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-10" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                             <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-32" /></TableCell>
                             <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
-                             <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
-                             <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
+                            <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
+                            <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                             {canEdit && <TableCell><Skeleton className="h-8 w-8" /></TableCell>}
                         </TableRow>
@@ -136,6 +156,16 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             />
                         </TableCell>
                         <TableCell className="font-medium">{product.name}</TableCell>
+                        <TableCell>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    {getRotationIcon(product.rotationCategoryName)}
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>{product.rotationCategoryName}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TableCell>
                         <TableCell>{product.sku}</TableCell>
                         <TableCell>
                             <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
@@ -172,5 +202,6 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             </CardContent>
           </Card>
         </div>
+        </TooltipProvider>
     )
 }

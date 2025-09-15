@@ -14,6 +14,7 @@ export type Product = {
   damagedStock: number;
   restockThreshold: number;
   vendorId: string;
+  rotationCategoryName?: string;
 };
 
 export type Supplier = {
