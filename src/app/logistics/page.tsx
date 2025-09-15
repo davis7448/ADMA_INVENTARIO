@@ -152,8 +152,7 @@ export default function LogisticsPage() {
           const product = allProductsList.find(p => p.sku === barcode);
     
           if (product) {
-            setProductToConfirm(product);
-            setIsConfirmDialogOpen(true);
+            addProductToDispatch(product);
           } else {
             toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
           }
@@ -833,5 +832,7 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
 
     
