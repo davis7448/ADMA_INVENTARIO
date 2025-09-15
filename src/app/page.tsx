@@ -335,6 +335,8 @@ export default function DashboardPage() {
     selected,
     onSelectedChange,
   }: MultiSelectFilterProps<T>) {
+    const [open, setOpen] = useState(false);
+
     const handleSelect = (id: string) => {
       const isSelected = selected.includes(id);
       if (isSelected) {
@@ -345,7 +347,7 @@ export default function DashboardPage() {
     };
   
     return (
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" className="w-full justify-start font-normal">
             <PlusCircle className="mr-2 h-4 w-4" />
@@ -366,7 +368,10 @@ export default function DashboardPage() {
                 {options.map((option) => (
                   <CommandItem
                     key={option.id}
-                    onSelect={() => handleSelect(option.id)}
+                    onSelect={() => {
+                        handleSelect(option.id);
+                        setOpen(true);
+                    }}
                   >
                     <div
                       className={cn(
