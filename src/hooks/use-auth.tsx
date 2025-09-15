@@ -4,7 +4,7 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { User } from '@/lib/types';
-import { findUserByUID } from '@/lib/api';
+import { findUserByEmail } from '@/lib/api';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type User as FirebaseUser } from "firebase/auth";
 import { app } from '@/lib/firebase';
 
@@ -27,8 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        const appUser = await findUserByUID(firebaseUser.uid);
+      if (firebaseUser?.email) {
+        const appUser = await findUserByEmail(firebaseUser.email);
         setUser(appUser);
       } else {
         setUser(null);
@@ -49,9 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const appUser = await findUserByUID(userCredential.user.uid);
-        setUser(appUser);
-        router.push('/');
+        // onAuthStateChanged will handle setting the user and redirecting
         return true;
     } catch (error) {
         console.error("Login failed:", error);

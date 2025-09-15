@@ -131,13 +131,17 @@ export const getUsers = async (): Promise<User[]> => {
     return userList;
 };
 
-export const findUserByUID = async (uid: string): Promise<User | null> => {
-    const userRef = doc(db, "users", uid);
-    const userSnap = await getDoc(userRef);
-    if (userSnap.exists()) {
-        return { id: userSnap.id, ...userSnap.data() } as User;
+export const findUserByEmail = async (email: string): Promise<User | null> => {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where("email", "==", email));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+        return null;
     }
-    return null;
+    
+    const userDoc = querySnapshot.docs[0];
+    return { id: userDoc.id, ...userDoc.data() } as User;
 };
 
 
