@@ -84,12 +84,12 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
   const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
 
   const linkClass = (href?: string) => cn(
-    "font-medium transition-colors hover:text-primary",
+    "font-medium transition-colors",
     isMobile 
-      ? "text-lg p-2 rounded-md block w-full text-left" 
-      : "text-sm",
+      ? "text-lg p-2 rounded-md block w-full text-left hover:bg-black hover:text-primary" 
+      : "text-sm hover:text-black dark:hover:text-white",
     pathname === href 
-      ? (isMobile ? "text-primary bg-muted" : "text-primary")
+      ? (isMobile ? "text-primary bg-black" : "text-black dark:text-white")
       : "text-muted-foreground"
   );
 
@@ -124,7 +124,7 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
       return (
         <DropdownMenu key={item.label}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className={cn(linkClass(), "flex items-center gap-1")}>
+            <Button variant="ghost" className={cn(linkClass(), "flex items-center gap-1 hover:bg-black hover:text-primary")}>
                 {item.label}
                 <ChevronDown className="h-4 w-4" />
             </Button>
