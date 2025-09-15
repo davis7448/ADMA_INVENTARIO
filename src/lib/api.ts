@@ -32,7 +32,15 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 export const getProducts = async (): Promise<Product[]> => {
   const productsCol = collection(db, 'products');
   const productSnapshot = await getDocs(productsCol);
-  const productList = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), damagedStock: doc.data().damagedStock || 0 } as Product));
+  const productList = productSnapshot.docs.map(doc => {
+    const data = doc.data();
+    return { 
+        id: doc.id, 
+        ...data, 
+        damagedStock: data.damagedStock || 0,
+        pendingStock: data.pendingStock || 0
+    } as Product
+  });
   return productList;
 };
 
@@ -41,7 +49,12 @@ export const getProductById = async (id: string): Promise<Product | null> => {
   const productSnap = await getDoc(productDoc);
   if (productSnap.exists()) {
     const data = productSnap.data();
-    return { id: productSnap.id, ...data, damagedStock: data.damagedStock || 0 } as Product;
+    return { 
+        id: productSnap.id, 
+        ...data, 
+        damagedStock: data.damagedStock || 0,
+        pendingStock: data.pendingStock || 0
+    } as Product;
   } else {
     return null;
   }
