@@ -128,28 +128,41 @@ export default function DashboardPage() {
         currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    const productCategoryMap = allProducts.reduce((acc, product) => {
-        acc[product.id] = product.categoryId;
+    const productInfoMap = allProducts.reduce((acc, product) => {
+        acc[product.id] = { name: product.name, categoryId: product.categoryId };
         return acc;
-    }, {} as Record<string, string>);
+    }, {} as Record<string, {name: string, categoryId: string}>);
 
     const categoryNameMap = allCategories.reduce((acc, category) => {
         acc[category.id] = category.name;
         return acc;
     }, {} as Record<string, string>);
 
+    const salesByProduct: Record<string, number> = {};
     const salesByCategory: Record<string, number> = {};
     let totalItemsSold = 0;
 
     ordersInPeriod.forEach(order => {
-        order.products.forEach(product => {
-            const categoryId = productCategoryMap[product.productId];
+        order.products.forEach(p => {
+            // Aggregate by product
+            salesByProduct[p.productId] = (salesByProduct[p.productId] || 0) + p.quantity;
+            
+            // Aggregate by category
+            const categoryId = productInfoMap[p.productId]?.categoryId;
             if (categoryId) {
-                salesByCategory[categoryId] = (salesByCategory[categoryId] || 0) + product.quantity;
+                salesByCategory[categoryId] = (salesByCategory[categoryId] || 0) + p.quantity;
             }
-            totalItemsSold += product.quantity;
+            totalItemsSold += p.quantity;
         });
     });
+
+    const productChartData = Object.entries(salesByProduct)
+        .map(([productId, count]) => ({
+            name: productInfoMap[productId]?.name || 'Unknown',
+            value: count,
+            percentage: totalItemsSold > 0 ? (count / totalItemsSold) * 100 : 0,
+        }))
+        .sort((a, b) => b.value - a.value);
 
     const categoryChartData = Object.entries(salesByCategory)
         .map(([categoryId, count]) => ({
@@ -167,6 +180,7 @@ export default function DashboardPage() {
       returnsChartData,
       pendingChartData,
       chartData,
+      productChartData,
       categoryChartData,
     };
   }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allMovements]);
@@ -269,6 +283,53 @@ export default function DashboardPage() {
 
         <Card>
             <CardHeader>
+                <CardTitle>Rendimiento por Producto</CardTitle>
+                <CardDescription>
+                    Top 5 productos más vendidos en el período seleccionado.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {loading ? <Skeleton className="h-64" /> : filteredData.productChartData.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                        <div className="h-64">
+                            <DashboardCategoryChart data={filteredData.productChartData.slice(0, 5)} />
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Producto</TableHead>
+                                        <TableHead className="text-right">Unidades</TableHead>
+                                        <TableHead className="w-32 text-right">% del Total</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredData.productChartData.slice(0, 5).map(prod => (
+                                        <TableRow key={prod.name}>
+                                            <TableCell className="font-medium">{prod.name}</TableCell>
+                                            <TableCell className="text-right">{prod.value}</TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <span className="text-xs">{prod.percentage.toFixed(1)}%</span>
+                                                    <Progress value={prod.percentage} className="h-2 w-16" />
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground py-16">
+                        No hay datos de ventas por producto en el período seleccionado.
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
                 <CardTitle>Rendimiento por Categoría</CardTitle>
                 <CardDescription>
                     Distribución de los productos vendidos por categoría en el período seleccionado.
@@ -317,5 +378,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
