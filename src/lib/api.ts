@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement } from './types';
 
 // Product Functions
@@ -59,6 +59,18 @@ export const getSupplierById = async (id: string): Promise<Supplier | null> => {
     }
 };
 
+export const getSuppliersByIds = async (ids: string[]): Promise<Record<string, string>> => {
+    if (ids.length === 0) return {};
+    const suppliersRef = collection(db, "suppliers");
+    const q = query(suppliersRef, where('__name__', 'in', ids));
+    const querySnapshot = await getDocs(q);
+    const suppliers: Record<string, string> = {};
+    querySnapshot.forEach((doc) => {
+        suppliers[doc.id] = (doc.data() as Supplier).name;
+    });
+    return suppliers;
+};
+
 // Order Functions
 export const getOrders = async (): Promise<Order[]> => {
     const ordersCol = collection(db, 'orders');
@@ -99,7 +111,14 @@ export const findUserByEmail = async (email: string): Promise<User | null> => {
 export const getInventoryMovements = async (): Promise<InventoryMovement[]> => {
     const movementsCol = collection(db, 'inventoryMovements');
     const movementSnapshot = await getDocs(movementsCol);
-    const movementList = movementSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryMovement));
+    const movementList = movementSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+        id: doc.id, 
+        ...data,
+        date: (data.date as Timestamp).toDate().toISOString(),
+      } as InventoryMovement
+    });
     return movementList;
 };
 
@@ -107,6 +126,6 @@ export const addInventoryMovement = async (movement: Omit<InventoryMovement, 'id
     const movementsCol = collection(db, 'inventoryMovements');
     await addDoc(movementsCol, {
         ...movement,
-        date: new Date().toISOString(),
+        date: new Date(),
     });
 };

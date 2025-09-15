@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { getProducts, getSupplierById } from '@/lib/api';
+import { getProducts, getSuppliersByIds } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import { MoreHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -42,45 +42,46 @@ function ProductsContent() {
     const [supplierNames, setSupplierNames] = useState<Record<string, string>>({});
 
     useEffect(() => {
-      async function fetchProducts() {
+      async function fetchProductsAndSuppliers() {
         setLoading(true);
         const fetchedProducts = await getProducts();
         setProducts(fetchedProducts);
+
+        if (fetchedProducts.length > 0) {
+            const uniqueVendorIds = [...new Set(fetchedProducts.map(p => p.vendorId))];
+            const names = await getSuppliersByIds(uniqueVendorIds);
+            setSupplierNames(names);
+        }
+
         setLoading(false);
       }
-      fetchProducts();
+      fetchProductsAndSuppliers();
     }, []);
-
-    useEffect(() => {
-        const fetchSupplierNames = async () => {
-            const uniqueVendorIds = [...new Set(products.map(p => p.vendorId))];
-            const names: Record<string, string> = {};
-            for (const vendorId of uniqueVendorIds) {
-                if (!supplierNames[vendorId]) {
-                    const supplier = await getSupplierById(vendorId);
-                    names[vendorId] = supplier?.name ?? 'Unknown';
-                }
-            }
-            setSupplierNames(prev => ({ ...prev, ...names }));
-        };
-
-        if (products.length > 0) {
-            fetchSupplierNames();
+    
+    const refreshProducts = async () => {
+        setLoading(true);
+        const fetchedProducts = await getProducts();
+        setProducts(fetchedProducts);
+        
+        if (fetchedProducts.length > 0) {
+            const uniqueVendorIds = [...new Set(fetchedProducts.map(p => p.vendorId))];
+            const names = await getSuppliersByIds(uniqueVendorIds);
+            setSupplierNames(names);
         }
-    }, [products]);
 
+        setLoading(false);
+    }
 
     const canEdit = user?.role === 'admin';
 
     return (
-        <AuthProviderWrapper allowedRoles={['admin', 'commercial']}>
-          <div className="space-y-6">
+        <div className="space-y-6">
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
               <p className="text-muted-foreground">Browse and manage your product listings.</p>
             </div>
-            {canEdit && <AddProductForm onProductAdded={async () => setProducts(await getProducts())} />}
+            {canEdit && <AddProductForm onProductAdded={refreshProducts} />}
           </div>
           <Card>
             <CardHeader>
@@ -140,7 +141,7 @@ function ProductsContent() {
                         <TableCell>
                             <Badge variant="outline">{product.category}</Badge>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">{supplierNames[product.vendorId] || 'Loading...'}</TableCell>
+                        <TableCell className="hidden md:table-cell">{supplierNames[product.vendorId] || 'Unknown'}</TableCell>
                         <TableCell className="hidden md:table-cell">{product.stock}</TableCell>
                         <TableCell>${product.price.toFixed(2)}</TableCell>
                         {canEdit && (
@@ -168,10 +169,13 @@ function ProductsContent() {
             </CardContent>
           </Card>
         </div>
-      </AuthProviderWrapper>
     )
 }
 
 export default function ProductsPage() {
-    return <ProductsContent />;
+    return (
+      <AuthProviderWrapper allowedRoles={['admin', 'commercial']}>
+        <ProductsContent />
+      </AuthProviderWrapper>
+    );
 }
