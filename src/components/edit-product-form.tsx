@@ -43,7 +43,7 @@ import type { Supplier, Category, Product } from '@/lib/types';
 import Image from 'next/image';
 import { Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader } from './ui/card';
-import { Label } from './ui/label';
+import { Label } from '@/components/ui/label';
 
 interface EditProductFormProps {
   product: Product;
@@ -576,5 +576,3 @@ CAM-01-V,Verde,25.00,12"
     </>
   );
 }
-
-    

@@ -42,7 +42,7 @@ import { AddProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category } from '@/lib/types';
 import { Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader } from './ui/card';
-import { Label } from './ui/label';
+import { Label } from '@/components/ui/label';
 
 interface AddProductFormProps {
   onProductAdded: () => void;
@@ -566,5 +566,3 @@ CAM-01-V,Verde,25.00,12"
     </>
   );
 }
-
-    
