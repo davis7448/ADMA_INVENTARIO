@@ -10,6 +10,7 @@
       "categoryId": "cat-1",
       "price": 79.99,
       "stock": 45,
+      "pendingStock": 0,
       "restockThreshold": 10,
       "vendorId": "sup-1"
     },
@@ -23,6 +24,7 @@
       "categoryId": "cat-2",
       "price": 149.50,
       "stock": 28,
+      "pendingStock": 0,
       "restockThreshold": 5,
       "vendorId": "sup-2"
     },
@@ -36,6 +38,7 @@
       "categoryId": "cat-1",
       "price": 450.00,
       "stock": 20,
+      "pendingStock": 0,
       "restockThreshold": 8,
       "vendorId": "sup-1"
     },
@@ -49,6 +52,7 @@
       "categoryId": "cat-1",
       "price": 299.99,
       "stock": 15,
+      "pendingStock": 0,
       "restockThreshold": 5,
       "vendorId": "sup-3"
     },
@@ -62,6 +66,7 @@
       "categoryId": "cat-1",
       "price": 1299.00,
       "stock": 10,
+      "pendingStock": 0,
       "restockThreshold": 3,
       "vendorId": "sup-1"
     }

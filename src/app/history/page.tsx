@@ -22,7 +22,7 @@ import { format, startOfDay, endOfDay } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
-import type { InventoryMovement, Product, Platform, Carrier, DispatchOrder, DispatchOrderProduct } from '@/lib/types';
+import type { InventoryMovement, Product, Platform, Carrier, DispatchOrder } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -91,6 +91,11 @@ export default function HistoryPage() {
     }
     fetchData();
   }, []);
+
+  const productsById = useMemo(() => 
+    products.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>),
+    [products]
+  );
   
   const platformNames = useMemo(() => 
     platforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>),
@@ -483,31 +488,54 @@ export default function HistoryPage() {
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent>
-                                        <div className="space-y-4">
+                                        <div className="p-4 bg-muted/50 rounded-md">
+                                            <h4 className="font-semibold mb-2">Productos de la Orden</h4>
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
                                                         <TableHead>Producto</TableHead>
                                                         <TableHead>SKU</TableHead>
                                                         <TableHead className="text-right">Cant. Pedida</TableHead>
-                                                        <TableHead className="text-right">Excepciones</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                    {order.products.map((p) => {
-                                                        const exception = order.exceptions?.find(e => e.productId === p.productId);
-                                                        return (
-                                                            <TableRow key={p.productId} className={p.productId === filterProductId ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
-                                                                <TableCell>{p.name}</TableCell>
-                                                                <TableCell>{p.sku}</TableCell>
-                                                                <TableCell className="text-right">{p.quantity}</TableCell>
-                                                                <TableCell className="text-right text-destructive">{exception?.quantity || 0}</TableCell>
-                                                            </TableRow>
-                                                        )
-                                                    })}
+                                                    {order.products.map((p) => (
+                                                        <TableRow key={p.productId} className={p.productId === filterProductId ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
+                                                            <TableCell>{p.name}</TableCell>
+                                                            <TableCell>{p.sku}</TableCell>
+                                                            <TableCell className="text-right">{p.quantity}</TableCell>
+                                                        </TableRow>
+                                                    ))}
                                                 </TableBody>
                                             </Table>
-                                            <div className="flex justify-end">
+                                            {order.exceptions && order.exceptions.length > 0 && (
+                                                <div className="mt-4">
+                                                    <h4 className="font-semibold mb-2 text-destructive">Excepciones (No Enviados)</h4>
+                                                    {order.exceptions.map((ex, index) => (
+                                                        <div key={index} className="mb-3">
+                                                            <p className="text-sm font-semibold">Guía de Excepción: <span className="font-mono bg-destructive/10 px-2 py-1 rounded">{ex.trackingNumber}</span></p>
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow>
+                                                                        <TableHead>Producto</TableHead>
+                                                                        <TableHead className="text-right">Cant. no enviada</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {ex.products.map(p => (
+                                                                        <TableRow key={p.productId}>
+                                                                            <TableCell>{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
+                                                                            <TableCell className="text-right">{p.quantity}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-end mt-4">
                                                 <Button variant="outline" size="sm" onClick={() => handleDownloadPdf(order)}>
                                                     <Download className="mr-2 h-4 w-4" />
                                                     Descargar PDF
@@ -533,3 +561,4 @@ export default function HistoryPage() {
     </div>
   );
 }
+

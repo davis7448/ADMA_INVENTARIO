@@ -1,9 +1,10 @@
 
+
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -360,13 +361,14 @@ export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DispatchOrder));
 }
 
-export const processDispatch = async (orderId: string, trackingNumbers: string[], exceptions: { productId: string, quantity: number }[]) => {
+export const processDispatch = async (orderId: string, trackingNumbers: string[], exceptions: DispatchException[]) => {
     const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);
+    const orderSnap = await getDoc(orderRef);
+    const orderData = orderSnap.data();
 
     // 1. Determine status
     const status = exceptions.length > 0 ? 'Parcial' : 'Despachada';
-
 
     // 2. Update the dispatch order status, tracking numbers, and exceptions
     batch.update(orderRef, {
@@ -375,32 +377,44 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         exceptions: exceptions
     });
 
-    // 3. Handle exceptions: add stock back and create an inventory movement
+    // 3. Handle exceptions
     for (const ex of exceptions) {
-        // Add stock back
-        const productRef = doc(db, 'products', ex.productId);
-        const productSnap = await getDoc(productRef);
-        if (productSnap.exists()) {
-            const newStock = productSnap.data().stock + ex.quantity;
-            batch.update(productRef, { stock: newStock });
+        for (const exProd of ex.products) {
+            const productRef = doc(db, 'products', exProd.productId);
+            const productSnap = await getDoc(productRef);
+            
+            if (productSnap.exists()) {
+                const productData = productSnap.data();
+                const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
+                batch.update(productRef, { pendingStock: newPendingStock });
+
+                // Create "Entrada a Pendientes" movement
+                const movementRef = doc(collection(db, 'inventoryMovements'));
+                batch.set(movementRef, {
+                    type: 'Entrada',
+                    productId: exProd.productId,
+                    productName: productData.name || 'Unknown Product',
+                    quantity: exProd.quantity,
+                    date: new Date(),
+                    notes: `Excepción en despacho ID: ${orderData?.dispatchId}. Guía: ${ex.trackingNumber}. Movido a stock pendiente.`,
+                    movementId: 0 
+                });
+
+                // Audit Alert Logic
+                if (productData.stock > 0) {
+                    const auditAlertRef = doc(collection(db, 'auditAlerts'));
+                    batch.set(auditAlertRef, {
+                        date: new Date(),
+                        productId: exProd.productId,
+                        productName: productData.name,
+                        productSku: productData.sku,
+                        message: `Se generó una excepción de ${exProd.quantity} unidad(es) para un producto que tenía ${productData.stock} unidad(es) en stock principal.`,
+                        dispatchId: orderData?.dispatchId,
+                        exceptionTrackingNumber: ex.trackingNumber
+                    });
+                }
+            }
         }
-
-        // Create "Entrada" movement for the exception
-        const movementRef = doc(collection(db, 'inventoryMovements'));
-        const orderSnap = await getDoc(orderRef);
-        const orderData = orderSnap.data();
-
-        // This movement won't have a sequential ID from the counter transaction.
-        // It will be created with a random ID and movementId 0 for now.
-        batch.set(movementRef, {
-            type: 'Entrada',
-            productId: ex.productId,
-            productName: productSnap.data()?.name || 'Unknown Product',
-            quantity: ex.quantity,
-            date: new Date(),
-            notes: `Devolución a stock por excepción en despacho ID: ${orderData?.dispatchId}`,
-            movementId: 0 
-        });
     }
 
     await batch.commit();

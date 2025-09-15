@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import { useState } from 'react';
-import type { DispatchOrder, Product } from '@/lib/types';
+import type { DispatchOrder, Product, DispatchException } from '@/lib/types';
 import {
   Dialog,
   DialogContent,
@@ -40,7 +41,13 @@ import {
     SelectTrigger,
     SelectValue,
   } from '@/components/ui/select';
-import { Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+  } from "@/components/ui/accordion"
 
 interface ProcessDispatchDialogProps {
   order: DispatchOrder;
@@ -49,58 +56,79 @@ interface ProcessDispatchDialogProps {
   onDispatchProcessed: () => void;
 }
 
-interface ExceptionItem {
-  productId: string;
-  quantity: number;
-}
-
 export function ProcessDispatchDialog({ order, productsById, children, onDispatchProcessed }: ProcessDispatchDialogProps) {
   const [open, setOpen] = useState(false);
   const [trackingNumbers, setTrackingNumbers] = useState('');
-  const [exceptions, setExceptions] = useState<ExceptionItem[]>([]);
+  const [exceptions, setExceptions] = useState<DispatchException[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
+  const [newExceptionTracking, setNewExceptionTracking] = useState('');
 
-  const handleAddException = () => {
-    setExceptions([...exceptions, { productId: '', quantity: 1 }]);
-  };
-
-  const handleExceptionChange = (index: number, field: 'productId' | 'quantity', value: string | number) => {
-    const newExceptions = [...exceptions];
-    if (field === 'productId') {
-        newExceptions[index].productId = value as string;
-    } else {
-        newExceptions[index].quantity = Number(value);
+  const handleAddExceptionGroup = () => {
+    if (!newExceptionTracking.trim()) {
+        toast({ variant: 'destructive', title: 'Error', description: 'El número de guía de la excepción no puede estar vacío.' });
+        return;
     }
-    setExceptions(newExceptions);
+    setExceptions([...exceptions, { trackingNumber: newExceptionTracking.trim(), products: [{ productId: '', quantity: 1 }] }]);
+    setNewExceptionTracking('');
   };
 
-  const handleRemoveException = (index: number) => {
+  const handleRemoveExceptionGroup = (index: number) => {
     setExceptions(exceptions.filter((_, i) => i !== index));
   }
+
+  const handleAddProductToException = (groupIndex: number) => {
+    const newExceptions = [...exceptions];
+    newExceptions[groupIndex].products.push({ productId: '', quantity: 1 });
+    setExceptions(newExceptions);
+  }
+
+  const handleRemoveProductFromException = (groupIndex: number, productIndex: number) => {
+    const newExceptions = [...exceptions];
+    newExceptions[groupIndex].products = newExceptions[groupIndex].products.filter((_, i) => i !== productIndex);
+    // If no products left, remove the group
+    if (newExceptions[groupIndex].products.length === 0) {
+        handleRemoveExceptionGroup(groupIndex);
+    }
+    setExceptions(newExceptions);
+  }
+  
+  const handleExceptionProductChange = (groupIndex: number, productIndex: number, field: 'productId' | 'quantity', value: string | number) => {
+    const newExceptions = [...exceptions];
+    const product = newExceptions[groupIndex].products[productIndex];
+    if (field === 'productId') {
+        product.productId = value as string;
+    } else {
+        product.quantity = Number(value);
+    }
+    setExceptions(newExceptions);
+  }
+
 
   const handleSubmit = async () => {
     setIsProcessing(true);
     
     // Basic validation
     const trackingList = trackingNumbers.split('\n').map(t => t.trim()).filter(t => t);
-    if (trackingList.length === 0) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Debe ingresar al menos un número de guía.' });
+    if (trackingList.length === 0 && exceptions.length === 0) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Debe ingresar al menos un número de guía o registrar una excepción.' });
         setIsProcessing(false);
         return;
     }
     
     for (const ex of exceptions) {
-        const orderProduct = order.products.find(p => p.productId === ex.productId);
-        if (!orderProduct) {
-            toast({ variant: 'destructive', title: 'Error', description: `El producto de excepción con ID ${ex.productId} no está en la orden.` });
-            setIsProcessing(false);
-            return;
-        }
-        if (ex.quantity > orderProduct.quantity) {
-            toast({ variant: 'destructive', title: 'Error', description: `La cantidad de la excepción para ${productsById[ex.productId]?.name} supera la cantidad de la orden.` });
-            setIsProcessing(false);
-            return;
+        for (const prod of ex.products) {
+            const orderProduct = order.products.find(p => p.productId === prod.productId);
+            if (!orderProduct) {
+                toast({ variant: 'destructive', title: 'Error', description: `El producto de excepción no está en la orden.` });
+                setIsProcessing(false);
+                return;
+            }
+            if (prod.quantity > orderProduct.quantity) {
+                toast({ variant: 'destructive', title: 'Error', description: `La cantidad de la excepción para ${productsById[prod.productId]?.name} supera la cantidad de la orden.` });
+                setIsProcessing(false);
+                return;
+            }
         }
     }
 
@@ -161,55 +189,81 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
             </div>
             <div className="space-y-6">
                 <div>
-                    <Label htmlFor="tracking-numbers">Números de Guía (uno por línea)</Label>
+                    <Label htmlFor="tracking-numbers">Números de Guía Enviados (uno por línea)</Label>
                     <Textarea
                         id="tracking-numbers"
-                        placeholder="Pistolea o pega aquí los números de guía"
+                        placeholder="Pistolea o pega aquí los números de guía que SÍ salieron."
                         value={trackingNumbers}
                         onChange={(e) => setTrackingNumbers(e.target.value)}
-                        rows={10}
+                        rows={5}
                     />
                 </div>
                 <div>
                     <Card>
                         <CardHeader>
-                            <div className="flex justify-between items-center">
-                                <CardTitle>Excepciones (No Enviados)</CardTitle>
-                                <Button variant="outline" size="sm" onClick={handleAddException}>Añadir Excepción</Button>
-                            </div>
-                            <CardDescription>Productos que no salieron en este despacho. Se devolverán al stock.</CardDescription>
+                            <CardTitle>Excepciones (No Enviados)</CardTitle>
+                            <CardDescription>Agrupa por guía los productos que no salieron. Se moverán a stock pendiente.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {exceptions.map((ex, index) => (
-                                <div key={index} className="flex items-center gap-2">
-                                    <Select 
-                                        value={ex.productId} 
-                                        onValueChange={(val) => handleExceptionChange(index, 'productId', val)}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Seleccionar producto" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {order.products.map(p => (
-                                                <SelectItem key={p.productId} value={p.productId}>{p.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Input 
-                                        type="number" 
-                                        className="w-24"
-                                        placeholder="Cant."
-                                        value={ex.quantity}
-                                        onChange={(e) => handleExceptionChange(index, 'quantity', e.target.value)}
-                                        min="1"
-                                    />
-                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveException(index)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </div>
-                            ))}
+                            <div className="flex gap-2">
+                                <Input 
+                                    placeholder="Guía de la excepción..."
+                                    value={newExceptionTracking}
+                                    onChange={(e) => setNewExceptionTracking(e.target.value)}
+                                />
+                                <Button onClick={handleAddExceptionGroup}>Añadir Grupo</Button>
+                            </div>
+
+                            <Accordion type="multiple" className="w-full">
+                                {exceptions.map((ex, groupIndex) => (
+                                <AccordionItem value={`item-${groupIndex}`} key={groupIndex}>
+                                    <AccordionTrigger>
+                                        <div className="flex justify-between w-full pr-4">
+                                            <span>Guía: {ex.trackingNumber}</span>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleRemoveExceptionGroup(groupIndex)}}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="space-y-2 pt-2">
+                                        {ex.products.map((prod, prodIndex) => (
+                                            <div key={prodIndex} className="flex items-center gap-2 pl-2">
+                                                <Select 
+                                                    value={prod.productId} 
+                                                    onValueChange={(val) => handleExceptionProductChange(groupIndex, prodIndex, 'productId', val)}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Producto" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {order.products.map(p => (
+                                                            <SelectItem key={p.productId} value={p.productId}>{p.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Input 
+                                                    type="number" 
+                                                    className="w-24"
+                                                    placeholder="Cant."
+                                                    value={prod.quantity}
+                                                    onChange={(e) => handleExceptionProductChange(groupIndex, prodIndex, 'quantity', e.target.value)}
+                                                    min="1"
+                                                />
+                                                <Button variant="ghost" size="icon" onClick={() => handleRemoveProductFromException(groupIndex, prodIndex)}>
+                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        <Button variant="outline" size="sm" className="ml-2 mt-2" onClick={() => handleAddProductToException(groupIndex)}>
+                                            <Plus className="mr-2 h-4 w-4" /> Añadir Producto
+                                        </Button>
+                                    </AccordionContent>
+                                </AccordionItem>
+                                ))}
+                            </Accordion>
+                            
                             {exceptions.length === 0 && (
-                                <p className="text-sm text-muted-foreground text-center">No hay excepciones registradas.</p>
+                                <p className="text-sm text-muted-foreground text-center py-4">No hay excepciones registradas.</p>
                             )}
                         </CardContent>
                     </Card>

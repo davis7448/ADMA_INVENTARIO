@@ -10,6 +10,7 @@ export type Product = {
   categoryId: string;
   price: number;
   stock: number;
+  pendingStock: number;
   restockThreshold: number;
   vendorId: string;
 };
@@ -88,6 +89,16 @@ export interface DispatchOrderProduct {
     sku: string;
     quantity: number;
 }
+
+export interface DispatchExceptionProduct {
+    productId: string;
+    quantity: number;
+}
+
+export interface DispatchException {
+    trackingNumber: string;
+    products: DispatchExceptionProduct[];
+}
   
 export interface DispatchOrder {
     id: string; // Firestore document ID
@@ -99,5 +110,5 @@ export interface DispatchOrder {
     products: DispatchOrderProduct[];
     status: 'Pendiente' | 'Despachada' | 'Parcial';
     trackingNumbers: string[];
-    exceptions: { productId: string; quantity: number }[];
+    exceptions: DispatchException[];
 }
