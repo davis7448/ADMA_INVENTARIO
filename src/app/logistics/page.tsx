@@ -250,8 +250,8 @@ export default function LogisticsPage() {
         }
     };
 
-    const handleRemoveReturnedProduct = (sku: string, trackingNumber: string) => {
-        setReturnedProducts(prev => prev.filter(p => !(p.sku === sku && p.trackingNumber === trackingNumber)));
+    const handleRemoveReturnedProduct = (index: number) => {
+        setReturnedProducts(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleProcessReturn = () => {
@@ -562,7 +562,7 @@ export default function LogisticsPage() {
                                                                     <TableCell>{p.sku}</TableCell>
                                                                     <TableCell>{p.trackingNumber}</TableCell>
                                                                     <TableCell className="text-right">
-                                                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveReturnedProduct(p.sku, p.trackingNumber)}>
+                                                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveReturnedProduct(index)}>
                                                                             <Trash2 className="h-4 w-4 text-destructive" />
                                                                         </Button>
                                                                     </TableCell>
