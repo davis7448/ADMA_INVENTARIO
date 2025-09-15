@@ -80,10 +80,15 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
 
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
+            const lowercasedQuery = searchQuery.toLowerCase();
             // Text search
             const searchMatch = searchQuery.length > 2 
-                ? product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                  product.sku?.toLowerCase().includes(searchQuery.toLowerCase())
+                ? product.name.toLowerCase().includes(lowercasedQuery) || 
+                  (product.sku && product.sku.toLowerCase().includes(lowercasedQuery)) ||
+                  (product.productType === 'variable' && product.variants?.some(variant => 
+                      variant.name.toLowerCase().includes(lowercasedQuery) ||
+                      variant.sku.toLowerCase().includes(lowercasedQuery)
+                  ))
                 : true;
             
             // Category filter
