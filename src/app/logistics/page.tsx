@@ -69,6 +69,7 @@ export default function LogisticsPage() {
     const { toast } = useToast();
 
     // State for returns
+    const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
     const [returnCarrier, setReturnCarrier] = useState('');
     const [returnedProducts, setReturnedProducts] = useState<ReturnedProduct[]>([]);
     const [currentTrackingNumber, setCurrentTrackingNumber] = useState('');
@@ -148,24 +149,28 @@ export default function LogisticsPage() {
 
             if (product) {
                 setProductToAdd(product);
+                setIsReturnDialogOpen(true);
             } else {
                 toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
             }
             if(returnBarcodeRef.current) returnBarcodeRef.current.value = '';
         }
     };
-
+    
     const handleAddProductToReturn = () => {
         if (productToAdd && currentTrackingNumber) {
             setReturnedProducts(prev => [...prev, { ...productToAdd, trackingNumber: currentTrackingNumber }]);
             toast({ title: "Producto Agregado", description: `${productToAdd.name} añadido a la devolución.` });
+            
+            // Close dialog and reset state
+            setIsReturnDialogOpen(false);
             setProductToAdd(null);
             setCurrentTrackingNumber('');
-            trackingDialogCloseRef.current?.click();
         } else {
             toast({ variant: 'destructive', title: "Error", description: "Por favor, ingresa un número de guía." });
         }
     };
+
 
      const handleRemoveReturnedProduct = (sku: string, trackingNumber: string) => {
         setReturnedProducts(prev => prev.filter(p => !(p.sku === sku && p.trackingNumber === trackingNumber)));
@@ -200,7 +205,13 @@ export default function LogisticsPage() {
     }
     
     return (
-        <Dialog onOpenChange={(open) => { if(!open) { setProductToAdd(null); setCurrentTrackingNumber(''); }}}>
+        <Dialog open={isReturnDialogOpen} onOpenChange={(open) => {
+            setIsReturnDialogOpen(open);
+            if (!open) {
+                setProductToAdd(null);
+                setCurrentTrackingNumber('');
+            }
+        }}>
             <div className="space-y-6">
                 <div>
                   <h1 className="text-3xl font-bold font-headline tracking-tight">Panel de Logística</h1>
@@ -383,18 +394,16 @@ export default function LogisticsPage() {
                                         </div>
                                          <div>
                                             <Label htmlFor="return-barcode">Escanear Código de Barras (SKU)</Label>
-                                            <DialogTrigger asChild>
-                                                <div className="relative">
-                                                    <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                                    <Input 
-                                                        id="return-barcode"
-                                                        ref={returnBarcodeRef}
-                                                        placeholder="Escanear SKU para agregar producto a la devolución" 
-                                                        className="pl-8"
-                                                        onKeyDown={handleReturnBarcodeScan}
-                                                    />
-                                                </div>
-                                            </DialogTrigger>
+                                            <div className="relative">
+                                                <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                <Input 
+                                                    id="return-barcode"
+                                                    ref={returnBarcodeRef}
+                                                    placeholder="Escanear SKU para agregar producto a la devolución" 
+                                                    className="pl-8"
+                                                    onKeyDown={handleReturnBarcodeScan}
+                                                />
+                                            </div>
                                         </div>
                                          <Card>
                                             <CardHeader><CardTitle>Productos a Devolver</CardTitle></CardHeader>
@@ -463,7 +472,7 @@ export default function LogisticsPage() {
                 </Tabs>
             </div>
             
-            <DialogContent open={!!productToAdd} onOpenChange={(open) => { if(!open) setProductToAdd(null)}}>
+            <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Añadir Producto a Devolución</DialogTitle>
                     <DialogDescription>
@@ -483,7 +492,7 @@ export default function LogisticsPage() {
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button type="button" variant="secondary" ref={trackingDialogCloseRef}>
+                        <Button type="button" variant="secondary">
                             Cancelar
                         </Button>
                     </DialogClose>
