@@ -218,11 +218,15 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                                 {exceptions.map((ex, groupIndex) => (
                                 <AccordionItem value={`item-${groupIndex}`} key={groupIndex}>
                                     <AccordionTrigger>
-                                        <div className="flex justify-between w-full pr-4">
+                                        <div className="flex justify-between items-center w-full pr-4">
                                             <span>Guía: {ex.trackingNumber}</span>
-                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); handleRemoveExceptionGroup(groupIndex)}}>
+                                            <div
+                                                role="button"
+                                                className="p-1 rounded-md hover:bg-muted"
+                                                onClick={(e) => { e.stopPropagation(); handleRemoveExceptionGroup(groupIndex)}}
+                                            >
                                                 <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
+                                            </div>
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent className="space-y-2 pt-2">
