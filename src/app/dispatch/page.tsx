@@ -396,25 +396,23 @@ function DispatchPageContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <div className="flex items-center border-b">
-                                        <AccordionTrigger className="flex-grow">
-                                            <div className="grid grid-cols-3 w-full items-center text-sm">
-                                                <div className="text-left">
-                                                    <p className="font-semibold">{order.dispatchId}</p>
-                                                    <p className="text-muted-foreground">
-                                                        {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
-                                                    </p>
+                                        <div className="w-[80%]">
+                                            <AccordionTrigger>
+                                                <div className="grid grid-cols-2 w-full items-center text-sm">
+                                                    <div className="text-left">
+                                                        <p className="font-semibold">{order.dispatchId}</p>
+                                                        <p className="text-muted-foreground">
+                                                            {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="font-medium">{platformNames[order.platformId]}</p>
+                                                        <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-center">
-                                                    <p className="font-medium">{platformNames[order.platformId]}</p>
-                                                    <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
-                                                </div>
-                                                <div></div>
-                                            </div>
-                                        </AccordionTrigger>
-                                        <div 
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="pr-4 flex justify-end"
-                                        >
+                                            </AccordionTrigger>
+                                        </div>
+                                        <div className="w-[20%] flex justify-end pr-4">
                                             <ProcessDispatchDialog
                                                 order={orderForDialog}
                                                 productsById={productsById}
@@ -500,3 +498,4 @@ export default function DispatchPage() {
     
 
     
+
