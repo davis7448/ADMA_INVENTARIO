@@ -515,22 +515,24 @@ export default function HistoryPage() {
                                                     {order.exceptions.map((ex, index) => (
                                                         <div key={index} className="mb-3">
                                                             <p className="text-sm font-semibold">Guía de Excepción: <span className="font-mono bg-destructive/10 px-2 py-1 rounded">{ex.trackingNumber}</span></p>
-                                                            <Table>
-                                                                <TableHeader>
-                                                                    <TableRow>
-                                                                        <TableHead>Producto</TableHead>
-                                                                        <TableHead className="text-right">Cant. no enviada</TableHead>
-                                                                    </TableRow>
-                                                                </TableHeader>
-                                                                <TableBody>
-                                                                    {ex.products && ex.products.map(p => (
-                                                                        <TableRow key={p.productId}>
-                                                                            <TableCell>{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
-                                                                            <TableCell className="text-right">{p.quantity}</TableCell>
+                                                            {ex.products && ex.products.length > 0 && (
+                                                                <Table>
+                                                                    <TableHeader>
+                                                                        <TableRow>
+                                                                            <TableHead>Producto</TableHead>
+                                                                            <TableHead className="text-right">Cant. no enviada</TableHead>
                                                                         </TableRow>
-                                                                    ))}
-                                                                </TableBody>
-                                                            </Table>
+                                                                    </TableHeader>
+                                                                    <TableBody>
+                                                                        {ex.products.map(p => (
+                                                                            <TableRow key={p.productId}>
+                                                                                <TableCell>{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
+                                                                                <TableCell className="text-right">{p.quantity}</TableCell>
+                                                                            </TableRow>
+                                                                        ))}
+                                                                    </TableBody>
+                                                                </Table>
+                                                            )}
                                                         </div>
                                                     ))}
                                                 </div>
