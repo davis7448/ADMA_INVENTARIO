@@ -47,6 +47,16 @@ import {
     DialogFooter,
     DialogClose,
   } from '@/components/ui/dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface DispatchedProduct extends Product {
     dispatchQuantity: number;
@@ -76,6 +86,8 @@ export default function LogisticsPage() {
     const barcodeRef = useRef<HTMLInputElement>(null);
     const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+    const [productToConfirm, setProductToConfirm] = useState<Product | null>(null);
 
     // Entradas State
     const [receivedProducts, setReceivedProducts] = useState<ReceivedProduct[]>([]);
@@ -140,7 +152,8 @@ export default function LogisticsPage() {
           const product = allProductsList.find(p => p.sku === barcode);
     
           if (product) {
-            addProductToDispatch(product);
+            setProductToConfirm(product);
+            setIsConfirmDialogOpen(true);
           } else {
             toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
           }
@@ -149,9 +162,19 @@ export default function LogisticsPage() {
     };
 
     const handleProductSearchSelect = (product: Product) => {
-        addProductToDispatch(product);
+        setProductToConfirm(product);
         setIsSearchDialogOpen(false);
         setSearchQuery('');
+        // We need a slight delay to allow the search dialog to close before the confirm dialog opens
+        setTimeout(() => setIsConfirmDialogOpen(true), 150);
+    };
+
+    const handleConfirmAddProduct = () => {
+        if (productToConfirm) {
+            addProductToDispatch(productToConfirm);
+        }
+        setIsConfirmDialogOpen(false);
+        setProductToConfirm(null);
     };
 
     const filteredProducts = useMemo(() => {
@@ -373,6 +396,36 @@ export default function LogisticsPage() {
     
     return (
     <>
+        <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                <AlertDialogTitle>Confirmar Producto</AlertDialogTitle>
+                <AlertDialogDescription>
+                    ¿Deseas añadir el siguiente producto al despacho?
+                </AlertDialogDescription>
+                </AlertDialogHeader>
+                {productToConfirm && (
+                    <div className="flex flex-col items-center justify-center gap-4 my-4">
+                         <Image
+                            src={productToConfirm.imageUrl}
+                            alt={productToConfirm.name}
+                            width={128}
+                            height={128}
+                            className="rounded-md object-cover"
+                        />
+                        <div className="text-center">
+                            <p className="font-semibold">{productToConfirm.name}</p>
+                            <p className="text-sm text-muted-foreground">SKU: {productToConfirm.sku}</p>
+                        </div>
+                    </div>
+                )}
+                <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setProductToConfirm(null)}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleConfirmAddProduct}>Confirmar</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
         <Dialog open={isReturnDialogOpen} onOpenChange={(open) => {
             setIsReturnDialogOpen(open);
             if (!open) {
