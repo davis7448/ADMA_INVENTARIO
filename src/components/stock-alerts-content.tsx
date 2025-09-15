@@ -63,9 +63,9 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
             Estos productos podrían quedarse sin stock para nuevas reservas si no se toman acciones. 
             La alerta se activa si el stock disponible es menor a 3 días de ventas promedio.
             {lastGenerated && (
-                <p className="text-xs text-muted-foreground mt-2">
+                <div className="text-xs text-muted-foreground mt-2">
                     Última actualización: {formatToTimeZone(new Date(lastGenerated), 'dd/MM/yyyy HH:mm:ss')}
-                </p>
+                </div>
             )}
           </CardDescription>
         </CardHeader>
