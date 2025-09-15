@@ -395,22 +395,22 @@ function DispatchPageContent() {
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
-                                    <div className="flex items-center w-full">
-                                        <AccordionTrigger className="flex-1">
-                                            <div className="flex justify-between items-center w-full pr-4">
-                                                <div className="text-left">
+                                    <div className="flex items-center w-full hover:bg-muted/50 rounded-md">
+                                        <AccordionTrigger className="flex-1 p-4 cursor-pointer">
+                                            <div className="flex items-center justify-start w-full">
+                                                <div className="w-1/3 text-left">
                                                     <p className="font-semibold">{order.dispatchId}</p>
                                                     <p className="text-sm text-muted-foreground">
                                                         {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
                                                     </p>
                                                 </div>
-                                                <div className="text-center px-4">
+                                                <div className="w-1/3 text-center">
                                                     <p className="text-sm font-medium">{platformNames[order.platformId]}</p>
                                                     <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
-                                        <div className="px-4" onClick={(e) => e.stopPropagation()}>
+                                        <div className="w-1/3 text-right pr-8" onClick={(e) => e.stopPropagation()}>
                                             <ProcessDispatchDialog 
                                                 order={orderForDialog}
                                                 productsById={productsById}
