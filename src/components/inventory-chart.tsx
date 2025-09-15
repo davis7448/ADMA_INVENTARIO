@@ -29,6 +29,7 @@ export default function InventoryChart({ data }: InventoryChartProps) {
             tickLine={false}
             axisLine={false}
             tickMargin={8}
+            width={120}
             className="text-xs"
           />
           <XAxis
