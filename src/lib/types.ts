@@ -113,6 +113,7 @@ export type Platform = {
 
 export interface DispatchOrderProduct {
     productId: string;
+    variantId?: string;
     name: string;
     sku: string;
     quantity: number;

@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
@@ -86,42 +86,66 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
   await updateDoc(productRef, productUpdate);
 };
 
-export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract') => {
-  const productRef = doc(db, 'products', productId);
-  
-  await runTransaction(db, async (transaction) => {
-    const productSnap = await transaction.get(productRef);
-    if (!productSnap.exists()) {
-        throw new Error(`Product with ID ${productId} does not exist!`);
-    }
-    const currentStock = productSnap.data().stock;
-    let newStock;
-    if (operation === 'add') {
-      newStock = currentStock + quantity;
-    } else {
-      const calculatedStock = currentStock - quantity;
-      if (calculatedStock < 0) {
-        // Create an audit alert for stock discrepancy
-        const auditAlertRef = doc(collection(db, 'auditAlerts'));
-        const auditAlert: Omit<AuditAlert, 'id' | 'date'> = {
-            productId: productId,
-            productName: productSnap.data().name,
-            productSku: productSnap.data().sku,
-            message: `Intento de despachar ${quantity} unidades cuando solo habían ${currentStock} en stock.`,
-            dispatchId: 'N/A',
-            exceptionTrackingNumber: 'N/A',
-        };
-        transaction.set(auditAlertRef, {...auditAlert, date: new Date()});
-
-        throw new Error(`No hay suficiente stock para ${productSnap.data().name}. Stock actual: ${currentStock}, se requieren: ${quantity}. Se ha generado una alerta de auditoría.`);
+export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract', variantSku?: string) => {
+    const productRef = doc(db, 'products', productId);
+    
+    await runTransaction(db, async (transaction) => {
+      const productSnap = await transaction.get(productRef);
+      if (!productSnap.exists()) {
+          throw new Error(`Product with ID ${productId} does not exist!`);
       }
-      newStock = calculatedStock;
-    }
-    transaction.update(productRef, { stock: newStock });
-  });
+      
+      const productData = productSnap.data() as Product;
+      
+      // If it's a simple product or no variant SKU is provided
+      if (productData.productType === 'simple' || !variantSku) {
+          const currentStock = productData.stock || 0;
+          let newStock;
+          if (operation === 'add') {
+              newStock = currentStock + quantity;
+          } else {
+              if (currentStock < quantity) {
+                  throw new Error(`No hay suficiente stock para ${productData.name}. Stock actual: ${currentStock}, se requieren: ${quantity}.`);
+              }
+              newStock = currentStock - quantity;
+          }
+          transaction.update(productRef, { stock: newStock });
+      } else { // It's a variable product
+          const variants = productData.variants ? [...productData.variants] : [];
+          const variantIndex = variants.findIndex(v => v.sku === variantSku);
+  
+          if (variantIndex === -1) {
+              throw new Error(`Variante con SKU ${variantSku} no encontrada en el producto ${productData.name}.`);
+          }
+  
+          const variant = variants[variantIndex];
+          const currentVariantStock = variant.stock || 0;
+          let newVariantStock;
+  
+          if (operation === 'add') {
+              newVariantStock = currentVariantStock + quantity;
+          } else {
+              if (currentVariantStock < quantity) {
+                  throw new Error(`No hay suficiente stock para la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
+              }
+              newVariantStock = currentVariantStock - quantity;
+          }
+          
+          // Update the specific variant's stock
+          variants[variantIndex].stock = newVariantStock;
+          
+          // Recalculate the parent product's total stock
+          const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
+          
+          transaction.update(productRef, { 
+              variants: variants,
+              stock: newTotalStock 
+          });
+      }
+    });
 };
 
-export const registerDamagedProduct = async (productId: string, quantity: number) => {
+export const registerDamagedProduct = async (productId: string, quantity: number, variantSku?: string) => {
     const productRef = doc(db, 'products', productId);
     
     await runTransaction(db, async (transaction) => {
@@ -130,13 +154,43 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             throw new Error(`Product with ID ${productId} does not exist!`);
         }
         
-        const data = productSnap.data();
-        const currentDamagedStock = data.damagedStock || 0;
+        const productData = productSnap.data() as Product;
+        const currentDamagedStock = productData.damagedStock || 0;
         const newDamagedStock = currentDamagedStock + quantity;
+        
+        let updateData: { damagedStock: number, variants?: ProductVariant[], stock?: number } = { damagedStock: newDamagedStock };
 
-        transaction.update(productRef, { damagedStock: newDamagedStock });
+        // Also decrement stock from the correct variant if applicable
+        if (productData.productType === 'variable' && variantSku) {
+            const variants = productData.variants ? [...productData.variants] : [];
+            const variantIndex = variants.findIndex(v => v.sku === variantSku);
+    
+            if (variantIndex !== -1) {
+                const variant = variants[variantIndex];
+                const currentVariantStock = variant.stock || 0;
+
+                if (currentVariantStock < quantity) {
+                    throw new Error(`No hay suficiente stock para marcar como averiado en la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
+                }
+                
+                variants[variantIndex].stock = currentVariantStock - quantity;
+                const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
+                
+                updateData.variants = variants;
+                updateData.stock = newTotalStock;
+            }
+        } else if (productData.productType === 'simple') {
+            const currentStock = productData.stock || 0;
+            if (currentStock < quantity) {
+                throw new Error(`No hay suficiente stock para marcar como averiado en ${productData.name}. Stock actual: ${currentStock}, se requieren: ${quantity}.`);
+            }
+            updateData.stock = currentStock - quantity;
+        }
+
+        transaction.update(productRef, updateData);
     });
 };
+
 
 // Supplier Functions
 export const getSuppliers = async (): Promise<Supplier[]> => {
@@ -363,7 +417,6 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
 // Dispatch Order Functions
 
 export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'>) => {
-    const batch = writeBatch(db);
     const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
 
     // 1. Create the new dispatch order document
@@ -379,7 +432,8 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         exceptions: [],
         cancelledExceptions: [],
     };
-    batch.set(dispatchOrderRef, newDispatchOrder);
+    await setDoc(dispatchOrderRef, newDispatchOrder);
+
 
     const platformName = (await getDoc(doc(db, 'platforms', platformId))).data()?.name || 'N/A';
     const carrierName = (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || 'N-A';
@@ -388,47 +442,19 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
 
     // 2. Create inventory movements and update stock for each product
     for (const product of products) {
-        // Decrease stock
-        const productRef = doc(db, 'products', product.productId);
-        
-        await runTransaction(db, async (transaction) => {
-            const productSnap = await transaction.get(productRef);
-            if (!productSnap.exists()) {
-                throw `Product with id ${product.productId} not found`;
-            }
-            const productData = productSnap.data() as Product | undefined;
-            const currentStock = productData?.stock || 0;
-
-            if (currentStock < product.quantity) {
-            throw new Error(`No hay suficiente stock para ${product.name}. Stock actual: ${currentStock}, se requieren: ${product.quantity}`);
-            }
-            
-            transaction.update(productRef, { 
-                stock: currentStock - product.quantity 
-            });
-
-            // Create inventory movement
-            const movementRef = doc(collection(db, 'inventoryMovements'));
-            const movementData: Omit<InventoryMovement, 'id'| 'date' | 'movementId'> = {
-                type: 'Salida' as const,
-                productId: product.productId,
-                productName: product.name,
-                quantity: product.quantity,
-                notes: notes,
-            };
-            
-            // This won't have a sequential ID if done in a batch like this.
-            // For simplicity, we'll let Firestore assign a random ID.
-            // A Cloud Function trigger would be needed for sequential IDs on batched movements.
-            transaction.set(movementRef, {...movementData, date: new Date(), movementId: 0});
+        await updateProductStock(product.productId, product.quantity, 'subtract', product.sku);
+        await addInventoryMovement({
+            type: 'Salida' as const,
+            productId: product.productId,
+            productName: product.name,
+            quantity: product.quantity,
+            notes: notes,
         });
     }
-    
-    // Commit the batch
-    await batch.commit();
 
     return dispatchOrderRef.id;
 };
+
 
 export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const q = query(collection(db, 'dispatchOrders'));

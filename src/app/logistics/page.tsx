@@ -325,7 +325,8 @@ export default function LogisticsPage() {
         const dispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
 
         const productsForDispatch: DispatchOrderProduct[] = dispatchedProducts.map(p => ({
-            productId: p.productId, // Use parent product ID
+            productId: p.productId,
+            variantId: p.variantId,
             sku: p.sku,
             name: p.name,
             quantity: p.quantity
@@ -413,11 +414,11 @@ export default function LogisticsPage() {
 
         const promises = receivedProducts.map(product => {
             if(product.quantity > 0) {
-                updateProductStock(product.productId, product.quantity, 'add'); // Always use parent ID
+                updateProductStock(product.productId, product.quantity, 'add', product.sku);
                 return addInventoryMovement({
                     type: 'Entrada',
-                    productId: product.productId, // Use parent ID
-                    productName: product.name, // Use variant name if applicable
+                    productId: product.productId,
+                    productName: product.name,
                     quantity: product.quantity,
                     notes: 'Recepción de mercancía de proveedor.'
                 });
@@ -509,7 +510,7 @@ export default function LogisticsPage() {
         }
 
         const promises = returnedProducts.map(product => {
-            updateProductStock(product.productId, 1, 'add');
+            updateProductStock(product.productId, 1, 'add', product.sku);
             return addInventoryMovement({
                 type: 'Entrada',
                 productId: product.productId,
@@ -562,7 +563,7 @@ export default function LogisticsPage() {
         }
 
         try {
-            await registerDamagedProduct(parentProduct.id, 1);
+            await registerDamagedProduct(parentProduct.id, 1, damagedSku);
             await addInventoryMovement({
                 type: 'Averia',
                 productId: parentProduct.id,
@@ -850,12 +851,12 @@ export default function LogisticsPage() {
                                                         type="number"
                                                         className="w-24 text-center mx-auto"
                                                         value={product.quantity}
-                                                        onChange={(e) => handleDispatchQuantityChange(product.sku!, parseInt(e.target.value, 10))}
+                                                        onChange={(e) => handleDispatchQuantityChange(product.sku, parseInt(e.target.value, 10))}
                                                         min="1"
                                                     />
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(product.sku!)}>
+                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(product.sku)}>
                                                         <Trash2 className="h-4 w-4 text-destructive" />
                                                     </Button>
                                                 </TableCell>
@@ -936,12 +937,12 @@ export default function LogisticsPage() {
                                                                 type="number"
                                                                 className="w-24 text-center mx-auto"
                                                                 value={product.quantity}
-                                                                onChange={(e) => handleReceivedQuantityChange(product.sku!, parseInt(e.target.value, 10))}
+                                                                onChange={(e) => handleReceivedQuantityChange(product.sku, parseInt(e.target.value, 10))}
                                                                 min="0"
                                                             />
                                                         </TableCell>
                                                         <TableCell className="text-right">
-                                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveReceivedProduct(product.sku!)}>
+                                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveReceivedProduct(product.sku)}>
                                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                                             </Button>
                                                         </TableCell>
