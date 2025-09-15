@@ -1,150 +1,172 @@
 
+"use client";
+
+import { useState, useEffect, useMemo } from 'react';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { DollarSign, Archive, Package, Truck, AlertTriangle } from 'lucide-react';
-import { getProducts, getSuppliers, getInventoryMovements } from '@/lib/api';
-import type { Product, InventoryMovement } from '@/lib/types';
-import { formatToTimeZone } from '@/lib/utils';
-import InventoryChart from '@/components/inventory-chart';
+import { Button } from '@/components/ui/button';
+import { getDispatchOrders, getProducts } from '@/lib/api';
+import type { DispatchOrder, Product } from '@/lib/types';
+import { CalendarIcon, PackageCheck, PackageX, AlertTriangle } from 'lucide-react';
+import { DateRange } from 'react-day-picker';
+import { subDays, format, startOfDay, endOfDay } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import DashboardOrdersChart from '@/components/dashboard-orders-chart';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default async function DashboardPage() {
-  
-  const [products, suppliers, movements] = await Promise.all([
-    getProducts(),
-    getSuppliers(),
-    getInventoryMovements(),
-  ]);
+export default function DashboardPage() {
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 6),
+    to: new Date(),
+  });
+  const [allOrders, setAllOrders] = useState<DispatchOrder[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const totalInventoryValue = products.reduce((acc, p) => acc + (p.price * p.stock), 0);
-  const lowStockProducts = products.filter(p => p.stock < p.restockThreshold).length;
-  const recentMovements = movements
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 5);
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const [orders, products] = await Promise.all([getDispatchOrders(), getProducts()]);
+      setAllOrders(orders);
+      setAllProducts(products);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
 
-  const topProductsByStock = [...products]
-    .sort((a, b) => b.stock - a.stock)
-    .slice(0, 5)
-    .map(p => ({ name: p.name, stock: p.stock }));
-    
-  const getBadgeClass = (type: 'Entrada' | 'Salida' | 'Averia') => {
-    switch (type) {
-      case 'Entrada':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
-      case 'Salida':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
-      case 'Averia':
-        return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300';
-      default:
-        return '';
+  const filteredData = useMemo(() => {
+    const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
+    const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
+
+    const ordersInPeriod = allOrders.filter(order => {
+      const orderDate = new Date(order.date);
+      return orderDate >= fromDate && orderDate <= toDate;
+    });
+
+    const totalPendingStock = allProducts.reduce((sum, p) => sum + (p.pendingStock || 0), 0);
+    const totalDamagedStock = allProducts.reduce((sum, p) => sum + (p.damagedStock || 0), 0);
+
+    const ordersByDay = ordersInPeriod.reduce((acc, order) => {
+        const day = format(new Date(order.date), 'yyyy-MM-dd');
+        acc[day] = (acc[day] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+
+    const chartData = [];
+    let currentDate = new Date(fromDate);
+    while (currentDate <= toDate) {
+        const dayKey = format(currentDate, 'yyyy-MM-dd');
+        chartData.push({
+            date: dayKey,
+            orders: ordersByDay[dayKey] || 0,
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
     }
-  };
+    
+
+    return {
+      ordersInPeriod,
+      totalPendingStock,
+      totalDamagedStock,
+      chartData,
+    };
+  }, [dateRange, allOrders, allProducts]);
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Total del Inventario</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalInventoryValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            <p className="text-xs text-muted-foreground">Valor total de todos los productos en stock.</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Productos con Bajo Stock</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{lowStockProducts}</div>
-            <p className="text-xs text-muted-foreground">Productos que necesitan reposición.</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Productos</CardTitle>
-            <Archive className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{products.length}</div>
-            <p className="text-xs text-muted-foreground">SKUs únicos en el catálogo.</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Proveedores</CardTitle>
-            <Truck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{suppliers.length}</div>
-            <p className="text-xs text-muted-foreground">Proveedores activos registrados.</p>
-          </CardContent>
-        </Card>
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Dashboard Operativo</h1>
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button
+                    id="date"
+                    variant={"outline"}
+                    className={cn(
+                        "w-[260px] justify-start text-left font-normal",
+                        !dateRange && "text-muted-foreground"
+                    )}
+                >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                        dateRange.to ? (
+                            <>
+                                {format(dateRange.from, "LLL dd, y")} -{" "}
+                                {format(dateRange.to, "LLL dd, y")}
+                            </>
+                        ) : (
+                            format(dateRange.from, "LLL dd, y")
+                        )
+                    ) : (
+                        <span>Seleccionar rango</span>
+                    )}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                />
+            </PopoverContent>
+        </Popover>
       </div>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="font-headline">Top 5 Productos por Stock</CardTitle>
-            <CardDescription>Visualización de los productos con más unidades en inventario.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <InventoryChart data={topProductsByStock} />
-          </CardContent>
-        </Card>
+      {loading ? (
+         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+         </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Card className="col-span-1 lg:col-span-1">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Órdenes Movilizadas</CardTitle>
+                <PackageCheck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{filteredData.ordersInPeriod.length}</div>
+                <p className="text-xs text-muted-foreground">
+                    Total de despachos generados en el período.
+                </p>
+                <div className="h-24 mt-4">
+                    <DashboardOrdersChart data={filteredData.chartData} />
+                </div>
+            </CardContent>
+            </Card>
+            <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Productos Pendientes</CardTitle>
+                <PackageX className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{filteredData.totalPendingStock}</div>
+                <p className="text-xs text-muted-foreground">Unidades totales esperando resolución.</p>
+            </CardContent>
+            </Card>
+            <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Productos en Avería</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">{filteredData.totalDamagedStock}</div>
+                <p className="text-xs text-muted-foreground">Unidades totales no aptas para la venta.</p>
+            </CardContent>
+            </Card>
+        </div>
+      )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Movimientos Recientes</CardTitle>
-            <CardDescription>Últimas 5 entradas y salidas de inventario.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Producto</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Cantidad</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentMovements.map((movement) => (
-                  <TableRow key={movement.id}>
-                    <TableCell>
-                      <div className="font-medium">{movement.productName}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {formatToTimeZone(new Date(movement.date), "dd/MM/yyyy")}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={getBadgeClass(movement.type)}>
-                        {movement.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{movement.quantity}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Remove previous content */}
     </div>
   );
 }

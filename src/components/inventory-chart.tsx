@@ -1,3 +1,4 @@
+
 "use client";
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
@@ -21,7 +22,7 @@ export default function InventoryChart({ data }: InventoryChartProps) {
   return (
     <ChartContainer config={chartConfig} className="h-[250px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical">
+        <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20 }}>
           <CartesianGrid horizontal={false} />
           <YAxis
             dataKey="name"
