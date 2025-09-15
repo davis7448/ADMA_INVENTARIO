@@ -232,7 +232,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Price</FormLabel>
                                 <FormControl>
-                                    <Input type="number" step="0.01" placeholder="e.g., 79.99" {...field} />
+                                    <Input type="number" step="0.01" placeholder="e.g., 79.99" {...field} value={field.value ?? ''} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -245,7 +245,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Stock</FormLabel>
                                 <FormControl>
-                                    <Input type="number" placeholder="e.g., 100" {...field} />
+                                    <Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -258,7 +258,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Restock Threshold</FormLabel>
                                 <FormControl>
-                                    <Input type="number" placeholder="e.g., 10" {...field} />
+                                    <Input type="number" placeholder="e.g., 10" {...field} value={field.value ?? ''} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
