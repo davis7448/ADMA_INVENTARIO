@@ -331,6 +331,12 @@ export const getUsers = async (): Promise<User[]> => {
     return userList;
 };
 
+export const addUser = async (user: Omit<User, 'id'>): Promise<string> => {
+    const usersCol = collection(db, 'users');
+    const docRef = await addDoc(usersCol, user);
+    return docRef.id;
+};
+
 export const findUserByEmail = async (email: string): Promise<User | null> => {
     const usersRef = collection(db, 'users');
     const q = query(usersRef, where("email", "==", email));

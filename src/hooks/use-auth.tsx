@@ -4,7 +4,7 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { User } from '@/lib/types';
-import { findUserByEmail } from '@/lib/api';
+import { findUserByEmail, addUser } from '@/lib/api';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type User as FirebaseUser } from "firebase/auth";
 import { app } from '@/lib/firebase';
 
@@ -28,7 +28,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser?.email) {
-        const appUser = await findUserByEmail(firebaseUser.email);
+        let appUser = await findUserByEmail(firebaseUser.email);
+        
+        if (!appUser) {
+          // If no user profile exists in Firestore, create one
+          console.log(`No profile found for ${firebaseUser.email}, creating one...`);
+          const newUser: Omit<User, 'id'> = {
+            name: firebaseUser.email.split('@')[0],
+            email: firebaseUser.email,
+            role: 'commercial', // Default role for new sign-ups
+            avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.email}`
+          };
+          const newUserId = await addUser(newUser);
+          appUser = { id: newUserId, ...newUser };
+          console.log(`Profile created with ID: ${newUserId}`);
+        }
+
         setUser(appUser);
       } else {
         setUser(null);
