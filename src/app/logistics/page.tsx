@@ -141,19 +141,21 @@ export default function LogisticsPage() {
 
     // --- GENERIC PRODUCT/VARIANT ADDITION ---
 
-    const addProductOrVariant = (product: Product | ProductVariant, context: SearchContext) => {
+    const addProductOrVariant = (product: Product | ProductVariant, context: SearchContext, parentImageUrl?: string) => {
         const productToAdd = {
             ...product,
             id: 'id' in product ? product.id : `variant-${product.sku}`,
             name: 'name' in product ? product.name : 'Unknown',
-            imageUrl: 'imageUrl' in product ? product.imageUrl : (productForVariantSelection?.imageUrl || ''),
-            // Ensure all required Product fields are present
-            categoryId: productForVariantSelection?.categoryId || '',
+            imageUrl: parentImageUrl || ('imageUrl' in product ? product.imageUrl : ''),
+            // Ensure all required Product fields are present for type compatibility
+            categoryId: 'categoryId' in product ? product.categoryId : productForVariantSelection?.categoryId || '',
             price: 'price' in product ? product.price : 0,
-            restockThreshold: productForVariantSelection?.restockThreshold || 0,
-            vendorId: productForVariantSelection?.vendorId || '',
+            restockThreshold: 'restockThreshold' in product ? product.restockThreshold : productForVariantSelection?.restockThreshold || 0,
+            vendorId: 'vendorId' in product ? product.vendorId : productForVariantSelection?.vendorId || '',
             productType: 'simple' as 'simple', // Treat variants as simple products in lists
             variants: [],
+            pendingStock: 0,
+            damagedStock: 0,
         };
     
         switch (context) {
@@ -202,7 +204,7 @@ export default function LogisticsPage() {
             if (product.productType === 'variable') {
                 const variant = product.variants?.find(v => v.sku === barcode);
                 if (variant) {
-                    addProductOrVariant(variant, 'salidas');
+                    addProductOrVariant(variant, 'salidas', product.imageUrl);
                 } else {
                      toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
                 }
@@ -244,14 +246,16 @@ export default function LogisticsPage() {
                 setProductToConfirm(product);
                 setTimeout(() => setIsConfirmDialogOpen(true), 150);
             } else {
-                addProductOrVariant(product, searchContext);
+                addProductOrVariant(product, searchContext, product.imageUrl);
             }
         }
     };
 
     const handleVariantSelect = (variant: ProductVariant) => {
         setIsVariantDialogOpen(false);
-        addProductOrVariant(variant, searchContext);
+        if (productForVariantSelection) {
+            addProductOrVariant(variant, searchContext, productForVariantSelection.imageUrl);
+        }
         setProductForVariantSelection(null);
     }
 
@@ -374,7 +378,7 @@ export default function LogisticsPage() {
                 if (product.productType === 'variable') {
                     const variant = product.variants?.find(v => v.sku === barcode);
                     if (variant) {
-                        addProductOrVariant(variant, 'entradas');
+                        addProductOrVariant(variant, 'entradas', product.imageUrl);
                     } else {
                         toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
                     }
@@ -1093,6 +1097,8 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
 
     
 
