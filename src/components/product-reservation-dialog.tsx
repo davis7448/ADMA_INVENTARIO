@@ -77,6 +77,7 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
         vendedorId: '',
         platformId: '',
         customerEmail: '',
+        externalId: '',
         quantity: 1,
     },
   });
@@ -220,6 +221,19 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
                                 </FormItem>
                             )}
                         />
+                        <FormField
+                            control={form.control}
+                            name="externalId"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>ID Externo</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="ID de la venta en la plataforma" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
                          <FormField
                             control={form.control}
                             name="quantity"
@@ -248,8 +262,8 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
                         <TableHeader className="sticky top-0 bg-secondary">
                             <TableRow>
                                 <TableHead>Vendedor</TableHead>
+                                <TableHead>ID Externo</TableHead>
                                 <TableHead>Cant.</TableHead>
-                                <TableHead>Cliente</TableHead>
                                 <TableHead>Acción</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -258,8 +272,8 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
                                 product.reservations.map(res => (
                                     <TableRow key={res.id}>
                                         <TableCell className="font-medium text-xs">{vendedores.find(v => v.id === res.vendedorId)?.name || 'N/A'}</TableCell>
+                                        <TableCell className="font-mono text-xs">{res.externalId}</TableCell>
                                         <TableCell className="font-bold">{res.quantity}</TableCell>
-                                        <TableCell className="text-xs">{res.customerEmail}</TableCell>
                                         <TableCell>
                                             <AlertDialog>
                                                 <AlertDialogTrigger asChild>

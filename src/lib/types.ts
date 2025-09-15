@@ -25,6 +25,7 @@ export type Reservation = {
   vendedorId: string;
   platformId: string;
   customerEmail: string;
+  externalId: string;
   quantity: number;
   date: string;
 };
@@ -174,4 +175,5 @@ export type Vendedor = {
     phone: string;
   };
 };
+
 

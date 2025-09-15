@@ -150,6 +150,7 @@ export const CreateReservationFormSchema = z.object({
   vendedorId: z.string().min(1, 'Debe seleccionar un vendedor.'),
   platformId: z.string().min(1, 'Debe seleccionar una plataforma.'),
   customerEmail: z.string().email('Debe ingresar un correo de cliente válido.'),
+  externalId: z.string().min(1, 'Debe ingresar un ID externo.'),
   quantity: z.coerce.number().int().min(1, 'La cantidad debe ser al menos 1.'),
 });
 
@@ -162,6 +163,7 @@ export type CreateReservationFormState = {
     vendedorId?: string[];
     platformId?: string[];
     customerEmail?: string[];
+    externalId?: string[];
     quantity?: string[];
   };
   success: boolean;
