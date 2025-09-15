@@ -126,7 +126,7 @@ export const getReturnRequests = async (): Promise<ReturnRequest[]> => {
 // User Functions
 export const getUsers = async (): Promise<User[]> => {
     const usersCol = collection(db, 'users');
-    const userSnapshot = await getDocs(userSnapshot);
+    const userSnapshot = await getDocs(usersCol);
     const userList = userSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
     return userList;
 };
@@ -149,10 +149,12 @@ export const getInventoryMovements = async (): Promise<InventoryMovement[]> => {
     const movementSnapshot = await getDocs(movementsCol);
     const movementList = movementSnapshot.docs.map(doc => {
       const data = doc.data();
+      // Firestore Timestamps need to be converted to strings
+      const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
       return { 
         id: doc.id, 
         ...data,
-        date: (data.date as Timestamp).toDate().toISOString(),
+        date,
       } as InventoryMovement
     });
     return movementList;

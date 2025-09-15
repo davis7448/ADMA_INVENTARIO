@@ -1,0 +1,68 @@
+
+[
+    {
+      "id": "prod-1",
+      "sku": "WM-ERGO-01",
+      "name": "Ergo-Wireless Mouse",
+      "description": "A modern, wireless ergonomic mouse designed for comfort and precision. Features a rechargeable battery and customizable buttons.",
+      "imageUrl": "https://picsum.photos/seed/p1/600/400",
+      "imageHint": "wireless mouse",
+      "categoryId": "cat-1",
+      "price": 79.99,
+      "stock": 45,
+      "restockThreshold": 10,
+      "vendorId": "sup-1"
+    },
+    {
+      "id": "prod-2",
+      "sku": "KB-MECH-PRO",
+      "name": "Mechanical Keyboard Pro",
+      "description": "A mechanical keyboard with customizable RGB backlighting, tactile switches, and a durable aluminum frame for the ultimate typing experience.",
+      "imageUrl": "https://picsum.photos/seed/p2/600/400",
+      "imageHint": "mechanical keyboard",
+      "categoryId": "cat-2",
+      "price": 149.50,
+      "stock": 28,
+      "restockThreshold": 5,
+      "vendorId": "sup-2"
+    },
+    {
+      "id": "prod-3",
+      "sku": "MON-4K-27",
+      "name": "4K UHD Monitor",
+      "description": "A 27-inch 4K UHD monitor with vibrant colors, wide viewing angles, and a slim bezel design. Perfect for creative professionals.",
+      "imageUrl": "https://picsum.photos/seed/p3/600/400",
+      "imageHint": "computer monitor",
+      "categoryId": "cat-1",
+      "price": 450.00,
+      "stock": 20,
+      "restockThreshold": 8,
+      "vendorId": "sup-1"
+    },
+    {
+      "id": "prod-4",
+      "sku": "HP-NC-X1",
+      "name": "Noise-Cancelling Headphones",
+      "description": "Over-ear noise-cancelling headphones with high-fidelity audio, 30-hour battery life, and a comfortable design for long listening sessions.",
+      "imageUrl": "https://picsum.photos/seed/p4/600/400",
+      "imageHint": "wireless headphones",
+      "categoryId": "cat-1",
+      "price": 299.99,
+      "stock": 15,
+      "restockThreshold": 5,
+      "vendorId": "sup-3"
+    },
+    {
+      "id": "prod-5",
+      "sku": "LP-ULTRA-14",
+      "name": "Ultralight Pro Laptop",
+      "description": "A lightweight and powerful 14-inch laptop for professionals on the go. Features a high-resolution display and all-day battery life.",
+      "imageUrl": "https://picsum.photos/seed/p5/600/400",
+      "imageHint": "modern laptop",
+      "categoryId": "cat-1",
+      "price": 1299.00,
+      "stock": 10,
+      "restockThreshold": 3,
+      "vendorId": "sup-1"
+    }
+]

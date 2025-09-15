@@ -1,0 +1,38 @@
+
+[
+    {
+        "type": "Entrada",
+        "productId": "prod-1",
+        "productName": "Ergo-Wireless Mouse",
+        "quantity": 50,
+        "notes": "Stock inicial de proveedor Global Tech Supplies."
+    },
+    {
+        "type": "Entrada",
+        "productId": "prod-2",
+        "productName": "Mechanical Keyboard Pro",
+        "quantity": 30,
+        "notes": "Stock inicial de proveedor Keyboard Masters."
+    },
+    {
+        "type": "Salida",
+        "productId": "prod-1",
+        "productName": "Ergo-Wireless Mouse",
+        "quantity": 5,
+        "notes": "Plataforma: Mercado Libre, Transportadora: DHL"
+    },
+    {
+        "type": "Salida",
+        "productId": "prod-2",
+        "productName": "Mechanical Keyboard Pro",
+        "quantity": 2,
+        "notes": "Plataforma: Shopify, Transportadora: FedEx"
+    },
+    {
+        "type": "Entrada",
+        "productId": "prod-3",
+        "productName": "4K UHD Monitor",
+        "quantity": 20,
+        "notes": "Stock inicial de proveedor Global Tech Supplies."
+    }
+]

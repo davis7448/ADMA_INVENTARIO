@@ -1,0 +1,23 @@
+
+[
+    {
+      "id": "cat-1",
+      "name": "Electronics",
+      "description": "Gadgets, devices, and all things electronic."
+    },
+    {
+      "id": "cat-2",
+      "name": "Office Supplies",
+      "description": "Items for a productive workspace."
+    },
+    {
+      "id": "cat-3",
+      "name": "Ergonomics",
+      "description": "Products designed for comfort and efficiency."
+    },
+    {
+      "id": "cat-4",
+      "name": "Smart Home",
+      "description": "Connected devices to automate your home."
+    }
+]

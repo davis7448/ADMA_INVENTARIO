@@ -1,0 +1,24 @@
+
+[
+    {
+      "id": "user-1",
+      "name": "Admin User",
+      "email": "admin@example.com",
+      "role": "admin",
+      "avatarUrl": "https://i.pravatar.cc/150?u=admin@example.com"
+    },
+    {
+      "id": "user-2",
+      "name": "Logistics User",
+      "email": "logistics@example.com",
+      "role": "logistics",
+      "avatarUrl": "https://i.pravatar.cc/150?u=logistics@example.com"
+    },
+    {
+      "id": "user-3",
+      "name": "Commercial User",
+      "email": "commercial@example.com",
+      "role": "commercial",
+      "avatarUrl": "https://i.pravatar.cc/150?u=commercial@example.com"
+    }
+]

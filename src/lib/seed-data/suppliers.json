@@ -1,0 +1,36 @@
+
+[
+    {
+        "id": "sup-1",
+        "name": "Global Tech Supplies",
+        "contact": {
+            "email": "sales@globaltech.com",
+            "phone": "+1-202-555-0174"
+        },
+        "productCount": 3,
+        "shippingPolicy": "Ships within 24 hours. Free shipping on orders over $500.",
+        "returnPolicy": "30-day return policy. Restocking fee may apply."
+    },
+    {
+        "id": "sup-2",
+        "name": "Keyboard Masters",
+        "contact": {
+            "email": "contact@keyboardmasters.io",
+            "phone": "+44 20 7946 0958"
+        },
+        "productCount": 1,
+        "shippingPolicy": "Specializes in custom keyboard orders. 3-5 day handling time.",
+        "returnPolicy": "Returns accepted for defective products only."
+    },
+    {
+        "id": "sup-3",
+        "name": "AudioPhile Gear",
+        "contact": {
+            "email": "support@audiophilegear.net",
+            "phone": "+1-310-555-0188"
+        },
+        "productCount": 1,
+        "shippingPolicy": "Worldwide express shipping available.",
+        "returnPolicy": "45-day satisfaction guarantee."
+    }
+]
