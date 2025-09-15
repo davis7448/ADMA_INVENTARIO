@@ -21,7 +21,6 @@
 
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getSecurityRules, setSecurityRules } from 'firebase-admin/security-rules';
 import { firebaseConfig } from './firebase';
 
 import products from './seed-data/products.json';
@@ -36,36 +35,6 @@ const app = getApps().length
   : initializeApp({ projectId: firebaseConfig.projectId });
 
 const db = getFirestore(app);
-const securityRules = getSecurityRules(app);
-
-const devSecurityRules = `
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      // Allow read and write access for development purposes.
-      // Do not use in production.
-      allow read, write: if true;
-    }
-  }
-}
-`;
-
-async function setDevelopmentSecurityRules() {
-    console.log('Setting development security rules for Firestore...');
-    try {
-        const source = {
-            source: devSecurityRules
-        };
-        const ruleset = await securityRules.createRuleset(source);
-        await securityRules.releaseFirestoreRuleset(ruleset.name);
-        console.log('Successfully set development security rules.');
-    } catch (error) {
-        console.error('Error setting security rules:', error);
-        throw new Error('Could not set security rules. Please check your Firebase project permissions.');
-    }
-}
-
 
 async function seedCollection<T extends { id: string }>(collectionName: string, data: T[]) {
   console.log(`Seeding ${collectionName}...`);
@@ -122,14 +91,14 @@ async function seedInventoryMovements() {
 
 async function main() {
   try {
-    await setDevelopmentSecurityRules();
+    console.log('Starting to seed the database...');
     await seedCollection('products', products);
     await seedCollection('suppliers', suppliers);
     await seedCollection('categories', categories);
     await seedCollection('users', users);
     await seedInventoryMovements();
     
-    console.log('\nDatabase seeded and security rules set successfully!');
+    console.log('\nDatabase seeded successfully!');
   } catch (error) {
     console.error('Error seeding database:', error);
   }
