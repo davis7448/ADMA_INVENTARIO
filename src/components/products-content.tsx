@@ -208,54 +208,51 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             {canEdit && <AddProductForm onProductAdded={refreshProducts} />}
           </div>
 
-          <Card>
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <CardTitle>Filtros</CardTitle>
-                    <Button variant="ghost" onClick={clearFilters}>Limpiar Filtros</Button>
+          <div className="p-4 border rounded-lg bg-muted/50">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
+                <h3 className="font-semibold text-lg">Filtros</h3>
+                <Button variant="ghost" onClick={clearFilters}>Limpiar Filtros</Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="search">Buscar producto</Label>
+                    <Input id="search" placeholder="Nombre o SKU..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                 </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="search">Buscar producto</Label>
-                        <Input id="search" placeholder="Nombre o SKU..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="category">Categoría</Label>
-                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                            <SelectTrigger id="category"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todas las Categorías</SelectItem>
-                                {Object.entries(categoryNames).map(([id, name]) => (
-                                    <SelectItem key={id} value={id}>{name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="rotation">Rotación</Label>
-                        <Select value={selectedRotation} onValueChange={setSelectedRotation}>
-                            <SelectTrigger id="rotation"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Toda la Rotación</SelectItem>
-                                {allRotationCategories.map(cat => (
-                                    <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="min-stock">Stock Mínimo</Label>
-                        <Input id="min-stock" type="number" placeholder="Ej: 10" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
-                    </div>
+                <div className="space-y-2">
+                    <Label htmlFor="category">Categoría</Label>
+                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <SelectTrigger id="category"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas las Categorías</SelectItem>
+                            {Object.entries(categoryNames).map(([id, name]) => (
+                                <SelectItem key={id} value={id}>{name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
-                 <div className="flex items-center space-x-2 pt-2">
-                    <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
-                    <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
+                <div className="space-y-2">
+                    <Label htmlFor="rotation">Rotación</Label>
+                    <Select value={selectedRotation} onValueChange={setSelectedRotation}>
+                        <SelectTrigger id="rotation"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Toda la Rotación</SelectItem>
+                            {allRotationCategories.map(cat => (
+                                <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
-            </CardContent>
-          </Card>
+                <div className="space-y-2">
+                    <Label htmlFor="min-stock">Stock Mínimo</Label>
+                    <Input id="min-stock" type="number" placeholder="Ej: 10" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
+                </div>
+            </div>
+             <div className="flex items-center space-x-2 pt-4">
+                <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
+                <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
+            </div>
+          </div>
+
 
           <Card>
             <CardHeader>
@@ -285,10 +282,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <TableHead>Averiado</TableHead>
                                 <TableHead>Price</TableHead>
                                 {canEdit && <TableHead className="w-[50px]"><span className="sr-only">Actions</span></TableHead>}
-                                <TableHead className="w-[50px]"><span className="sr-only">Expand</span></TableHead>
+                                <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expand</span></TableHead>
                             </TableRow>
                         </TableHeader>
-                        <Accordion type="single" collapsible className="w-full">
+                        <Accordion type="single" collapsible asChild>
                             <TableBody>
                             {loading ? (
                                 <>
@@ -302,107 +299,107 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 </>
                             ) : filteredProducts.length > 0 ? (
                                 filteredProducts.map((product) => (
-                                    <AccordionItem value={product.id} key={product.id}>
-                                        <TableRow 
-                                            className={cn("data-[state=closed]:border-b", product.productType === 'simple' && 'cursor-pointer hover:bg-muted/50')}
-                                            onClick={() => handleRowClick(product)}
-                                        >
-                                            <TableCell className="w-[80px] hidden sm:table-cell">
-                                                <Image
-                                                    alt={product.name}
-                                                    className="aspect-square rounded-md object-cover"
-                                                    height="64"
-                                                    src={product.imageUrl}
-                                                    width="64"
-                                                />
-                                            </TableCell>
-                                            <TableCell className="font-medium">{product.name}</TableCell>
-                                            <TableCell>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        {getRotationIcon(product.rotationCategoryName)}
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{product.rotationCategoryName}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TableCell>
-                                            <TableCell>{product.sku}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
-                                            </TableCell>
-                                            <TableCell>{product.stock}</TableCell>
-                                            <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
-                                            <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
-                                            <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
-                                            {canEdit && (
-                                                <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button aria-haspopup="true" size="icon" variant="ghost">
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                                <span className="sr-only">Toggle menu</span>
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                            <EditProductForm product={product} onProductUpdated={refreshProducts}>
-                                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Edit</DropdownMenuItem>
-                                                            </EditProductForm>
-                                                            <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
+                                    <AccordionItem value={product.id} key={product.id} asChild>
+                                        <>
+                                            <TableRow 
+                                                className={cn("data-[state=closed]:border-b", product.productType === 'simple' && 'cursor-pointer hover:bg-muted/50')}
+                                                onClick={() => handleRowClick(product)}
+                                            >
+                                                <TableCell className="w-[80px] hidden sm:table-cell">
+                                                    <Image
+                                                        alt={product.name}
+                                                        className="aspect-square rounded-md object-cover"
+                                                        height="64"
+                                                        src={product.imageUrl}
+                                                        width="64"
+                                                    />
                                                 </TableCell>
-                                            )}
-                                            <TableCell className="w-[50px] pr-4 text-right">
-                                                {product.productType === 'variable' && (
-                                                    <AccordionTrigger className="p-1 rounded-md hover:bg-accent [&[data-state=open]>svg]:rotate-180" onClick={(e) => e.stopPropagation()}>
-                                                        <ChevronDown className="h-5 w-5 shrink-0 transition-transform duration-200" />
-                                                    </AccordionTrigger>
+                                                <TableCell className="font-medium">{product.name}</TableCell>
+                                                <TableCell>
+                                                    <Tooltip>
+                                                        <TooltipTrigger>
+                                                            {getRotationIcon(product.rotationCategoryName)}
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>{product.rotationCategoryName}</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TableCell>
+                                                <TableCell>{product.sku}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
+                                                </TableCell>
+                                                <TableCell>{product.stock}</TableCell>
+                                                <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
+                                                <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
+                                                <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
+                                                {canEdit && (
+                                                    <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button aria-haspopup="true" size="icon" variant="ghost">
+                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                                    <span className="sr-only">Toggle menu</span>
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                                <EditProductForm product={product} onProductUpdated={refreshProducts}>
+                                                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Edit</DropdownMenuItem>
+                                                                </EditProductForm>
+                                                                <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </TableCell>
                                                 )}
-                                            </TableCell>
-                                        </TableRow>
-                                        {product.productType === 'variable' && product.variants && product.variants.length > 0 && (
-                                            <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                                <TableCell colSpan={canEdit ? 11 : 10} className="p-0">
-                                                    <AccordionContent>
-                                                        <div className="p-4">
-                                                            <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
-                                                            <Table>
-                                                                <TableHeader>
-                                                                    <TableRow className="hover:bg-transparent">
-                                                                        <TableHead>Nombre</TableHead>
-                                                                        <TableHead>SKU</TableHead>
-                                                                        <TableHead>Precio</TableHead>
-                                                                        <TableHead>Stock</TableHead>
-                                                                    </TableRow>
-                                                                </TableHeader>
-                                                                <TableBody>
-                                                                {product.variants.map((variant) => (
-                                                                    <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
-                                                                        <TableCell>{variant.name}</TableCell>
-                                                                        <TableCell>{variant.sku}</TableCell>
-                                                                        <TableCell>${variant.price.toFixed(0)}</TableCell>
-                                                                        <TableCell>{variant.stock}</TableCell>
-                                                                    </TableRow>
-                                                                ))}
-                                                                </TableBody>
-                                                            </Table>
-                                                        </div>
-                                                    </AccordionContent>
+                                                <TableCell className="w-[50px] pr-4 text-right">
+                                                    {product.productType === 'variable' && (
+                                                        <AccordionTrigger className="p-1 rounded-md hover:bg-accent [&[data-state=open]>svg]:rotate-180" onClick={(e) => e.stopPropagation()}>
+                                                            <ChevronDown className="h-5 w-5 shrink-0 transition-transform duration-200" />
+                                                        </AccordionTrigger>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
-                                        )}
+                                            {product.productType === 'variable' && product.variants && product.variants.length > 0 && (
+                                                <TableRow className="bg-muted/20 hover:bg-muted/30">
+                                                    <TableCell colSpan={canEdit ? 11 : 10} className="p-0">
+                                                        <AccordionContent>
+                                                            <div className="p-4">
+                                                                <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
+                                                                <Table>
+                                                                    <TableHeader>
+                                                                        <TableRow className="hover:bg-transparent">
+                                                                            <TableHead>Nombre</TableHead>
+                                                                            <TableHead>SKU</TableHead>
+                                                                            <TableHead>Precio</TableHead>
+                                                                            <TableHead>Stock</TableHead>
+                                                                        </TableRow>
+                                                                    </TableHeader>
+                                                                    <TableBody>
+                                                                    {product.variants.map((variant) => (
+                                                                        <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
+                                                                            <TableCell>{variant.name}</TableCell>
+                                                                            <TableCell>{variant.sku}</TableCell>
+                                                                            <TableCell>${variant.price.toFixed(0)}</TableCell>
+                                                                            <TableCell>{variant.stock}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                    </TableBody>
+                                                                </Table>
+                                                            </div>
+                                                        </AccordionContent>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </>
                                     </AccordionItem>
                                 ))
                             ) : (
-                                
-                                    <TableRow>
-                                        <TableCell colSpan={canEdit ? 11 : 10} className="text-center h-24">
-                                            No se encontraron productos con los filtros actuales.
-                                        </TableCell>
-                                    </TableRow>
-                                
+                                <TableRow>
+                                    <TableCell colSpan={canEdit ? 11 : 10} className="text-center h-24">
+                                        No se encontraron productos con los filtros actuales.
+                                    </TableCell>
+                                </TableRow>
                             )}
                             </TableBody>
                         </Accordion>
