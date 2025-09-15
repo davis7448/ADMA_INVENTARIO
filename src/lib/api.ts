@@ -361,6 +361,12 @@ export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DispatchOrder));
 }
 
+export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
+    const q = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DispatchOrder));
+}
+
 export const processDispatch = async (orderId: string, trackingNumbers: string[], exceptions: DispatchException[]) => {
     const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);

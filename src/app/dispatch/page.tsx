@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
-import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, processDispatch } from '@/lib/api';
+import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders } from '@/lib/api';
 import type { DispatchOrder, Product, Platform, Carrier } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import {
@@ -25,9 +25,11 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatToTimeZone } from '@/lib/utils';
 import { ProcessDispatchDialog } from '@/components/process-dispatch-dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 function DispatchPageContent() {
-  const [orders, setOrders] = useState<DispatchOrder[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>([]);
+  const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
@@ -35,13 +37,15 @@ function DispatchPageContent() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [fetchedOrders, fetchedProducts, fetchedPlatforms, fetchedCarriers] = await Promise.all([
+    const [fetchedPendingOrders, fetchedPartialOrders, fetchedProducts, fetchedPlatforms, fetchedCarriers] = await Promise.all([
       getPendingDispatchOrders(),
+      getPartialDispatchOrders(),
       getProducts(),
       getPlatforms(),
       getCarriers(),
     ]);
-    setOrders(fetchedOrders);
+    setPendingOrders(fetchedPendingOrders);
+    setPartialOrders(fetchedPartialOrders);
     setProducts(fetchedProducts);
     setPlatforms(fetchedPlatforms);
     setCarriers(fetchedCarriers);
@@ -65,11 +69,10 @@ function DispatchPageContent() {
   const productsById = useMemo(() =>
     products.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>),
     [products]
-);
-
+  );
 
   const handleDispatchProcessed = () => {
-    fetchData(); // Refresh the list after an order is processed
+    fetchData(); // Refresh both lists after an order is processed
   }
 
   const getStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial') => {
@@ -85,21 +88,9 @@ function DispatchPageContent() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Despacho de Guías</h1>
-        <p className="text-muted-foreground">Gestiona y finaliza las órdenes de despacho pendientes.</p>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Órdenes de Despacho Pendientes</CardTitle>
-          <CardDescription>
-            Estas son las órdenes que han sido preparadas (picking) y están listas para la asignación de guías y envío final.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
+  const renderOrdersTable = (orders: DispatchOrder[], isPartialTab = false) => {
+    return (
+        <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>ID Despacho</TableHead>
@@ -125,7 +116,21 @@ function DispatchPageContent() {
                   </TableRow>
                 ))
               ) : orders.length > 0 ? (
-                orders.map((order) => (
+                orders.map((order) => {
+                  const productsForDialog = isPartialTab
+                    ? order.exceptions.flatMap(ex =>
+                        ex.products.map(p => ({
+                          productId: p.productId,
+                          name: productsById[p.productId]?.name || 'N/A',
+                          sku: productsById[p.productId]?.sku || 'N/A',
+                          quantity: p.quantity,
+                        }))
+                      )
+                    : order.products;
+
+                  const orderForDialog = { ...order, products: productsForDialog };
+                  
+                  return (
                   <TableRow key={order.id}>
                     <TableCell className="font-medium">{order.dispatchId}</TableCell>
                     <TableCell>{formatToTimeZone(new Date(order.date), 'dd/MM/yyyy HH:mm')}</TableCell>
@@ -135,26 +140,67 @@ function DispatchPageContent() {
                     <TableCell>{getStatusBadge(order.status)}</TableCell>
                     <TableCell className="text-right">
                         <ProcessDispatchDialog 
-                            order={order}
+                            order={orderForDialog}
                             productsById={productsById}
                             onDispatchProcessed={handleDispatchProcessed}
                         >
-                            <Button>Procesar Despacho</Button>
+                            <Button>{isPartialTab ? 'Procesar Pendientes' : 'Procesar Despacho'}</Button>
                         </ProcessDispatchDialog>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center h-24">
-                    No hay órdenes de despacho pendientes.
+                    No hay órdenes {isPartialTab ? 'parciales' : 'pendientes'}.
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Despacho de Guías</h1>
+        <p className="text-muted-foreground">Gestiona y finaliza las órdenes de despacho pendientes y parciales.</p>
+      </div>
+
+      <Tabs defaultValue="pendientes" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="pendientes">Pendientes</TabsTrigger>
+            <TabsTrigger value="parciales">Parciales</TabsTrigger>
+        </TabsList>
+        <TabsContent value="pendientes">
+            <Card>
+                <CardHeader>
+                <CardTitle>Órdenes de Despacho Pendientes</CardTitle>
+                <CardDescription>
+                    Estas son las órdenes que han sido preparadas (picking) y están listas para la asignación de guías y envío final.
+                </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {renderOrdersTable(pendingOrders)}
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="parciales">
+            <Card>
+                <CardHeader>
+                <CardTitle>Órdenes con Despacho Parcial</CardTitle>
+                <CardDescription>
+                    Estas órdenes tuvieron excepciones. Desde aquí puedes procesar el despacho de los productos que quedaron pendientes.
+                </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {renderOrdersTable(partialOrders, true)}
+                </CardContent>
+            </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
