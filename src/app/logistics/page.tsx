@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, getInventoryMovementsByDate, createDispatchOrder, registerDamagedProduct } from '@/lib/api';
-import type { Product, Carrier, Platform, DispatchOrderProduct } from '@/lib/types';
+import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -58,7 +58,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { generatePickingListPDF } from '@/lib/pdf';
-import { formatToTimeZone } from '@/lib/utils';
+import { formatToTimeZone, cn } from '@/lib/utils';
 
 
 interface DispatchedProduct extends Product {
@@ -105,7 +105,7 @@ export default function LogisticsPage() {
     const [returnCarrier, setReturnCarrier] = useState('');
     const [returnedProducts, setReturnedProducts] = useState<ReturnedProduct[]>([]);
     const [currentTrackingNumber, setCurrentTrackingNumber] = useState('');
-    const [productToAdd, setProductToAdd] = useState<Product | null>(null);
+    const [productToAdd, setProductToAdd] = useState<Product | ProductVariant | null>(null);
     const returnBarcodeRef = useRef<HTMLInputElement>(null);
 
     // Averías State
@@ -113,6 +113,10 @@ export default function LogisticsPage() {
     const [damageDescription, setDamageDescription] = useState('');
     const [damageCarrier, setDamageCarrier] = useState('');
     const [damageTrackingNumber, setDamageTrackingNumber] = useState('');
+
+    // Variant Selection State
+    const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
+    const [productForVariantSelection, setProductForVariantSelection] = useState<Product | null>(null);
 
 
     useEffect(() => {
@@ -135,14 +139,48 @@ export default function LogisticsPage() {
         fetchData();
     }, []);
 
+    // --- GENERIC PRODUCT/VARIANT ADDITION ---
+
+    const addProductOrVariant = (product: Product | ProductVariant, context: SearchContext) => {
+        const productToAdd = {
+            ...product,
+            id: 'id' in product ? product.id : `variant-${product.sku}`,
+            name: 'name' in product ? product.name : 'Unknown',
+            imageUrl: 'imageUrl' in product ? product.imageUrl : (productForVariantSelection?.imageUrl || ''),
+            // Ensure all required Product fields are present
+            categoryId: productForVariantSelection?.categoryId || '',
+            price: 'price' in product ? product.price : 0,
+            restockThreshold: productForVariantSelection?.restockThreshold || 0,
+            vendorId: productForVariantSelection?.vendorId || '',
+            productType: 'simple' as 'simple', // Treat variants as simple products in lists
+            variants: [],
+        };
+    
+        switch (context) {
+            case 'salidas':
+                addProductToDispatch(productToAdd);
+                break;
+            case 'entradas':
+                addProductToEntry(productToAdd);
+                break;
+            case 'devoluciones':
+                setProductToAdd(productToAdd);
+                setIsReturnDialogOpen(true);
+                break;
+            case 'averias':
+                setDamagedSku(productToAdd.sku || '');
+                break;
+        }
+    };
+    
     // --- SALIDAS ---
 
     const addProductToDispatch = (product: Product) => {
         setDispatchedProducts(prev => {
-            const existingProduct = prev.find(p => p.id === product.id);
+            const existingProduct = prev.find(p => p.sku === product.sku);
             if (existingProduct) {
               return prev.map(p => 
-                p.id === product.id 
+                p.sku === product.sku 
                   ? { ...p, dispatchQuantity: p.dispatchQuantity + 1 } 
                   : p
               );
@@ -156,10 +194,21 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
           e.preventDefault();
           const barcode = e.currentTarget.value;
-          const product = allProductsList.find(p => p.sku === barcode);
+          const product = allProductsList.find(p => 
+            p.sku === barcode || p.variants?.some(v => v.sku === barcode)
+          );
     
           if (product) {
-            addProductToDispatch(product);
+            if (product.productType === 'variable') {
+                const variant = product.variants?.find(v => v.sku === barcode);
+                if (variant) {
+                    addProductOrVariant(variant, 'salidas');
+                } else {
+                     toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
+                }
+            } else {
+                 addProductToDispatch(product);
+            }
           } else {
             toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
           }
@@ -174,9 +223,9 @@ export default function LogisticsPage() {
 
     const addProductToEntry = (product: Product) => {
         setReceivedProducts(prev => {
-            const existing = prev.find(p => p.id === product.id);
+            const existing = prev.find(p => p.sku === product.sku);
             if (existing) {
-                return prev.map(p => p.id === product.id ? { ...p, receiveQuantity: p.receiveQuantity + 1 } : p);
+                return prev.map(p => p.sku === product.sku ? { ...p, receiveQuantity: p.receiveQuantity + 1 } : p);
             }
             return [...prev, { ...product, receiveQuantity: 1 }];
         });
@@ -186,20 +235,26 @@ export default function LogisticsPage() {
     const handleProductSearchSelect = (product: Product) => {
         setIsSearchDialogOpen(false);
         setSearchQuery('');
-    
-        if (searchContext === 'salidas') {
-            setProductToConfirm(product);
-            // We need a slight delay to allow the search dialog to close before the confirm dialog opens
-            setTimeout(() => setIsConfirmDialogOpen(true), 150);
-        } else if (searchContext === 'averias') {
-            setDamagedSku(product.sku);
-        } else if (searchContext === 'entradas') {
-            addProductToEntry(product);
-        } else if (searchContext === 'devoluciones') {
-            setProductToAdd(product);
-            setIsReturnDialogOpen(true);
+
+        if (product.productType === 'variable') {
+            setProductForVariantSelection(product);
+            setIsVariantDialogOpen(true);
+        } else {
+             if (searchContext === 'salidas') {
+                setProductToConfirm(product);
+                setTimeout(() => setIsConfirmDialogOpen(true), 150);
+            } else {
+                addProductOrVariant(product, searchContext);
+            }
         }
     };
+
+    const handleVariantSelect = (variant: ProductVariant) => {
+        setIsVariantDialogOpen(false);
+        addProductOrVariant(variant, searchContext);
+        setProductForVariantSelection(null);
+    }
+
 
     const handleConfirmAddProduct = () => {
         if (productToConfirm) {
@@ -213,19 +268,19 @@ export default function LogisticsPage() {
         if (!searchQuery) return allProductsList;
         return allProductsList.filter(p => 
             p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+            p.sku?.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [searchQuery, allProductsList]);
 
 
-    const handleRemoveProduct = (productId: string) => {
-        setDispatchedProducts(prev => prev.filter(p => p.id !== productId));
+    const handleRemoveProduct = (sku: string) => {
+        setDispatchedProducts(prev => prev.filter(p => p.sku !== sku));
     };
 
-    const handleDispatchQuantityChange = (productId: string, quantity: number) => {
+    const handleDispatchQuantityChange = (sku: string, quantity: number) => {
         if (quantity >= 0) {
             setDispatchedProducts(prev => 
-                prev.map(p => p.id === productId ? { ...p, dispatchQuantity: quantity } : p)
+                prev.map(p => p.sku === sku ? { ...p, dispatchQuantity: quantity } : p)
             );
         }
     };
@@ -264,7 +319,7 @@ export default function LogisticsPage() {
 
         const productsForDispatch: DispatchOrderProduct[] = dispatchedProducts.map(p => ({
             productId: p.id,
-            sku: p.sku,
+            sku: p.sku!,
             name: p.name,
             quantity: p.dispatchQuantity
         }));
@@ -278,7 +333,7 @@ export default function LogisticsPage() {
             });
 
             const pdfProducts = dispatchedProducts.map(p => ({
-                sku: p.sku,
+                sku: p.sku!,
                 name: p.name,
                 dispatchQuantity: p.dispatchQuantity,
             }))
@@ -311,10 +366,21 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = allProductsList.find(p => p.sku === barcode);
+            const product = allProductsList.find(p => 
+                p.sku === barcode || p.variants?.some(v => v.sku === barcode)
+            );
 
             if (product) {
-                addProductToEntry(product);
+                if (product.productType === 'variable') {
+                    const variant = product.variants?.find(v => v.sku === barcode);
+                    if (variant) {
+                        addProductOrVariant(variant, 'entradas');
+                    } else {
+                        toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
+                    }
+                } else {
+                    addProductToEntry(product);
+                }
             } else {
                 toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado.' });
             }
@@ -322,14 +388,14 @@ export default function LogisticsPage() {
         }
     };
     
-    const handleReceivedQuantityChange = (productId: string, quantity: number) => {
+    const handleReceivedQuantityChange = (sku: string, quantity: number) => {
         if (quantity >= 0) {
-            setReceivedProducts(prev => prev.map(p => p.id === productId ? { ...p, receiveQuantity: quantity } : p));
+            setReceivedProducts(prev => prev.map(p => p.sku === sku ? { ...p, receiveQuantity: quantity } : p));
         }
     };
 
-    const handleRemoveReceivedProduct = (productId: string) => {
-        setReceivedProducts(prev => prev.filter(p => p.id !== productId));
+    const handleRemoveReceivedProduct = (sku: string) => {
+        setReceivedProducts(prev => prev.filter(p => p.sku !== sku));
     };
 
     const handleRegisterEntry = async () => {
@@ -363,11 +429,23 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = allProductsList.find(p => p.sku === barcode);
+            const product = allProductsList.find(p => 
+                p.sku === barcode || p.variants?.some(v => v.sku === barcode)
+            );
 
             if (product) {
-                setProductToAdd(product);
-                setIsReturnDialogOpen(true);
+                 if (product.productType === 'variable') {
+                    const variant = product.variants?.find(v => v.sku === barcode);
+                    if (variant) {
+                        setProductToAdd(variant);
+                        setIsReturnDialogOpen(true);
+                    } else {
+                         toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
+                    }
+                } else {
+                    setProductToAdd(product);
+                    setIsReturnDialogOpen(true);
+                }
             } else {
                 toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
             }
@@ -377,7 +455,7 @@ export default function LogisticsPage() {
     
     const handleAddProductToReturn = () => {
         if (productToAdd && currentTrackingNumber) {
-            setReturnedProducts(prev => [...prev, { ...productToAdd, trackingNumber: currentTrackingNumber }]);
+            setReturnedProducts(prev => [...prev, { ...(productToAdd as Product), trackingNumber: currentTrackingNumber }]);
             toast({ title: "Producto Agregado", description: `${productToAdd.name} añadido a la devolución.` });
             
             setIsReturnDialogOpen(false);
@@ -435,9 +513,10 @@ export default function LogisticsPage() {
 
     // --- AVERÍAS ---
     const handleRegisterDamage = async () => {
-        const product = allProductsList.find(p => p.sku.toLowerCase() === damagedSku.toLowerCase());
+        const product = allProductsList.find(p => p.sku?.toLowerCase() === damagedSku.toLowerCase() || p.variants?.some(v => v.sku.toLowerCase() === damagedSku.toLowerCase()));
+
         if (!product) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado con ese SKU.' });
+            toast({ variant: 'destructive', title: 'Error', description: 'Producto o variante no encontrado con ese SKU.' });
             return;
         }
         if (!damageDescription) {
@@ -453,12 +532,21 @@ export default function LogisticsPage() {
             return;
         }
 
+        const productToRegisterDamage = product.productType === 'variable' 
+            ? product.variants?.find(v => v.sku.toLowerCase() === damagedSku.toLowerCase()) 
+            : product;
+
+        if (!productToRegisterDamage) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Variante no encontrada.' });
+            return;
+        }
+
         try {
-            await registerDamagedProduct(product.id, 1);
+            await registerDamagedProduct(product.id, 1); // We can simplify this to always use parent product ID for damage tracking if variant specific damage stock isn't a feature.
             await addInventoryMovement({
                 type: 'Averia',
-                productId: product.id,
-                productName: product.name,
+                productId: product.id, // Use parent product ID
+                productName: `${product.name} (${productToRegisterDamage.name})`,
                 quantity: 1,
                 notes: `Devolución averiada: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
             });
@@ -608,6 +696,41 @@ export default function LogisticsPage() {
             </DialogContent>
         </Dialog>
         
+        <Dialog open={isVariantDialogOpen} onOpenChange={setIsVariantDialogOpen}>
+             <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Seleccionar Variante</DialogTitle>
+                    <DialogDescription>
+                        El producto <span className="font-semibold">{productForVariantSelection?.name}</span> es variable. Por favor, selecciona una variante.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="max-h-[400px] overflow-y-auto py-4">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Variante</TableHead>
+                                <TableHead>SKU</TableHead>
+                                <TableHead className="text-right">Stock</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {productForVariantSelection?.variants?.map(variant => (
+                                <TableRow 
+                                    key={variant.id}
+                                    onClick={() => handleVariantSelect(variant)}
+                                    className="cursor-pointer hover:bg-muted"
+                                >
+                                    <TableCell className="font-medium">{variant.name}</TableCell>
+                                    <TableCell>{variant.sku}</TableCell>
+                                    <TableCell className="text-right">{variant.stock}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+             </DialogContent>
+        </Dialog>
+
         <div className="space-y-6">
             <div>
               <h1 className="text-3xl font-bold font-headline tracking-tight">Panel de Logística</h1>
@@ -690,7 +813,7 @@ export default function LogisticsPage() {
                                         <TableBody>
                                         {dispatchedProducts.length > 0 ? (
                                             dispatchedProducts.map(product => (
-                                            <TableRow key={product.id}>
+                                            <TableRow key={product.sku}>
                                                 <TableCell>
                                                     <Image
                                                         src={product.imageUrl}
@@ -707,12 +830,12 @@ export default function LogisticsPage() {
                                                         type="number"
                                                         className="w-24 text-center mx-auto"
                                                         value={product.dispatchQuantity}
-                                                        onChange={(e) => handleDispatchQuantityChange(product.id, parseInt(e.target.value, 10))}
+                                                        onChange={(e) => handleDispatchQuantityChange(product.sku!, parseInt(e.target.value, 10))}
                                                         min="1"
                                                     />
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(product.id)}>
+                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(product.sku!)}>
                                                         <Trash2 className="h-4 w-4 text-destructive" />
                                                     </Button>
                                                 </TableCell>
@@ -776,7 +899,7 @@ export default function LogisticsPage() {
                                         <TableBody>
                                             {receivedProducts.length > 0 ? (
                                                 receivedProducts.map(product => (
-                                                    <TableRow key={product.id}>
+                                                    <TableRow key={product.sku}>
                                                         <TableCell>
                                                             <Image
                                                                 src={product.imageUrl}
@@ -793,12 +916,12 @@ export default function LogisticsPage() {
                                                                 type="number"
                                                                 className="w-24 text-center mx-auto"
                                                                 value={product.receiveQuantity}
-                                                                onChange={(e) => handleReceivedQuantityChange(product.id, parseInt(e.target.value, 10))}
+                                                                onChange={(e) => handleReceivedQuantityChange(product.sku!, parseInt(e.target.value, 10))}
                                                                 min="0"
                                                             />
                                                         </TableCell>
                                                         <TableCell className="text-right">
-                                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveReceivedProduct(product.id)}>
+                                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveReceivedProduct(product.sku!)}>
                                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                                             </Button>
                                                         </TableCell>
@@ -970,6 +1093,8 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
 
     
 
