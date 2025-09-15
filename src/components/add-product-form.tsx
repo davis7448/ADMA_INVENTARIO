@@ -40,8 +40,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category } from '@/lib/types';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
-import { Info, Trash2 } from 'lucide-react';
+import { Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader } from './ui/card';
 
 interface AddProductFormProps {
@@ -54,6 +53,8 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isPending, startTransition] = useTransition();
+  const [isImporting, setIsImporting] = useState(false);
+  const [importText, setImportText] = useState('');
 
   const form = useForm<AddProductFormValues>({
     resolver: zodResolver(AddProductFormSchema),
@@ -73,7 +74,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: "variants",
   });
@@ -97,6 +98,30 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
         });
     }
   }, [open]);
+
+  const handleImport = () => {
+    const lines = importText.trim().split('\n');
+    const newVariants = lines.map(line => {
+      const parts = line.split(/[\t,]/); // Split by tab or comma
+      const [name, sku, price, stock] = parts;
+      return {
+        id: uuidv4(),
+        name: name?.trim() || '',
+        sku: sku?.trim() || '',
+        price: parseFloat(price?.trim()) || 0,
+        stock: parseInt(stock?.trim(), 10) || 0,
+      };
+    }).filter(v => v.name && v.sku); // Only add variants that have a name and sku
+
+    replace(newVariants);
+    toast({
+      title: 'Importación Exitosa',
+      description: `Se han importado ${newVariants.length} variantes.`,
+    })
+    setIsImporting(false);
+    setImportText('');
+  };
+
 
   const onSubmit = (values: AddProductFormValues) => {
     const formData = new FormData();
@@ -162,337 +187,380 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   }, [open, form]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Add Product</Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add New Product</DialogTitle>
-          <DialogDescription>
-            Enter the details of the new product below.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                    control={form.control}
-                    name="productType"
-                    render={({ field }) => (
-                        <FormItem className="space-y-3">
-                            <FormLabel>Product Type</FormLabel>
-                            <FormControl>
-                                <RadioGroup
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                                className="flex flex-row space-x-4"
-                                >
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="simple" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Simple</FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="variable" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Variable</FormLabel>
-                                </FormItem>
-                                </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Product Name</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="e.g., Ergo-Wireless Mouse" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="sku"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>SKU</FormLabel>
-                                <FormControl>
-                                    <Input 
-                                        placeholder="e.g., WM-ERGO-01" 
-                                        {...field} 
-                                        disabled={productType === 'variable'}
-                                        value={productType === 'variable' ? '' : field.value}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                </div>
-                <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Description</FormLabel>
-                            <FormControl>
-                                <Textarea placeholder="A brief description of the product." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                 <FormField
-                    control={form.control}
-                    name="image"
-                    render={({ field: { onChange, value, ...rest } }) => (
-                        <FormItem>
-                            <FormLabel>Product Image</FormLabel>
-                            <FormControl>
-                               <Input 
-                                type="file" 
-                                accept="image/png, image/jpeg, image/webp"
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    onChange(file);
-                                }}
-                                {...rest}
-                               />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="contentLink"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Link de Contenido (Google Drive)</FormLabel>
-                            <FormControl>
-                                <Input placeholder="https://docs.google.com/..." {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="categoryId"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Category</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <FormControl>
-                                        <SelectTrigger>
-                                        <SelectValue placeholder="Select a category" />
-                                        </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        {categories.map(category => (
-                                        <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="vendorId"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Supplier</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <FormControl>
-                                        <SelectTrigger>
-                                        <SelectValue placeholder="Select a supplier" />
-                                        </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        {suppliers.map(supplier => (
-                                        <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                </div>
-                
-                {productType === 'variable' ? (
-                  <Card>
-                    <CardHeader>
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-semibold">Variants</h3>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => append({ id: uuidv4(), name: '', sku: '', price: 0, stock: 0 })}
-                        >
-                          Add Variant
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {fields.map((field, index) => (
-                        <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
-                          <FormField
-                            control={form.control}
-                            name={`variants.${index}.name`}
-                            render={({ field }) => (
-                              <FormItem className="col-span-3">
-                                <FormLabel className="sr-only">Variant Name</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="Variant Name" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name={`variants.${index}.sku`}
-                            render={({ field }) => (
-                              <FormItem className="col-span-3">
-                                <FormLabel className="sr-only">SKU</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="SKU" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                           <FormField
-                            control={form.control}
-                            name={`variants.${index}.price`}
-                            render={({ field }) => (
-                              <FormItem className="col-span-2">
-                                <FormLabel className="sr-only">Price</FormLabel>
-                                <FormControl>
-                                  <Input type="number" placeholder="Price" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name={`variants.${index}.stock`}
-                            render={({ field }) => (
-                              <FormItem className="col-span-2">
-                                <FormLabel className="sr-only">Stock</FormLabel>
-                                <FormControl>
-                                  <Input type="number" placeholder="Stock" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <div className="col-span-2 flex items-center justify-end">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => remove(index)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                      {fields.length === 0 && (
-                          <p className="text-sm text-muted-foreground text-center py-4">
-                              Click 'Add Variant' to create product variations.
-                          </p>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button>Add Product</Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Product</DialogTitle>
+            <DialogDescription>
+              Enter the details of the new product below.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                      control={form.control}
+                      name="productType"
+                      render={({ field }) => (
+                          <FormItem className="space-y-3">
+                              <FormLabel>Product Type</FormLabel>
+                              <FormControl>
+                                  <RadioGroup
+                                  onValueChange={field.onChange}
+                                  defaultValue={field.value}
+                                  className="flex flex-row space-x-4"
+                                  >
+                                  <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl>
+                                          <RadioGroupItem value="simple" />
+                                      </FormControl>
+                                      <FormLabel className="font-normal">Simple</FormLabel>
+                                  </FormItem>
+                                  <FormItem className="flex items-center space-x-2 space-y-0">
+                                      <FormControl>
+                                          <RadioGroupItem value="variable" />
+                                      </FormControl>
+                                      <FormLabel className="font-normal">Variable</FormLabel>
+                                  </FormItem>
+                                  </RadioGroup>
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
                       )}
-                    </CardContent>
-                  </Card>
-                ) : null}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Product Name</FormLabel>
+                                  <FormControl>
+                                      <Input placeholder="e.g., Ergo-Wireless Mouse" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                      <FormField
+                          control={form.control}
+                          name="sku"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>SKU</FormLabel>
+                                  <FormControl>
+                                      <Input 
+                                          placeholder="e.g., WM-ERGO-01" 
+                                          {...field} 
+                                          disabled={productType === 'variable'}
+                                          value={productType === 'variable' ? '' : field.value}
+                                      />
+                                  </FormControl>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                  </div>
+                  <FormField
+                      control={form.control}
+                      name="description"
+                      render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Description</FormLabel>
+                              <FormControl>
+                                  <Textarea placeholder="A brief description of the product." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="image"
+                      render={({ field: { onChange, value, ...rest } }) => (
+                          <FormItem>
+                              <FormLabel>Product Image</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="file" 
+                                  accept="image/png, image/jpeg, image/webp"
+                                  onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      onChange(file);
+                                  }}
+                                  {...rest}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+                  <FormField
+                      control={form.control}
+                      name="contentLink"
+                      render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Link de Contenido (Google Drive)</FormLabel>
+                              <FormControl>
+                                  <Input placeholder="https://docs.google.com/..." {...field} />
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                          control={form.control}
+                          name="categoryId"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Category</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value}>
+                                      <FormControl>
+                                          <SelectTrigger>
+                                          <SelectValue placeholder="Select a category" />
+                                          </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                          {categories.map(category => (
+                                          <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                      <FormField
+                          control={form.control}
+                          name="vendorId"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Supplier</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value}>
+                                      <FormControl>
+                                          <SelectTrigger>
+                                          <SelectValue placeholder="Select a supplier" />
+                                          </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                          {suppliers.map(supplier => (
+                                          <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                  </div>
+                  
+                  {productType === 'variable' && (
+                    <Card>
+                      <CardHeader>
+                        <div className="flex justify-between items-center">
+                            <h3 className="font-semibold">Variants</h3>
+                            <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setIsImporting(true)}
+                                >
+                                  <Upload className="mr-2 h-4 w-4" />
+                                  Importar Variantes
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => append({ id: uuidv4(), name: '', sku: '', price: 0, stock: 0 })}
+                                >
+                                    Add Variant
+                                </Button>
+                            </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {fields.map((field, index) => (
+                          <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
+                            <FormField
+                              control={form.control}
+                              name={`variants.${index}.name`}
+                              render={({ field }) => (
+                                <FormItem className="col-span-3">
+                                  <FormLabel className="sr-only">Variant Name</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="Variant Name" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`variants.${index}.sku`}
+                              render={({ field }) => (
+                                <FormItem className="col-span-3">
+                                  <FormLabel className="sr-only">SKU</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="SKU" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`variants.${index}.price`}
+                              render={({ field }) => (
+                                <FormItem className="col-span-2">
+                                  <FormLabel className="sr-only">Price</FormLabel>
+                                  <FormControl>
+                                    <Input type="number" placeholder="Price" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`variants.${index}.stock`}
+                              render={({ field }) => (
+                                <FormItem className="col-span-2">
+                                  <FormLabel className="sr-only">Stock</FormLabel>
+                                  <FormControl>
+                                    <Input type="number" placeholder="Stock" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <div className="col-span-2 flex items-center justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => remove(index)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        {fields.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                                Click 'Add Variant' to create product variations.
+                            </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="price"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Price</FormLabel>
-                                <FormControl>
-                                    <Input 
-                                        type="number" 
-                                        step="0.01" 
-                                        placeholder="e.g., 79.99" 
-                                        {...field} 
-                                        value={productType === 'variable' ? '' : field.value ?? ''} 
-                                        disabled={productType === 'variable'}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="stock"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Stock</FormLabel>
-                                <FormControl>
-                                    <Input 
-                                        type="number" 
-                                        placeholder="e.g., 100" 
-                                        {...field} 
-                                        value={field.value ?? ''}
-                                        onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} 
-                                        disabled={productType === 'variable'}
-                                        readOnly={productType === 'variable'}
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="restockThreshold"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Restock Threshold</FormLabel>
-                                <FormControl>
-                                    <Input type="number" placeholder="e.g., 10" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                </div>
-                <DialogFooter>
-                    <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                            Cancel
-                        </Button>
-                    </DialogClose>
-                     <Button type="submit" disabled={isPending}>
-                        {isPending ? 'Adding Product...' : 'Add Product'}
-                    </Button>
-                </DialogFooter>
-            </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <FormField
+                          control={form.control}
+                          name="price"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Price</FormLabel>
+                                  <FormControl>
+                                      <Input 
+                                          type="number" 
+                                          step="0.01" 
+                                          placeholder="e.g., 79.99" 
+                                          {...field} 
+                                          value={productType === 'variable' ? '' : field.value ?? ''} 
+                                          disabled={productType === 'variable'}
+                                      />
+                                  </FormControl>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                      <FormField
+                          control={form.control}
+                          name="stock"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Stock</FormLabel>
+                                  <FormControl>
+                                      <Input 
+                                          type="number" 
+                                          placeholder="e.g., 100" 
+                                          {...field} 
+                                          value={field.value ?? ''}
+                                          onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} 
+                                          disabled={productType === 'variable'}
+                                          readOnly={productType === 'variable'}
+                                      />
+                                  </FormControl>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                      <FormField
+                          control={form.control}
+                          name="restockThreshold"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Restock Threshold</FormLabel>
+                                  <FormControl>
+                                      <Input type="number" placeholder="e.g., 10" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />
+                                  </FormControl>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                  </div>
+                  <DialogFooter>
+                      <DialogClose asChild>
+                          <Button type="button" variant="secondary">
+                              Cancel
+                          </Button>
+                      </DialogClose>
+                      <Button type="submit" disabled={isPending}>
+                          {isPending ? 'Adding Product...' : 'Add Product'}
+                      </Button>
+                  </DialogFooter>
+              </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isImporting} onOpenChange={setIsImporting}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importar Variantes desde Texto</DialogTitle>
+            <DialogDescription>
+              Pega aquí los datos de tus variantes desde una hoja de cálculo (Excel, Google Sheets). 
+              Usa una línea por variante y asegúrate de que las columnas estén en el orden: Nombre, SKU, Precio, Stock.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              placeholder="Ejemplo:
+Rojo, CAM-01-R, 25.00, 10
+Azul, CAM-01-A, 25.00, 15
+Verde, CAM-01-V, 25.00, 12"
+              rows={10}
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">Cancelar</Button>
+            </DialogClose>
+            <Button onClick={handleImport}>Importar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
+
+    
