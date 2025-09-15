@@ -54,6 +54,7 @@ import {
     SelectValue,
   } from '@/components/ui/select';
 import { Input } from './ui/input';
+import { Label } from './ui/label';
 import { MoreHorizontal, PlusCircle } from 'lucide-react';
 import type { User, UserRole } from '@/lib/types';
 import type { CreateUserFormValues } from '@/lib/definitions';
