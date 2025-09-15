@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useEffect } from "react";
+import { useFormStatus } from "react-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useEffect } from "react";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
@@ -47,7 +47,7 @@ function SubmitButton() {
 
 export default function RestockForm() {
   const initialState: FormState = { message: "", errors: {} };
-  const [state, formAction] = useFormState(checkRestock, initialState);
+  const [state, formAction] = useActionState(checkRestock, initialState);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(RestockAlertFormSchema),

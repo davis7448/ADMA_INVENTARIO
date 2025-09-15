@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState, useEffect, useRef } from 'react';
+import { useFormStatus } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,7 +35,6 @@ import {
 } from './ui/select';
 import { suppliers } from '@/lib/data';
 import { addProduct, type AddProductFormState } from '@/app/actions/products';
-import { useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 const AddProductFormSchema = z.object({
@@ -70,7 +70,7 @@ export function AddProductForm() {
     errors: {},
     success: false,
   };
-  const [state, formAction] = useFormState(addProduct, initialState);
+  const [state, formAction] = useActionState(addProduct, initialState);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(AddProductFormSchema),
