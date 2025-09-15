@@ -42,6 +42,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditProductForm } from './edit-product-form';
 import { cn } from '@/lib/utils';
+import { ProductDetailSheet } from './product-detail-sheet';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -55,12 +56,23 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [categoryNames, setCategoryNames] = useState<Record<string, string>>(initialCategoryNames);
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
+    const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     
     const refreshProducts = async () => {
         setLoading(true);
         // This should be refetched from the server page component to get updated rotation
         window.location.reload();
     }
+
+    const handleRowClick = (productId: string) => {
+        setSelectedProductId(productId);
+    };
+
+    const handleSheetOpenChange = (open: boolean) => {
+        if (!open) {
+            setSelectedProductId(null);
+        }
+    };
 
     const canEdit = user?.role === 'admin';
 
@@ -143,7 +155,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                      ))
                   ) : (
                     products.map((product) => (
-                        <TableRow key={product.id}>
+                        <TableRow key={product.id} onClick={() => handleRowClick(product.id)} className="cursor-pointer">
                         <TableCell className="hidden sm:table-cell">
                             <Image
                             alt={product.name}
@@ -173,7 +185,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                         <TableCell className="hidden md:table-cell text-center text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
                         <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
                         {canEdit && (
-                            <TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                 <Button aria-haspopup="true" size="icon" variant="ghost">
@@ -199,6 +211,13 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             </CardContent>
           </Card>
         </div>
+        {selectedProductId && (
+            <ProductDetailSheet 
+                productId={selectedProductId}
+                open={!!selectedProductId}
+                onOpenChange={handleSheetOpenChange}
+            />
+        )}
         </TooltipProvider>
     )
 }

@@ -265,6 +265,22 @@ export const getInventoryMovements = async (): Promise<InventoryMovement[]> => {
     return movementList;
 };
 
+export const getInventoryMovementsByProductId = async (productId: string): Promise<InventoryMovement[]> => {
+    const movementsCol = collection(db, 'inventoryMovements');
+    const q = query(movementsCol, where('productId', '==', productId));
+    const movementSnapshot = await getDocs(q);
+    const movementList = movementSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
+        return {
+            id: doc.id,
+            ...data,
+            date,
+        } as InventoryMovement;
+    });
+    return movementList;
+}
+
 export const getInventoryMovementsByDate = async (date: Date): Promise<InventoryMovement[]> => {
     const movementsCol = collection(db, 'inventoryMovements');
     const start = startOfDay(date);

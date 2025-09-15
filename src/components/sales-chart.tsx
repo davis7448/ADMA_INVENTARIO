@@ -1,49 +1,50 @@
+
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 
 const chartConfig = {
-  stock: {
-    label: "Stock",
+  sales: {
+    label: "Sales",
     color: "hsl(var(--primary))",
   },
 } satisfies ChartConfig;
 
-type InventoryChartProps = {
+type SalesChartProps = {
   data: {
-    name: string;
-    stock: number;
+    date: string;
+    sales: number;
   }[];
 };
 
-export default function InventoryChart({ data }: InventoryChartProps) {
+export default function SalesChart({ data }: SalesChartProps) {
   return (
     <ChartContainer config={chartConfig} className="h-[250px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical">
-          <CartesianGrid horizontal={false} />
-          <YAxis
-            dataKey="name"
-            type="category"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            className="text-xs"
-          />
+        <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis
-            type="number"
+            dataKey="date"
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            tickFormatter={(value) => value.toString()}
+            tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           />
+          <YAxis
+            stroke="#888888"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            allowDecimals={false}
+           />
           <ChartTooltip
             cursor={{ fill: 'hsl(var(--muted))' }}
             content={<ChartTooltipContent />} 
           />
-          <Bar dataKey="stock" fill="var(--color-stock)" radius={4} />
-        </BarChart>
+          <Line type="monotone" dataKey="sales" stroke="var(--color-sales)" strokeWidth={2} dot={false} />
+        </LineChart>
       </ResponsiveContainer>
     </ChartContainer>
   );
