@@ -6,6 +6,14 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
 
+const ProductVariantSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Variant name is required.'),
+  sku: z.string().min(1, 'Variant SKU is required.'),
+  price: z.coerce.number().min(0, 'Price must be non-negative.'),
+  stock: z.coerce.number().int().min(0, 'Stock must be non-negative.'),
+});
+
 const ProductFormSchemaBase = z.object({
   name: z.string().min(1, 'Product name is required.'),
   sku: z.string().optional(),
@@ -28,7 +36,9 @@ const ProductFormSchemaBase = z.object({
     z.coerce.number({ invalid_type_error: 'Threshold must be a number.' }).int('Threshold must be a whole number.').min(0, 'Threshold must be a non-negative number.').optional()
   ),
   contentLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
+  variants: z.array(ProductVariantSchema).optional(),
 });
+
 
 export const AddProductFormSchema = ProductFormSchemaBase.extend({
   image: z
@@ -42,66 +52,60 @@ export const AddProductFormSchema = ProductFormSchemaBase.extend({
         (file): file is File => file instanceof File && ACCEPTED_IMAGE_TYPES.includes(file.type),
         "Only .jpg, .jpeg, .png and .webp formats are supported."
     ),
-}).refine(data => {
+}).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
-        return data.sku && data.sku.length > 0;
+        if (!data.sku || data.sku.length === 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'SKU is required for simple products.',
+                path: ['sku'],
+            });
+        }
+    } else if (data.productType === 'variable') {
+      if (!data.variants || data.variants.length === 0) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Variable products must have at least one variant.',
+            path: ['variants'],
+        });
+      }
     }
-    return true;
-}, {
-    message: 'SKU is required for simple products.',
-    path: ['sku'],
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;
 
 export type AddProductFormState = {
   message: string;
-  errors?: {
-    _form?: string[];
-    name?: string[];
-    sku?: string[];
-    description?: string[];
-    productType?: string[];
-    categoryId?: string[];
-    vendorId?: string[];
-    price?: string[];
-    stock?: string[];
-    restockThreshold?: string[];
-    image?: string[];
-    contentLink?: string[];
-  };
+  errors?: z.ZodError<AddProductFormValues>['formErrors']['fieldErrors'];
   success: boolean;
 };
 
 export const EditProductFormSchema = ProductFormSchemaBase.extend({
     image: z.any().optional(),
-}).refine(data => {
+}).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
-        return data.sku && data.sku.length > 0;
-    }
-    return true;
-}, {
-    message: 'SKU is required for simple products.',
-    path: ['sku'],
+        if (!data.sku || data.sku.length === 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'SKU is required for simple products.',
+                path: ['sku'],
+            });
+        }
+    } else if (data.productType === 'variable') {
+        if (!data.variants || data.variants.length === 0) {
+          ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Variable products must have at least one variant.',
+              path: ['variants'],
+          });
+        }
+      }
 });
   
 export type EditProductFormValues = z.infer<typeof EditProductFormSchema>;
   
 export type EditProductFormState = Omit<AddProductFormState, 'errors'> & {
-errors?: {
-    _form?: string[];
-    name?: string[];
-    sku?: string[];
-    description?: string[];
-    productType?: string[];
-    categoryId?: string[];
-    vendorId?: string[];
-    price?: string[];
-    stock?: string[];
-    restockThreshold?: string[];
-    image?: string[];
-    contentLink?: string[];
-};
+  errors?: z.ZodError<EditProductFormValues>['formErrors']['fieldErrors'];
 };
 
 export const AddSupplierFormSchema = z.object({

@@ -2,8 +2,9 @@
 "use client";
 
 import { useEffect, useState, useTransition } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { v4 as uuidv4 } from 'uuid';
 import {
   Dialog,
   DialogContent,
@@ -40,7 +41,8 @@ import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category } from '@/lib/types';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
-import { Info } from 'lucide-react';
+import { Info, Trash2 } from 'lucide-react';
+import { Card, CardContent, CardHeader } from './ui/card';
 
 interface AddProductFormProps {
   onProductAdded: () => void;
@@ -67,10 +69,25 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       restockThreshold: undefined,
       image: undefined,
       contentLink: '',
+      variants: [],
     },
   });
 
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "variants",
+  });
+
   const productType = form.watch('productType');
+  const variants = form.watch('variants');
+
+  useEffect(() => {
+    if (productType === 'variable' && variants) {
+        const totalStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+        form.setValue('stock', totalStock, { shouldValidate: true });
+    }
+  }, [variants, productType, form]);
+
 
   useEffect(() => {
     if (open) {
@@ -83,19 +100,29 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
 
   const onSubmit = (values: AddProductFormValues) => {
     const formData = new FormData();
-    Object.entries(values).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
-            if (key === 'image' && value instanceof File) {
-                formData.append(key, value);
-            } else if (typeof value !== 'object') {
-                 if (key === 'sku' && values.productType === 'variable') {
-                    // Don't append SKU for variable products
-                 } else {
-                    formData.append(key, String(value));
-                 }
-            }
-        }
-    });
+    
+    // Append all fields except image and variants
+    for (const key in values) {
+      if (key !== 'image' && key !== 'variants' && values[key as keyof typeof values] !== null && values[key as keyof typeof values] !== undefined) {
+        formData.append(key, String(values[key as keyof typeof values]));
+      }
+    }
+
+    // Append image if it exists
+    if (values.image instanceof File) {
+      formData.append('image', values.image);
+    }
+    
+    // Append variants
+    if (values.variants) {
+      values.variants.forEach((variant, index) => {
+        formData.append(`variants[${index}].id`, variant.id);
+        formData.append(`variants[${index}].name`, variant.name);
+        formData.append(`variants[${index}].sku`, variant.sku);
+        formData.append(`variants[${index}].price`, String(variant.price));
+        formData.append(`variants[${index}].stock`, String(variant.stock));
+      });
+    }
 
     startTransition(async () => {
         const result = await addProductAction(formData);
@@ -115,12 +142,13 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
             });
             if (result.errors) {
                 Object.entries(result.errors).forEach(([key, errorMessages]) => {
-                    if (key in values && errorMessages) {
-                         form.setError(key as keyof AddProductFormValues, {
-                            type: 'manual',
-                            message: errorMessages[0],
-                        });
-                    }
+                  const fieldKey = key as keyof AddProductFormValues;
+                  if (fieldKey && errorMessages) {
+                    form.setError(fieldKey, {
+                      type: 'manual',
+                      message: errorMessages[0],
+                    });
+                  }
                 });
             }
         }
@@ -138,7 +166,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       <DialogTrigger asChild>
         <Button>Add Product</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[625px]">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Product</DialogTitle>
           <DialogDescription>
@@ -304,15 +332,98 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         )}
                     />
                 </div>
-                {productType === 'variable' && (
-                    <Alert>
-                        <Info className="h-4 w-4" />
-                        <AlertTitle>Producto Variable</AlertTitle>
-                        <AlertDescription>
-                            El stock y el precio se determinarán por la suma de sus variantes. Podrás añadir variantes después de crear el producto principal.
-                        </AlertDescription>
-                    </Alert>
-                )}
+                
+                {productType === 'variable' ? (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold">Variants</h3>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => append({ id: uuidv4(), name: '', sku: '', price: 0, stock: 0 })}
+                        >
+                          Add Variant
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {fields.map((field, index) => (
+                        <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
+                          <FormField
+                            control={form.control}
+                            name={`variants.${index}.name`}
+                            render={({ field }) => (
+                              <FormItem className="col-span-3">
+                                <FormLabel className="sr-only">Variant Name</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Variant Name" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`variants.${index}.sku`}
+                            render={({ field }) => (
+                              <FormItem className="col-span-3">
+                                <FormLabel className="sr-only">SKU</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="SKU" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                           <FormField
+                            control={form.control}
+                            name={`variants.${index}.price`}
+                            render={({ field }) => (
+                              <FormItem className="col-span-2">
+                                <FormLabel className="sr-only">Price</FormLabel>
+                                <FormControl>
+                                  <Input type="number" placeholder="Price" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`variants.${index}.stock`}
+                            render={({ field }) => (
+                              <FormItem className="col-span-2">
+                                <FormLabel className="sr-only">Stock</FormLabel>
+                                <FormControl>
+                                  <Input type="number" placeholder="Stock" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <div className="col-span-2 flex items-center justify-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => remove(index)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      {fields.length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                              Click 'Add Variant' to create product variations.
+                          </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : null}
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FormField
                         control={form.control}
@@ -345,9 +456,10 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                         type="number" 
                                         placeholder="e.g., 100" 
                                         {...field} 
-                                        value={productType === 'variable' ? '' : field.value ?? ''} 
+                                        value={field.value ?? ''}
                                         onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} 
                                         disabled={productType === 'variable'}
+                                        readOnly={productType === 'variable'}
                                     />
                                 </FormControl>
                                 <FormMessage />

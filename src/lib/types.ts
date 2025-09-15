@@ -1,6 +1,6 @@
 
 export type ProductVariant = {
-  id: string;
+  id: string; // Can be a temporary client-side ID before saving
   name: string;
   sku: string;
   price: number;

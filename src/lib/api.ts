@@ -64,12 +64,25 @@ export const getProductById = async (id: string): Promise<Product | null> => {
 
 export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> => {
   const productsCol = collection(db, 'products');
+  
+  if (product.productType === 'variable') {
+    product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
+    // For variable products, price could be the lowest variant price, or 0. Let's use 0 for now.
+    product.price = 0; 
+  }
+
   const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
 };
 
 export const updateProduct = async (productId: string, productUpdate: Partial<Omit<Product, 'id'>>) => {
   const productRef = doc(db, 'products', productId);
+
+  if (productUpdate.productType === 'variable') {
+    productUpdate.stock = productUpdate.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
+    productUpdate.price = 0;
+  }
+
   await updateDoc(productRef, productUpdate);
 };
 
@@ -155,7 +168,7 @@ export const addSupplier = async (supplier: Omit<Supplier, 'id' | 'productCount'
 export const getSuppliersByIds = async (ids: string[]): Promise<Record<string, string>> => {
     if (ids.length === 0) return {};
     const suppliersRef = collection(db, "suppliers");
-    const q = query(suppliersRef, where('__name__', 'in', ids));
+    const q = query(suppliersRef, where(documentId(), 'in', ids));
     const querySnapshot = await getDocs(q);
     const suppliers: Record<string, string> = {};
     querySnapshot.forEach((doc) => {
@@ -181,7 +194,7 @@ export const addCategory = async (category: Omit<Category, 'id'>): Promise<strin
 export const getCategoriesByIds = async (ids: string[]): Promise<Record<string, string>> => {
     if (ids.length === 0) return {};
     const categoriesRef = collection(db, "categories");
-    const q = query(categoriesRef, where('__name__', 'in', ids));
+    const q = query(categoriesRef, where(documentId(), 'in', ids));
     const querySnapshot = await getDocs(q);
     const categories: Record<string, string> = {};
     querySnapshot.forEach((doc) => {
