@@ -2,7 +2,7 @@
 
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant } from './types';
 import {v4 as uuidv4} from 'uuid';
@@ -163,7 +163,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         // Also decrement stock from the correct variant if applicable
         if (productData.productType === 'variable' && variantSku) {
             const variants = productData.variants ? [...productData.variants] : [];
-            const variantIndex = variants.findIndex(v => v.sku === variantSku);
+            const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
     
             if (variantIndex !== -1) {
                 const variant = variants[variantIndex];
@@ -436,7 +436,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
 
 
     const platformName = (await getDoc(doc(db, 'platforms', platformId))).data()?.name || 'N/A';
-    const carrierName = (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || 'N-A';
+    const carrierName = (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || 'N/A';
     const notes = `Dispatch ID: ${dispatchId}. Plataforma: ${platformName}, Transportadora: ${carrierName}`;
 
 
