@@ -108,6 +108,31 @@ export default function HistoryPage() {
     [...movements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [movements]
   );
+  
+  const filteredMovements = useMemo(() => {
+    let allMovements = [...sortedMovements];
+
+    if (filterProductId) {
+        allMovements = allMovements.filter(m => m.productId === filterProductId);
+    }
+    if (filterPlatformId) {
+        const platformName = platforms.find(p => p.id === filterPlatformId)?.name;
+        allMovements = allMovements.filter(m => m.notes.includes(`Plataforma: ${platformName}`));
+    }
+    if (filterCarrierId) {
+        const carrierName = carriers.find(c => c.id === filterCarrierId)?.name;
+        allMovements = allMovements.filter(m => m.notes.includes(`Transportadora: ${carrierName}`));
+    }
+    if (dateRange?.from) {
+        allMovements = allMovements.filter(m => new Date(m.date) >= startOfDay(dateRange.from!));
+    }
+    if (dateRange?.to) {
+        allMovements = allMovements.filter(m => new Date(m.date) <= endOfDay(dateRange.to!));
+    }
+
+    return allMovements;
+  }, [sortedMovements, platforms, carriers, filterProductId, filterPlatformId, filterCarrierId, dateRange]);
+
 
   const dispatchOrders = useMemo(() => {
     const dispatches: Record<string, DispatchOrder> = {};
@@ -187,6 +212,117 @@ export default function HistoryPage() {
         return '';
     }
   };
+  
+  const renderFilters = () => (
+    <div className="mb-4 flex flex-wrap items-center gap-4">
+        <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+            <PopoverTrigger asChild>
+                <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={comboboxOpen}
+                    className="w-full md:w-[250px] justify-between"
+                >
+                    {filterProductId
+                        ? products.find((p) => p.id === filterProductId)?.name
+                        : "Filtrar por producto..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                <Command>
+                    <CommandInput placeholder="Buscar producto..." />
+                    <CommandEmpty>No se encontró el producto.</CommandEmpty>
+                    <CommandGroup>
+                        {products.map((p) => (
+                            <CommandItem
+                                key={p.id}
+                                value={p.name}
+                                onSelect={() => {
+                                    setFilterProductId(p.id === filterProductId ? '' : p.id)
+                                    setComboboxOpen(false)
+                                }}
+                            >
+                                <Check
+                                    className={cn(
+                                        "mr-2 h-4 w-4",
+                                        filterProductId === p.id ? "opacity-100" : "opacity-0"
+                                    )}
+                                />
+                                {p.name}
+                            </CommandItem>
+                        ))}
+                    </CommandGroup>
+                </Command>
+            </PopoverContent>
+        </Popover>
+        
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button
+                    variant={"outline"}
+                    className={cn(
+                    "w-full md:w-[240px] justify-start text-left font-normal",
+                    !dateRange && "text-muted-foreground"
+                    )}
+                >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                    dateRange.to ? (
+                        <>
+                        {format(dateRange.from, "LLL dd, y")} -{" "}
+                        {format(dateRange.to, "LLL dd, y")}
+                        </>
+                    ) : (
+                        format(dateRange.from, "LLL dd, y")
+                    )
+                    ) : (
+                    <span>Rango de fechas</span>
+                    )}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                />
+            </PopoverContent>
+        </Popover>
+
+        <Select value={filterPlatformId} onValueChange={setFilterPlatformId}>
+            <SelectTrigger className="w-full md:w-[180px]">
+                <SelectValue placeholder="Plataforma" />
+            </SelectTrigger>
+            <SelectContent>
+                {platforms.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+
+        <Select value={filterCarrierId} onValueChange={setFilterCarrierId}>
+            <SelectTrigger className="w-full md:w-[180px]">
+                <SelectValue placeholder="Transportadora" />
+            </SelectTrigger>
+            <SelectContent>
+                {carriers.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+
+        {hasActiveFilters && (
+            <Button variant="ghost" onClick={clearFilters}>
+                <X className="mr-2 h-4 w-4" />
+                Limpiar filtros
+            </Button>
+        )}
+    </div>
+  );
 
   if (user?.role !== 'logistics' && user?.role !== 'admin') {
     return (
@@ -218,6 +354,7 @@ export default function HistoryPage() {
                 </CardDescription>
                 </CardHeader>
                 <CardContent>
+                {renderFilters()}
                 <Table>
                     <TableHeader>
                     <TableRow>
@@ -239,8 +376,8 @@ export default function HistoryPage() {
                                 <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                             </TableRow>
                         ))
-                    ) : sortedMovements.length > 0 ? (
-                        sortedMovements.map((movement) => (
+                    ) : filteredMovements.length > 0 ? (
+                        filteredMovements.map((movement) => (
                         <TableRow key={movement.id}>
                             <TableCell className="font-medium">
                             {format(new Date(movement.date), "dd/MM/yyyy HH:mm")}
@@ -258,7 +395,10 @@ export default function HistoryPage() {
                     ) : (
                         <TableRow>
                         <TableCell colSpan={5} className="text-center">
-                            No hay movimientos de inventario registrados.
+                            {hasActiveFilters
+                                ? "No se encontraron movimientos para los filtros seleccionados."
+                                : "No hay movimientos de inventario registrados."
+                            }
                         </TableCell>
                         </TableRow>
                     )}
@@ -277,114 +417,7 @@ export default function HistoryPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="mb-4 flex flex-wrap items-center gap-4">
-                        <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={comboboxOpen}
-                                    className="w-full md:w-[250px] justify-between"
-                                >
-                                    {filterProductId
-                                        ? products.find((p) => p.id === filterProductId)?.name
-                                        : "Filtrar por producto..."}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Buscar producto..." />
-                                    <CommandEmpty>No se encontró el producto.</CommandEmpty>
-                                    <CommandGroup>
-                                        {products.map((p) => (
-                                            <CommandItem
-                                                key={p.id}
-                                                value={p.name}
-                                                onSelect={() => {
-                                                    setFilterProductId(p.id === filterProductId ? '' : p.id)
-                                                    setComboboxOpen(false)
-                                                }}
-                                            >
-                                                <Check
-                                                    className={cn(
-                                                        "mr-2 h-4 w-4",
-                                                        filterProductId === p.id ? "opacity-100" : "opacity-0"
-                                                    )}
-                                                />
-                                                {p.name}
-                                            </CommandItem>
-                                        ))}
-                                    </CommandGroup>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
-                        
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                    "w-full md:w-[240px] justify-start text-left font-normal",
-                                    !dateRange && "text-muted-foreground"
-                                    )}
-                                >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {dateRange?.from ? (
-                                    dateRange.to ? (
-                                        <>
-                                        {format(dateRange.from, "LLL dd, y")} -{" "}
-                                        {format(dateRange.to, "LLL dd, y")}
-                                        </>
-                                    ) : (
-                                        format(dateRange.from, "LLL dd, y")
-                                    )
-                                    ) : (
-                                    <span>Rango de fechas</span>
-                                    )}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                    initialFocus
-                                    mode="range"
-                                    defaultMonth={dateRange?.from}
-                                    selected={dateRange}
-                                    onSelect={setDateRange}
-                                    numberOfMonths={2}
-                                />
-                            </PopoverContent>
-                        </Popover>
-
-                        <Select value={filterPlatformId} onValueChange={setFilterPlatformId}>
-                            <SelectTrigger className="w-full md:w-[180px]">
-                                <SelectValue placeholder="Plataforma" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {platforms.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        <Select value={filterCarrierId} onValueChange={setFilterCarrierId}>
-                            <SelectTrigger className="w-full md:w-[180px]">
-                                <SelectValue placeholder="Transportadora" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {carriers.map(c => (
-                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        {hasActiveFilters && (
-                            <Button variant="ghost" onClick={clearFilters}>
-                                <X className="mr-2 h-4 w-4" />
-                                Limpiar filtros
-                            </Button>
-                        )}
-                    </div>
+                    {renderFilters()}
                     {loading ? (
                         <div className="space-y-4">
                             <Skeleton className="h-12 w-full" />
@@ -455,3 +488,4 @@ export default function HistoryPage() {
     </div>
   );
 }
+
