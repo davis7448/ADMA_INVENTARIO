@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getProductById, getProductPerformanceData, getVendedores, getPlatforms } from '@/lib/api';
-import type { Product, ProductPerformanceData, Vendedor, Platform } from '@/lib/types';
+import type { Product, ProductPerformanceData, Vendedor, Platform, ProductVariant } from '@/lib/types';
 import SalesChart from './sales-chart';
 import CarrierChart from './carrier-chart';
 import ReturnsChart from './returns-chart';
@@ -38,6 +38,8 @@ import { Button } from './ui/button';
 import { ProductReservationDialog } from './product-reservation-dialog';
 import { LinkIcon } from 'lucide-react';
 import Link from 'next/link';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Label } from './ui/label';
 
 interface ProductDetailDialogProps {
   productId: string;
@@ -53,6 +55,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
   const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
+  const [selectedVariantId, setSelectedVariantId] = useState<string>('total');
 
   const refreshData = async () => {
     if (productId && open) {
@@ -75,6 +78,12 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   useEffect(() => {
     refreshData();
   }, [productId, open]);
+  
+  useEffect(() => {
+    if (!open) {
+      setSelectedVariantId('total');
+    }
+  }, [open]);
 
   const totalReservedStock = useMemo(() => {
     if (!product?.reservations) return 0;
@@ -83,33 +92,64 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
 
   const salesData = useMemo(() => {
     if (!performanceData) return [];
-    const salesByDay = performanceData.salesByDay;
+    
+    const dataSet = selectedVariantId === 'total' 
+        ? performanceData.salesByDay 
+        : performanceData.salesByVariant?.[selectedVariantId]?.byDay || {};
 
     const data = Array.from({ length: 30 }).map((_, i) => {
       const date = subDays(new Date(), i);
       const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
       return {
         date: dayKey,
-        sales: salesByDay[dayKey] || 0,
+        sales: dataSet[dayKey] || 0,
       };
     }).reverse();
 
     return data;
-  }, [performanceData]);
+  }, [performanceData, selectedVariantId]);
 
   const returnsData = useMemo(() => {
     if (!performanceData) return [];
-    const returnsByDay = performanceData.returnsByDay;
+    
+    const dataSet = selectedVariantId === 'total'
+        ? performanceData.returnsByDay
+        : performanceData.returnsByVariant?.[selectedVariantId]?.byDay || {};
 
     const data = Array.from({ length: 30 }).map((_, i) => {
         const date = subDays(new Date(), i);
         const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
         return {
             date: dayKey,
-            returns: returnsByDay[dayKey] || 0,
+            returns: dataSet[dayKey] || 0,
         };
     }).reverse();
-}, [performanceData]);
+  }, [performanceData, selectedVariantId]);
+
+  const salesByCarrierData = useMemo(() => {
+    if (!performanceData) return [];
+    const dataSet = selectedVariantId === 'total'
+        ? performanceData.salesByCarrier
+        : performanceData.salesByVariant?.[selectedVariantId]?.byCarrier || [];
+    return dataSet;
+  }, [performanceData, selectedVariantId]);
+
+  const salesByPlatformData = useMemo(() => {
+    if (!performanceData) return [];
+    const dataSet = selectedVariantId === 'total'
+        ? performanceData.salesByPlatform
+        : performanceData.salesByVariant?.[selectedVariantId]?.byPlatform || [];
+    return dataSet;
+  }, [performanceData, selectedVariantId]);
+
+  const returnsByCarrierData = useMemo(() => {
+    if (!performanceData) return [];
+    const dataSet = selectedVariantId === 'total'
+        ? performanceData.returnsByCarrier
+        : performanceData.returnsByVariant?.[selectedVariantId]?.byCarrier || [];
+    return dataSet;
+  }, [performanceData, selectedVariantId]);
+
 
   const handleReservationSuccess = () => {
     setIsReservationDialogOpen(false);
@@ -291,6 +331,27 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                 </Card>
               )}
 
+              {product.productType === 'variable' && (
+                <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/50">
+                    <Label htmlFor="variant-filter" className="text-sm font-medium">
+                        Mostrar datos para:
+                    </Label>
+                    <Select value={selectedVariantId} onValueChange={setSelectedVariantId}>
+                        <SelectTrigger id="variant-filter" className="w-[300px]">
+                            <SelectValue placeholder="Seleccionar vista" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="total">Todas las Variantes (Total)</SelectItem>
+                            {product.variants?.map((v) => (
+                                <SelectItem key={v.id} value={v.id}>
+                                    {v.name} ({v.sku})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
@@ -318,7 +379,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                         <CardDescription>Distribution of units dispatched by each carrier.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <CarrierChart data={performanceData?.salesByCarrier || []} />
+                        <CarrierChart data={salesByCarrierData} />
                     </CardContent>
                 </Card>
 
@@ -328,7 +389,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                         <CardDescription>Distribution of units dispatched for each platform.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <CarrierChart data={performanceData?.salesByPlatform || []} />
+                        <CarrierChart data={salesByPlatformData} />
                     </CardContent>
                 </Card>
 
@@ -338,7 +399,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                         <CardDescription>Distribution of units returned by each carrier.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <CarrierChart data={performanceData?.returnsByCarrier || []} />
+                        <CarrierChart data={returnsByCarrierData} />
                     </CardContent>
                 </Card>
               </div>

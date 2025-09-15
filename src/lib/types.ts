@@ -185,6 +185,19 @@ export interface ProductPerformanceData {
     returnsByCarrier: { name: string; value: number }[];
     salesByDay: Record<string, number>;
     returnsByDay: Record<string, number>;
+    salesByVariant?: {
+        [variantId: string]: {
+            byCarrier: { name: string; value: number }[];
+            byPlatform: { name: string; value: number }[];
+            byDay: Record<string, number>;
+        }
+    };
+    returnsByVariant?: {
+        [variantId: string]: {
+            byCarrier: { name: string; value: number }[];
+            byDay: Record<string, number>;
+        }
+    };
 }
 
 export type Vendedor = {

@@ -696,12 +696,17 @@ export const updateRotationCategories = async (categories: RotationCategory[]): 
 };
 
 export const getProductPerformanceData = async (productId: string): Promise<ProductPerformanceData> => {
-    const [dispatchOrders, movements, carriers, platforms] = await Promise.all([
+    const [product, dispatchOrders, movements, carriers, platforms] = await Promise.all([
+        getProductById(productId),
         getDispatchOrders(),
         getInventoryMovementsByProductId(productId),
         getCarriers(),
         getPlatforms(),
     ]);
+
+    if (!product) {
+        throw new Error("Product not found");
+    }
 
     const carrierMap = new Map(carriers.map(c => [c.id, c.name]));
     const platformMap = new Map(platforms.map(p => [p.id, p.name]));
@@ -711,19 +716,51 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     const salesByDay: Record<string, number> = {};
     const returnsByDay: Record<string, number> = {};
     const returnsByCarrier: Record<string, number> = {};
+    
+    const salesByVariant: ProductPerformanceData['salesByVariant'] = {};
+    const returnsByVariant: ProductPerformanceData['returnsByVariant'] = {};
+
+    const initializeVariantData = (variantId: string) => {
+        if (!salesByVariant![variantId]) {
+            salesByVariant![variantId] = { byCarrier: [], byPlatform: [], byDay: {} };
+        }
+        if (!returnsByVariant![variantId]) {
+            returnsByVariant![variantId] = { byCarrier: [], byDay: {} };
+        }
+    };
+
+    if (product.productType === 'variable' && product.variants) {
+        product.variants.forEach(v => initializeVariantData(v.id));
+    }
 
     // Process dispatch orders for sales data
     for (const order of dispatchOrders) {
-        const productInOrder = order.products.find(p => p.productId === productId);
-        if (productInOrder) {
-            const carrierName = carrierMap.get(order.carrierId) || 'Unknown Carrier';
-            const platformName = platformMap.get(order.platformId) || 'Unknown Platform';
+        for (const p of order.products) {
+            if (p.productId === productId) {
+                const carrierName = carrierMap.get(order.carrierId) || 'Unknown Carrier';
+                const platformName = platformMap.get(order.platformId) || 'Unknown Platform';
+                const day = format(startOfDay(new Date(order.date)), 'yyyy-MM-dd');
+                const qty = p.quantity;
 
-            salesByCarrier[carrierName] = (salesByCarrier[carrierName] || 0) + productInOrder.quantity;
-            salesByPlatform[platformName] = (salesByPlatform[platformName] || 0) + productInOrder.quantity;
-            
-            const day = format(startOfDay(new Date(order.date)), 'yyyy-MM-dd');
-            salesByDay[day] = (salesByDay[day] || 0) + productInOrder.quantity;
+                // Aggregate total data
+                salesByCarrier[carrierName] = (salesByCarrier[carrierName] || 0) + qty;
+                salesByPlatform[platformName] = (salesByPlatform[platformName] || 0) + qty;
+                salesByDay[day] = (salesByDay[day] || 0) + qty;
+
+                // Aggregate variant data
+                if (p.variantId && salesByVariant && salesByVariant[p.variantId]) {
+                    const variantSales = salesByVariant[p.variantId]!;
+                    variantSales.byDay[day] = (variantSales.byDay[day] || 0) + qty;
+
+                    const carrierRecord = variantSales.byCarrier.find(c => c.name === carrierName);
+                    if (carrierRecord) carrierRecord.value += qty;
+                    else variantSales.byCarrier.push({ name: carrierName, value: qty });
+                    
+                    const platformRecord = variantSales.byPlatform.find(pl => pl.name === platformName);
+                    if (platformRecord) platformRecord.value += qty;
+                    else variantSales.byPlatform.push({ name: platformName, value: qty });
+                }
+            }
         }
     }
     
@@ -737,12 +774,29 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
 
     for (const movement of returnMovements) {
         const day = format(startOfDay(new Date(movement.date)), 'yyyy-MM-dd');
-        returnsByDay[day] = (returnsByDay[day] || 0) + movement.quantity;
+        const qty = movement.quantity;
         
-        // Extract carrier from notes
+        // Aggregate total returns
+        returnsByDay[day] = (returnsByDay[day] || 0) + qty;
         const carrierMatch = movement.notes.match(/Transportadora: (.*?)$/);
         const carrierName = carrierMatch ? carrierMatch[1].trim() : 'Unknown';
-        returnsByCarrier[carrierName] = (returnsByCarrier[carrierName] || 0) + movement.quantity;
+        returnsByCarrier[carrierName] = (returnsByCarrier[carrierName] || 0) + qty;
+
+        // Aggregate variant returns (requires SKU in notes)
+        if (product.productType === 'variable' && product.variants) {
+            const variantSkuMatch = movement.notes.match(/SKU: (\S+)/);
+            if (variantSkuMatch) {
+                const variant = product.variants.find(v => v.sku === variantSkuMatch[1]);
+                if (variant && variant.id && returnsByVariant && returnsByVariant[variant.id]) {
+                    const variantReturns = returnsByVariant[variant.id]!;
+                    variantReturns.byDay[day] = (variantReturns.byDay[day] || 0) + qty;
+                    
+                    const carrierRecord = variantReturns.byCarrier.find(c => c.name === carrierName);
+                    if (carrierRecord) carrierRecord.value += qty;
+                    else variantReturns.byCarrier.push({ name: carrierName, value: qty });
+                }
+            }
+        }
     }
 
     return {
@@ -751,6 +805,8 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
         returnsByCarrier: Object.entries(returnsByCarrier).map(([name, value]) => ({ name, value })),
         salesByDay,
         returnsByDay,
+        salesByVariant,
+        returnsByVariant
     };
 };
 
