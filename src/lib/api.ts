@@ -966,22 +966,14 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
             (m) => m.type === 'Salida' && new Date(m.date) >= sevenDaysAgo
         );
 
-        const salesBySku: Record<string, number> = {};
+        const salesByProductId: Record<string, number> = {};
         for (const movement of recentSaleMovements) {
-            const product = products.find(p => p.id === movement.productId);
-            if (product) {
-                 if (product.productType === 'variable' && product.variants) {
-                    for (const variant of product.variants) {
-                        salesBySku[variant.sku] = (salesBySku[variant.sku] || 0) + movement.quantity;
-                    }
-                } else if (product.sku) {
-                     salesBySku[product.sku] = (salesBySku[product.sku] || 0) + movement.quantity;
-                }
-            }
+            salesByProductId[movement.productId] = (salesByProductId[movement.productId] || 0) + movement.quantity;
         }
         
         const sortedRotationCategories = [...rotationCategories].sort((a,b) => b.salesThreshold - a.salesThreshold);
-        const getRotationCategoryName = (sales: number): string => {
+        const getRotationCategoryName = (productId: string): string => {
+            const sales = salesByProductId[productId] || 0;
             for (const category of sortedRotationCategories) {
                 if (sales >= category.salesThreshold) {
                     return category.name;
@@ -992,13 +984,12 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
 
         const itemsToCheck: any[] = [];
         for (const product of products) {
-            const totalReserved = (Array.isArray(product.reservations) ? product.reservations : []).reduce((sum, res) => sum + res.quantity, 0);
-            const salesLast7Days = salesBySku[product.sku || ''] || 0;
-            const rotationName = getRotationCategoryName(salesLast7Days);
-
+            const rotationName = getRotationCategoryName(product.id);
             if (rotationName === 'Inactivo') continue;
 
             if (product.productType === 'simple' && product.sku) {
+                const totalReserved = (Array.isArray(product.reservations) ? product.reservations : []).reduce((sum, res) => sum + res.quantity, 0);
+                const salesLast7Days = salesByProductId[product.id] || 0;
                 itemsToCheck.push({
                     productName: product.name,
                     physicalStock: product.stock,
@@ -1009,19 +1000,18 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
                 });
             } else if (product.productType === 'variable' && product.variants) {
                 for (const variant of product.variants) {
+                    // Sales are aggregated at the parent level, so we use the parent's sales data for the check.
+                    // This is a simplification; a more complex system might track variant-level sales.
+                    const salesLast7Days = salesByProductId[product.id] || 0; 
                     const variantReserved = (Array.isArray(product.reservations) ? product.reservations : [])
                         .filter(r => r.variantId === variant.id)
                         .reduce((sum, res) => sum + res.quantity, 0);
-                    const variantSales = salesBySku[variant.sku] || 0;
-                    const variantRotationName = getRotationCategoryName(variantSales);
-
-                    if (variantRotationName === 'Inactivo') continue;
 
                     itemsToCheck.push({
                         productName: `${product.name} - ${variant.name}`,
                         physicalStock: variant.stock,
                         reservedStock: variantReserved,
-                        salesLast7Days: variantSales,
+                        salesLast7Days: salesLast7Days,
                         // Pass through data for storage
                         id: `${product.id}-${variant.id}`, name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
                     });
