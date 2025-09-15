@@ -9,8 +9,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { getDispatchOrders, getProducts } from '@/lib/api';
-import type { DispatchOrder, Product } from '@/lib/types';
+import { getDispatchOrders, getProducts, getCarriers } from '@/lib/api';
+import type { DispatchOrder, Product, Carrier } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, AlertTriangle } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import DashboardOrdersChart from '@/components/dashboard-orders-chart';
+import DashboardPendingChart from '@/components/dashboard-pending-chart';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function DashboardPage() {
@@ -27,14 +28,16 @@ export default function DashboardPage() {
   });
   const [allOrders, setAllOrders] = useState<DispatchOrder[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [allCarriers, setAllCarriers] = useState<Carrier[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [orders, products] = await Promise.all([getDispatchOrders(), getProducts()]);
+      const [orders, products, carriers] = await Promise.all([getDispatchOrders(), getProducts(), getCarriers()]);
       setAllOrders(orders);
       setAllProducts(products);
+      setAllCarriers(carriers);
       setLoading(false);
     };
     fetchData();
@@ -44,13 +47,28 @@ export default function DashboardPage() {
     const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
     const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
 
+    const carrierMap = new Map(allCarriers.map(c => [c.id, c.name]));
+
     const ordersInPeriod = allOrders.filter(order => {
       const orderDate = new Date(order.date);
       return orderDate >= fromDate && orderDate <= toDate;
     });
 
-    const totalPendingStock = allProducts.reduce((sum, p) => sum + (p.pendingStock || 0), 0);
-    const totalDamagedStock = allProducts.reduce((sum, p) => sum + (p.damagedStock || 0), 0);
+    const pendingAndPartialOrders = allOrders.filter(
+        order => order.status === 'Pendiente' || order.status === 'Parcial'
+    );
+    const totalPendingOrders = pendingAndPartialOrders.length;
+    
+    const pendingByCarrier = pendingAndPartialOrders.reduce((acc, order) => {
+        const carrierName = carrierMap.get(order.carrierId) || 'Desconocido';
+        acc[carrierName] = (acc[carrierName] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+
+    const pendingChartData = Object.entries(pendingByCarrier)
+        .map(([name, value]) => ({ name, orders: value }))
+        .sort((a,b) => b.orders - a.orders);
+
 
     const ordersByDay = ordersInPeriod.reduce((acc, order) => {
         const day = format(new Date(order.date), 'yyyy-MM-dd');
@@ -72,11 +90,11 @@ export default function DashboardPage() {
 
     return {
       ordersInPeriod,
-      totalPendingStock,
-      totalDamagedStock,
+      totalPendingOrders,
+      pendingChartData,
       chartData,
     };
-  }, [dateRange, allOrders, allProducts]);
+  }, [dateRange, allOrders, allCarriers]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -121,14 +139,13 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Skeleton className="h-40" />
-            <Skeleton className="h-40" />
-            <Skeleton className="h-40" />
+         <div className="grid gap-4 md:grid-cols-2">
+            <Skeleton className="h-48" />
+            <Skeleton className="h-48" />
          </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card className="col-span-1 lg:col-span-1">
+        <div className="grid gap-4 md:grid-cols-2">
+            <Card className="col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Órdenes Movilizadas</CardTitle>
                 <PackageCheck className="h-4 w-4 text-muted-foreground" />
@@ -138,35 +155,27 @@ export default function DashboardPage() {
                 <p className="text-xs text-muted-foreground">
                     Total de despachos generados en el período.
                 </p>
-                <div className="h-24 mt-4">
+                <div className="h-32 mt-4">
                     <DashboardOrdersChart data={filteredData.chartData} />
                 </div>
             </CardContent>
             </Card>
             <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Productos Pendientes</CardTitle>
+                <CardTitle className="text-sm font-medium">Despachos Pendientes/Parciales</CardTitle>
                 <PackageX className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold">{filteredData.totalPendingStock}</div>
-                <p className="text-xs text-muted-foreground">Unidades totales esperando resolución.</p>
-            </CardContent>
-            </Card>
-            <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Productos en Avería</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-destructive" />
-            </CardHeader>
-            <CardContent>
-                <div className="text-2xl font-bold">{filteredData.totalDamagedStock}</div>
-                <p className="text-xs text-muted-foreground">Unidades totales no aptas para la venta.</p>
+                <div className="text-2xl font-bold">{filteredData.totalPendingOrders}</div>
+                <p className="text-xs text-muted-foreground">Órdenes totales esperando procesamiento o resolución.</p>
+                 <div className="h-32 mt-4">
+                    <DashboardPendingChart data={filteredData.pendingChartData} />
+                </div>
             </CardContent>
             </Card>
         </div>
       )}
 
-      {/* Remove previous content */}
     </div>
   );
 }
