@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -324,6 +323,10 @@ export default function LogisticsPage() {
         if (quantity >= 0) {
             setReceivedProducts(prev => prev.map(p => p.id === productId ? { ...p, receiveQuantity: quantity } : p));
         }
+    };
+
+    const handleRemoveReceivedProduct = (productId: string) => {
+        setReceivedProducts(prev => prev.filter(p => p.id !== productId));
     };
 
     const handleRegisterEntry = async () => {
@@ -764,6 +767,7 @@ export default function LogisticsPage() {
                                                 <TableHead>Producto</TableHead>
                                                 <TableHead>SKU</TableHead>
                                                 <TableHead className="text-center w-[150px]">Cantidad</TableHead>
+                                                <TableHead className="text-right">Acciones</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -790,11 +794,16 @@ export default function LogisticsPage() {
                                                                 min="0"
                                                             />
                                                         </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveReceivedProduct(product.id)}>
+                                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                                            </Button>
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={4} className="text-center">Escanea o busca un producto para comenzar.</TableCell>
+                                                    <TableCell colSpan={5} className="text-center">Escanea o busca un producto para comenzar.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
@@ -952,5 +961,7 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
 
     
