@@ -192,6 +192,14 @@ export default function LogisticsPage() {
         setDispatchedProducts(prev => prev.filter(p => p.id !== productId));
     };
 
+    const handleDispatchQuantityChange = (productId: string, quantity: number) => {
+        if (quantity >= 0) {
+            setDispatchedProducts(prev => 
+                prev.map(p => p.id === productId ? { ...p, dispatchQuantity: quantity } : p)
+            );
+        }
+    };
+
     const handleCreateDispatch = async () => {
         if (!platform || !carrier || dispatchedProducts.length === 0) {
             toast({
@@ -638,7 +646,7 @@ export default function LogisticsPage() {
                                                 <TableHead className="w-[80px]">Imagen</TableHead>
                                                 <TableHead>Producto</TableHead>
                                                 <TableHead>SKU</TableHead>
-                                                <TableHead className="text-center">Cantidad</TableHead>
+                                                <TableHead className="text-center w-[150px]">Cantidad</TableHead>
                                                 <TableHead className="text-right">Acciones</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -657,7 +665,15 @@ export default function LogisticsPage() {
                                                 </TableCell>
                                                 <TableCell className="font-medium">{product.name}</TableCell>
                                                 <TableCell>{product.sku}</TableCell>
-                                                <TableCell className="text-center">{product.dispatchQuantity}</TableCell>
+                                                <TableCell className="text-center">
+                                                    <Input 
+                                                        type="number"
+                                                        className="w-24 text-center mx-auto"
+                                                        value={product.dispatchQuantity}
+                                                        onChange={(e) => handleDispatchQuantityChange(product.id, parseInt(e.target.value, 10))}
+                                                        min="1"
+                                                    />
+                                                </TableCell>
                                                 <TableCell className="text-right">
                                                     <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(product.id)}>
                                                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -883,5 +899,7 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
 
     
