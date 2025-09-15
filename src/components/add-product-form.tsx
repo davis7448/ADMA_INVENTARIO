@@ -45,15 +45,6 @@ interface AddProductFormProps {
   onProductAdded: () => void;
 }
 
-function SubmitButton() {
-    const { pending } = useFormStatus();
-    return (
-        <Button type="submit" disabled={pending}>
-            {pending ? 'Adding Product...' : 'Add Product'}
-        </Button>
-    );
-}
-
 export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -126,6 +117,15 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     }
   }, [open, form]);
   
+  function SubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending}>
+            {pending ? 'Adding Product...' : 'Add Product'}
+        </Button>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -235,7 +235,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Supplier</FormLabel>
-                                <Select onValuechange={field.onChange} defaultValue={field.value}>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a supplier" />
