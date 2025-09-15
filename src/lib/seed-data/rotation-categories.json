@@ -1,0 +1,23 @@
+
+[
+    {
+        "id": "rot-1",
+        "name": "Escalada",
+        "description": "Productos con demanda en rápido crecimiento y alto potencial."
+    },
+    {
+        "id": "rot-2",
+        "name": "Activo",
+        "description": "Productos con ventas constantes y movimiento regular."
+    },
+    {
+        "id": "rot-3",
+        "name": "Baja rotación",
+        "description": "Productos con ventas esporádicas o movimiento lento."
+    },
+    {
+        "id": "rot-4",
+        "name": "Sin movimiento",
+        "description": "Productos que no han registrado ventas en un período prolongado."
+    }
+]

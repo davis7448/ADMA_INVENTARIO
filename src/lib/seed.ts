@@ -17,6 +17,7 @@ import suppliers from './seed-data/suppliers.json';
 import categories from './seed-data/categories.json';
 import users from './seed-data/users.json';
 import inventoryMovements from './seed-data/inventory-movements.json';
+import rotationCategories from './seed-data/rotation-categories.json';
 
 // Initialize Firebase Admin SDK
 const app: App = getApps().length
@@ -73,6 +74,7 @@ async function main() {
     await seedCollection('products', products);
     await seedCollection('suppliers', suppliers);
     await seedCollection('categories', categories);
+    await seedCollection('rotationCategories', rotationCategories);
     await seedInventoryMovements();
     
     console.log('\nDatabase seeded successfully!');
@@ -82,5 +84,3 @@ async function main() {
 }
 
 main();
-
-

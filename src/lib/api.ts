@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -568,4 +568,18 @@ export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => 
     }
 
     return pendingItems;
+};
+
+// Settings Functions
+export const getRotationCategories = async (): Promise<RotationCategory[]> => {
+    const rotationCategoriesCol = collection(db, 'rotationCategories');
+    const snapshot = await getDocs(rotationCategoriesCol);
+    const categoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RotationCategory));
+    return categoryList;
+};
+
+export const addRotationCategory = async (category: Omit<RotationCategory, 'id'>): Promise<string> => {
+    const rotationCategoriesCol = collection(db, 'rotationCategories');
+    const docRef = await addDoc(rotationCategoriesCol, category);
+    return docRef.id;
 };

@@ -137,3 +137,9 @@ export interface PendingInventoryItem {
     trackingNumber: string;
     date: string; // Date of the original dispatch
 }
+
+export type RotationCategory = {
+    id: string;
+    name: string;
+    description: string;
+};
