@@ -99,4 +99,5 @@ export interface DispatchOrder {
     products: DispatchOrderProduct[];
     status: 'Pendiente' | 'Despachada' | 'Parcial';
     trackingNumbers: string[];
+    exceptions: { productId: string; quantity: number }[];
 }

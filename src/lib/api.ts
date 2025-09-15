@@ -287,7 +287,7 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers'>) => {
+export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions'>) => {
     const batch = writeBatch(db);
     const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
 
@@ -301,6 +301,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         totalItems: products.reduce((acc, p) => acc + p.quantity, 0),
         status: 'Pendiente',
         trackingNumbers: [],
+        exceptions: [],
     };
     batch.set(dispatchOrderRef, newDispatchOrder);
 
@@ -313,26 +314,31 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
     for (const product of products) {
         // Decrease stock
         const productRef = doc(db, 'products', product.productId);
+        const productSnap = await getDoc(productRef);
+        const currentStock = productSnap.data()?.stock || 0;
+
+        if (currentStock < product.quantity) {
+          throw new Error(`No hay suficiente stock para ${product.name}. Stock actual: ${currentStock}, se requieren: ${product.quantity}`);
+        }
+        
         batch.update(productRef, { 
-            stock: (await getDoc(productRef)).data()!.stock - product.quantity 
+            stock: currentStock - product.quantity 
         });
 
         // Create inventory movement
         const movementRef = doc(collection(db, 'inventoryMovements'));
-        const movementData = {
+        const movementData: Omit<InventoryMovement, 'id'| 'date' | 'movementId'> = {
             type: 'Salida' as const,
             productId: product.productId,
             productName: product.name,
             quantity: product.quantity,
-            date: new Date(),
             notes: notes,
-            // movementId will be added by the 'addInventoryMovement' logic if we unify them
-            // For now, let's assume we might need a different way or just omit it for batch
         };
-         // We can't easily use the transaction for movementId here, so we will manage it differently or accept it.
-         // For simplicity, let's omit the sequential movementId for this batch operation.
-         // A more robust solution would involve a Cloud Function triggered on write.
-        batch.set(movementRef, movementData);
+        
+        // This won't have a sequential ID if done in a batch like this.
+        // For simplicity, we'll let Firestore assign a random ID.
+        // A Cloud Function trigger would be needed for sequential IDs on batched movements.
+        batch.set(movementRef, {...movementData, date: new Date(), movementId: 0});
     }
     
     // Commit the batch
@@ -340,6 +346,13 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
 
     return dispatchOrderRef.id;
 };
+
+export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
+    const q = query(collection(db, 'dispatchOrders'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DispatchOrder));
+}
+
 
 export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const q = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
@@ -351,13 +364,18 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
-    // 1. Update the dispatch order status and tracking numbers
+    // 1. Determine status
+    const status = exceptions.length > 0 ? 'Parcial' : 'Despachada';
+
+
+    // 2. Update the dispatch order status, tracking numbers, and exceptions
     batch.update(orderRef, {
-        status: 'Despachada',
-        trackingNumbers: trackingNumbers
+        status: status,
+        trackingNumbers: trackingNumbers,
+        exceptions: exceptions
     });
 
-    // 2. Handle exceptions: add stock back and create an inventory movement
+    // 3. Handle exceptions: add stock back and create an inventory movement
     for (const ex of exceptions) {
         // Add stock back
         const productRef = doc(db, 'products', ex.productId);
@@ -372,13 +390,16 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         const orderSnap = await getDoc(orderRef);
         const orderData = orderSnap.data();
 
+        // This movement won't have a sequential ID from the counter transaction.
+        // It will be created with a random ID and movementId 0 for now.
         batch.set(movementRef, {
             type: 'Entrada',
             productId: ex.productId,
             productName: productSnap.data()?.name || 'Unknown Product',
             quantity: ex.quantity,
             date: new Date(),
-            notes: `Devolución a stock por excepción en despacho ID: ${orderData?.dispatchId}`
+            notes: `Devolución a stock por excepción en despacho ID: ${orderData?.dispatchId}`,
+            movementId: 0 
         });
     }
 

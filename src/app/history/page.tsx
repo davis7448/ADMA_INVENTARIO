@@ -17,12 +17,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { getInventoryMovements, getProducts, getPlatforms, getCarriers } from '@/lib/api';
+import { getInventoryMovements, getProducts, getPlatforms, getCarriers, getDispatchOrders } from '@/lib/api';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo } from 'react';
-import type { InventoryMovement, Product, Platform, Carrier } from '@/lib/types';
+import type { InventoryMovement, Product, Platform, Carrier, DispatchOrder, DispatchOrderProduct } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -43,27 +43,11 @@ import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 
-
-interface DispatchOrderProduct {
-    productId: string;
-    name: string;
-    sku: string;
-    quantity: number;
-}
-
-interface DispatchOrder {
-  id: string;
-  date: string;
-  totalItems: number;
-  platform: string;
-  carrier: string;
-  products: DispatchOrderProduct[];
-}
-
 export default function HistoryPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [allDispatchOrders, setAllDispatchOrders] = useState<DispatchOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
@@ -87,16 +71,19 @@ export default function HistoryPage() {
         setLoading(true);
         const [
             fetchedMovements, 
+            fetchedDispatchOrders,
             fetchedProducts, 
             fetchedPlatforms, 
             fetchedCarriers
         ] = await Promise.all([
             getInventoryMovements(),
+            getDispatchOrders(),
             getProducts(),
             getPlatforms(),
             getCarriers()
         ]);
         setMovements(fetchedMovements);
+        setAllDispatchOrders(fetchedDispatchOrders);
         setProducts(fetchedProducts);
         setPlatforms(fetchedPlatforms);
         setCarriers(fetchedCarriers);
@@ -104,6 +91,16 @@ export default function HistoryPage() {
     }
     fetchData();
   }, []);
+  
+  const platformNames = useMemo(() => 
+    platforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>),
+    [platforms]
+  );
+
+  const carrierNames = useMemo(() =>
+    carriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>),
+    [carriers]
+  );
   
   const sortedMovements = useMemo(() => 
     [...movements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -136,47 +133,16 @@ export default function HistoryPage() {
 
 
   const dispatchOrders = useMemo(() => {
-    const dispatches: Record<string, DispatchOrder> = {};
-    const salidaMovements = movements.filter(m => m.type === 'Salida' && m.notes.includes('Dispatch ID:'));
-    const productsById = new Map(products.map(p => [p.id, p]));
-    
-    salidaMovements.forEach(m => {
-        const match = m.notes.match(/Dispatch ID: (.*?)\./);
-        if (!match) return;
-        const dispatchId = match[1];
-
-        const platformMatch = m.notes.match(/Plataforma: (.*?)\,/);
-        const carrierMatch = m.notes.match(/Transportadora: (.*)/);
-
-        if (!dispatches[dispatchId]) {
-            dispatches[dispatchId] = {
-                id: dispatchId,
-                date: m.date,
-                totalItems: 0,
-                platform: platformMatch ? platformMatch[1] : 'N/A',
-                carrier: carrierMatch ? carrierMatch[1] : 'N/A',
-                products: [],
-            };
-        }
-        
-        const product = productsById.get(m.productId);
-        
-        dispatches[dispatchId].products.push({ productId: m.productId, name: m.productName, sku: product?.sku || 'N/A', quantity: m.quantity });
-        dispatches[dispatchId].totalItems += m.quantity;
-    });
-
-    let allOrders = Object.values(dispatches).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    let allOrders = [...allDispatchOrders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     if (filterProductId) {
         allOrders = allOrders.filter(order => order.products.some(p => p.productId === filterProductId));
     }
     if (filterPlatformId) {
-        const platformName = platforms.find(p => p.id === filterPlatformId)?.name;
-        allOrders = allOrders.filter(order => order.platform === platformName);
+        allOrders = allOrders.filter(order => order.platformId === filterPlatformId);
     }
     if (filterCarrierId) {
-        const carrierName = carriers.find(c => c.id === filterCarrierId)?.name;
-        allOrders = allOrders.filter(order => order.carrier === carrierName);
+        allOrders = allOrders.filter(order => order.carrierId === filterCarrierId);
     }
     if (dateRange?.from) {
         allOrders = allOrders.filter(order => new Date(order.date) >= startOfDay(dateRange.from!));
@@ -186,12 +152,11 @@ export default function HistoryPage() {
     }
     
     return allOrders;
-
-  }, [movements, products, platforms, carriers, filterProductId, filterPlatformId, filterCarrierId, dateRange]);
+  }, [allDispatchOrders, filterProductId, filterPlatformId, filterCarrierId, dateRange]);
 
   const handleDownloadPdf = (order: DispatchOrder) => {
     const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
-    generatePickingListPDF(order.id, productsForPdf, order.platform, order.carrier, new Date(order.date));
+    generatePickingListPDF(order.dispatchId, productsForPdf, platformNames[order.platformId], carrierNames[order.carrierId], new Date(order.date));
   };
   
   const clearFilters = () => {
@@ -220,7 +185,26 @@ export default function HistoryPage() {
     XLSX.writeFile(workbook, `Historial-Movimientos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
-  const getBadgeClass = (type: 'Entrada' | 'Salida') => {
+  const handleExportExcel = () => {
+    const flattenedData = dispatchOrders.flatMap(order => 
+        order.products.map(product => ({
+            'ID Despacho': order.dispatchId,
+            'Fecha': format(new Date(order.date), "dd/MM/yyyy HH:mm"),
+            'Plataforma': platformNames[order.platformId] || 'N/A',
+            'Transportadora': carrierNames[order.carrierId] || 'N/A',
+            'SKU Producto': product.sku,
+            'Nombre Producto': product.name,
+            'Cantidad': product.quantity,
+        }))
+    );
+
+    const worksheet = XLSX.utils.json_to_sheet(flattenedData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Despachos");
+    XLSX.writeFile(workbook, `Historial-Despachos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
+
+  const getMovementBadgeClass = (type: 'Entrada' | 'Salida') => {
     switch (type) {
       case 'Entrada':
         return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
@@ -228,6 +212,19 @@ export default function HistoryPage() {
         return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
       default:
         return '';
+    }
+  };
+
+  const getDispatchStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial') => {
+    switch (status) {
+      case 'Pendiente':
+        return <Badge variant="destructive">Pendiente</Badge>;
+      case 'Despachada':
+        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Despachada</Badge>;
+      case 'Parcial':
+        return <Badge variant="secondary">Parcial</Badge>;
+      default:
+        return <Badge variant="outline">Desconocido</Badge>;
     }
   };
   
@@ -410,13 +407,13 @@ export default function HistoryPage() {
                     ) : filteredMovements.length > 0 ? (
                         filteredMovements.map((movement) => (
                         <TableRow key={movement.id}>
-                             <TableCell className="font-mono text-xs">{movement.movementId}</TableCell>
+                             <TableCell className="font-mono text-xs">{movement.movementId || 'N/A'}</TableCell>
                             <TableCell className="font-medium">
                             {format(new Date(movement.date), "dd/MM/yyyy HH:mm")}
                             </TableCell>
                             <TableCell>{movement.productName}</TableCell>
                             <TableCell>
-                            <Badge variant="outline" className={getBadgeClass(movement.type)}>
+                            <Badge variant="outline" className={getMovementBadgeClass(movement.type)}>
                                 {movement.type}
                             </Badge>
                             </TableCell>
@@ -443,10 +440,18 @@ export default function HistoryPage() {
           <TabsContent value="dispatches">
             <Card>
                 <CardHeader>
-                  <CardTitle>Órdenes de Despacho Generadas</CardTitle>
-                  <CardDescription>
-                      Un historial de todos los picking lists generados. Filtra para encontrar órdenes específicas.
-                  </CardDescription>
+                  <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle>Órdenes de Despacho Generadas</CardTitle>
+                        <CardDescription>
+                            Un historial de todos los picking lists generados. Filtra para encontrar órdenes específicas.
+                        </CardDescription>
+                      </div>
+                      <Button variant="outline" onClick={handleExportExcel}>
+                          <FileSpreadsheet className="mr-2 h-4 w-4" />
+                          Exportar a Excel
+                      </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                     {renderFilters()}
@@ -463,14 +468,17 @@ export default function HistoryPage() {
                                     <AccordionTrigger>
                                         <div className="flex justify-between items-center w-full pr-4">
                                             <div className="text-left">
-                                                <p className="font-semibold">{order.id}</p>
+                                                <p className="font-semibold">{order.dispatchId}</p>
                                                 <p className="text-sm text-muted-foreground">
                                                     {format(new Date(order.date), "dd/MM/yyyy HH:mm")} - {order.totalItems} items
                                                 </p>
                                             </div>
+                                            <div className="text-center px-4">
+                                                {getDispatchStatusBadge(order.status)}
+                                            </div>
                                             <div className="text-right">
-                                                <p className="text-sm font-medium">{order.platform}</p>
-                                                <p className="text-sm text-muted-foreground">{order.carrier}</p>
+                                                <p className="text-sm font-medium">{platformNames[order.platformId]}</p>
+                                                <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                             </div>
                                         </div>
                                     </AccordionTrigger>
@@ -481,17 +489,22 @@ export default function HistoryPage() {
                                                     <TableRow>
                                                         <TableHead>Producto</TableHead>
                                                         <TableHead>SKU</TableHead>
-                                                        <TableHead className="text-right">Cantidad</TableHead>
+                                                        <TableHead className="text-right">Cant. Pedida</TableHead>
+                                                        <TableHead className="text-right">Excepciones</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                    {order.products.map((p, i) => (
-                                                        <TableRow key={i} className={p.productId === filterProductId ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
-                                                            <TableCell>{p.name}</TableCell>
-                                                            <TableCell>{p.sku}</TableCell>
-                                                            <TableCell className="text-right">{p.quantity}</TableCell>
-                                                        </TableRow>
-                                                    ))}
+                                                    {order.products.map((p) => {
+                                                        const exception = order.exceptions?.find(e => e.productId === p.productId);
+                                                        return (
+                                                            <TableRow key={p.productId} className={p.productId === filterProductId ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
+                                                                <TableCell>{p.name}</TableCell>
+                                                                <TableCell>{p.sku}</TableCell>
+                                                                <TableCell className="text-right">{p.quantity}</TableCell>
+                                                                <TableCell className="text-right text-destructive">{exception?.quantity || 0}</TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    })}
                                                 </TableBody>
                                             </Table>
                                             <div className="flex justify-end">
@@ -520,5 +533,3 @@ export default function HistoryPage() {
     </div>
   );
 }
-
-    
