@@ -4,11 +4,14 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { User } from '@/lib/types';
-import { findUserByEmail, getUsers } from '@/lib/api';
+import { findUserByUID } from '@/lib/api';
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type User as FirebaseUser } from "firebase/auth";
+import { app } from '@/lib/firebase';
+
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
@@ -20,14 +23,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const auth = getAuth(app);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
-  }, []);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const appUser = await findUserByUID(firebaseUser.uid);
+        setUser(appUser);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [auth]);
 
   useEffect(() => {
     if (!loading && !user && pathname !== '/login') {
@@ -36,19 +46,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, loading, pathname, router]);
 
 
-  const login = async (email: string) => {
-    const foundUser = await findUserByEmail(email);
-    if (foundUser) {
-      localStorage.setItem('user', JSON.stringify(foundUser));
-      setUser(foundUser);
-      router.push('/');
-      return true;
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const appUser = await findUserByUID(userCredential.user.uid);
+        setUser(appUser);
+        router.push('/');
+        return true;
+    } catch (error) {
+        console.error("Login failed:", error);
+        return false;
     }
-    return false;
   };
 
-  const logout = () => {
-    localStorage.removeItem('user');
+  const logout = async () => {
+    await signOut(auth);
     setUser(null);
     router.push('/login');
   };
@@ -56,7 +68,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = { user, login, logout, loading };
 
   if (loading) {
-     // You can return a loading spinner here
     return (
         <div className="flex h-screen items-center justify-center">
             <div>Loading...</div>
@@ -65,7 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   
   if (!user && pathname !== '/login') {
-    return null; // or a loading indicator
+     // Don't render children if not logged in and not on login page
+    return null;
   }
 
   return (

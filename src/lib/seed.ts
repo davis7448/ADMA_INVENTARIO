@@ -3,24 +3,14 @@
  * This is a script to seed the Firestore database with initial data.
  * Run it with `npm run seed`.
  * 
- * Make sure your Firebase project has a Firestore database created.
- * Also, ensure your Security Rules allow writes from a server environment,
- * or run this script with appropriate admin credentials.
- * For development, it's common to have open write rules.
- * 
- * Example Firestore security rule for development (DO NOT USE IN PRODUCTION):
- * rules_version = '2';
- * service cloud.firestore {
- *   match /databases/{database}/documents {
- *     match /{document=**} {
- *       allow read, write: if true;
- *     }
- *   }
- * }
+ * IMPORTANT: Before running, ensure you have enabled:
+ * 1. Firestore in your Firebase project.
+ * 2. Firebase Authentication with the "Email/Password" sign-in method.
  */
 
-import { initializeApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps, App } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { firebaseConfig } from './firebase';
 
 import products from './seed-data/products.json';
@@ -35,70 +25,103 @@ const app = getApps().length
   : initializeApp({ projectId: firebaseConfig.projectId });
 
 const db = getFirestore(app);
+const auth = getAuth(app);
+
+async function seedAuthenticationUsers() {
+    console.log('Seeding authentication users...');
+    let seededCount = 0;
+
+    for (const user of users) {
+        try {
+            // Use a simple, default password for all seeded users
+            const defaultPassword = 'password123';
+            
+            // Check if user already exists
+            try {
+                await auth.getUserByEmail(user.email);
+                console.log(`User ${user.email} already exists in Auth. Skipping.`);
+                continue; // Skip to next user
+            } catch (error: any) {
+                if (error.code !== 'auth/user-not-found') {
+                    throw error; // Re-throw unexpected errors
+                }
+                // If user not found, proceed to create
+            }
+
+            await auth.createUser({
+                uid: user.id,
+                email: user.email,
+                password: defaultPassword,
+                displayName: user.name,
+                photoURL: user.avatarUrl,
+            });
+            seededCount++;
+        } catch (error: any) {
+            if (error.code === 'auth/uid-already-exists') {
+                console.log(`User with UID ${user.id} already exists, skipping.`);
+            } else if (error.code === 'auth/email-already-exists') {
+                console.log(`User with email ${user.email} already exists, skipping.`);
+            } else {
+                console.error(`Error creating auth user ${user.email}:`, error.message);
+            }
+        }
+    }
+    console.log(`Seeded ${seededCount} new authentication users.`);
+}
+
 
 async function seedCollection<T extends { id: string }>(collectionName: string, data: T[]) {
   console.log(`Seeding ${collectionName}...`);
   const collectionRef = db.collection(collectionName);
   const batch = db.batch();
 
-  // Clear existing documents
-  const snapshot = await collectionRef.get();
-  if (!snapshot.empty) {
-    console.log(`Deleting existing documents in ${collectionName}...`);
-    snapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    await batch.commit();
-    console.log(`Deleted ${snapshot.size} documents.`);
-  }
-
-  // Add new documents with specified IDs
-  const newBatch = db.batch();
+  // We will upsert data instead of deleting. This is safer.
   data.forEach((item) => {
     const { id, ...rest } = item;
     const docRef = collectionRef.doc(id);
-    newBatch.set(docRef, rest);
+    batch.set(docRef, rest);
   });
   
-  await newBatch.commit();
-  console.log(`Seeded ${data.length} documents into ${collectionName}.`);
+  await batch.commit();
+  console.log(`Seeded/Updated ${data.length} documents in ${collectionName}.`);
 }
 
 async function seedInventoryMovements() {
     console.log('Seeding inventoryMovements...');
     const collectionRef = db.collection('inventoryMovements');
+
+    // For simplicity, we just add new ones each time.
+    // In a real scenario, you might want to avoid duplicates.
     const batch = db.batch();
-
-    // Clear existing
-    const snapshot = await collectionRef.get();
-    snapshot.docs.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
-
-    // Add new with random dates
-    const newBatch = db.batch();
     inventoryMovements.forEach((movement) => {
-        const docRef = collectionRef.doc();
+        const docRef = collectionRef.doc(); // Create new doc with random ID
         const randomDaysAgo = Math.floor(Math.random() * 30);
         const date = new Date();
         date.setDate(date.getDate() - randomDaysAgo);
 
-        newBatch.set(docRef, { ...movement, date });
+        batch.set(docRef, { ...movement, date });
     });
 
-    await newBatch.commit();
-    console.log(`Seeded ${inventoryMovements.length} documents into inventoryMovements.`);
+    await batch.commit();
+    console.log(`Seeded ${inventoryMovements.length} new documents into inventoryMovements.`);
 }
 
 async function main() {
   try {
     console.log('Starting to seed the database...');
+    
+    // Seed auth users first, as other things might depend on them.
+    await seedAuthenticationUsers();
+    
+    // Seed Firestore collections
+    await seedCollection('users', users);
     await seedCollection('products', products);
     await seedCollection('suppliers', suppliers);
     await seedCollection('categories', categories);
-    await seedCollection('users', users);
     await seedInventoryMovements();
     
     console.log('\nDatabase seeded successfully!');
+    console.log('Default password for all users is "password123"');
   } catch (error) {
     console.error('Error seeding database:', error);
   }

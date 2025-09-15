@@ -1,4 +1,4 @@
-
+import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category } from './types';
@@ -131,13 +131,11 @@ export const getUsers = async (): Promise<User[]> => {
     return userList;
 };
 
-export const findUserByEmail = async (email: string): Promise<User | null> => {
-    const usersRef = collection(db, "users");
-    const q = query(usersRef, where("email", "==", email.toLowerCase()));
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        return { id: userDoc.id, ...userDoc.data() } as User;
+export const findUserByUID = async (uid: string): Promise<User | null> => {
+    const userRef = doc(db, "users", uid);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+        return { id: userSnap.id, ...userSnap.data() } as User;
     }
     return null;
 };

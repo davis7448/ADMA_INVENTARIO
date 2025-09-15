@@ -14,6 +14,7 @@ import { Logo } from '@/components/logo';
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,20 +22,21 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const success = await login(email);
+    const success = await login(email, password);
     if (!success) {
-      setError('Invalid email. Please try again.');
+      setError('Invalid credentials. Please try again.');
     }
     setLoading(false);
   };
 
   const handleDemoLogin = async (demoEmail: string) => {
     setEmail(demoEmail);
+    setPassword('password123'); // Default password for demo users
     setLoading(true);
     setError(null);
-    const success = await login(demoEmail);
+    const success = await login(demoEmail, 'password123');
      if (!success) {
-      setError('Invalid email. Please try again.');
+      setError('Invalid credentials. Please try again.');
     }
     setLoading(false);
   }
@@ -48,7 +50,7 @@ export default function LoginPage() {
         <Card>
           <CardHeader>
             <CardTitle className="font-headline">Login</CardTitle>
-            <CardDescription>Enter your email to access your account.</CardDescription>
+            <CardDescription>Enter your email and password to access your account.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,6 +65,16 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
               {error && (
                  <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -75,7 +87,7 @@ export default function LoginPage() {
               </Button>
             </form>
              <div className="mt-4 text-center text-sm">
-                <p className="text-muted-foreground">Or log in as a demo user:</p>
+                <p className="text-muted-foreground">Or log in as a demo user (password: password123):</p>
                 <div className="mt-2 flex justify-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => handleDemoLogin('admin@example.com')}>Admin</Button>
                     <Button variant="outline" size="sm" onClick={() => handleDemoLogin('logistics@example.com')}>Logistics</Button>
