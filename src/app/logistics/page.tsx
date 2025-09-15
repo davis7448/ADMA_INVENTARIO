@@ -29,8 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts, updateProductStock, addInventoryMovement } from '@/lib/api';
-import type { Product } from '@/lib/types';
+import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms } from '@/lib/api';
+import type { Product, Carrier, Platform } from '@/lib/types';
 import { Barcode, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -60,14 +60,14 @@ interface ReturnedProduct extends Product {
     trackingNumber: string;
 }
 
-const platforms = ['Mercado Libre', 'Shopify', 'Amazon', 'Tienda Propia'];
-const carriers = ['DHL', 'FedEx', 'UPS', 'Estafeta'];
-
 export default function LogisticsPage() {
     const { user } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
     const [allProductsList, setAllProductsList] = useState<Product[]>([]);
+    const [carriers, setCarriers] = useState<Carrier[]>([]);
+    const [platforms, setPlatforms] = useState<Platform[]>([]);
+
 
     // Salidas State
     const [platform, setPlatform] = useState('');
@@ -101,11 +101,17 @@ export default function LogisticsPage() {
     }, [user, router]);
 
     useEffect(() => {
-        async function fetchProducts() {
-            const products = await getProducts();
+        async function fetchData() {
+            const [products, fetchedCarriers, fetchedPlatforms] = await Promise.all([
+                getProducts(),
+                getCarriers(),
+                getPlatforms(),
+            ]);
             setAllProductsList(products);
+            setCarriers(fetchedCarriers);
+            setPlatforms(fetchedPlatforms);
         }
-        fetchProducts();
+        fetchData();
     }, []);
 
     // --- SALIDAS ---
@@ -156,7 +162,7 @@ export default function LogisticsPage() {
                 productId: product.id,
                 productName: product.name,
                 quantity: product.dispatchQuantity,
-                notes: `Plataforma: ${platform}, Transportadora: ${carrier}`
+                notes: `Plataforma: ${platforms.find(p => p.id === platform)?.name}, Transportadora: ${carriers.find(c => c.id === carrier)?.name}`
             });
         });
 
@@ -283,7 +289,7 @@ export default function LogisticsPage() {
                 productId: product.id,
                 productName: product.name,
                 quantity: 1,
-                notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${returnCarrier}`
+                notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${carriers.find(c => c.id === returnCarrier)?.name}`
             });
         });
         
@@ -323,7 +329,7 @@ export default function LogisticsPage() {
             productId: product.id,
             productName: product.name,
             quantity: 1,
-            notes: `Producto averiado: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${damageCarrier}`
+            notes: `Producto averiado: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
         });
 
         toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name} y se ha ajustado el stock.` });
@@ -411,7 +417,7 @@ export default function LogisticsPage() {
                                         <SelectValue placeholder="Seleccionar una plataforma" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        {platforms.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                        {platforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -422,7 +428,7 @@ export default function LogisticsPage() {
                                         <SelectValue placeholder="Seleccionar una transportadora" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                        {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                        {carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -579,7 +585,7 @@ export default function LogisticsPage() {
                                                 <SelectValue placeholder="Seleccionar una transportadora" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                                {carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -652,7 +658,7 @@ export default function LogisticsPage() {
                                                     <SelectValue placeholder="Seleccionar transportadora" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                                    {carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -697,4 +703,3 @@ export default function LogisticsPage() {
     </>
     );
 }
-

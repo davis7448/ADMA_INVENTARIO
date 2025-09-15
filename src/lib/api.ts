@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform } from './types';
 import {v4 as uuidv4} from 'uuid';
 
 // Image Upload Function
@@ -134,6 +134,35 @@ export const getCategoriesByIds = async (ids: string[]): Promise<Record<string, 
     });
     return categories;
 };
+
+// Carrier Functions
+export const getCarriers = async (): Promise<Carrier[]> => {
+    const carriersCol = collection(db, 'carriers');
+    const carrierSnapshot = await getDocs(carriersCol);
+    const carrierList = carrierSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Carrier));
+    return carrierList;
+};
+
+export const addCarrier = async (carrier: Omit<Carrier, 'id'>): Promise<string> => {
+    const carriersCol = collection(db, 'carriers');
+    const docRef = await addDoc(carriersCol, carrier);
+    return docRef.id;
+};
+
+// Platform Functions
+export const getPlatforms = async (): Promise<Platform[]> => {
+    const platformsCol = collection(db, 'platforms');
+    const platformSnapshot = await getDocs(platformsCol);
+    const platformList = platformSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Platform));
+    return platformList;
+};
+
+export const addPlatform = async (platform: Omit<Platform, 'id'>): Promise<string> => {
+    const platformsCol = collection(db, 'platforms');
+    const docRef = await addDoc(platformsCol, platform);
+    return docRef.id;
+};
+
 
 // Order Functions
 export const getOrders = (): Order[] => {

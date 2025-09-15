@@ -69,3 +69,14 @@ export type InventoryMovement = {
   date: string;
   notes: string;
 };
+
+export type Carrier = {
+  id: string;
+  name: string;
+};
+
+export type Platform = {
+    id: string;
+    name: string;
+};
+
