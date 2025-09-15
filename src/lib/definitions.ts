@@ -19,7 +19,7 @@ export const AddProductFormSchema = z.object({
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Threshold must be a number.' }).int('Threshold must be a whole number.').min(0, 'Threshold must be a non-negative number.').optional()
   ),
-  image: z.any().refine(file => file instanceof File, 'Image is required.'),
+  image: z.any().refine(file => file instanceof File && file.size > 0, 'Image is required.'),
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;

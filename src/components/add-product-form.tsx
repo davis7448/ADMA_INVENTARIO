@@ -125,20 +125,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       form.reset();
     }
   }, [open, form]);
-
-  const onFormSubmit = (data: AddProductFormValues) => {
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-            if (key === 'image' && value instanceof File) {
-                formData.append(key, value);
-            } else {
-                 formData.append(key, String(value));
-            }
-        }
-    });
-    formAction(formData);
-  };
   
   return (
     <Dialog open={open} onOpenChange={setOpen}>
