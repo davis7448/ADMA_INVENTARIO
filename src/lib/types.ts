@@ -1,8 +1,15 @@
 
+export type ProductVariant = {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  stock: number;
+};
 
 export type Product = {
   id: string;
-  sku: string;
+  sku?: string; // SKU is now optional for the parent product
   name: string;
   description: string;
   imageUrl: string;
@@ -18,6 +25,7 @@ export type Product = {
   reservations?: Reservation[]; // This will now be populated on the fly
   contentLink?: string;
   productType: 'simple' | 'variable';
+  variants?: ProductVariant[]; // Array to hold variants
 };
 
 export type Reservation = {

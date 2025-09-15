@@ -39,6 +39,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category } from '@/lib/types';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Info } from 'lucide-react';
 
 interface AddProductFormProps {
   onProductAdded: () => void;
@@ -68,6 +70,8 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     },
   });
 
+  const productType = form.watch('productType');
+
   useEffect(() => {
     if (open) {
         Promise.all([getSuppliers(), getCategories()]).then(([fetchedSuppliers, fetchedCategories]) => {
@@ -84,7 +88,11 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
             if (key === 'image' && value instanceof File) {
                 formData.append(key, value);
             } else if (typeof value !== 'object') {
-                formData.append(key, String(value));
+                 if (key === 'sku' && values.productType === 'variable') {
+                    // Don't append SKU for variable products
+                 } else {
+                    formData.append(key, String(value));
+                 }
             }
         }
     });
@@ -139,6 +147,36 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
         </DialogHeader>
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                    control={form.control}
+                    name="productType"
+                    render={({ field }) => (
+                        <FormItem className="space-y-3">
+                            <FormLabel>Product Type</FormLabel>
+                            <FormControl>
+                                <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                className="flex flex-row space-x-4"
+                                >
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="simple" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Simple</FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="variable" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Variable</FormLabel>
+                                </FormItem>
+                                </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -160,7 +198,12 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>SKU</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="e.g., WM-ERGO-01" {...field} />
+                                    <Input 
+                                        placeholder="e.g., WM-ERGO-01" 
+                                        {...field} 
+                                        disabled={productType === 'variable'}
+                                        value={productType === 'variable' ? '' : field.value}
+                                    />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -214,36 +257,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         </FormItem>
                     )}
                 />
-                 <FormField
-                    control={form.control}
-                    name="productType"
-                    render={({ field }) => (
-                        <FormItem className="space-y-3">
-                            <FormLabel>Product Type</FormLabel>
-                            <FormControl>
-                                <RadioGroup
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                                className="flex flex-row space-x-4"
-                                >
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="simple" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Simple</FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="variable" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Variable</FormLabel>
-                                </FormItem>
-                                </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -290,6 +304,15 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         )}
                     />
                 </div>
+                {productType === 'variable' && (
+                    <Alert>
+                        <Info className="h-4 w-4" />
+                        <AlertTitle>Producto Variable</AlertTitle>
+                        <AlertDescription>
+                            El stock y el precio se determinarán por la suma de sus variantes. Podrás añadir variantes después de crear el producto principal.
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FormField
                         control={form.control}
@@ -298,7 +321,14 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Price</FormLabel>
                                 <FormControl>
-                                    <Input type="number" step="0.01" placeholder="e.g., 79.99" {...field} value={field.value ?? ''} />
+                                    <Input 
+                                        type="number" 
+                                        step="0.01" 
+                                        placeholder="e.g., 79.99" 
+                                        {...field} 
+                                        value={productType === 'variable' ? '' : field.value ?? ''} 
+                                        disabled={productType === 'variable'}
+                                    />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -311,7 +341,14 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Stock</FormLabel>
                                 <FormControl>
-                                    <Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />
+                                    <Input 
+                                        type="number" 
+                                        placeholder="e.g., 100" 
+                                        {...field} 
+                                        value={productType === 'variable' ? '' : field.value ?? ''} 
+                                        onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} 
+                                        disabled={productType === 'variable'}
+                                    />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>

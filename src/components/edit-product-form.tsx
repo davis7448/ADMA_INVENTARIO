@@ -40,6 +40,8 @@ import type { EditProductFormValues } from '@/lib/definitions';
 import { EditProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category, Product } from '@/lib/types';
 import Image from 'next/image';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { Info } from 'lucide-react';
 
 interface EditProductFormProps {
   product: Product;
@@ -58,7 +60,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
     resolver: zodResolver(EditProductFormSchema),
     defaultValues: {
       name: product.name,
-      sku: product.sku,
+      sku: product.sku || '',
       description: product.description,
       productType: product.productType || 'simple',
       categoryId: product.categoryId,
@@ -70,6 +72,8 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
       contentLink: product.contentLink || '',
     },
   });
+
+  const productType = form.watch('productType');
 
   useEffect(() => {
     if (open) {
@@ -87,7 +91,11 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
             if (key === 'image' && value instanceof File) {
                 formData.append(key, value);
             } else if (typeof value !== 'object') {
-                formData.append(key, String(value));
+                if (key === 'sku' && values.productType === 'variable') {
+                    // Don't append SKU for variable products
+                } else {
+                    formData.append(key, String(value));
+                }
             }
         }
     });
@@ -123,7 +131,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
   };
   
   useEffect(() => {
-    if (!open) {
+    if (open) {
       form.reset({
         name: product.name,
         sku: product.sku,
@@ -152,6 +160,36 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         </DialogHeader>
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                 <FormField
+                    control={form.control}
+                    name="productType"
+                    render={({ field }) => (
+                        <FormItem className="space-y-3">
+                            <FormLabel>Product Type</FormLabel>
+                            <FormControl>
+                                <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                className="flex flex-row space-x-4"
+                                >
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="simple" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Simple</FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="variable" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Variable</FormLabel>
+                                </FormItem>
+                                </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -173,7 +211,12 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                             <FormItem>
                                 <FormLabel>SKU</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="e.g., WM-ERGO-01" {...field} />
+                                     <Input 
+                                        placeholder="e.g., WM-ERGO-01" 
+                                        {...field} 
+                                        disabled={productType === 'variable'}
+                                        value={productType === 'variable' ? '' : field.value || ''}
+                                    />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -230,36 +273,6 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                         </FormItem>
                     )}
                 />
-                 <FormField
-                    control={form.control}
-                    name="productType"
-                    render={({ field }) => (
-                        <FormItem className="space-y-3">
-                            <FormLabel>Product Type</FormLabel>
-                            <FormControl>
-                                <RadioGroup
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                                className="flex flex-row space-x-4"
-                                >
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="simple" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Simple</FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="variable" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Variable</FormLabel>
-                                </FormItem>
-                                </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -306,6 +319,15 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                         )}
                     />
                 </div>
+                {productType === 'variable' && (
+                     <Alert>
+                        <Info className="h-4 w-4" />
+                        <AlertTitle>Producto Variable</AlertTitle>
+                        <AlertDescription>
+                            El stock y el precio se determinan por la suma de sus variantes. La gestión de variantes estará disponible aquí.
+                        </AlertDescription>
+                    </Alert>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FormField
                         control={form.control}
@@ -314,7 +336,14 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                             <FormItem>
                                 <FormLabel>Price</FormLabel>
                                 <FormControl>
-                                    <Input type="number" step="0.01" placeholder="e.g., 79.99" {...field} value={field.value ?? ''} />
+                                    <Input 
+                                        type="number" 
+                                        step="0.01" 
+                                        placeholder="e.g., 79.99" 
+                                        {...field} 
+                                        value={productType === 'variable' ? '' : field.value ?? ''}
+                                        disabled={productType === 'variable'}
+                                    />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -327,7 +356,14 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                             <FormItem>
                                 <FormLabel>Stock</FormLabel>
                                 <FormControl>
-                                    <Input type="number" placeholder="e.g., 100" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />
+                                    <Input 
+                                        type="number" 
+                                        placeholder="e.g., 100" 
+                                        {...field} 
+                                        value={productType === 'variable' ? '' : field.value ?? ''} 
+                                        onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
+                                        disabled={productType === 'variable'}
+                                    />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -363,4 +399,3 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
     </Dialog>
   );
 }
-    

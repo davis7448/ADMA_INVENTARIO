@@ -8,7 +8,7 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/web
 
 export const AddProductFormSchema = z.object({
   name: z.string().min(1, 'Product name is required.'),
-  sku: z.string().min(1, 'SKU is required.'),
+  sku: z.string().optional(),
   description: z.string().min(1, 'Description is required.'),
   productType: z.enum(['simple', 'variable'], {
     required_error: "You need to select a product type.",
@@ -39,6 +39,15 @@ export const AddProductFormSchema = z.object({
         "Only .jpg, .jpeg, .png and .webp formats are supported."
     ),
   contentLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
+}).refine(data => {
+    // If productType is 'simple', SKU is required.
+    if (data.productType === 'simple') {
+        return data.sku && data.sku.length > 0;
+    }
+    return true;
+}, {
+    message: 'SKU is required for simple products.',
+    path: ['sku'],
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;
