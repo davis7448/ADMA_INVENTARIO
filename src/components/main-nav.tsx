@@ -61,6 +61,7 @@ type NavItem = {
         children: [
             { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
             { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin'], badge: 'stale_alerts' },
+            { href: '/stock-alerts', label: 'Stock', roles: ['admin'] },
         ]
     }
   ];
