@@ -14,9 +14,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { suppliers } from '@/lib/data';
+import { getSuppliers } from '@/lib/api';
 
 export default function SuppliersPage() {
+  const suppliers = getSuppliers();
   return (
     <div className="space-y-6">
       <div>

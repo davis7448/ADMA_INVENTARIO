@@ -6,7 +6,7 @@ const findImage = (id: string) => {
   return image ? { url: image.imageUrl, hint: image.imageHint, description: image.description } : { url: `https://picsum.photos/seed/${id}/600/400`, hint: 'placeholder', description: 'Placeholder image' };
 };
 
-export let products: Product[] = [
+let products: Product[] = [
   {
     id: 'prod-1',
     sku: 'WM-ERGO-01',
@@ -113,34 +113,7 @@ export let products: Product[] = [
   },
 ];
 
-export const addProductToData = (product: Product) => {
-  products.unshift(product);
-};
-
-export const updateProductStock = (productId: string, quantity: number, operation: 'add' | 'subtract') => {
-  const productIndex = products.findIndex(p => p.id === productId);
-  if (productIndex !== -1) {
-    if (operation === 'add') {
-      products[productIndex].stock += quantity;
-    } else {
-      products[productIndex].stock = Math.max(0, products[productIndex].stock - quantity);
-    }
-  }
-};
-
-
-export let inventoryMovements: InventoryMovement[] = [];
-
-export const addInventoryMovement = (movement: Omit<InventoryMovement, 'id' | 'date'>) => {
-  inventoryMovements.unshift({
-    id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-    date: new Date().toISOString(),
-    ...movement,
-  });
-};
-
-
-export const suppliers: Supplier[] = [
+let suppliers: Supplier[] = [
   {
     id: 'sup-1',
     name: 'Global Tech Supplies',
@@ -175,7 +148,7 @@ export const suppliers: Supplier[] = [
   },
 ];
 
-export const orders: Order[] = [
+let orders: Order[] = [
   { id: 'ORD-001', customerName: 'Alice Johnson', customerEmail: 'alice@example.com', date: '2023-10-26', status: 'Delivered', total: 165.98 },
   { id: 'ORD-002', customerName: 'Bob Williams', customerEmail: 'bob@example.com', date: '2023-10-25', status: 'Shipped', total: 899.99 },
   { id: 'ORD-003', customerName: 'Charlie Brown', customerEmail: 'charlie@example.com', date: '2023-10-25', status: 'Processing', total: 79.99 },
@@ -186,14 +159,66 @@ export const orders: Order[] = [
   { id: 'ORD-008', customerName: 'Hannah Montana', customerEmail: 'hannah@example.com', date: '2023-10-20', status: 'Shipped', total: 499.99 },
 ];
 
-export const returnRequests: ReturnRequest[] = [
+let returnRequests: ReturnRequest[] = [
   { id: 'RET-001', orderId: 'ORD-001', customerName: 'Alice Johnson', productName: 'Mechanical RGB Keyboard', reason: 'Defective Key', status: 'Approved', date: '2023-10-28' },
   { id: 'RET-002', orderId: 'ORD-004', customerName: 'Diana Prince', productName: 'Hi-Fi Noise-Cancelling Headphones', reason: 'Changed my mind', status: 'Pending', date: '2023-10-27' },
   { id: 'RET-003', orderId: 'ORD-007', customerName: 'George Costanza', productName: 'Smart Fitness Watch', reason: 'Not compatible with phone', status: 'Rejected', date: '2023-10-25' },
 ];
 
-export const users: User[] = [
+let users: User[] = [
   { id: 'usr-1', name: 'Admin User', email: 'admin@example.com', role: 'admin', avatarUrl: 'https://i.pravatar.cc/150?u=admin' },
   { id: 'usr-2', name: 'Logistics User', email: 'logistics@example.com', role: 'logistics', avatarUrl: 'https://i.pravatar.cc/150?u=logistics' },
   { id: 'usr-3', name: 'Commercial User', email: 'commercial@example.com', role: 'commercial', avatarUrl: 'https://i.pravatar.cc/150?u=commercial' },
 ];
+
+let inventoryMovements: InventoryMovement[] = [];
+
+
+// Product Functions
+export const getProducts = () => products;
+
+export const getProductById = (id: string) => products.find(p => p.id === id);
+
+export const addProduct = (product: Product) => {
+  products.unshift(product);
+};
+
+export const updateProductStock = (productId: string, quantity: number, operation: 'add' | 'subtract') => {
+  const productIndex = products.findIndex(p => p.id === productId);
+  if (productIndex !== -1) {
+    if (operation === 'add') {
+      products[productIndex].stock += quantity;
+    } else {
+      products[productIndex].stock = Math.max(0, products[productIndex].stock - quantity);
+    }
+  }
+};
+
+// Supplier Functions
+export const getSuppliers = () => suppliers;
+
+export const getSupplierById = (id: string) => suppliers.find(s => s.id === id);
+
+
+// Order Functions
+export const getOrders = () => orders;
+
+
+// Return Request Functions
+export const getReturnRequests = () => returnRequests;
+
+
+// User Functions
+export const getUsers = () => users;
+
+
+// Inventory Movement Functions
+export const getInventoryMovements = () => inventoryMovements;
+
+export const addInventoryMovement = (movement: Omit<InventoryMovement, 'id' | 'date'>) => {
+  inventoryMovements.unshift({
+    id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    date: new Date().toISOString(),
+    ...movement,
+  });
+};

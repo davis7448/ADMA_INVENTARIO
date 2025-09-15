@@ -24,7 +24,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { returnRequests } from '@/lib/data';
+import { getReturnRequests } from '@/lib/api';
 
 const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
@@ -70,6 +70,7 @@ function ReturnPolicyDialog() {
 
 
 export default function ReturnsPage() {
+  const returnRequests = getReturnRequests();
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">

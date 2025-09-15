@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DollarSign, Users, ShoppingCart, Activity } from 'lucide-react';
-import { orders } from '@/lib/data';
+import { getOrders } from '@/lib/api';
 import { format, subDays } from 'date-fns';
 import SalesChart from '@/components/sales-chart';
 
@@ -28,6 +28,7 @@ const chartData = Array.from({ length: 7 }, (_, i) => {
 }).reverse();
 
 export default function DashboardPage() {
+  const orders = getOrders();
   const recentOrders = orders.slice(0, 5);
 
   return (

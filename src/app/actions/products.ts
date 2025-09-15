@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from 'zod';
-import { addProductToData } from '@/lib/data';
+import { addProduct as addProductToApi } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
 import type { AddProductFormState, AddProductFormValues } from '@/lib/definitions';
@@ -29,7 +29,7 @@ export async function addProduct(
       imageHint: 'new product',
     };
     
-    addProductToData(newProduct);
+    addProductToApi(newProduct);
     
     revalidatePath('/products');
 

@@ -16,23 +16,29 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { inventoryMovements } from '@/lib/data';
+import { getInventoryMovements } from '@/lib/api';
 import { format } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import type { InventoryMovement } from '@/lib/types';
 
 export default function HistoryPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const [movements, setMovements] = useState<InventoryMovement[]>([]);
 
   useEffect(() => {
     if (user && user.role !== 'logistics' && user.role !== 'admin') {
       router.push('/');
     }
   }, [user, router]);
+
+  useEffect(() => {
+    setMovements(getInventoryMovements());
+  }, []);
   
-  const sortedMovements = [...inventoryMovements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const sortedMovements = [...movements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const getBadgeClass = (type: 'Entrada' | 'Salida') => {
     switch (type) {

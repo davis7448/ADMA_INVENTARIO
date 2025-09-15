@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { products, updateProductStock, addInventoryMovement } from '@/lib/data';
+import { getProducts, updateProductStock, addInventoryMovement } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import { Barcode, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -66,6 +66,7 @@ export default function LogisticsPage() {
     const { user } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
+    const allProducts = getProducts();
 
     // Salidas State
     const [platform, setPlatform] = useState('');
@@ -103,7 +104,7 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
           e.preventDefault();
           const barcode = e.currentTarget.value;
-          const product = products.find(p => p.sku === barcode);
+          const product = allProducts.find(p => p.sku === barcode);
     
           if (product) {
             setDispatchedProducts(prev => {
@@ -166,7 +167,7 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = products.find(p => p.sku === barcode);
+            const product = allProducts.find(p => p.sku === barcode);
 
             if (product) {
                 setReceivedProducts(prev => {
@@ -219,7 +220,7 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = products.find(p => p.sku === barcode);
+            const product = allProducts.find(p => p.sku === barcode);
 
             if (product) {
                 setProductToAdd(product);
@@ -289,7 +290,7 @@ export default function LogisticsPage() {
 
     // --- AVERÍAS ---
     const handleRegisterDamage = () => {
-        const product = products.find(p => p.sku.toLowerCase() === damagedSku.toLowerCase());
+        const product = allProducts.find(p => p.sku.toLowerCase() === damagedSku.toLowerCase());
         if (!product) {
             toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado con ese SKU.' });
             return;

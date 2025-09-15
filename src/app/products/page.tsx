@@ -24,19 +24,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { products, suppliers } from '@/lib/data';
+import { getProducts, getSupplierById } from '@/lib/api';
 import { MoreHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/use-auth';
 import { AddProductForm } from '@/components/add-product-form';
 
-const getSupplierName = (vendorId: string) => {
-  return suppliers.find((s) => s.id === vendorId)?.name ?? 'Unknown';
-};
-
 export default function ProductsPage() {
   const { user } = useAuth();
   const canEdit = user?.role === 'admin';
+  const products = getProducts();
+
+  const getSupplierName = (vendorId: string) => {
+    return getSupplierById(vendorId)?.name ?? 'Unknown';
+  };
 
   return (
     <div className="space-y-6">

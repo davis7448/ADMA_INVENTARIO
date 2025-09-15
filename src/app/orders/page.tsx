@@ -24,7 +24,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal } from 'lucide-react';
-import { orders } from '@/lib/data';
+import { getOrders } from '@/lib/api';
 
 const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
@@ -35,6 +35,7 @@ const statusStyles: { [key: string]: string } = {
 };
 
 export default function OrdersPage() {
+  const orders = getOrders();
   return (
     <div className="space-y-6">
       <div>

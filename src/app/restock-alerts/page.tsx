@@ -17,15 +17,16 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import RestockForm from '@/components/restock-form';
-import { products, suppliers } from '@/lib/data';
+import { getProducts, getSupplierById } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function RestockAlertsPage() {
   const { user } = useAuth();
-  const lowStockProducts = products.filter(p => p.stock < p.restockThreshold);
+  const allProducts = getProducts();
+  const lowStockProducts = allProducts.filter(p => p.stock < p.restockThreshold);
 
   const getSupplierName = (vendorId: string) => {
-    return suppliers.find(s => s.id === vendorId)?.name || 'Unknown';
+    return getSupplierById(vendorId)?.name || 'Unknown';
   };
   
   const canManageRestock = user?.role === 'admin' || user?.role === 'logistics';

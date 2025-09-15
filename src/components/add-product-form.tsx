@@ -31,7 +31,7 @@ import {
     FormLabel,
     FormMessage,
   } from '@/components/ui/form';
-import { suppliers } from '@/lib/data';
+import { getSuppliers } from '@/lib/api';
 import { addProduct } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
@@ -41,6 +41,7 @@ export function AddProductForm() {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
+  const suppliers = getSuppliers();
 
   const form = useForm<AddProductFormValues>({
     resolver: zodResolver(AddProductFormSchema),
@@ -73,10 +74,10 @@ export function AddProductForm() {
         });
         if (result.errors) {
             Object.entries(result.errors).forEach(([key, value]) => {
-                if (key !== '_form') {
+                if (key !== '_form' && value) {
                     form.setError(key as keyof AddProductFormValues, {
                         type: 'manual',
-                        message: value?.[0],
+                        message: value[0],
                     });
                 }
             });
