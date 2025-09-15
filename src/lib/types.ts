@@ -1,3 +1,4 @@
+
 export type Product = {
   id: string;
   sku: string;
@@ -5,7 +6,7 @@ export type Product = {
   description: string;
   imageUrl: string;
   imageHint: string;
-  category: string;
+  categoryId: string;
   price: number;
   stock: number;
   restockThreshold: number;
@@ -22,6 +23,12 @@ export type Supplier = {
   productCount: number;
   shippingPolicy: string;
   returnPolicy: string;
+};
+
+export type Category = {
+  id: string;
+  name: string;
+  description: string;
 };
 
 export type Order = {

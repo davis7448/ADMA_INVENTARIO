@@ -32,12 +32,12 @@ import {
     FormLabel,
     FormMessage,
   } from '@/components/ui/form';
-import { getSuppliers } from '@/lib/api';
+import { getSuppliers, getCategories } from '@/lib/api';
 import { addProductAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
-import type { Supplier } from '@/lib/types';
+import type { Supplier, Category } from '@/lib/types';
 
 interface AddProductFormProps {
   onProductAdded: () => void;
@@ -48,10 +48,14 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
     if (open) {
-        getSuppliers().then(setSuppliers);
+        Promise.all([getSuppliers(), getCategories()]).then(([fetchedSuppliers, fetchedCategories]) => {
+            setSuppliers(fetchedSuppliers);
+            setCategories(fetchedCategories);
+        });
     }
   }, [open]);
 
@@ -61,7 +65,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       name: '',
       sku: '',
       description: '',
-      category: '',
+      categoryId: '',
       vendorId: '',
       price: 0,
       stock: 0,
@@ -188,13 +192,22 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
-                        name="category"
+                        name="categoryId"
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Category</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="e.g., Electronics" {...field} />
-                                </FormControl>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                        <SelectValue placeholder="Select a category" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {categories.map(category => (
+                                        <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                                 <FormMessage />
                             </FormItem>
                         )}

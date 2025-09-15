@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -9,6 +10,8 @@ import { SheetClose } from './ui/sheet';
 const navItems = [
   { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial'] },
   { href: '/products', label: 'Products', roles: ['admin', 'commercial'] },
+  { href: '/suppliers', label: 'Suppliers', roles: ['admin', 'commercial'] },
+  { href: '/categories', label: 'Categories', roles: ['admin', 'commercial'] },
   { href: '/logistics', label: 'Logística', roles: ['admin', 'logistics'] },
   { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
 ];

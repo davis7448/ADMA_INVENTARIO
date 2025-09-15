@@ -1,6 +1,7 @@
+
 import { db } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category } from './types';
 
 // Product Functions
 export const getProducts = async (): Promise<Product[]> => {
@@ -59,6 +60,15 @@ export const getSupplierById = async (id: string): Promise<Supplier | null> => {
     }
 };
 
+export const addSupplier = async (supplier: Omit<Supplier, 'id' | 'productCount'>): Promise<string> => {
+    const suppliersCol = collection(db, 'suppliers');
+    const docRef = await addDoc(suppliersCol, {
+        ...supplier,
+        productCount: 0,
+    });
+    return docRef.id;
+};
+
 export const getSuppliersByIds = async (ids: string[]): Promise<Record<string, string>> => {
     if (ids.length === 0) return {};
     const suppliersRef = collection(db, "suppliers");
@@ -69,6 +79,32 @@ export const getSuppliersByIds = async (ids: string[]): Promise<Record<string, s
         suppliers[doc.id] = (doc.data() as Supplier).name;
     });
     return suppliers;
+};
+
+// Category Functions
+export const getCategories = async (): Promise<Category[]> => {
+    const categoriesCol = collection(db, 'categories');
+    const categorySnapshot = await getDocs(categoriesCol);
+    const categoryList = categorySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+    return categoryList;
+};
+
+export const addCategory = async (category: Omit<Category, 'id'>): Promise<string> => {
+    const categoriesCol = collection(db, 'categories');
+    const docRef = await addDoc(categoriesCol, category);
+    return docRef.id;
+};
+
+export const getCategoriesByIds = async (ids: string[]): Promise<Record<string, string>> => {
+    if (ids.length === 0) return {};
+    const categoriesRef = collection(db, "categories");
+    const q = query(categoriesRef, where('__name__', 'in', ids));
+    const querySnapshot = await getDocs(q);
+    const categories: Record<string, string> = {};
+    querySnapshot.forEach((doc) => {
+        categories[doc.id] = (doc.data() as Category).name;
+    });
+    return categories;
 };
 
 // Order Functions
@@ -90,7 +126,7 @@ export const getReturnRequests = async (): Promise<ReturnRequest[]> => {
 // User Functions
 export const getUsers = async (): Promise<User[]> => {
     const usersCol = collection(db, 'users');
-    const userSnapshot = await getDocs(usersCol);
+    const userSnapshot = await getDocs(userSnapshot);
     const userList = userSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
     return userList;
 };

@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { getProducts, getSuppliersByIds } from '@/lib/api';
+import { getProducts, getSuppliersByIds, getCategoriesByIds } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import { MoreHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -40,22 +40,29 @@ function ProductsContent() {
     const [loading, setLoading] = useState(true);
     const { user } = useAuth();
     const [supplierNames, setSupplierNames] = useState<Record<string, string>>({});
+    const [categoryNames, setCategoryNames] = useState<Record<string, string>>({});
+
 
     useEffect(() => {
-      async function fetchProductsAndSuppliers() {
+      async function fetchProductsAndRelatedData() {
         setLoading(true);
         const fetchedProducts = await getProducts();
         setProducts(fetchedProducts);
 
         if (fetchedProducts.length > 0) {
             const uniqueVendorIds = [...new Set(fetchedProducts.map(p => p.vendorId))];
-            const names = await getSuppliersByIds(uniqueVendorIds);
-            setSupplierNames(names);
+            const uniqueCategoryIds = [...new Set(fetchedProducts.map(p => p.categoryId))];
+            const [supplierNames, categoryNames] = await Promise.all([
+                getSuppliersByIds(uniqueVendorIds),
+                getCategoriesByIds(uniqueCategoryIds)
+            ]);
+            setSupplierNames(supplierNames);
+            setCategoryNames(categoryNames);
         }
 
         setLoading(false);
       }
-      fetchProductsAndSuppliers();
+      fetchProductsAndRelatedData();
     }, []);
     
     const refreshProducts = async () => {
@@ -65,8 +72,13 @@ function ProductsContent() {
         
         if (fetchedProducts.length > 0) {
             const uniqueVendorIds = [...new Set(fetchedProducts.map(p => p.vendorId))];
-            const names = await getSuppliersByIds(uniqueVendorIds);
-            setSupplierNames(names);
+            const uniqueCategoryIds = [...new Set(fetchedProducts.map(p => p.categoryId))];
+             const [supplierNames, categoryNames] = await Promise.all([
+                getSuppliersByIds(uniqueVendorIds),
+                getCategoriesByIds(uniqueCategoryIds)
+            ]);
+            setSupplierNames(supplierNames);
+            setCategoryNames(categoryNames);
         }
 
         setLoading(false);
@@ -139,7 +151,7 @@ function ProductsContent() {
                         <TableCell className="font-medium">{product.name}</TableCell>
                         <TableCell>{product.sku}</TableCell>
                         <TableCell>
-                            <Badge variant="outline">{product.category}</Badge>
+                            <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">{supplierNames[product.vendorId] || 'Unknown'}</TableCell>
                         <TableCell className="hidden md:table-cell">{product.stock}</TableCell>
