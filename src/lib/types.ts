@@ -15,14 +15,19 @@ export type Product = {
   restockThreshold: number;
   vendorId: string;
   rotationCategoryName?: string;
-  reservations?: Record<string, number>; // sellerId: quantity
+  reservations?: Reservation[]; // This will now be populated on the fly
 };
 
-export type ProductReservation = {
-    vendedorId: string;
-    vendedorName: string;
-    quantity: number;
-}
+export type Reservation = {
+  id: string; // Firestore document ID
+  reservationId: string; // Human-readable ID
+  productId: string;
+  vendedorId: string;
+  platformId: string;
+  customerEmail: string;
+  quantity: number;
+  date: string;
+};
 
 export type Supplier = {
   id: string;
@@ -54,7 +59,7 @@ export type Order = {
 export type ReturnRequest = {
   id: string;
   orderId: string;
-  customerName: string;
+  customerName: 'Jane Smith',
   productName: string;
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';

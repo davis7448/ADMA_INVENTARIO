@@ -2,9 +2,9 @@
 
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, ProductReservation } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
@@ -39,7 +39,6 @@ export const getProducts = async (): Promise<Product[]> => {
         ...data, 
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
-        reservations: data.reservations || {},
     } as Product
   });
   return productList;
@@ -50,12 +49,13 @@ export const getProductById = async (id: string): Promise<Product | null> => {
   const productSnap = await getDoc(productDoc);
   if (productSnap.exists()) {
     const data = productSnap.data();
+    const reservations = await getReservationsByProductId(id);
     return { 
         id: productSnap.id, 
         ...data, 
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
-        reservations: data.reservations || {},
+        reservations: reservations || [],
     } as Product;
   } else {
     return null;
@@ -64,7 +64,7 @@ export const getProductById = async (id: string): Promise<Product | null> => {
 
 export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> => {
   const productsCol = collection(db, 'products');
-  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0, reservations: {} });
+  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
 };
 
@@ -72,47 +72,6 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
   const productRef = doc(db, 'products', productId);
   await updateDoc(productRef, productUpdate);
 };
-
-export const updateProductReservations = async (productId: string, reservations: ProductReservation[]) => {
-    const productRef = doc(db, 'products', productId);
-
-    await runTransaction(db, async (transaction) => {
-        const productSnap = await transaction.get(productRef);
-        if (!productSnap.exists()) {
-            throw new Error('Producto no encontrado.');
-        }
-
-        const product = productSnap.data() as Product;
-        const originalReservations = product.reservations || {};
-        const newReservations: Record<string, number> = {};
-
-        let totalStockChange = 0;
-
-        for (const res of reservations) {
-            const originalQty = originalReservations[res.vendedorId] || 0;
-            const newQty = res.quantity;
-            const diff = newQty - originalQty; // +ve if adding to reservation, -ve if removing
-            totalStockChange += diff;
-
-            if (newQty > 0) {
-                newReservations[res.vendedorId] = newQty;
-            }
-        }
-
-        const newMainStock = product.stock - totalStockChange;
-
-        if (newMainStock < 0) {
-            throw new Error(`No hay suficiente stock disponible para esta reserva. Stock disponible: ${product.stock}, se intentó reservar: ${totalStockChange}`);
-        }
-
-        transaction.update(productRef, {
-            stock: newMainStock,
-            reservations: newReservations,
-        });
-
-    });
-};
-
 
 export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract') => {
   const productRef = doc(db, 'products', productId);
@@ -738,3 +697,50 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
     return docRef.id;
 };
 
+// Reservation Functions
+export const getReservationsByProductId = async (productId: string): Promise<Reservation[]> => {
+    const q = query(collection(db, 'reservations'), where('productId', '==', productId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
+        return { 
+            id: doc.id, 
+            ...data,
+            date,
+        } as Reservation;
+    });
+};
+
+export const createReservation = async (reservationData: Omit<Reservation, 'id' | 'reservationId' | 'date'>) => {
+    const productRef = doc(db, 'products', reservationData.productId);
+    const reservationsCol = collection(db, 'reservations');
+    
+    await runTransaction(db, async (transaction) => {
+        const productSnap = await transaction.get(productRef);
+        if (!productSnap.exists()) {
+            throw new Error("Producto no encontrado.");
+        }
+        
+        const productData = productSnap.data() as Product;
+        const totalReserved = (await getReservationsByProductId(reservationData.productId)).reduce((sum, res) => sum + res.quantity, 0);
+        const availableStock = productData.stock - totalReserved;
+
+        if (reservationData.quantity > availableStock) {
+            throw new Error(`No hay suficiente stock para reservar. Stock disponible: ${availableStock}, se intentó reservar: ${reservationData.quantity}.`);
+        }
+
+        const newReservationRef = doc(reservationsCol);
+        const reservationId = `RES-${Date.now()}`;
+        transaction.set(newReservationRef, {
+            ...reservationData,
+            reservationId,
+            date: new Date(),
+        });
+    });
+};
+
+export const deleteReservation = async (reservationId: string) => {
+    const reservationRef = doc(db, 'reservations', reservationId);
+    await deleteDoc(reservationRef);
+};

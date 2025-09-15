@@ -2,11 +2,11 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail, createReservation } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
-import type { AddProductFormState, EditProductFormState } from '@/lib/definitions';
-import { AddProductFormSchema, EditProductFormSchema } from '@/lib/definitions';
+import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues } from '@/lib/definitions';
+import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema } from '@/lib/definitions';
 import { getAuth } from 'firebase/auth';
 import { app } from '@/lib/firebase';
 
@@ -130,6 +130,35 @@ export async function updateProductAction(
             message: 'Product updated successfully.',
             success: true,
         };
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        return {
+            message: errorMessage,
+            success: false,
+        };
+    }
+}
+
+export async function createReservationAction(productId: string, data: CreateReservationFormValues): Promise<CreateReservationFormState> {
+    const validatedFields = CreateReservationFormSchema.safeParse(data);
+
+    if (!validatedFields.success) {
+        return {
+          message: 'Validation failed. Please check your inputs.',
+          errors: validatedFields.error.flatten().fieldErrors,
+          success: false,
+        };
+    }
+
+    try {
+        await createReservation({ productId, ...validatedFields.data });
+        revalidatePath('/products');
+        return {
+            message: 'Reserva creada con éxito.',
+            success: true,
+        };
+
     } catch (error) {
         console.error(error);
         const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';

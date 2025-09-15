@@ -2,8 +2,12 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import type { Product, Vendedor, ProductReservation } from '@/lib/types';
+import { useState, useMemo, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import type { Product, Vendedor, Platform, Reservation } from '@/lib/types';
+import type { CreateReservationFormValues } from '@/lib/definitions';
+import { CreateReservationFormSchema } from '@/lib/definitions';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { updateProductReservations } from '@/lib/api';
+import { createReservation, deleteReservation } from '@/lib/api';
 import {
     Table,
     TableBody,
@@ -26,135 +30,275 @@ import {
     TableHeader,
     TableRow,
   } from '@/components/ui/table';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Trash2 } from 'lucide-react';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface ProductReservationDialogProps {
   product: Product;
   vendedores: Vendedor[];
+  platforms: Platform[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
-export function ProductReservationDialog({ product, vendedores, open, onOpenChange, onSuccess }: ProductReservationDialogProps) {
-  const [reservations, setReservations] = useState<ProductReservation[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+export function ProductReservationDialog({ product, vendedores, platforms, open, onOpenChange, onSuccess }: ProductReservationDialogProps) {
+  const [isProcessing, startTransition] = useTransition();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (open) {
-      const initialReservations = vendedores.map(v => ({
-        vendedorId: v.id,
-        vendedorName: v.name,
-        quantity: product.reservations?.[v.id] || 0,
-      }));
-      setReservations(initialReservations);
-    }
-  }, [open, product, vendedores]);
+  const form = useForm<CreateReservationFormValues>({
+    resolver: zodResolver(CreateReservationFormSchema),
+    defaultValues: {
+        vendedorId: '',
+        platformId: '',
+        customerEmail: '',
+        quantity: 1,
+    },
+  });
 
-  const handleQuantityChange = (vendedorId: string, value: string) => {
-    const quantity = parseInt(value, 10) || 0;
-    setReservations(prev =>
-      prev.map(r => (r.vendedorId === vendedorId ? { ...r, quantity: Math.max(0, quantity) } : r))
-    );
-  };
-  
-  const totalReserved = useMemo(() => reservations.reduce((sum, r) => sum + r.quantity, 0), [reservations]);
-  const originalTotalReserved = useMemo(() => {
-    if (!product.reservations) return 0;
-    return Object.values(product.reservations).reduce((sum, qty) => sum + qty, 0);
+  const totalReserved = useMemo(() => {
+    return product.reservations?.reduce((sum, r) => sum + r.quantity, 0) || 0;
   }, [product.reservations]);
 
-  const availableToReserve = product.stock + originalTotalReserved;
+  const availableToReserve = product.stock - totalReserved;
 
-  const handleSave = async () => {
-    if (totalReserved > availableToReserve) {
+  const onSubmit = (values: CreateReservationFormValues) => {
+    if (values.quantity > availableToReserve) {
         toast({
             variant: 'destructive',
             title: 'Error de Stock',
-            description: `No puedes reservar más del stock total disponible (${availableToReserve} unidades).`,
+            description: `No puedes reservar más del stock disponible (${availableToReserve} unidades).`,
         });
         return;
     }
 
-    setIsSaving(true);
-    try {
-        await updateProductReservations(product.id, reservations);
+    startTransition(async () => {
+      try {
+        await createReservation({
+            productId: product.id,
+            ...values
+        });
         toast({
             title: '¡Éxito!',
-            description: 'Las reservas de inventario se han actualizado correctamente.',
+            description: 'La reserva se ha creado correctamente.',
         });
+        form.reset();
         onSuccess();
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'No se pudieron guardar las reservas.';
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'No se pudo crear la reserva.';
         toast({
             variant: 'destructive',
-            title: 'Error al Guardar',
+            title: 'Error al Crear',
             description: errorMessage,
         });
-    } finally {
-        setIsSaving(false);
-    }
+      }
+    });
   };
+
+  const handleDeleteReservation = (reservationId: string) => {
+    startTransition(async () => {
+        try {
+            await deleteReservation(reservationId);
+            toast({
+                title: 'Reserva Eliminada',
+                description: 'La reserva ha sido eliminada con éxito.',
+            });
+            onSuccess();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'No se pudo eliminar la reserva.';
+            toast({
+                variant: 'destructive',
+                title: 'Error al Eliminar',
+                description: errorMessage,
+            });
+        }
+    });
+  }
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Reservar Inventario para Vendedores</DialogTitle>
+          <DialogTitle>Gestionar Reservas de Inventario</DialogTitle>
           <DialogDescription>
-            Asigna unidades de <strong>{product.name}</strong> a las bodegas privadas de tus vendedores.
-            El stock asignado se restará del inventario principal.
+            Crea o elimina reservas para <strong>{product.name}</strong>. Las reservas descuentan del stock disponible, no del físico.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-4 space-y-4">
-            <div className="grid grid-cols-3 gap-4 text-center">
-                <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">Disponible para Reservar</p>
-                    <p className="text-2xl font-bold">{availableToReserve}</p>
+        <div className="py-4 grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Form to create new reservation */}
+            <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Crear Nueva Reserva</h3>
+                <div className="grid grid-cols-3 gap-4 text-center p-4 bg-muted rounded-lg">
+                    <div>
+                        <p className="text-sm font-medium text-muted-foreground">Stock Físico</p>
+                        <p className="text-2xl font-bold">{product.stock}</p>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-muted-foreground">Total Reservado</p>
+                        <p className="text-2xl font-bold text-blue-500">{totalReserved}</p>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-muted-foreground">Disponible</p>
+                        <p className="text-2xl font-bold text-green-600">{availableToReserve}</p>
+                    </div>
                 </div>
-                <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">Total Reservado</p>
-                    <p className="text-2xl font-bold text-blue-500">{totalReserved}</p>
-                </div>
-                <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">Stock Principal Restante</p>
-                    <p className="text-2xl font-bold text-green-600">{availableToReserve - totalReserved}</p>
-                </div>
+
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="vendedorId"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Vendedor</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger><SelectValue placeholder="Selecciona un vendedor" /></SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {vendedores.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="platformId"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Plataforma</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger><SelectValue placeholder="Selecciona una plataforma" /></SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {platforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                         <FormField
+                            control={form.control}
+                            name="customerEmail"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Email del Cliente</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="cliente@email.com" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                         <FormField
+                            control={form.control}
+                            name="quantity"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Cantidad</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" min="1" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <Button type="submit" disabled={isProcessing}>
+                            {isProcessing ? 'Creando...' : 'Crear Reserva'}
+                        </Button>
+                    </form>
+                </Form>
             </div>
-            <div className="max-h-[40vh] overflow-y-auto border rounded-lg">
-                <Table>
-                    <TableHeader className="sticky top-0 bg-secondary">
-                        <TableRow>
-                            <TableHead>Vendedor</TableHead>
-                            <TableHead className="w-[150px]">Cantidad a Reservar</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {reservations.map(res => (
-                            <TableRow key={res.vendedorId}>
-                                <TableCell className="font-medium">{res.vendedorName}</TableCell>
-                                <TableCell>
-                                    <Input
-                                        type="number"
-                                        value={res.quantity}
-                                        onChange={(e) => handleQuantityChange(res.vendedorId, e.target.value)}
-                                        min="0"
-                                        className="text-center"
-                                    />
-                                </TableCell>
+
+            {/* Table of existing reservations */}
+            <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Reservas Activas</h3>
+                 <div className="max-h-[55vh] overflow-y-auto border rounded-lg">
+                    <Table>
+                        <TableHeader className="sticky top-0 bg-secondary">
+                            <TableRow>
+                                <TableHead>Vendedor</TableHead>
+                                <TableHead>Cant.</TableHead>
+                                <TableHead>Cliente</TableHead>
+                                <TableHead>Acción</TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {product.reservations && product.reservations.length > 0 ? (
+                                product.reservations.map(res => (
+                                    <TableRow key={res.id}>
+                                        <TableCell className="font-medium text-xs">{vendedores.find(v => v.id === res.vendedorId)?.name || 'N/A'}</TableCell>
+                                        <TableCell className="font-bold">{res.quantity}</TableCell>
+                                        <TableCell className="text-xs">{res.customerEmail}</TableCell>
+                                        <TableCell>
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" disabled={isProcessing}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Esta acción no se puede deshacer. Se liberará el stock reservado.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleDeleteReservation(res.id)}>
+                                                            Eliminar
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center h-24">No hay reservas para este producto.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
         </div>
         <DialogFooter>
             <DialogClose asChild>
-                <Button variant="secondary">Cancelar</Button>
+                <Button variant="secondary">Cerrar</Button>
             </DialogClose>
-            <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Guardando...' : 'Guardar Reservas'}
-            </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

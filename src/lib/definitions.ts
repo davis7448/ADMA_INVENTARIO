@@ -144,3 +144,25 @@ export type AddVendedorFormState = {
   };
   success: boolean;
 };
+
+
+export const CreateReservationFormSchema = z.object({
+  vendedorId: z.string().min(1, 'Debe seleccionar un vendedor.'),
+  platformId: z.string().min(1, 'Debe seleccionar una plataforma.'),
+  customerEmail: z.string().email('Debe ingresar un correo de cliente válido.'),
+  quantity: z.coerce.number().int().min(1, 'La cantidad debe ser al menos 1.'),
+});
+
+export type CreateReservationFormValues = z.infer<typeof CreateReservationFormSchema>;
+
+export type CreateReservationFormState = {
+  message: string;
+  errors?: {
+    _form?: string[];
+    vendedorId?: string[];
+    platformId?: string[];
+    customerEmail?: string[];
+    quantity?: string[];
+  };
+  success: boolean;
+};
