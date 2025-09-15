@@ -42,7 +42,21 @@ export const getProducts = async (): Promise<Product[]> => {
         pendingStock: data.pendingStock || 0,
     } as Product
   });
-  return productList;
+
+  const allReservations = await getAllReservations();
+  const reservationsByProductId: Record<string, Reservation[]> = {};
+
+  for (const reservation of allReservations) {
+    if (!reservationsByProductId[reservation.productId]) {
+        reservationsByProductId[reservation.productId] = [];
+    }
+    reservationsByProductId[reservation.productId].push(reservation);
+  }
+
+  return productList.map(product => ({
+    ...product,
+    reservations: reservationsByProductId[product.id] || [],
+  }));
 };
 
 export const getProductById = async (id: string): Promise<Product | null> => {
@@ -978,7 +992,7 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
 
         const itemsToCheck: any[] = [];
         for (const product of products) {
-            const totalReserved = product.reservations?.reduce((sum, res) => sum + res.quantity, 0) || 0;
+            const totalReserved = (Array.isArray(product.reservations) ? product.reservations : []).reduce((sum, res) => sum + res.quantity, 0);
             const salesLast7Days = salesBySku[product.sku || ''] || 0;
             const rotationName = getRotationCategoryName(salesLast7Days);
 
@@ -995,7 +1009,9 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
                 });
             } else if (product.productType === 'variable' && product.variants) {
                 for (const variant of product.variants) {
-                    const variantReserved = product.reservations?.filter(r => r.variantId === variant.id).reduce((sum, res) => sum + res.quantity, 0) || 0;
+                    const variantReserved = (Array.isArray(product.reservations) ? product.reservations : [])
+                        .filter(r => r.variantId === variant.id)
+                        .reduce((sum, res) => sum + res.quantity, 0);
                     const variantSales = salesBySku[variant.sku] || 0;
                     const variantRotationName = getRotationCategoryName(variantSales);
 
