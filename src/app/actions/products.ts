@@ -25,6 +25,7 @@ export async function addProductAction(
     stock: formData.get('stock'),
     restockThreshold: formData.get('restockThreshold'),
     image: formData.get('image'),
+    contentLink: formData.get('contentLink'),
   });
   
   if (!validatedFields.success) {
@@ -93,6 +94,7 @@ export async function updateProductAction(
         stock: formData.get('stock'),
         restockThreshold: formData.get('restockThreshold'),
         image: formData.get('image'),
+        contentLink: formData.get('contentLink'),
     });
   
     if (!validatedFields.success) {

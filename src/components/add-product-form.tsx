@@ -62,6 +62,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       stock: undefined,
       restockThreshold: undefined,
       image: undefined,
+      contentLink: '',
     },
   });
 
@@ -193,6 +194,19 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                 }}
                                 {...rest}
                                />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="contentLink"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Link de Contenido (Google Drive)</FormLabel>
+                            <FormControl>
+                                <Input placeholder="https://docs.google.com/..." {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>

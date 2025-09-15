@@ -16,6 +16,7 @@ export type Product = {
   vendorId: string;
   rotationCategoryName?: string;
   reservations?: Reservation[]; // This will now be populated on the fly
+  contentLink?: string;
 };
 
 export type Reservation = {

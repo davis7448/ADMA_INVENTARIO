@@ -35,6 +35,7 @@ export const AddProductFormSchema = z.object({
         (file): file is File => file instanceof File && ACCEPTED_IMAGE_TYPES.includes(file.type),
         "Only .jpg, .jpeg, .png and .webp formats are supported."
     ),
+  contentLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;
@@ -52,6 +53,7 @@ export type AddProductFormState = {
     stock?: string[];
     restockThreshold?: string[];
     image?: string[];
+    contentLink?: string[];
   };
   success: boolean;
 };
@@ -74,6 +76,7 @@ errors?: {
     stock?: string[];
     restockThreshold?: string[];
     image?: string[];
+    contentLink?: string[];
 };
 };
 

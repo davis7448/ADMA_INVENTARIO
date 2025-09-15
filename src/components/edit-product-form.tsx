@@ -65,6 +65,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
       stock: product.stock,
       restockThreshold: product.restockThreshold,
       image: undefined,
+      contentLink: product.contentLink || '',
     },
   });
 
@@ -131,6 +132,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         stock: product.stock,
         restockThreshold: product.restockThreshold,
         image: undefined,
+        contentLink: product.contentLink || '',
       });
     }
   }, [open, form, product]);
@@ -212,6 +214,19 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                         )}
                     />
                 </div>
+                 <FormField
+                    control={form.control}
+                    name="contentLink"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Link de Contenido (Google Drive)</FormLabel>
+                            <FormControl>
+                                <Input placeholder="https://docs.google.com/..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
