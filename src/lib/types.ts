@@ -15,7 +15,14 @@ export type Product = {
   restockThreshold: number;
   vendorId: string;
   rotationCategoryName?: string;
+  reservations?: Record<string, number>; // sellerId: quantity
 };
+
+export type ProductReservation = {
+    vendedorId: string;
+    vendedorName: string;
+    quantity: number;
+}
 
 export type Supplier = {
   id: string;

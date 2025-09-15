@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, ProductReservation } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
@@ -38,7 +38,8 @@ export const getProducts = async (): Promise<Product[]> => {
         id: doc.id, 
         ...data, 
         damagedStock: data.damagedStock || 0,
-        pendingStock: data.pendingStock || 0
+        pendingStock: data.pendingStock || 0,
+        reservations: data.reservations || {},
     } as Product
   });
   return productList;
@@ -53,7 +54,8 @@ export const getProductById = async (id: string): Promise<Product | null> => {
         id: productSnap.id, 
         ...data, 
         damagedStock: data.damagedStock || 0,
-        pendingStock: data.pendingStock || 0
+        pendingStock: data.pendingStock || 0,
+        reservations: data.reservations || {},
     } as Product;
   } else {
     return null;
@@ -62,7 +64,7 @@ export const getProductById = async (id: string): Promise<Product | null> => {
 
 export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> => {
   const productsCol = collection(db, 'products');
-  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
+  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0, reservations: {} });
   return docRef.id;
 };
 
@@ -70,6 +72,47 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
   const productRef = doc(db, 'products', productId);
   await updateDoc(productRef, productUpdate);
 };
+
+export const updateProductReservations = async (productId: string, reservations: ProductReservation[]) => {
+    const productRef = doc(db, 'products', productId);
+
+    await runTransaction(db, async (transaction) => {
+        const productSnap = await transaction.get(productRef);
+        if (!productSnap.exists()) {
+            throw new Error('Producto no encontrado.');
+        }
+
+        const product = productSnap.data() as Product;
+        const originalReservations = product.reservations || {};
+        const newReservations: Record<string, number> = {};
+
+        let totalStockChange = 0;
+
+        for (const res of reservations) {
+            const originalQty = originalReservations[res.vendedorId] || 0;
+            const newQty = res.quantity;
+            const diff = newQty - originalQty; // +ve if adding to reservation, -ve if removing
+            totalStockChange += diff;
+
+            if (newQty > 0) {
+                newReservations[res.vendedorId] = newQty;
+            }
+        }
+
+        const newMainStock = product.stock - totalStockChange;
+
+        if (newMainStock < 0) {
+            throw new Error(`No hay suficiente stock disponible para esta reserva. Stock disponible: ${product.stock}, se intentó reservar: ${totalStockChange}`);
+        }
+
+        transaction.update(productRef, {
+            stock: newMainStock,
+            reservations: newReservations,
+        });
+
+    });
+};
+
 
 export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract') => {
   const productRef = doc(db, 'products', productId);
@@ -694,3 +737,4 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
     const docRef = await addDoc(vendedoresCol, vendedor);
     return docRef.id;
 };
+

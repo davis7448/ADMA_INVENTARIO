@@ -68,7 +68,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         setSelectedProductId(productId);
     };
 
-    const handleDialogValidChange = (open: boolean) => {
+    const handleDialogChange = (open: boolean) => {
         if (!open) {
             setSelectedProductId(null);
         }
@@ -215,7 +215,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             <ProductDetailDialog
                 productId={selectedProductId}
                 open={!!selectedProductId}
-                onOpenChange={handleDialogValidChange}
+                onOpenChange={handleDialogChange}
+                onProductUpdate={refreshProducts}
             />
         )}
         </TooltipProvider>

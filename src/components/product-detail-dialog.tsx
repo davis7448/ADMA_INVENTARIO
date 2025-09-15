@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter
 } from '@/components/ui/dialog';
 import {
   Card,
@@ -19,37 +20,53 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getProductById, getProductPerformanceData } from '@/lib/api';
-import type { Product, ProductPerformanceData } from '@/lib/types';
+import { getProductById, getProductPerformanceData, getVendedores } from '@/lib/api';
+import type { Product, ProductPerformanceData, Vendedor } from '@/lib/types';
 import SalesChart from './sales-chart';
 import CarrierChart from './carrier-chart';
 import ReturnsChart from './returns-chart';
 import { subDays, format, startOfDay } from 'date-fns';
+import { Button } from './ui/button';
+import { ProductReservationDialog } from './product-reservation-dialog';
 
 interface ProductDetailDialogProps {
   productId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onProductUpdate: () => void;
 }
 
-export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDetailDialogProps) {
+export function ProductDetailDialog({ productId, open, onOpenChange, onProductUpdate }: ProductDetailDialogProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [performanceData, setPerformanceData] = useState<ProductPerformanceData | null>(null);
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
+
+  const refreshData = async () => {
+    if (productId && open) {
+        setLoading(true);
+        Promise.all([
+            getProductById(productId),
+            getProductPerformanceData(productId),
+            getVendedores(),
+        ]).then(([productData, perfData, vendedorData]) => {
+            setProduct(productData);
+            setPerformanceData(perfData);
+            setVendedores(vendedorData);
+            setLoading(false);
+        });
+    }
+  }
 
   useEffect(() => {
-    if (productId && open) {
-      setLoading(true);
-      Promise.all([
-        getProductById(productId),
-        getProductPerformanceData(productId),
-      ]).then(([productData, perfData]) => {
-        setProduct(productData);
-        setPerformanceData(perfData);
-        setLoading(false);
-      });
-    }
+    refreshData();
   }, [productId, open]);
+
+  const totalReservedStock = useMemo(() => {
+    if (!product?.reservations) return 0;
+    return Object.values(product.reservations).reduce((acc, qty) => acc + qty, 0);
+  }, [product]);
 
   const salesData = useMemo(() => {
     if (!performanceData) return [];
@@ -81,7 +98,15 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
     }).reverse();
 }, [performanceData]);
 
+  const handleReservationSuccess = () => {
+    setIsReservationDialogOpen(false);
+    refreshData(); // Refresh product data
+    onProductUpdate(); // Refresh product list view
+  }
+
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -125,7 +150,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                         <h2 className="text-2xl font-bold font-headline break-words">{product.name}</h2>
                         <p className="text-sm text-muted-foreground font-mono">{product.sku}</p>
                         <p className="pt-2 text-muted-foreground break-words">{product.description}</p>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-4 text-center">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-4 text-center">
                             <Card>
                                 <CardHeader className="pb-2">
                                     <CardDescription>Price</CardDescription>
@@ -134,17 +159,25 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                                     <p className="text-2xl font-bold">${product.price.toLocaleString('en-US')}</p>
                                 </CardContent>
                             </Card>
-                            <Card>
+                             <Card>
                                 <CardHeader className="pb-2">
-                                    <CardDescription>In Stock</CardDescription>
+                                    <CardDescription>Disponible</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-2xl font-bold">{product.stock}</p>
+                                    <p className="text-2xl font-bold text-green-600">{product.stock}</p>
+                                </CardContent>
+                            </Card>
+                             <Card>
+                                <CardHeader className="pb-2">
+                                    <CardDescription>Reservado</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-2xl font-bold text-blue-500">{totalReservedStock}</p>
                                 </CardContent>
                             </Card>
                             <Card>
                                 <CardHeader className="pb-2">
-                                    <CardDescription>Pending</CardDescription>
+                                    <CardDescription>Pendiente</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-2xl font-bold text-orange-500">{product.pendingStock || 0}</p>
@@ -152,7 +185,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                             </Card>
                             <Card>
                                 <CardHeader className="pb-2">
-                                    <CardDescription>Damaged</CardDescription>
+                                    <CardDescription>Averiado</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-2xl font-bold text-destructive">{product.damagedStock || 0}</p>
@@ -162,6 +195,9 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                     </div>
                   </div>
                 </CardContent>
+                <DialogFooter className="p-4 border-t">
+                    <Button onClick={() => setIsReservationDialogOpen(true)}>Reservar Inventario</Button>
+                </DialogFooter>
               </Card>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -220,5 +256,16 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
         </div>
       </DialogContent>
     </Dialog>
+     {product && (
+        <ProductReservationDialog 
+            open={isReservationDialogOpen}
+            onOpenChange={setIsReservationDialogOpen}
+            product={product}
+            vendedores={vendedores}
+            onSuccess={handleReservationSuccess}
+        />
+     )}
+    </>
   );
 }
+
