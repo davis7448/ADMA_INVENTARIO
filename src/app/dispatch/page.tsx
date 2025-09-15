@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -412,7 +413,7 @@ function DispatchPageContent() {
                                         </AccordionTrigger>
                                         <div 
                                           onClick={(e) => e.stopPropagation()}
-                                          className="pr-4"
+                                          className="pr-4 flex justify-end"
                                         >
                                             <ProcessDispatchDialog
                                                 order={orderForDialog}
