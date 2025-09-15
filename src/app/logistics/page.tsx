@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { products } from '@/lib/data';
+import { products, updateProductStock } from '@/lib/data';
 import type { Product } from '@/lib/types';
 import { Barcode, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -125,6 +125,11 @@ export default function LogisticsPage() {
             return;
         }
 
+        // Update stock for each dispatched product
+        dispatchedProducts.forEach(product => {
+            updateProductStock(product.id, product.dispatchQuantity);
+        });
+
         console.log({
             platform,
             carrier,
@@ -133,12 +138,13 @@ export default function LogisticsPage() {
 
         toast({
             title: "Salida Creada",
-            description: `Se ha creado una salida con ${dispatchedProducts.length} producto(s) para ${platform}.`
+            description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.dispatchQuantity, 0)} unidades. El stock ha sido actualizado.`
         });
 
         setPlatform('');
         setCarrier('');
         setDispatchedProducts([]);
+        router.refresh(); // Refresh the page to show updated stock in other components
     }
 
     const handleReturnBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {

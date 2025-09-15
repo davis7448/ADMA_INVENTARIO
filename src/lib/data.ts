@@ -117,6 +117,12 @@ export const addProduct = (product: Product) => {
   products.unshift(product);
 };
 
+export const updateProductStock = (productId: string, quantity: number) => {
+    const productIndex = products.findIndex(p => p.id === productId);
+    if (productIndex !== -1) {
+      products[productIndex].stock -= quantity;
+    }
+};
 
 export const suppliers: Supplier[] = [
   {
