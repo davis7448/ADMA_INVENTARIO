@@ -3,12 +3,32 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { products } from '@/lib/data';
+import { products, suppliers } from '@/lib/data';
+import { MoreHorizontal } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+
+const getSupplierName = (vendorId: string) => {
+  return suppliers.find((s) => s.id === vendorId)?.name ?? 'Unknown';
+};
 
 export default function ProductsPage() {
   return (
@@ -17,36 +37,70 @@ export default function ProductsPage() {
         <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
         <p className="text-muted-foreground">Browse and manage your product listings.</p>
       </div>
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {products.map((product) => (
-          <Card key={product.id} className="flex flex-col">
-            <CardHeader>
-              <CardTitle className="font-headline">{product.name}</CardTitle>
-              <CardDescription>{product.category}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-grow">
-              <div className="aspect-video overflow-hidden rounded-md mb-4">
-                 <Image
-                  src={product.imageUrl}
-                  alt={product.name}
-                  width={600}
-                  height={400}
-                  className="object-cover transition-transform hover:scale-105"
-                  data-ai-hint={product.imageHint}
-                />
-              </div>
-              <p className="text-sm text-muted-foreground mb-4">{product.description}</p>
-              <div className="flex justify-between items-center">
-                <p className="text-lg font-semibold">${product.price.toFixed(2)}</p>
-                <p className="text-sm text-muted-foreground">Stock: {product.stock}</p>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button className="w-full">View Details</Button>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>All Products</CardTitle>
+          <CardDescription>A list of all products in your catalog.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="hidden w-[100px] sm:table-cell">
+                  <span className="sr-only">Image</span>
+                </TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="hidden md:table-cell">Supplier</TableHead>
+                <TableHead className="hidden md:table-cell">Stock</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {products.map((product) => (
+                <TableRow key={product.id}>
+                  <TableCell className="hidden sm:table-cell">
+                    <Image
+                      alt={product.name}
+                      className="aspect-square rounded-md object-cover"
+                      height="64"
+                      src={product.imageUrl}
+                      width="64"
+                      data-ai-hint={product.imageHint}
+                    />
+                  </TableCell>
+                  <TableCell className="font-medium">{product.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{product.category}</Badge>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">{getSupplierName(product.vendorId)}</TableCell>
+                  <TableCell className="hidden md:table-cell">{product.stock}</TableCell>
+                  <TableCell>${product.price.toFixed(2)}</TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button aria-haspopup="true" size="icon" variant="ghost">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Toggle menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem>View Details</DropdownMenuItem>
+                        <DropdownMenuItem>Edit</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
