@@ -432,7 +432,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         exceptions: [],
         cancelledExceptions: [],
     };
-    await setDoc(dispatchOrderRef, newDispatchOrder);
+    setDoc(dispatchOrderRef, newDispatchOrder);
 
 
     const platformName = (await getDoc(doc(db, 'platforms', platformId))).data()?.name || 'N/A';
@@ -548,12 +548,13 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
                     const productData = productSnap.data() as Product;
                     // Decrease pending stock, increase main stock
                     const newPendingStock = (productData.pendingStock || 0) - exProd.quantity;
-                    const newStock = (productData.stock || 0) + exProd.quantity;
 
                     transaction.update(productRef, { 
-                        stock: newStock < 0 ? 0 : newStock,
                         pendingStock: newPendingStock < 0 ? 0 : newPendingStock
                     });
+
+                    // Update variant stock if applicable
+                    await updateProductStock(exProd.productId, exProd.quantity, 'add', exProd.variantSku);
 
                     // Create "Entrada" movement for the cancellation
                     const movementRef = doc(collection(db, 'inventoryMovements'));
@@ -619,17 +620,26 @@ export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => 
                     for (const exProduct of exception.products) {
                         const productInfo = productsById.get(exProduct.productId);
                         if (productInfo) {
-                            pendingItems.push({
-                                id: `${order.id}-${exception.trackingNumber}-${exProduct.productId}`,
+                            const item: PendingInventoryItem = {
+                                id: `${order.id}-${exception.trackingNumber}-${exProduct.productId}-${exProduct.variantId || 'simple'}`,
                                 productId: exProduct.productId,
                                 productName: productInfo.name,
-                                productSku: productInfo.sku,
+                                productSku: productInfo.sku || '',
                                 productImageUrl: productInfo.imageUrl,
                                 quantity: exProduct.quantity,
                                 dispatchId: order.dispatchId,
                                 trackingNumber: exception.trackingNumber,
                                 date: order.date,
-                            });
+                            };
+
+                            if (exProduct.variantId && productInfo.variants) {
+                                const variant = productInfo.variants.find(v => v.id === exProduct.variantId);
+                                if (variant) {
+                                    item.variantName = variant.name;
+                                    item.variantSku = variant.sku;
+                                }
+                            }
+                            pendingItems.push(item);
                         }
                     }
                 }

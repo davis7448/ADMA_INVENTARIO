@@ -122,6 +122,8 @@ export interface DispatchOrderProduct {
 export interface DispatchExceptionProduct {
     productId: string;
     quantity: number;
+    variantId?: string;
+    variantSku?: string;
 }
 
 export interface DispatchException {
@@ -160,6 +162,8 @@ export interface PendingInventoryItem {
     productName: string;
     productSku: string;
     productImageUrl: string;
+    variantName?: string;
+    variantSku?: string;
     quantity: number;
     dispatchId: string;
     trackingNumber: string;

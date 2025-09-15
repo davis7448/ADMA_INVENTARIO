@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -50,6 +51,8 @@ interface GroupedByProduct {
             quantity: number;
             date: string;
             dispatchId: string;
+            variantName?: string;
+            variantSku?: string;
         }[];
     };
 }
@@ -101,6 +104,8 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
                 quantity: item.quantity,
                 date: item.date,
                 dispatchId: item.dispatchId,
+                variantName: item.variantName,
+                variantSku: item.variantSku,
             });
             return acc;
         }, {});
@@ -249,6 +254,7 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
                                                 <TableHeader>
                                                     <TableRow>
                                                         <TableHead>Guía de Excepción</TableHead>
+                                                        <TableHead>Variante</TableHead>
                                                         <TableHead>ID Despacho Original</TableHead>
                                                         <TableHead>Fecha Despacho</TableHead>
                                                         <TableHead className="text-right">Cantidad Pendiente</TableHead>
@@ -258,6 +264,16 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
                                                     {group.exceptions.map((ex, index) => (
                                                         <TableRow key={index}>
                                                             <TableCell className="font-mono">{ex.trackingNumber}</TableCell>
+                                                            <TableCell>
+                                                                {ex.variantName ? (
+                                                                    <>
+                                                                        <div>{ex.variantName}</div>
+                                                                        <div className="text-xs text-muted-foreground font-mono">{ex.variantSku}</div>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">N/A</span>
+                                                                )}
+                                                            </TableCell>
                                                             <TableCell>{ex.dispatchId}</TableCell>
                                                             <TableCell>{formatToTimeZone(new Date(ex.date), 'dd/MM/yyyy')}</TableCell>
                                                             <TableCell className="text-right font-medium">{ex.quantity}</TableCell>

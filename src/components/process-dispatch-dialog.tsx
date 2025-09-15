@@ -3,7 +3,7 @@
 "use client";
 
 import { useState } from 'react';
-import type { DispatchOrder, Product, DispatchException } from '@/lib/types';
+import type { DispatchOrder, Product, DispatchException, DispatchExceptionProduct } from '@/lib/types';
 import {
   Dialog,
   DialogContent,
@@ -96,11 +96,23 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
   
   const handleExceptionProductChange = (groupIndex: number, productIndex: number, field: 'productId' | 'quantity', value: string | number) => {
     const newExceptions = [...exceptions];
-    const product = newExceptions[groupIndex].products[productIndex];
+    const exceptionProduct = newExceptions[groupIndex].products[productIndex];
+    
     if (field === 'productId') {
-        product.productId = value as string;
+        const [productId, variantId] = (value as string).split('|');
+        const product = productsById[productId];
+        
+        exceptionProduct.productId = productId;
+        if (variantId && product?.variants) {
+            const variant = product.variants.find(v => v.id === variantId);
+            exceptionProduct.variantId = variant?.id;
+            exceptionProduct.variantSku = variant?.sku;
+        } else {
+            delete exceptionProduct.variantId;
+            delete exceptionProduct.variantSku;
+        }
     } else {
-        product.quantity = Number(value);
+        exceptionProduct.quantity = Number(value);
     }
     setExceptions(newExceptions);
   }
@@ -121,11 +133,15 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     const productQuantities: Record<string, number> = {};
 
     for(const p of allProductsInExceptions) {
-      if (p) productQuantities[p.productId] = (productQuantities[p.productId] || 0) + p.quantity;
+      if (p) {
+        const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+        productQuantities[key] = (productQuantities[key] || 0) + p.quantity;
+      }
     }
 
     for (const orderProduct of order.products) {
-      if ((productQuantities[orderProduct.productId] || 0) > orderProduct.quantity) {
+      const key = orderProduct.variantId ? `${orderProduct.productId}-${orderProduct.variantId}` : orderProduct.productId;
+      if ((productQuantities[key] || 0) > orderProduct.quantity) {
         toast({ variant: 'destructive', title: 'Error', description: `La cantidad total de excepción para ${orderProduct.name} excede la cantidad de la orden.` });
         setIsProcessing(false);
         return;
@@ -148,6 +164,17 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
   };
 
   const isPartial = order.status === 'Parcial';
+
+  const selectableProducts = order.products.flatMap(p => {
+    const parentProduct = productsById[p.productId];
+    if (parentProduct?.productType === 'variable' && parentProduct.variants) {
+      return parentProduct.variants.map(v => ({
+        id: `${parentProduct.id}|${v.id}`,
+        name: `${parentProduct.name} - ${v.name}`,
+      }));
+    }
+    return [{ id: p.productId, name: p.name }];
+  });
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -177,7 +204,7 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                             </TableHeader>
                             <TableBody>
                                 {order.products.map(p => (
-                                    <TableRow key={p.productId}>
+                                    <TableRow key={p.productId + (p.variantId || '')}>
                                         <TableCell>{p.name}</TableCell>
                                         <TableCell>{p.sku}</TableCell>
                                         <TableCell className="text-right">{p.quantity}</TableCell>
@@ -234,15 +261,15 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                                         {ex.products.map((prod, prodIndex) => (
                                             <div key={prodIndex} className="flex items-center gap-2 pl-2">
                                                 <Select 
-                                                    value={prod.productId} 
+                                                    value={prod.variantId ? `${prod.productId}|${prod.variantId}` : prod.productId} 
                                                     onValueChange={(val) => handleExceptionProductChange(groupIndex, prodIndex, 'productId', val)}
                                                 >
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="Producto" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {order.products.map(p => (
-                                                            <SelectItem key={p.productId} value={p.productId}>{p.name}</SelectItem>
+                                                        {selectableProducts.map(p => (
+                                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
@@ -303,4 +330,3 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     </Dialog>
   );
 }
-
