@@ -101,6 +101,7 @@ export type InventoryMovement = {
   quantity: number;
   date: string;
   notes: string;
+  variantSku?: string; // Add this to track variant returns
 };
 
 export type Carrier = {

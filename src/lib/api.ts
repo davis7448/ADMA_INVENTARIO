@@ -585,8 +585,8 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
                         productName: productData.name || 'Unknown Product',
                         quantity: exProd.quantity,
                         date: new Date(),
-                        notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}.`,
-                        movementId: 0,
+                        notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}. SKU: ${exProd.variantSku || productData.sku}`,
+                        movementId: 0, // This will be set by addInventoryMovement if we refactor to use it
                     });
                 }
             });
@@ -775,18 +775,19 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     for (const movement of returnMovements) {
         const day = format(startOfDay(new Date(movement.date)), 'yyyy-MM-dd');
         const qty = movement.quantity;
+        const carrierMatch = movement.notes.match(/Transportadora: (.*?)(?:\.|$)/);
+        const carrierName = carrierMatch ? carrierMatch[1].trim() : 'Unknown';
         
         // Aggregate total returns
         returnsByDay[day] = (returnsByDay[day] || 0) + qty;
-        const carrierMatch = movement.notes.match(/Transportadora: (.*?)$/);
-        const carrierName = carrierMatch ? carrierMatch[1].trim() : 'Unknown';
         returnsByCarrier[carrierName] = (returnsByCarrier[carrierName] || 0) + qty;
 
-        // Aggregate variant returns (requires SKU in notes)
+        // Aggregate variant returns
         if (product.productType === 'variable' && product.variants) {
-            const variantSkuMatch = movement.notes.match(/SKU: (\S+)/);
-            if (variantSkuMatch) {
-                const variant = product.variants.find(v => v.sku === variantSkuMatch[1]);
+            const skuMatch = movement.notes.match(/SKU: (\S+)/);
+            if (skuMatch) {
+                const variantSku = skuMatch[1];
+                const variant = product.variants.find(v => v.sku === variantSku);
                 if (variant && variant.id && returnsByVariant && returnsByVariant[variant.id]) {
                     const variantReturns = returnsByVariant[variant.id]!;
                     variantReturns.byDay[day] = (variantReturns.byDay[day] || 0) + qty;
@@ -798,6 +799,7 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
             }
         }
     }
+
 
     return {
         salesByCarrier: Object.entries(salesByCarrier).map(([name, value]) => ({ name, value })),
@@ -919,7 +921,7 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
         reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
       } as StaleReservationAlert;
     });
-    return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.alertDate).getTime());
+    return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.date).getTime());
 };
 
 export const checkForStaleReservations = async (): Promise<void> => {
