@@ -42,7 +42,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditProductForm } from './edit-product-form';
 import { cn } from '@/lib/utils';
-import { ProductDetailSheet } from './product-detail-sheet';
+import { ProductDetailDialog } from './product-detail-dialog';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -68,7 +68,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         setSelectedProductId(productId);
     };
 
-    const handleSheetOpenChange = (open: boolean) => {
+    const handleDialogValidChange = (open: boolean) => {
         if (!open) {
             setSelectedProductId(null);
         }
@@ -212,10 +212,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
           </Card>
         </div>
         {selectedProductId && (
-            <ProductDetailSheet 
+            <ProductDetailDialog
                 productId={selectedProductId}
                 open={!!selectedProductId}
-                onOpenChange={handleSheetOpenChange}
+                onOpenChange={handleDialogValidChange}
             />
         )}
         </TooltipProvider>
