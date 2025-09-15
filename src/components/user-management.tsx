@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -74,6 +74,23 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
     const [isAddUserOpen, setIsAddUserOpen] = useState(false);
     const { toast } = useToast();
 
+    // Filter states
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedRole, setSelectedRole] = useState('all');
+
+    const filteredUsers = useMemo(() => {
+        return initialUsers.filter(user => {
+            const lowercasedQuery = searchQuery.toLowerCase();
+            const searchMatch = searchQuery === '' || 
+                                user.name.toLowerCase().includes(lowercasedQuery) || 
+                                user.email.toLowerCase().includes(lowercasedQuery);
+            
+            const roleMatch = selectedRole === 'all' || user.role === selectedRole;
+
+            return searchMatch && roleMatch;
+        });
+    }, [initialUsers, searchQuery, selectedRole]);
+
     return (
         <Card>
             <CardHeader>
@@ -93,6 +110,33 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                 </div>
             </CardHeader>
             <CardContent>
+                <div className="p-4 mb-4 border rounded-lg bg-muted/50">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="user-search">Buscar por nombre o email</Label>
+                            <Input
+                                id="user-search"
+                                placeholder="Escribe para buscar..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor="role-filter">Filtrar por rol</Label>
+                            <Select value={selectedRole} onValueChange={setSelectedRole}>
+                                <SelectTrigger id="role-filter">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todos los Roles</SelectItem>
+                                    <SelectItem value="admin">Admin</SelectItem>
+                                    <SelectItem value="logistics">Logistics</SelectItem>
+                                    <SelectItem value="commercial">Commercial</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -109,13 +153,13 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                             <TableCell colSpan={4}><Skeleton className="h-10 w-full" /></TableCell>
                         </TableRow>
                      ))
-                  ) : initialUsers.length > 0 ? (
-                    initialUsers.map((user) => (
+                  ) : filteredUsers.length > 0 ? (
+                    filteredUsers.map((user) => (
                         <UserRow key={user.id} user={user} onUsersUpdate={onUsersUpdate} />
                     ))
                   ) : (
                     <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center">No users found.</TableCell>
+                        <TableCell colSpan={4} className="h-24 text-center">No se encontraron usuarios con los filtros aplicados.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -312,4 +356,3 @@ function AddUserDialog({ children, onUserAdded }: { children: React.ReactNode, o
         </Dialog>
     );
 }
-
