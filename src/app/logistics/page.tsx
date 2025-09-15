@@ -170,6 +170,13 @@ export default function LogisticsPage() {
             toast({ variant: 'destructive', title: "Error", description: "Por favor, ingresa un número de guía." });
         }
     };
+    
+    const handleAddProductKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddProductToReturn();
+        }
+    };
 
 
      const handleRemoveReturnedProduct = (sku: string, trackingNumber: string) => {
@@ -487,6 +494,7 @@ export default function LogisticsPage() {
                             value={currentTrackingNumber}
                             onChange={(e) => setCurrentTrackingNumber(e.target.value)}
                             placeholder="Ej: TRK123456789"
+                            onKeyDown={handleAddProductKeyDown}
                         />
                     </div>
                 </div>
