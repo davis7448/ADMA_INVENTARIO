@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -394,8 +395,24 @@ function DispatchPageContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <div className="flex items-center border-b">
+                                        <AccordionTrigger className="flex-grow">
+                                            <div className="grid grid-cols-3 w-full items-center text-sm">
+                                                <div className="text-left">
+                                                    <p className="font-semibold">{order.dispatchId}</p>
+                                                    <p className="text-muted-foreground">
+                                                        {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
+                                                    </p>
+                                                </div>
+                                                <div className="text-center">
+                                                    <p className="font-medium">{platformNames[order.platformId]}</p>
+                                                    <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                                </div>
+                                                {/* Empty div as a spacer for the 3-column grid */}
+                                                <div></div>
+                                            </div>
+                                        </AccordionTrigger>
                                         <div 
-                                          className="pl-4 pr-2"
+                                          className="pr-4"
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                             <ProcessDispatchDialog
@@ -406,20 +423,6 @@ function DispatchPageContent() {
                                                 <Button>Procesar Pendientes</Button>
                                             </ProcessDispatchDialog>
                                         </div>
-                                        <AccordionTrigger className="flex-grow">
-                                          <div className="grid grid-cols-2 w-full items-center text-sm">
-                                              <div className="text-left">
-                                                  <p className="font-semibold">{order.dispatchId}</p>
-                                                  <p className="text-muted-foreground">
-                                                      {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
-                                                  </p>
-                                              </div>
-                                              <div className="text-center">
-                                                  <p className="font-medium">{platformNames[order.platformId]}</p>
-                                                  <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
-                                              </div>
-                                          </div>
-                                        </AccordionTrigger>
                                     </div>
                                     <AccordionContent>
                                         <div className="p-4 bg-muted/50 rounded-md">
@@ -493,3 +496,5 @@ export default function DispatchPage() {
         </AuthProviderWrapper>
     )
 }
+
+    
