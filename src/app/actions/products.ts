@@ -2,11 +2,13 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, updateProduct, uploadImageAndGetURL } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState } from '@/lib/definitions';
 import { AddProductFormSchema, EditProductFormSchema } from '@/lib/definitions';
+import { getAuth } from 'firebase/auth';
+import { app } from '@/lib/firebase';
 
 
 export async function addProductAction(
@@ -68,6 +70,19 @@ export async function updateProductAction(
     productId: string,
     formData: FormData
   ): Promise<EditProductFormState> {
+    const auth = getAuth(app);
+    const firebaseUser = auth.currentUser;
+
+    if (!firebaseUser?.email) {
+        return { message: 'Authentication required.', success: false };
+    }
+
+    const appUser = await findUserByEmail(firebaseUser.email);
+
+    if (appUser?.role !== 'admin') {
+        return { message: 'Permission denied. You do not have access to this feature.', success: false };
+    }
+
     const validatedFields = EditProductFormSchema.safeParse({
         name: formData.get('name'),
         sku: formData.get('sku'),
