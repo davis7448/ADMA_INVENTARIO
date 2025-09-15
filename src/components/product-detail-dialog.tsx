@@ -90,38 +90,36 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
     return product.reservations.reduce((acc, res) => acc + res.quantity, 0);
   }, [product]);
 
+  const getChartDataForRange = (dataSet: Record<string, number> | undefined) => {
+    const data: { date: string; [key: string]: any }[] = [];
+    if (!dataSet) return [];
+    
+    for (let i = 29; i >= 0; i--) {
+        const date = subDays(new Date(), i);
+        const dayKey = format(date, 'yyyy-MM-dd');
+        data.push({
+            date: dayKey,
+            ...{ sales: dataSet[dayKey] || 0 },
+            ...{ returns: dataSet[dayKey] || 0 }
+        });
+    }
+    return data;
+  };
+  
   const salesData = useMemo(() => {
     if (!performanceData) return [];
-  
     const dataSet = selectedVariantId === 'total' || !performanceData.salesByVariant?.[selectedVariantId]
       ? performanceData.salesByDay
       : performanceData.salesByVariant[selectedVariantId].byDay;
-  
-    return Array.from({ length: 30 }).map((_, i) => {
-      const date = subDays(new Date(), i);
-      const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
-      return {
-        date: dayKey,
-        sales: dataSet[dayKey] || 0,
-      };
-    }).reverse();
+    return getChartDataForRange(dataSet).map(d => ({ date: d.date, sales: d.sales }));
   }, [performanceData, selectedVariantId]);
   
   const returnsData = useMemo(() => {
     if (!performanceData) return [];
-  
     const dataSet = selectedVariantId === 'total' || !performanceData.returnsByVariant?.[selectedVariantId]
       ? performanceData.returnsByDay
       : performanceData.returnsByVariant[selectedVariantId].byDay;
-  
-    return Array.from({ length: 30 }).map((_, i) => {
-      const date = subDays(new Date(), i);
-      const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
-      return {
-        date: dayKey,
-        returns: dataSet[dayKey] || 0,
-      };
-    }).reverse();
+    return getChartDataForRange(dataSet).map(d => ({ date: d.date, returns: d.returns }));
   }, [performanceData, selectedVariantId]);
   
   const salesByCarrierData = useMemo(() => {
@@ -147,6 +145,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
     }
     return performanceData.returnsByVariant[selectedVariantId].byCarrier;
   }, [performanceData, selectedVariantId]);
+
 
 
   const handleReservationSuccess = () => {

@@ -516,7 +516,7 @@ export default function LogisticsPage() {
                 productId: product.productId,
                 productName: product.name,
                 quantity: 1,
-                notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${carriers.find(c => c.id === returnCarrier)?.name}`
+                notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${carriers.find(c => c.id === returnCarrier)?.name}. SKU: ${product.sku}`
             });
         });
 
@@ -569,7 +569,7 @@ export default function LogisticsPage() {
                 productId: parentProduct.id,
                 productName: `${parentProduct.name} (${productToRegisterDamage.name})`,
                 quantity: 1,
-                notes: `Devolución averiada: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
+                notes: `Devolución averiada: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}. SKU: ${damagedSku}`
             });
 
             toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${parentProduct.name}.` });

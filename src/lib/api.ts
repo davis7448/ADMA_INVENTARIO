@@ -717,15 +717,15 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     const returnsByDay: Record<string, number> = {};
     const returnsByCarrier: Record<string, number> = {};
     
-    const salesByVariant: ProductPerformanceData['salesByVariant'] = {};
-    const returnsByVariant: ProductPerformanceData['returnsByVariant'] = {};
-
+    const salesByVariant: NonNullable<ProductPerformanceData['salesByVariant']> = {};
+    const returnsByVariant: NonNullable<ProductPerformanceData['returnsByVariant']> = {};
+    
     const initializeVariantData = (variantId: string) => {
-        if (!salesByVariant![variantId]) {
-            salesByVariant![variantId] = { byCarrier: [], byPlatform: [], byDay: {} };
+        if (!salesByVariant[variantId]) {
+            salesByVariant[variantId] = { byCarrier: [], byPlatform: [], byDay: {} };
         }
-        if (!returnsByVariant![variantId]) {
-            returnsByVariant![variantId] = { byCarrier: [], byDay: {} };
+        if (!returnsByVariant[variantId]) {
+            returnsByVariant[variantId] = { byCarrier: [], byDay: {} };
         }
     };
 
@@ -748,8 +748,8 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
                 salesByDay[day] = (salesByDay[day] || 0) + qty;
 
                 // Aggregate variant data
-                if (p.variantId && salesByVariant && salesByVariant[p.variantId]) {
-                    const variantSales = salesByVariant[p.variantId]!;
+                if (p.variantId && salesByVariant[p.variantId]) {
+                    const variantSales = salesByVariant[p.variantId];
                     variantSales.byDay[day] = (variantSales.byDay[day] || 0) + qty;
 
                     const carrierRecord = variantSales.byCarrier.find(c => c.name === carrierName);
@@ -767,7 +767,7 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     // Process movements for returns data
     const thirtyDaysAgo = subDays(new Date(), 30);
     const returnMovements = movements.filter(m => 
-        m.type === 'Entrada' && 
+        (m.type === 'Entrada' || m.type === 'Averia') && 
         (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia')) &&
         new Date(m.date) >= thirtyDaysAgo
     );
@@ -778,18 +778,16 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
         const carrierMatch = movement.notes.match(/Transportadora: (.*?)(?:\.|$)/);
         const carrierName = carrierMatch ? carrierMatch[1].trim() : 'Unknown';
         
-        // Aggregate total returns
         returnsByDay[day] = (returnsByDay[day] || 0) + qty;
         returnsByCarrier[carrierName] = (returnsByCarrier[carrierName] || 0) + qty;
 
-        // Aggregate variant returns
         if (product.productType === 'variable' && product.variants) {
             const skuMatch = movement.notes.match(/SKU: (\S+)/);
             if (skuMatch) {
                 const variantSku = skuMatch[1];
                 const variant = product.variants.find(v => v.sku === variantSku);
-                if (variant && variant.id && returnsByVariant && returnsByVariant[variant.id]) {
-                    const variantReturns = returnsByVariant[variant.id]!;
+                if (variant && variant.id && returnsByVariant[variant.id]) {
+                    const variantReturns = returnsByVariant[variant.id];
                     variantReturns.byDay[day] = (variantReturns.byDay[day] || 0) + qty;
                     
                     const carrierRecord = variantReturns.byCarrier.find(c => c.name === carrierName);
