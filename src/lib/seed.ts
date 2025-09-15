@@ -34,24 +34,22 @@ async function seedAuthenticationUsers() {
 
     for (const user of users) {
         try {
-            // Use a simple, default password for all seeded users
             const defaultPassword = 'password123';
             
-            // Check if user already exists
+            // Delete the user if they already exist to ensure a clean slate
             try {
-                await auth.getUserByEmail(user.email);
-                console.log(`User ${user.email} already exists in Auth. Updating...`);
-                // Optionally update user, or just ensure they exist. For seeding, we can just skip.
-                // For this case, we will delete and recreate to ensure consistency.
                 await auth.deleteUser(user.id);
-                console.log(`Deleted existing user ${user.email} to recreate.`);
+                console.log(`Successfully deleted existing user: ${user.email}`);
             } catch (error: any) {
-                if (error.code !== 'auth/user-not-found') {
-                    throw error; // Re-throw unexpected errors
+                if (error.code === 'auth/user-not-found') {
+                    // This is fine, means we are creating a new user.
+                } else {
+                    console.error(`Error deleting user ${user.email}:`, error.message);
+                    // Continue to try and create, maybe it's a recoverable state
                 }
-                // If user not found, proceed to create
             }
 
+            // Create the user with the specified UID
             await auth.createUser({
                 uid: user.id,
                 email: user.email,
@@ -60,19 +58,13 @@ async function seedAuthenticationUsers() {
                 photoURL: user.avatarUrl,
             });
             seededCount++;
+            console.log(`Successfully created user: ${user.email}`);
+
         } catch (error: any) {
-            if (error.code === 'auth/uid-already-exists') {
-                 // This is expected if we run seed multiple times, we can ignore it or update the user.
-                 // Forcing a recreate by deleting first is a more reliable seeding strategy.
-                console.log(`User with UID ${user.id} already exists, skipping creation.`);
-            } else if (error.code === 'auth/email-already-exists') {
-                console.log(`User with email ${user.email} already exists, skipping creation.`);
-            } else {
-                console.error(`Error creating auth user ${user.email}:`, error.message);
-            }
+            console.error(`Error creating auth user ${user.email}:`, error.message);
         }
     }
-    console.log(`Seeded ${seededCount} new authentication users.`);
+    console.log(`Seeded/Re-created ${seededCount} authentication users.`);
 }
 
 
@@ -134,4 +126,5 @@ async function main() {
 }
 
 main();
+
 
