@@ -288,7 +288,7 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions'>) => {
+export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'>) => {
     const batch = writeBatch(db);
     const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
 
@@ -303,6 +303,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         status: 'Pendiente',
         trackingNumbers: [],
         exceptions: [],
+        cancelledExceptions: [],
     };
     batch.set(dispatchOrderRef, newDispatchOrder);
 
@@ -371,19 +372,25 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);
     const orderSnap = await getDoc(orderRef);
+    if (!orderSnap.exists()) {
+        throw new Error('Order not found');
+    }
     const orderData = orderSnap.data() as DispatchOrder;
 
+    const currentExceptions = orderData.exceptions || [];
+    const newExceptions = [...currentExceptions, ...exceptions];
+
     // 1. Determine status
-    const status = exceptions.length > 0 ? 'Parcial' : 'Despachada';
+    const status = newExceptions.length > 0 ? 'Parcial' : 'Despachada';
 
     // 2. Update the dispatch order status, tracking numbers, and exceptions
     batch.update(orderRef, {
         status: status,
-        trackingNumbers: trackingNumbers,
-        exceptions: exceptions
+        trackingNumbers: [...orderData.trackingNumbers, ...trackingNumbers],
+        exceptions: newExceptions
     });
 
-    // 3. Handle exceptions
+    // 3. Handle exceptions by moving stock to pending
     for (const ex of exceptions) {
         for (const exProd of ex.products) {
             const productRef = doc(db, 'products', exProd.productId);
@@ -391,33 +398,23 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             
             if (productSnap.exists()) {
                 const productData = productSnap.data();
-                const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
-                batch.update(productRef, { pendingStock: newPendingStock });
-
-                // Create "Entrada a Pendientes" movement
-                const movementRef = doc(collection(db, 'inventoryMovements'));
-                batch.set(movementRef, {
-                    type: 'Entrada',
-                    productId: exProd.productId,
-                    productName: productData.name || 'Unknown Product',
-                    quantity: exProd.quantity,
-                    date: new Date(),
-                    notes: `Excepción en despacho ID: ${orderData?.dispatchId}. Guía: ${ex.trackingNumber}. Movido a stock pendiente.`,
-                    movementId: 0 
-                });
-
-                // Audit Alert Logic
-                if (productData.stock > 0) {
-                    const auditAlertRef = doc(collection(db, 'auditAlerts'));
-                    batch.set(auditAlertRef, {
-                        date: new Date(),
-                        productId: exProd.productId,
-                        productName: productData.name,
-                        productSku: productData.sku,
-                        message: `Se generó una excepción de ${exProd.quantity} unidad(es) para un producto que tenía ${productData.stock} unidad(es) en stock principal.`,
-                        dispatchId: orderData?.dispatchId,
-                        exceptionTrackingNumber: ex.trackingNumber
-                    });
+                
+                // Audit Alert Logic: Check if stock was available when exception was created
+                const orderProduct = orderData.products.find(p => p.productId === exProd.productId);
+                if (orderProduct && orderData.status === 'Pendiente') { // Only for the first processing run
+                    const stockAtDispatchTime = (productData.stock || 0) + orderProduct.quantity;
+                     if (stockAtDispatchTime < orderProduct.quantity) {
+                        const auditAlertRef = doc(collection(db, 'auditAlerts'));
+                        batch.set(auditAlertRef, {
+                            date: new Date(),
+                            productId: exProd.productId,
+                            productName: productData.name,
+                            productSku: productData.sku,
+                            message: `Se generó una excepción de ${exProd.quantity} unidad(es) para el despacho ${orderData.dispatchId} cuando el stock (${stockAtDispatchTime}) ya era insuficiente para la cantidad pedida (${orderProduct.quantity}).`,
+                            dispatchId: orderData?.dispatchId,
+                            exceptionTrackingNumber: ex.trackingNumber
+                        });
+                     }
                 }
             }
         }
@@ -425,6 +422,63 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 
     await batch.commit();
 }
+
+
+export const cancelPendingDispatchItems = async (orderId: string, cancelledTrackingNumbers: string[]) => {
+    const batch = writeBatch(db);
+    const orderRef = doc(db, 'dispatchOrders', orderId);
+
+    const orderSnap = await getDoc(orderRef);
+    if (!orderSnap.exists()) {
+        throw new Error("Dispatch order not found.");
+    }
+    const orderData = orderSnap.data() as DispatchOrder;
+
+    const exceptionsToCancel = orderData.exceptions.filter(ex => cancelledTrackingNumbers.includes(ex.trackingNumber));
+    const remainingExceptions = orderData.exceptions.filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
+
+    if (exceptionsToCancel.length === 0) {
+        throw new Error("No matching exceptions found to cancel.");
+    }
+
+    // 1. Return stock to main inventory and create inventory movements
+    for (const ex of exceptionsToCancel) {
+        for (const exProd of ex.products) {
+            const productRef = doc(db, 'products', exProd.productId);
+            const productSnap = await getDoc(productRef);
+
+            if (productSnap.exists()) {
+                const productData = productSnap.data();
+                // Add stock back
+                batch.update(productRef, { stock: (productData.stock || 0) + exProd.quantity });
+
+                // Create "Entrada" movement for the cancellation
+                const movementRef = doc(collection(db, 'inventoryMovements'));
+                batch.set(movementRef, {
+                    type: 'Entrada',
+                    productId: exProd.productId,
+                    productName: productData.name || 'Unknown Product',
+                    quantity: exProd.quantity,
+                    date: new Date(),
+                    notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}.`,
+                    movementId: 0,
+                });
+            }
+        }
+    }
+
+    // 2. Update the dispatch order
+    const newStatus = remainingExceptions.length === 0 ? 'Despachada' : 'Parcial';
+    const currentCancelled = orderData.cancelledExceptions || [];
+    batch.update(orderRef, {
+        exceptions: remainingExceptions,
+        status: newStatus,
+        cancelledExceptions: [...currentCancelled, ...exceptionsToCancel],
+    });
+
+    await batch.commit();
+};
+
 
 // Audit Alert Functions
 export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
@@ -481,3 +535,4 @@ export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => 
 
     return pendingItems;
 };
+

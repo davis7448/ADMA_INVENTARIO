@@ -111,6 +111,7 @@ export interface DispatchOrder {
     status: 'Pendiente' | 'Despachada' | 'Parcial';
     trackingNumbers: string[];
     exceptions: DispatchException[];
+    cancelledExceptions?: DispatchException[];
 }
 
 export interface AuditAlert {
@@ -135,3 +136,4 @@ export interface PendingInventoryItem {
     trackingNumber: string;
     date: string; // Date of the original dispatch
 }
+

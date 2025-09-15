@@ -16,7 +16,6 @@ import {
 import {
     Card,
     CardContent,
-    CardDescription,
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
@@ -47,7 +46,8 @@ import {
     AccordionContent,
     AccordionItem,
     AccordionTrigger,
-  } from "@/components/ui/accordion"
+  } from "@/components/ui/accordion";
+import { CancelDispatchDialog } from './cancel-dispatch-dialog';
 
 interface ProcessDispatchDialogProps {
   order: DispatchOrder;
@@ -115,24 +115,22 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
         setIsProcessing(false);
         return;
     }
-    
-    for (const ex of exceptions) {
-        for (const prod of ex.products) {
-            const orderProduct = order.products.find(p => p.productId === prod.productId);
-            if (!orderProduct) {
-                toast({ variant: 'destructive', title: 'Error', description: `El producto de excepción no está en la orden.` });
-                setIsProcessing(false);
-                return;
-            }
-            if (prod.quantity > orderProduct.quantity) {
-                toast({ variant: 'destructive', title: 'Error', description: `La cantidad de la excepción para ${productsById[prod.productId]?.name} supera la cantidad de la orden.` });
-                setIsProcessing(false);
-                return;
-            }
-        }
+
+    const allProductsInExceptions = [...order.exceptions.flatMap(ex => ex.products), ...exceptions.flatMap(ex => ex.products)];
+    const productQuantities: Record<string, number> = {};
+
+    for(const p of allProductsInExceptions) {
+      productQuantities[p.productId] = (productQuantities[p.productId] || 0) + p.quantity;
     }
 
-
+    for (const orderProduct of order.products) {
+      if ((productQuantities[orderProduct.productId] || 0) > orderProduct.quantity) {
+        toast({ variant: 'destructive', title: 'Error', description: `La cantidad total de excepción para ${orderProduct.name} excede la cantidad de la orden.` });
+        setIsProcessing(false);
+        return;
+      }
+    }
+    
     try {
         await processDispatch(order.id, trackingList, exceptions);
         toast({ title: 'Éxito', description: 'La orden ha sido despachada correctamente.' });
@@ -147,6 +145,8 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
         setIsProcessing(false);
     }
   };
+
+  const isPartial = order.status === 'Parcial';
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -276,12 +276,30 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
         </div>
 
         <DialogFooter>
-          <Button variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={isProcessing}>
-            {isProcessing ? 'Procesando...' : 'Confirmar Despacho'}
-          </Button>
+          <div className="flex w-full justify-between">
+            <div>
+              {isPartial && (
+                <CancelDispatchDialog 
+                  order={order} 
+                  onCancelled={() => {
+                    setOpen(false);
+                    onDispatchProcessed();
+                  }}
+                >
+                    <Button variant="destructive">Anular Pendientes</Button>
+                </CancelDispatchDialog>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSubmit} disabled={isProcessing}>
+                {isProcessing ? 'Procesando...' : 'Confirmar Despacho'}
+              </Button>
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+

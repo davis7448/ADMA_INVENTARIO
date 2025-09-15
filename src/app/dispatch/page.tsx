@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
 import Image from 'next/image';
 import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders } from '@/lib/api';
-import type { DispatchOrder, Product, Platform, Carrier, DispatchExceptionProduct } from '@/lib/types';
+import type { DispatchOrder, Product, Platform, Carrier } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import {
   Card,
