@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from 'react';
-import { useActionState } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-
 import {
   Dialog,
   DialogContent,
@@ -35,40 +32,16 @@ import {
     FormMessage,
   } from '@/components/ui/form';
 import { suppliers } from '@/lib/data';
-import { addProduct, type AddProductFormState } from '@/app/actions/products';
+import { addProduct, AddProductFormSchema, AddProductFormValues, AddProductFormState } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
-import { useFormStatus } from 'react-dom';
-
-const AddProductFormSchema = z.object({
-    name: z.string().min(1, 'Product name is required.'),
-    sku: z.string().min(1, 'SKU is required.'),
-    description: z.string().min(1, 'Description is required.'),
-    category: z.string().min(1, 'Category is required.'),
-    vendorId: z.string().min(1, 'Supplier is required.'),
-    price: z.coerce.number().min(0, 'Price must be a non-negative number.'),
-    stock: z.coerce.number().min(0, 'Stock must be a non-negative number.'),
-    restockThreshold: z.coerce.number().min(0, 'Threshold must be a non-negative number.'),
-  });
-
-type FormValues = z.infer<typeof AddProductFormSchema>;
-
-function SubmitButton() {
-    const { pending } = useFormStatus();
-    return (
-      <Button type="submit" disabled={pending}>
-        {pending ? 'Adding Product...' : 'Add Product'}
-      </Button>
-    );
-}
 
 export function AddProductForm() {
   const { toast } = useToast();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  
-  const initialState: AddProductFormState = { message: '', errors: {}, success: false };
-  const [state, formAction] = useActionState(addProduct, initialState);
+  const [isPending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
 
-  const form = useForm<FormValues>({
+  const form = useForm<AddProductFormValues>({
     resolver: zodResolver(AddProductFormSchema),
     defaultValues: {
       name: '',
@@ -82,31 +55,43 @@ export function AddProductForm() {
     },
   });
 
-  useEffect(() => {
-    if (state.success) {
-      toast({
-        title: 'Success!',
-        description: state.message,
-      });
-      closeButtonRef.current?.click();
-      form.reset();
-    } else if (state.message && state.errors) {
-      toast({
-        title: 'Error',
-        description: state.message,
-        variant: 'destructive',
-      });
-      Object.entries(state.errors).forEach(([key, value]) => {
-        form.setError(key as keyof FormValues, {
-          type: 'manual',
-          message: value?.[0],
+  const onSubmit = (values: AddProductFormValues) => {
+    startTransition(async () => {
+      const result = await addProduct(values);
+      if (result.success) {
+        toast({
+          title: 'Success!',
+          description: result.message,
         });
-      });
+        setOpen(false); 
+      } else {
+        toast({
+          title: 'Error',
+          description: result.message || 'Something went wrong.',
+          variant: 'destructive',
+        });
+        if (result.errors) {
+            Object.entries(result.errors).forEach(([key, value]) => {
+                if (key !== '_form') {
+                    form.setError(key as keyof AddProductFormValues, {
+                        type: 'manual',
+                        message: value?.[0],
+                    });
+                }
+            });
+        }
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (!open) {
+      form.reset();
     }
-  }, [state, toast, form]);
-  
+  }, [open, form]);
+
   return (
-    <Dialog onOpenChange={() => form.reset()}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>Add Product</Button>
       </DialogTrigger>
@@ -118,7 +103,7 @@ export function AddProductForm() {
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-            <form action={formAction} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -244,7 +229,9 @@ export function AddProductForm() {
                             Cancel
                         </Button>
                     </DialogClose>
-                    <SubmitButton />
+                    <Button type="submit" disabled={isPending}>
+                        {isPending ? 'Adding Product...' : 'Add Product'}
+                    </Button>
                 </DialogFooter>
             </form>
         </Form>

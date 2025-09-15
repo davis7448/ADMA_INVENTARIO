@@ -113,8 +113,12 @@ export let products: Product[] = [
   },
 ];
 
-export const addProduct = (product: Product) => {
-  products.unshift(product);
+export const addProductToData = (product: Omit<Product, 'id'>) => {
+  const newProduct: Product = {
+    id: `prod-${Date.now()}`,
+    ...product,
+  };
+  products.unshift(newProduct);
 };
 
 export const updateProductStock = (productId: string, quantity: number, operation: 'add' | 'subtract') => {

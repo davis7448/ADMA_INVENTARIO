@@ -1,10 +1,11 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct as addProductToData } from '@/lib/data';
+import { addProductToData } from '@/lib/data';
 import { revalidatePath } from 'next/cache';
+import type { Product } from '@/lib/types';
 
-const AddProductFormSchema = z.object({
+export const AddProductFormSchema = z.object({
   name: z.string().min(1, 'Product name is required.'),
   sku: z.string().min(1, 'SKU is required.'),
   description: z.string().min(1, 'Description is required.'),
@@ -15,9 +16,12 @@ const AddProductFormSchema = z.object({
   restockThreshold: z.coerce.number().min(0, 'Threshold must be a non-negative number.'),
 });
 
+export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;
+
 export type AddProductFormState = {
   message: string;
   errors?: {
+    _form?: string[];
     name?: string[];
     sku?: string[];
     description?: string[];
@@ -31,19 +35,9 @@ export type AddProductFormState = {
 };
 
 export async function addProduct(
-  prevState: AddProductFormState,
-  formData: FormData
+  data: AddProductFormValues
 ): Promise<AddProductFormState> {
-  const validatedFields = AddProductFormSchema.safeParse({
-    name: formData.get('name'),
-    sku: formData.get('sku'),
-    description: formData.get('description'),
-    category: formData.get('category'),
-    vendorId: formData.get('vendorId'),
-    price: formData.get('price'),
-    stock: formData.get('stock'),
-    restockThreshold: formData.get('restockThreshold'),
-  });
+  const validatedFields = AddProductFormSchema.safeParse(data);
 
   if (!validatedFields.success) {
     return {
@@ -54,9 +48,8 @@ export async function addProduct(
   }
 
   try {
-    const newProduct = {
+    const newProduct: Omit<Product, 'id'> = {
       ...validatedFields.data,
-      id: `prod-${Date.now()}`,
       imageUrl: 'https://placehold.co/600x400',
       imageHint: 'placeholder',
     };
