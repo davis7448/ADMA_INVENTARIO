@@ -3,21 +3,25 @@
     {
         "id": "rot-1",
         "name": "Escalada",
-        "description": "Productos con demanda en rápido crecimiento y alto potencial."
+        "description": "Productos con demanda en rápido crecimiento y alto potencial.",
+        "salesThreshold": 50
     },
     {
         "id": "rot-2",
         "name": "Activo",
-        "description": "Productos con ventas constantes y movimiento regular."
+        "description": "Productos con ventas constantes y movimiento regular.",
+        "salesThreshold": 10
     },
     {
         "id": "rot-3",
         "name": "Baja rotación",
-        "description": "Productos con ventas esporádicas o movimiento lento."
+        "description": "Productos con ventas esporádicas o movimiento lento.",
+        "salesThreshold": 1
     },
     {
         "id": "rot-4",
         "name": "Sin movimiento",
-        "description": "Productos que no han registrado ventas en un período prolongado."
+        "description": "Productos que no han registrado ventas en un período prolongado.",
+        "salesThreshold": 0
     }
 ]

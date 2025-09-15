@@ -338,7 +338,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
     batch.set(dispatchOrderRef, newDispatchOrder);
 
     const platformName = (await getDoc(doc(db, 'platforms', platformId))).data()?.name || 'N/A';
-    const carrierName = (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || 'N/A';
+    const carrierName = (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || 'N-A';
     const notes = `Dispatch ID: ${dispatchId}. Plataforma: ${platformName}, Transportadora: ${carrierName}`;
 
 
@@ -575,11 +575,21 @@ export const getRotationCategories = async (): Promise<RotationCategory[]> => {
     const rotationCategoriesCol = collection(db, 'rotationCategories');
     const snapshot = await getDocs(rotationCategoriesCol);
     const categoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RotationCategory));
-    return categoryList;
+    // Sort by salesThreshold in descending order
+    return categoryList.sort((a, b) => b.salesThreshold - a.salesThreshold);
 };
 
 export const addRotationCategory = async (category: Omit<RotationCategory, 'id'>): Promise<string> => {
     const rotationCategoriesCol = collection(db, 'rotationCategories');
     const docRef = await addDoc(rotationCategoriesCol, category);
     return docRef.id;
+};
+
+export const updateRotationCategories = async (categories: RotationCategory[]): Promise<void> => {
+    const batch = writeBatch(db);
+    categories.forEach(category => {
+        const docRef = doc(db, 'rotationCategories', category.id);
+        batch.update(docRef, { salesThreshold: category.salesThreshold });
+    });
+    await batch.commit();
 };

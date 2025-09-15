@@ -142,4 +142,5 @@ export type RotationCategory = {
     id: string;
     name: string;
     description: string;
+    salesThreshold: number;
 };

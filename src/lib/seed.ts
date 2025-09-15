@@ -74,7 +74,7 @@ async function main() {
     await seedCollection('products', products);
     await seedCollection('suppliers', suppliers);
     await seedCollection('categories', categories);
-    await seedCollection('rotationCategories', rotationCategories);
+    await seedCollection('rotationCategories', rotationCategories as any);
     await seedInventoryMovements();
     
     console.log('\nDatabase seeded successfully!');
