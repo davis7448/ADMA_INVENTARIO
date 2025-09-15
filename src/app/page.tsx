@@ -15,21 +15,16 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DollarSign, Archive, Package, Truck, AlertTriangle } from 'lucide-react';
-import { getProducts, getSuppliers, getInventoryMovements, getDispatchOrders, getCarriers } from '@/lib/api';
-import type { Product, InventoryMovement, DispatchOrder, Carrier } from '@/lib/types';
+import { getProducts, getSuppliers, getInventoryMovements } from '@/lib/api';
+import type { Product, InventoryMovement } from '@/lib/types';
 import { formatToTimeZone } from '@/lib/utils';
 import InventoryChart from '@/components/inventory-chart';
-import CarrierChart from '@/components/carrier-chart';
-import ReturnsChart from '@/components/returns-chart';
-import { subDays, format, startOfDay } from 'date-fns';
 
 export default async function DashboardPage() {
-  const [products, suppliers, movements, dispatchOrders, carriers] = await Promise.all([
+  const [products, suppliers, movements] = await Promise.all([
     getProducts(),
     getSuppliers(),
     getInventoryMovements(),
-    getDispatchOrders(),
-    getCarriers(),
   ]);
 
   const totalInventoryValue = products.reduce((acc, p) => acc + (p.price * p.stock), 0);
@@ -42,41 +37,6 @@ export default async function DashboardPage() {
     .sort((a, b) => b.stock - a.stock)
     .slice(0, 5)
     .map(p => ({ name: p.name, stock: p.stock }));
-
-  const carrierNamesById = carriers.reduce((acc, carrier) => {
-    acc[carrier.id] = carrier.name;
-    return acc;
-  }, {} as Record<string, string>);
-
-  const dispatchesByCarrier = dispatchOrders.reduce((acc, order) => {
-    const carrierName = carrierNamesById[order.carrierId] || 'Unknown';
-    acc[carrierName] = (acc[carrierName] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const carrierChartData = Object.entries(dispatchesByCarrier).map(([name, value]) => ({ name, value }));
-
-  const thirtyDaysAgo = subDays(new Date(), 30);
-  const returnMovements = movements.filter(m => 
-      m.type === 'Entrada' && 
-      m.notes.toLowerCase().includes('devolución') &&
-      new Date(m.date) >= thirtyDaysAgo
-  );
-
-  const returnsByDay = returnMovements.reduce((acc, m) => {
-    const day = format(startOfDay(new Date(m.date)), 'yyyy-MM-dd');
-    acc[day] = (acc[day] || 0) + m.quantity;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const returnsChartData = Array.from({ length: 30 }).map((_, i) => {
-    const date = subDays(new Date(), i);
-    const dayKey = format(startOfDay(date), 'yyyy-MM-dd');
-    return {
-      date: dayKey,
-      returns: returnsByDay[dayKey] || 0,
-    };
-  }).reverse();
     
   const getBadgeClass = (type: 'Entrada' | 'Salida' | 'Averia') => {
     switch (type) {
@@ -132,27 +92,6 @@ export default async function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{suppliers.length}</div>
             <p className="text-xs text-muted-foreground">Proveedores activos registrados.</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Distribución por Transportadora</CardTitle>
-            <CardDescription>Volumen de despachos por cada transportadora.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CarrierChart data={carrierChartData} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Tendencia de Devoluciones</CardTitle>
-            <CardDescription>Volumen de devoluciones en los últimos 30 días.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ReturnsChart data={returnsChartData} />
           </CardContent>
         </Card>
       </div>
