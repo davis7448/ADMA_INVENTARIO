@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct as addProductToData } from '@/lib/data';
+import { addProduct } from '@/lib/data';
 import { revalidatePath } from 'next/cache';
 
 const AddProductFormSchema = z.object({
@@ -61,7 +61,7 @@ export async function addProduct(
       imageHint: 'placeholder',
     };
     
-    addProductToData(newProduct);
+    addProduct(newProduct);
     
     revalidatePath('/products');
 
