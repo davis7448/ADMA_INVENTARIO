@@ -192,7 +192,7 @@ export function AddProductForm() {
                             <FormItem>
                                 <FormLabel>Price</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} />
+                                    <Input type="number" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -205,7 +205,7 @@ export function AddProductForm() {
                             <FormItem>
                                 <FormLabel>Stock</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} />
+                                    <Input type="number" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -218,7 +218,7 @@ export function AddProductForm() {
                             <FormItem>
                                 <FormLabel>Restock Threshold</FormLabel>
                                 <FormControl>
-                                    <Input type="number" {...field} />
+                                    <Input type="number" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
