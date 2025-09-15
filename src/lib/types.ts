@@ -123,3 +123,12 @@ export interface AuditAlert {
     dispatchId: string;
     exceptionTrackingNumber: string;
 }
+
+export interface PendingInventoryItem extends Product {
+    exceptionDetails: {
+        trackingNumber: string;
+        quantity: number;
+        dispatchId: string;
+        date: string;
+    }[];
+}

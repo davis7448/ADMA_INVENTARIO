@@ -43,6 +43,7 @@ type NavItem = {
     },
     { href: '/logistics', label: 'Logística', roles: ['admin', 'logistics'] },
     { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics'] },
+    { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics'] },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
     { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
   ];

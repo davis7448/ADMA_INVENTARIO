@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -365,7 +365,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);
     const orderSnap = await getDoc(orderRef);
-    const orderData = orderSnap.data();
+    const orderData = orderSnap.data() as DispatchOrder;
 
     // 1. Determine status
     const status = exceptions.length > 0 ? 'Parcial' : 'Despachada';
@@ -434,4 +434,44 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+};
+
+// Pending Inventory Functions
+export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => {
+    const productsRef = collection(db, 'products');
+    const q = query(productsRef, where('pendingStock', '>', 0));
+    const productSnapshot = await getDocs(q);
+    
+    if (productSnapshot.empty) {
+        return [];
+    }
+
+    const pendingProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+    const dispatchOrders = await getDispatchOrders();
+    
+    const pendingInventory: PendingInventoryItem[] = pendingProducts.map(product => {
+        const exceptionDetails: PendingInventoryItem['exceptionDetails'] = [];
+
+        for (const order of dispatchOrders) {
+            if (order.exceptions && order.exceptions.length > 0) {
+                for (const exception of order.exceptions) {
+                    if (exception.products) {
+                        for (const exProduct of exception.products) {
+                            if (exProduct.productId === product.id) {
+                                exceptionDetails.push({
+                                    trackingNumber: exception.trackingNumber,
+                                    quantity: exProduct.quantity,
+                                    dispatchId: order.dispatchId,
+                                    date: order.date,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return { ...product, exceptionDetails };
+    });
+
+    return pendingInventory;
 };
