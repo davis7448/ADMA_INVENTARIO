@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts, updateProductStock, addInventoryMovement } from '@/lib/api';
+import { products as allProducts, updateProductStock, addInventoryMovement } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import { Barcode, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -66,7 +66,6 @@ export default function LogisticsPage() {
     const { user } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
-    const allProducts = getProducts();
 
     // Salidas State
     const [platform, setPlatform] = useState('');

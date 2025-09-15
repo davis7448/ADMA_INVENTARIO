@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { getProducts, getSupplierById } from '@/lib/api';
+import { products, getSupplierById } from '@/lib/api';
 import { MoreHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/use-auth';
@@ -33,7 +33,6 @@ import { AddProductForm } from '@/components/add-product-form';
 export default function ProductsPage() {
   const { user } = useAuth();
   const canEdit = user?.role === 'admin';
-  const products = getProducts();
 
   const getSupplierName = (vendorId: string) => {
     return getSupplierById(vendorId)?.name ?? 'Unknown';

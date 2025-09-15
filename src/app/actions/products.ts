@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct } from '@/lib/api';
+import { addProduct as addProductToMemory, products } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
 import type { AddProductFormState, AddProductFormValues } from '@/lib/definitions';
@@ -29,7 +29,8 @@ export async function addProductAction(
       imageHint: 'new product',
     };
     
-    addProduct(newProduct);
+    // Directly modify the imported products array
+    addProductToMemory(products, newProduct);
     
     revalidatePath('/products');
 

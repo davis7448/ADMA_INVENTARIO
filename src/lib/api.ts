@@ -6,7 +6,7 @@ const findImage = (id: string) => {
   return image ? { url: image.imageUrl, hint: image.imageHint, description: image.description } : { url: `https://picsum.photos/seed/${id}/600/400`, hint: 'placeholder', description: 'Placeholder image' };
 };
 
-let products: Product[] = [
+export let products: Product[] = [
   {
     id: 'prod-1',
     sku: 'WM-ERGO-01',
@@ -179,8 +179,9 @@ export const getProducts = () => products;
 
 export const getProductById = (id: string) => products.find(p => p.id === id);
 
-export const addProduct = (product: Product) => {
-  products.unshift(product);
+export const addProduct = (productsArray: Product[], product: Product) => {
+  productsArray.unshift(product);
+  return productsArray;
 };
 
 export const updateProductStock = (productId: string, quantity: number, operation: 'add' | 'subtract') => {
