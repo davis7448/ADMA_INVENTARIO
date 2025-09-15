@@ -7,7 +7,7 @@ import { getStorage } from "firebase/storage";
 export const firebaseConfig = {
   "projectId": "studio-9748962172-82b35",
   "appId": "1:607501701912:web:753a676ca0723828e4c46d",
-  "storageBucket": "studio-9748962172-82b35.appspot.com",
+  "storageBucket": "studio-9748962172-82b35.firebasestorage.app",
   "apiKey": "AIzaSyAFrZ4jvO5fIF9koe0cMUUwO1r_b5fdBRk",
   "authDomain": "studio-9748962172-82b35.firebaseapp.com",
   "messagingSenderId": "607501701912"
