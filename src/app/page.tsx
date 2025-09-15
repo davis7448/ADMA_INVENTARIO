@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -186,6 +187,7 @@ export default function DashboardPage() {
     const platformCarrierMap: { [platformId: string]: { [carrierId: string]: number } } = {};
     const platformOrderCount: { [platformId: string]: number } = {};
     const carrierUsageCount: { [carrierId: string]: number } = {};
+    let totalProductsShipped = 0;
 
     ordersInPeriod.forEach(order => {
         const platformName = platformNameMap[order.platformId] || 'Unknown Platform';
@@ -198,6 +200,7 @@ export default function DashboardPage() {
 
         platformOrderCount[platformName] = (platformOrderCount[platformName] || 0) + 1;
         carrierUsageCount[carrierName] = (carrierUsageCount[carrierName] || 0) + order.totalItems;
+        totalProductsShipped += order.totalItems;
     });
 
     for (const platformName in platformCarrierMap) {
@@ -207,8 +210,20 @@ export default function DashboardPage() {
         });
     }
 
-    const mostUsedCarrier = Object.entries(carrierUsageCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-    const platformWithMostOrders = Object.entries(platformOrderCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+    const mostUsedCarrierEntry = Object.entries(carrierUsageCount).sort((a, b) => b[1] - a[1])[0];
+    const mostUsedCarrier = {
+        name: mostUsedCarrierEntry?.[0] || 'N/A',
+        count: mostUsedCarrierEntry?.[1] || 0,
+        percentage: totalProductsShipped > 0 ? ((mostUsedCarrierEntry?.[1] || 0) / totalProductsShipped) * 100 : 0,
+    };
+
+    const platformWithMostOrdersEntry = Object.entries(platformOrderCount).sort((a, b) => b[1] - a[1])[0];
+    const totalOrdersInPeriod = ordersInPeriod.length;
+    const platformWithMostOrders = {
+        name: platformWithMostOrdersEntry?.[0] || 'N/A',
+        count: platformWithMostOrdersEntry?.[1] || 0,
+        percentage: totalOrdersInPeriod > 0 ? ((platformWithMostOrdersEntry?.[1] || 0) / totalOrdersInPeriod) * 100 : 0,
+    };
 
 
     return {
@@ -435,9 +450,25 @@ export default function DashboardPage() {
                         </div>
                          <div className="lg:col-span-1 space-y-4 text-center lg:text-left">
                             <h4 className="font-semibold text-lg">Resumen Técnico</h4>
-                            <div className="text-sm text-muted-foreground space-y-2">
-                                <p>La transportadora más usada en el período es: <strong className="block text-xl text-foreground">{filteredData.mostUsedCarrier}</strong>.</p>
-                                <p>La plataforma con más despachos es: <strong className="block text-xl text-foreground">{filteredData.platformWithMostOrders}</strong>.</p>
+                            <div className="text-sm text-muted-foreground space-y-4">
+                                <div>
+                                    <p>La transportadora más usada en el período es: </p>
+                                    <strong className="block text-xl text-foreground">
+                                        {filteredData.mostUsedCarrier.name}
+                                    </strong>
+                                    <p className="text-xs">
+                                        con {filteredData.mostUsedCarrier.count} productos ({filteredData.mostUsedCarrier.percentage.toFixed(1)}% del total).
+                                    </p>
+                                </div>
+                                <div>
+                                    <p>La plataforma con más despachos es: </p>
+                                    <strong className="block text-xl text-foreground">
+                                        {filteredData.platformWithMostOrders.name}
+                                    </strong>
+                                     <p className="text-xs">
+                                        con {filteredData.platformWithMostOrders.count} órdenes ({filteredData.platformWithMostOrders.percentage.toFixed(1)}% del total).
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
