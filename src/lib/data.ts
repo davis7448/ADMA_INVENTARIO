@@ -133,7 +133,7 @@ export let inventoryMovements: InventoryMovement[] = [];
 
 export const addInventoryMovement = (movement: Omit<InventoryMovement, 'id' | 'date'>) => {
   inventoryMovements.unshift({
-    id: `mov-${Date.now()}`,
+    id: `mov-${Date.now()}-${Math.random()}`,
     date: new Date().toISOString(),
     ...movement,
   });
