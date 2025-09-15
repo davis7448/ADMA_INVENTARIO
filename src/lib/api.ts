@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -419,3 +419,19 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 
     await batch.commit();
 }
+
+// Audit Alert Functions
+export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
+    const alertsCol = collection(db, 'auditAlerts');
+    const alertSnapshot = await getDocs(query(alertsCol));
+    const alertList = alertSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
+        return {
+            id: doc.id,
+            ...data,
+            date,
+        } as AuditAlert;
+    });
+    return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+};

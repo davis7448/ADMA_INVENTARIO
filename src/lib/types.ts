@@ -112,3 +112,14 @@ export interface DispatchOrder {
     trackingNumbers: string[];
     exceptions: DispatchException[];
 }
+
+export interface AuditAlert {
+    id: string;
+    date: string;
+    productId: string;
+    productName: string;
+    productSku: string;
+    message: string;
+    dispatchId: string;
+    exceptionTrackingNumber: string;
+}

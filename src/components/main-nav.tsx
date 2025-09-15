@@ -44,6 +44,7 @@ type NavItem = {
     { href: '/logistics', label: 'Logística', roles: ['admin', 'logistics'] },
     { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics'] },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
+    { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
   ];
 
 export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
