@@ -103,11 +103,11 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     const lines = importText.trim().split('\n');
     const newVariants = lines.map(line => {
       const parts = line.split(/[\t,]/); // Split by tab or comma
-      const [name, sku, price, stock] = parts;
+      const [sku, name, price, stock] = parts;
       return {
         id: uuidv4(),
-        name: name?.trim() || '',
         sku: sku?.trim() || '',
+        name: name?.trim() || '',
         price: parseFloat(price?.trim()) || 0,
         stock: parseInt(stock?.trim(), 10) || 0,
       };
@@ -537,15 +537,15 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
             <DialogTitle>Importar Variantes desde Texto</DialogTitle>
             <DialogDescription>
               Pega aquí los datos de tus variantes desde una hoja de cálculo (Excel, Google Sheets). 
-              Usa una línea por variante y asegúrate de que las columnas estén en el orden: Nombre, SKU, Precio, Stock.
+              Usa una línea por variante y asegúrate de que las columnas estén en el orden: SKU, Nombre, Precio, Stock.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea
               placeholder="Ejemplo:
-Rojo, CAM-01-R, 25.00, 10
-Azul, CAM-01-A, 25.00, 15
-Verde, CAM-01-V, 25.00, 12"
+CAM-01-R,Rojo,25.00,10
+CAM-01-A,Azul,25.00,15
+CAM-01-V,Verde,25.00,12"
               rows={10}
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
@@ -562,5 +562,3 @@ Verde, CAM-01-V, 25.00, 12"
     </>
   );
 }
-
-    
