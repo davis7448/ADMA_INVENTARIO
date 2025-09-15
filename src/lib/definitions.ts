@@ -27,6 +27,11 @@ const ProductFormSchemaBase = z.object({
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Price must be a number.' }).min(0, 'Price must be a non-negative number.').optional()
   ),
+  cost: z.preprocess(
+    (val) => (String(val).trim() === '' ? undefined : val),
+    z.coerce.number({ invalid_type_error: 'Cost must be a number.' }).min(0, 'Cost must be non-negative.').optional()
+  ),
+  purchaseDate: z.date().optional(),
   stock: z.preprocess(
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Stock must be a number.' }).int('Stock must be a whole number.').min(0, 'Stock must be a non-negative number.').optional()

@@ -17,6 +17,8 @@ export type Product = {
   imageHint: string;
   categoryId: string;
   price: number;
+  cost?: number;
+  purchaseDate?: string;
   stock: number;
   pendingStock: number;
   damagedStock: number;

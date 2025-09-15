@@ -36,10 +36,14 @@ export async function addProductAction(
 
   rawData.variants = variants.filter(Boolean); // Clean up any empty slots
 
+  const purchaseDate = formData.get('purchaseDate');
+
   const validatedFields = AddProductFormSchema.safeParse({
     ...rawData,
     image: formData.get('image'),
     price: rawData.price ? Number(rawData.price) : undefined,
+    cost: rawData.cost ? Number(rawData.cost) : undefined,
+    purchaseDate: purchaseDate ? new Date(purchaseDate as string) : undefined,
     stock: rawData.stock ? Number(rawData.stock) : undefined,
     restockThreshold: rawData.restockThreshold ? Number(rawData.restockThreshold) : undefined,
     variants: rawData.variants.map((v: any) => ({
@@ -66,6 +70,7 @@ export async function addProductAction(
       price: productData.price ?? 0,
       stock: productData.stock ?? 0,
       restockThreshold: productData.restockThreshold ?? 0,
+      purchaseDate: productData.purchaseDate?.toISOString(),
       imageUrl: imageUrl,
       imageHint: 'new product', // This could be improved with AI
     };
@@ -102,7 +107,10 @@ export async function updateProductAction(
     const appUser = await findUserByEmail(firebaseUser.email);
 
     if (appUser?.role !== 'admin') {
-        return { message: 'Permission denied. You do not have access to this feature.', success: false };
+        // Silently remove cost field if user is not admin
+        if (formData.has('cost')) {
+          formData.delete('cost');
+        }
     }
     
     const rawData: Record<string, any> = {};
@@ -123,11 +131,15 @@ export async function updateProductAction(
         }
     }
     rawData.variants = variants.filter(Boolean); // Clean up any empty slots
+    
+    const purchaseDate = formData.get('purchaseDate');
 
     const validatedFields = EditProductFormSchema.safeParse({
         ...rawData,
         image: formData.get('image'),
         price: rawData.price ? Number(rawData.price) : undefined,
+        cost: rawData.cost ? Number(rawData.cost) : undefined,
+        purchaseDate: purchaseDate ? new Date(purchaseDate as string) : undefined,
         stock: rawData.stock ? Number(rawData.stock) : undefined,
         restockThreshold: rawData.restockThreshold ? Number(rawData.restockThreshold) : undefined,
         variants: rawData.variants.map((v: any) => ({
@@ -161,6 +173,7 @@ export async function updateProductAction(
             price: productData.price ?? 0,
             stock: productData.stock ?? 0,
             restockThreshold: productData.restockThreshold ?? 0,
+            purchaseDate: productData.purchaseDate?.toISOString(),
         };
 
         if (imageUrl) {

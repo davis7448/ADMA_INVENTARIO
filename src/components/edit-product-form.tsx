@@ -41,9 +41,14 @@ import type { EditProductFormValues } from '@/lib/definitions';
 import { EditProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category, Product } from '@/lib/types';
 import Image from 'next/image';
-import { Trash2, Upload } from 'lucide-react';
+import { CalendarIcon, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/hooks/use-auth';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Calendar } from './ui/calendar';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface EditProductFormProps {
   product: Product;
@@ -53,6 +58,7 @@ interface EditProductFormProps {
 
 export function EditProductForm({ product, onProductUpdated, children }: EditProductFormProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -70,6 +76,8 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         categoryId: product.categoryId,
         vendorId: product.vendorId,
         price: product.price,
+        cost: product.cost,
+        purchaseDate: product.purchaseDate ? new Date(product.purchaseDate) : undefined,
         stock: product.stock,
         restockThreshold: product.restockThreshold,
         image: undefined,
@@ -107,6 +115,8 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
             categoryId: product.categoryId,
             vendorId: product.vendorId,
             price: product.price,
+            cost: product.cost,
+            purchaseDate: product.purchaseDate ? new Date(product.purchaseDate) : undefined,
             stock: product.stock,
             restockThreshold: product.restockThreshold,
             image: undefined,
@@ -143,28 +153,22 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
   const onSubmit = (values: EditProductFormValues) => {
     const formData = new FormData();
     
-    // Append all fields except image and variants
-    for (const key in values) {
-        if (key !== 'image' && key !== 'variants' && values[key as keyof typeof values] !== null && values[key as keyof typeof values] !== undefined) {
-          formData.append(key, String(values[key as keyof typeof values]));
-        }
-    }
-  
-    // Append image if it exists
-    if (values.image instanceof File) {
-        formData.append('image', values.image);
-    }
-      
-    // Append variants
-    if (values.variants) {
-        values.variants.forEach((variant, index) => {
-          formData.append(`variants[${index}].id`, variant.id);
-          formData.append(`variants[${index}].name`, variant.name);
-          formData.append(`variants[${index}].sku`, variant.sku);
-          formData.append(`variants[${index}].price`, String(variant.price));
-          formData.append(`variants[${index}].stock`, String(variant.stock));
+    Object.entries(values).forEach(([key, value]) => {
+      if (key === 'image' && value instanceof File) {
+        formData.append(key, value);
+      } else if (key === 'variants' && Array.isArray(value)) {
+        value.forEach((variant, index) => {
+          Object.entries(variant).forEach(([vKey, vValue]) => {
+            formData.append(`variants[${index}].${vKey}`, String(vValue));
+          });
         });
-    }
+      } else if (key === 'purchaseDate' && value instanceof Date) {
+        formData.append(key, value.toISOString());
+      }
+       else if (value !== null && value !== undefined) {
+        formData.append(key, String(value));
+      }
+    });
 
     startTransition(async () => {
         const result = await updateProductAction(product.id, formData);
@@ -389,7 +393,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => append({ id: uuidv4(), name: '', sku: '', price: 0, stock: 0 })}
+                                    onClick={() => append({ id: uuidv4(), sku: '', name: '', price: 0, stock: 0 })}
                                 >
                                     Add Variant
                                 </Button>
@@ -475,7 +479,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                     </Card>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                           control={form.control}
                           name="price"
@@ -496,6 +500,23 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                               </FormItem>
                           )}
                       />
+                      {user?.role === 'admin' && (
+                        <FormField
+                            control={form.control}
+                            name="cost"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Cost</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" step="0.01" placeholder="e.g., 45.50" {...field} value={field.value ?? ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                      )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
                           control={form.control}
                           name="stock"
@@ -530,6 +551,47 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                               </FormItem>
                           )}
                       />
+                      <FormField
+                            control={form.control}
+                            name="purchaseDate"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Purchase Date</FormLabel>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <FormControl>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn(
+                                                        "pl-3 text-left font-normal",
+                                                        !field.value && "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    {field.value ? (
+                                                        format(field.value, "PPP")
+                                                    ) : (
+                                                        <span>Pick a date</span>
+                                                    )}
+                                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                </Button>
+                                            </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar
+                                                mode="single"
+                                                selected={field.value}
+                                                onSelect={field.onChange}
+                                                disabled={(date) =>
+                                                    date > new Date() || date < new Date("1900-01-01")
+                                                }
+                                                initialFocus
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
                   </div>
                   <DialogFooter>
                       <DialogClose asChild>
