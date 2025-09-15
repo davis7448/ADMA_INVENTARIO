@@ -32,7 +32,7 @@ import {
     FormMessage,
   } from '@/components/ui/form';
 import { getSuppliers } from '@/lib/api';
-import { addProduct } from '@/app/actions/products';
+import { addProductAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
@@ -59,7 +59,7 @@ export function AddProductForm() {
 
   const onSubmit = (values: AddProductFormValues) => {
     startTransition(async () => {
-      const result = await addProduct(values);
+      const result = await addProductAction(values);
       if (result.success) {
         toast({
           title: 'Success!',

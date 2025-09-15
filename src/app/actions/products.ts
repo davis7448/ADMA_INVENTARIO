@@ -1,13 +1,13 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct as addProductToApi } from '@/lib/api';
+import { addProduct } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
 import type { AddProductFormState, AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
 
-export async function addProduct(
+export async function addProductAction(
   data: AddProductFormValues
 ): Promise<AddProductFormState> {
   const validatedFields = AddProductFormSchema.safeParse(data);
@@ -29,7 +29,7 @@ export async function addProduct(
       imageHint: 'new product',
     };
     
-    addProductToApi(newProduct);
+    addProduct(newProduct);
     
     revalidatePath('/products');
 
