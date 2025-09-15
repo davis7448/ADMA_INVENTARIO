@@ -1,9 +1,10 @@
 
 "use client";
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useActionState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -38,26 +39,33 @@ import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category } from '@/lib/types';
+import { useFormStatus } from 'react-dom';
 
 interface AddProductFormProps {
   onProductAdded: () => void;
 }
 
+function SubmitButton() {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending}>
+            {pending ? 'Adding Product...' : 'Add Product'}
+        </Button>
+    )
+}
+
 export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-
-  useEffect(() => {
-    if (open) {
-        Promise.all([getSuppliers(), getCategories()]).then(([fetchedSuppliers, fetchedCategories]) => {
-            setSuppliers(fetchedSuppliers);
-            setCategories(fetchedCategories);
-        });
-    }
-  }, [open]);
+  const formRef = useRef<HTMLFormElement>(null);
+  
+  const [state, formAction] = useActionState(addProductAction, {
+    message: '',
+    errors: {},
+    success: false,
+  });
 
   const form = useForm<AddProductFormValues>({
     resolver: zodResolver(AddProductFormSchema),
@@ -70,28 +78,36 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       price: undefined,
       stock: undefined,
       restockThreshold: undefined,
-      imageUrl: '',
+      image: undefined,
     },
   });
 
-  const onSubmit = (values: AddProductFormValues) => {
-    startTransition(async () => {
-      const result = await addProductAction(values);
-      if (result.success) {
-        toast({
-          title: 'Success!',
-          description: result.message,
+  useEffect(() => {
+    if (open) {
+        Promise.all([getSuppliers(), getCategories()]).then(([fetchedSuppliers, fetchedCategories]) => {
+            setSuppliers(fetchedSuppliers);
+            setCategories(fetchedCategories);
         });
-        setOpen(false); 
-        onProductAdded();
-      } else {
-        toast({
-          title: 'Error',
-          description: result.message || 'Something went wrong.',
-          variant: 'destructive',
-        });
-        if (result.errors) {
-            Object.entries(result.errors).forEach(([key, value]) => {
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (state.success) {
+      toast({
+        title: 'Success!',
+        description: state.message,
+      });
+      setOpen(false); 
+      onProductAdded();
+      form.reset();
+    } else if (state.message && !state.success) {
+       toast({
+        title: 'Error',
+        description: state.message || 'Something went wrong.',
+        variant: 'destructive',
+      });
+       if (state.errors) {
+            Object.entries(state.errors).forEach(([key, value]) => {
                 if (key !== '_form' && value) {
                     form.setError(key as keyof AddProductFormValues, {
                         type: 'manual',
@@ -100,9 +116,9 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                 }
             });
         }
-      }
-    });
-  };
+    }
+  }, [state, onProductAdded, form, toast]);
+
 
   useEffect(() => {
     if (!open) {
@@ -110,6 +126,20 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     }
   }, [open, form]);
 
+  const onFormSubmit = (data: AddProductFormValues) => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            if (key === 'image' && value instanceof File) {
+                formData.append(key, value);
+            } else {
+                 formData.append(key, String(value));
+            }
+        }
+    });
+    formAction(formData);
+  };
+  
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -123,7 +153,11 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form
+                ref={formRef} 
+                action={formAction}
+                className="space-y-4"
+            >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -167,12 +201,20 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                 />
                  <FormField
                     control={form.control}
-                    name="imageUrl"
-                    render={({ field }) => (
+                    name="image"
+                    render={({ field: { onChange, value, ...rest } }) => (
                         <FormItem>
-                            <FormLabel>Product Image URL</FormLabel>
+                            <FormLabel>Product Image</FormLabel>
                             <FormControl>
-                               <Input placeholder="https://example.com/image.png" {...field} />
+                               <Input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    onChange(file);
+                                }}
+                                {...rest}
+                               />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -211,7 +253,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a supplier" />
-                                        </SelectTrigger>
+                                        </Trigger>
                                     </FormControl>
                                     <SelectContent>
                                         {suppliers.map(supplier => (
@@ -271,9 +313,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             Cancel
                         </Button>
                     </DialogClose>
-                    <Button type="submit" disabled={isPending}>
-                        {isPending ? 'Adding Product...' : 'Add Product'}
-                    </Button>
+                    <SubmitButton />
                 </DialogFooter>
             </form>
         </Form>

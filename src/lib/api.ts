@@ -1,7 +1,30 @@
+
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-import { db } from './firebase';
+import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category } from './types';
+import {v4 as uuidv4} from 'uuid';
+
+// Image Upload Function
+export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => {
+  if (!imageFile) {
+    throw new Error("No image file provided.");
+  }
+  const fileExtension = imageFile.name.split('.').pop();
+  const fileName = `${uuidv4()}.${fileExtension}`;
+  const storageRef = ref(storage, `product-images/${fileName}`);
+
+  try {
+    const snapshot = await uploadBytes(storageRef, imageFile);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
+  } catch (error) {
+    console.error("Error uploading image: ", error);
+    throw new Error("Failed to upload image.");
+  }
+};
+
 
 // Product Functions
 export const getProducts = async (): Promise<Product[]> => {

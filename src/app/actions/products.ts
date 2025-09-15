@@ -2,17 +2,42 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct } from '@/lib/api';
+import { addProduct, uploadImageAndGetURL } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product } from '@/lib/types';
-import type { AddProductFormState, AddProductFormValues } from '@/lib/definitions';
-import { AddProductFormSchema } from '@/lib/definitions';
+import type { AddProductFormState } from '@/lib/definitions';
+
+// Adjusted schema for server-side processing with FormData
+const AddProductActionSchema = z.object({
+  name: z.string().min(1, 'Product name is required.'),
+  sku: z.string().min(1, 'SKU is required.'),
+  description: z.string().min(1, 'Description is required.'),
+  categoryId: z.string().min(1, 'Category is required.'),
+  vendorId: z.string().min(1, 'Supplier is required.'),
+  price: z.coerce.number().min(0).optional(),
+  stock: z.coerce.number().int().min(0).optional(),
+  restockThreshold: z.coerce.number().int().min(0).optional(),
+  image: z.any().refine(value => value instanceof File && value.size > 0, 'Image is required.'),
+});
+
 
 export async function addProductAction(
-  data: AddProductFormValues
+  prevState: AddProductFormState,
+  formData: FormData
 ): Promise<AddProductFormState> {
-  const validatedFields = AddProductFormSchema.safeParse(data);
 
+  const validatedFields = AddProductActionSchema.safeParse({
+    name: formData.get('name'),
+    sku: formData.get('sku'),
+    description: formData.get('description'),
+    categoryId: formData.get('categoryId'),
+    vendorId: formData.get('vendorId'),
+    price: formData.get('price'),
+    stock: formData.get('stock'),
+    restockThreshold: formData.get('restockThreshold'),
+    image: formData.get('image'),
+  });
+  
   if (!validatedFields.success) {
     return {
       message: 'Validation failed. Please check your inputs.',
@@ -22,11 +47,15 @@ export async function addProductAction(
   }
 
   try {
+    const imageFile = validatedFields.data.image as File;
+    const imageUrl = await uploadImageAndGetURL(imageFile);
+
     const newProduct: Omit<Product, 'id'> = {
       ...validatedFields.data,
       price: validatedFields.data.price ?? 0,
       stock: validatedFields.data.stock ?? 0,
       restockThreshold: validatedFields.data.restockThreshold ?? 0,
+      imageUrl: imageUrl,
       imageHint: 'new product', // This could be improved with AI
     };
     
@@ -40,8 +69,9 @@ export async function addProductAction(
     };
   } catch (error) {
     console.error(error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
     return {
-      message: 'An unexpected error occurred. Please try again.',
+      message: errorMessage,
       success: false,
     };
   }

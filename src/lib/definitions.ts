@@ -19,7 +19,7 @@ export const AddProductFormSchema = z.object({
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Threshold must be a number.' }).int('Threshold must be a whole number.').min(0, 'Threshold must be a non-negative number.').optional()
   ),
-  imageUrl: z.string().url('Must be a valid URL.').min(1, 'Product image is required.'),
+  image: z.any().refine(file => file instanceof File, 'Image is required.'),
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;
@@ -36,7 +36,7 @@ export type AddProductFormState = {
     price?: string[];
     stock?: string[];
     restockThreshold?: string[];
-    imageUrl?: string[];
+    image?: string[];
   };
   success: boolean;
 };
