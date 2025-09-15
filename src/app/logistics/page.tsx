@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, getInventoryMovementsByDate, createDispatchOrder } from '@/lib/api';
+import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, getInventoryMovementsByDate, createDispatchOrder, registerDamagedProduct } from '@/lib/api';
 import type { Product, Carrier, Platform, DispatchOrderProduct } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -73,6 +73,9 @@ interface ReturnedProduct extends Product {
     trackingNumber: string;
 }
 
+type SearchContext = 'salidas' | 'averias';
+
+
 export default function LogisticsPage() {
     const { user } = useAuth();
     const router = useRouter();
@@ -89,6 +92,7 @@ export default function LogisticsPage() {
     const barcodeRef = useRef<HTMLInputElement>(null);
     const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchContext, setSearchContext] = useState<SearchContext>('salidas');
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
     const [productToConfirm, setProductToConfirm] = useState<Product | null>(null);
 
@@ -163,12 +167,22 @@ export default function LogisticsPage() {
         }
     };
 
+    const openSearchDialog = (context: SearchContext) => {
+        setSearchContext(context);
+        setIsSearchDialogOpen(true);
+    };
+
     const handleProductSearchSelect = (product: Product) => {
-        setProductToConfirm(product);
         setIsSearchDialogOpen(false);
         setSearchQuery('');
-        // We need a slight delay to allow the search dialog to close before the confirm dialog opens
-        setTimeout(() => setIsConfirmDialogOpen(true), 150);
+    
+        if (searchContext === 'salidas') {
+            setProductToConfirm(product);
+            // We need a slight delay to allow the search dialog to close before the confirm dialog opens
+            setTimeout(() => setIsConfirmDialogOpen(true), 150);
+        } else if (searchContext === 'averias') {
+            setDamagedSku(product.sku);
+        }
     };
 
     const handleConfirmAddProduct = () => {
@@ -426,21 +440,31 @@ export default function LogisticsPage() {
             return;
         }
 
-        updateProductStock(product.id, 1, 'subtract');
-        await addInventoryMovement({
-            type: 'Salida',
-            productId: product.id,
-            productName: product.name,
-            quantity: 1,
-            notes: `Producto averiado: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
-        });
+        try {
+            await registerDamagedProduct(product.id, 1);
+            await addInventoryMovement({
+                type: 'Salida',
+                productId: product.id,
+                productName: product.name,
+                quantity: 1,
+                notes: `Producto averiado: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
+            });
 
-        toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name} y se ha ajustado el stock.` });
-        setDamagedSku('');
-        setDamageDescription('');
-        setDamageCarrier('');
-        setDamageTrackingNumber('');
-        router.refresh();
+            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name} y se ha ajustado el stock.` });
+            setDamagedSku('');
+            setDamageDescription('');
+            setDamageCarrier('');
+            setDamageTrackingNumber('');
+            router.refresh();
+        } catch (error) {
+            console.error("Failed to register damage:", error);
+            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado';
+            toast({
+                variant: 'destructive',
+                title: 'Error al Registrar Avería',
+                description: errorMessage,
+            })
+        }
     };
 
 
@@ -527,7 +551,7 @@ export default function LogisticsPage() {
                 <DialogHeader>
                     <DialogTitle>Buscar Producto</DialogTitle>
                     <DialogDescription>
-                        Busca un producto por nombre o SKU para agregarlo al despacho.
+                        Busca un producto por nombre o SKU.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -628,7 +652,7 @@ export default function LogisticsPage() {
                                             onKeyDown={handleBarcodeScan}
                                         />
                                     </div>
-                                    <Button variant="outline" size="icon" onClick={() => setIsSearchDialogOpen(true)}>
+                                    <Button variant="outline" size="icon" onClick={() => openSearchDialog('salidas')}>
                                         <Search className="h-4 w-4" />
                                         <span className="sr-only">Buscar Producto</span>
                                     </Button>
@@ -870,12 +894,18 @@ export default function LogisticsPage() {
                                     </div>
                                      <div>
                                         <Label htmlFor="damage-product-sku">SKU del Producto Averiado</Label>
-                                        <Input 
-                                            id="damage-product-sku" 
-                                            placeholder="Ej: WM-ERGO-01" 
-                                            value={damagedSku}
-                                            onChange={(e) => setDamagedSku(e.target.value)}
-                                        />
+                                        <div className="flex gap-2">
+                                            <Input 
+                                                id="damage-product-sku" 
+                                                placeholder="Ej: WM-ERGO-01" 
+                                                value={damagedSku}
+                                                onChange={(e) => setDamagedSku(e.target.value)}
+                                            />
+                                             <Button variant="outline" size="icon" onClick={() => openSearchDialog('averias')}>
+                                                <Search className="h-4 w-4" />
+                                                <span className="sr-only">Buscar Producto</span>
+                                            </Button>
+                                        </div>
                                     </div>
                                     <div>
                                         <Label htmlFor="damage-description">Descripción del Daño</Label>
@@ -899,7 +929,5 @@ export default function LogisticsPage() {
     </>
     );
 }
-
-    
 
     
