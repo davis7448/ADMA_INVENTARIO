@@ -15,10 +15,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { DollarSign, Users, ShoppingCart, Activity } from 'lucide-react';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from '@/components/ui/chart';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { orders } from '@/lib/data';
 import { format, subDays } from 'date-fns';
+import SalesChart from '@/components/sales-chart';
 
 const chartData = Array.from({ length: 7 }, (_, i) => {
   const date = subDays(new Date(), i);
@@ -27,14 +26,6 @@ const chartData = Array.from({ length: 7 }, (_, i) => {
     sales: Math.floor(Math.random() * 2000) + 500,
   };
 }).reverse();
-
-
-const chartConfig = {
-  sales: {
-    label: "Sales",
-    color: "hsl(var(--primary))",
-  },
-} satisfies ChartConfig
 
 export default function DashboardPage() {
   const recentOrders = orders.slice(0, 5);
@@ -91,27 +82,7 @@ export default function DashboardPage() {
             <CardDescription>Last 7 days</CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={chartData}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                    />
-                    <YAxis
-                       tickLine={false}
-                       axisLine={false}
-                       tickMargin={8}
-                       tickFormatter={(value) => `$${value/1000}k`}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="sales" fill="var(--color-sales)" radius={4} />
-                  </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
+            <SalesChart data={chartData} />
           </CardContent>
         </Card>
 
