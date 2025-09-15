@@ -17,12 +17,12 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import RestockForm from '@/components/restock-form';
-import { products, getSupplierById } from '@/lib/api';
+import { getProducts, getSupplierById } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function RestockAlertsPage() {
   const { user } = useAuth();
-  const allProducts = products;
+  const allProducts = getProducts();
   const lowStockProducts = allProducts.filter(p => p.stock < p.restockThreshold);
 
   const getSupplierName = (vendorId: string) => {
