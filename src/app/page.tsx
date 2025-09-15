@@ -285,14 +285,14 @@ export default function DashboardPage() {
             <CardHeader>
                 <CardTitle>Rendimiento por Producto</CardTitle>
                 <CardDescription>
-                    Top 5 productos más vendidos en el período seleccionado.
+                    Top 20 productos más vendidos en el período seleccionado.
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 {loading ? <Skeleton className="h-64" /> : filteredData.productChartData.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
                         <div className="h-64">
-                            <DashboardCategoryChart data={filteredData.productChartData.slice(0, 5)} />
+                            <DashboardCategoryChart data={filteredData.productChartData.slice(0, 20)} />
                         </div>
                         <div className="max-h-64 overflow-y-auto">
                             <Table>
@@ -304,7 +304,7 @@ export default function DashboardPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredData.productChartData.slice(0, 5).map(prod => (
+                                    {filteredData.productChartData.slice(0, 20).map(prod => (
                                         <TableRow key={prod.name}>
                                             <TableCell className="font-medium">{prod.name}</TableCell>
                                             <TableCell className="text-right">{prod.value}</TableCell>
