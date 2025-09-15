@@ -119,12 +119,12 @@ function DispatchPageContent() {
                 orders.map((order) => {
                   const productsForDialog = isPartialTab
                     ? order.exceptions.flatMap(ex =>
-                        ex.products.map(p => ({
+                        ex.products ? ex.products.map(p => ({
                           productId: p.productId,
                           name: productsById[p.productId]?.name || 'N/A',
                           sku: productsById[p.productId]?.sku || 'N/A',
                           quantity: p.quantity,
-                        }))
+                        })) : []
                       )
                     : order.products;
 
