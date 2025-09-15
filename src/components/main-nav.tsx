@@ -55,8 +55,14 @@ type NavItem = {
         ],
     },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
-    { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
-    { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin'], badge: 'stale_alerts' },
+    {
+        label: 'Alertas',
+        roles: ['admin'],
+        children: [
+            { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
+            { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin'], badge: 'stale_alerts' },
+        ]
+    }
   ];
 
 export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
@@ -125,7 +131,10 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
           <DropdownMenuContent align="start">
             {filteredChildren.map(child => (
               <DropdownMenuItem key={child.href} asChild>
-                 <Link href={child.href!}>{child.label}</Link>
+                 <Link href={child.href!} className="flex items-center">
+                    {child.label}
+                    {renderBadge(child.badge)}
+                 </Link>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
