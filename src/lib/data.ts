@@ -1,4 +1,4 @@
-import type { Product, Supplier, Order, ReturnRequest } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
 const findImage = (id: string) => {
@@ -155,4 +155,10 @@ export const returnRequests: ReturnRequest[] = [
   { id: 'RET-001', orderId: 'ORD-001', customerName: 'Alice Johnson', productName: 'Mechanical RGB Keyboard', reason: 'Defective Key', status: 'Approved', date: '2023-10-28' },
   { id: 'RET-002', orderId: 'ORD-004', customerName: 'Diana Prince', productName: 'Hi-Fi Noise-Cancelling Headphones', reason: 'Changed my mind', status: 'Pending', date: '2023-10-27' },
   { id: 'RET-003', orderId: 'ORD-007', customerName: 'George Costanza', productName: 'Smart Fitness Watch', reason: 'Not compatible with phone', status: 'Rejected', date: '2023-10-25' },
+];
+
+export const users: User[] = [
+  { id: 'usr-1', name: 'Admin User', email: 'admin@example.com', role: 'admin', avatarUrl: 'https://i.pravatar.cc/150?u=admin' },
+  { id: 'usr-2', name: 'Logistics User', email: 'logistics@example.com', role: 'logistics', avatarUrl: 'https://i.pravatar.cc/150?u=logistics' },
+  { id: 'usr-3', name: 'Commercial User', email: 'commercial@example.com', role: 'commercial', avatarUrl: 'https://i.pravatar.cc/150?u=commercial' },
 ];

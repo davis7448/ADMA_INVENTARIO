@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Card,
   CardContent,
@@ -16,13 +18,17 @@ import {
 import { Badge } from '@/components/ui/badge';
 import RestockForm from '@/components/restock-form';
 import { products, suppliers } from '@/lib/data';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function RestockAlertsPage() {
+  const { user } = useAuth();
   const lowStockProducts = products.filter(p => p.stock < p.restockThreshold);
 
   const getSupplierName = (vendorId: string) => {
     return suppliers.find(s => s.id === vendorId)?.name || 'Unknown';
   };
+  
+  const canManageRestock = user?.role === 'admin' || user?.role === 'logistics';
 
   return (
     <div className="space-y-8">
@@ -31,7 +37,7 @@ export default function RestockAlertsPage() {
         <p className="text-muted-foreground">Monitor inventory levels and generate restock alerts.</p>
       </div>
 
-      <RestockForm />
+      {canManageRestock && <RestockForm />}
 
       <Card>
         <CardHeader>

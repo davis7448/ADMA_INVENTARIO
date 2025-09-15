@@ -41,3 +41,13 @@ export type ReturnRequest = {
   status: 'Pending' | 'Approved' | 'Rejected';
   date: string;
 };
+
+export type UserRole = 'admin' | 'logistics' | 'commercial';
+
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatarUrl: string;
+};

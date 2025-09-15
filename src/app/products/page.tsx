@@ -1,3 +1,5 @@
+"use client";
+
 import Image from 'next/image';
 import {
   Card,
@@ -25,17 +27,24 @@ import { Button } from '@/components/ui/button';
 import { products, suppliers } from '@/lib/data';
 import { MoreHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/use-auth';
 
 const getSupplierName = (vendorId: string) => {
   return suppliers.find((s) => s.id === vendorId)?.name ?? 'Unknown';
 };
 
 export default function ProductsPage() {
+  const { user } = useAuth();
+  const canEdit = user?.role === 'admin';
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
-        <p className="text-muted-foreground">Browse and manage your product listings.</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
+          <p className="text-muted-foreground">Browse and manage your product listings.</p>
+        </div>
+        {canEdit && <Button>Add Product</Button>}
       </div>
       <Card>
         <CardHeader>
@@ -54,9 +63,11 @@ export default function ProductsPage() {
                 <TableHead className="hidden md:table-cell">Supplier</TableHead>
                 <TableHead className="hidden md:table-cell">Stock</TableHead>
                 <TableHead>Price</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
+                {canEdit && (
+                  <TableHead>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,22 +90,23 @@ export default function ProductsPage() {
                   <TableCell className="hidden md:table-cell">{getSupplierName(product.vendorId)}</TableCell>
                   <TableCell className="hidden md:table-cell">{product.stock}</TableCell>
                   <TableCell>${product.price.toFixed(2)}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button aria-haspopup="true" size="icon" variant="ghost">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Toggle menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+                  {canEdit && (
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button aria-haspopup="true" size="icon" variant="ghost">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Toggle menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem>Edit</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
