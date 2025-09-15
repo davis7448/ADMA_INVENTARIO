@@ -1,13 +1,14 @@
+
 "use client";
 
 import { useAuth } from '@/hooks/use-auth';
-import type { User, UserRole } from '@/lib/types';
+import type { UserRole } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 interface AuthProviderWrapperProps {
   allowedRoles: UserRole[];
-  children: (user: User | null) => React.ReactNode;
+  children: React.ReactNode;
 }
 
 export function AuthProviderWrapper({ allowedRoles, children }: AuthProviderWrapperProps) {
@@ -28,5 +29,5 @@ export function AuthProviderWrapper({ allowedRoles, children }: AuthProviderWrap
     );
   }
 
-  return <>{children(user)}</>;
+  return <>{children}</>;
 }
