@@ -198,6 +198,7 @@ export async function createReservationAction(productId: string, data: CreateRes
     try {
         await createReservation({ productId, ...validatedFields.data });
         revalidatePath('/products');
+        revalidatePath('/stale-reservations'); // Revalidate alerts page too
         return {
             message: 'Reserva creada con éxito.',
             success: true,

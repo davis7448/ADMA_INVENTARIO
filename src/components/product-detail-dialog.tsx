@@ -254,6 +254,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                 <TableRow>
                                     <TableHead>Vendedor</TableHead>
                                     <TableHead>Plataforma</TableHead>
+                                    <TableHead>Variante (SKU)</TableHead>
                                     <TableHead>ID Externo</TableHead>
                                     <TableHead>Cliente</TableHead>
                                     <TableHead className="text-right">Cantidad</TableHead>
@@ -264,6 +265,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                     <TableRow key={res.id}>
                                         <TableCell>{vendedores.find(v => v.id === res.vendedorId)?.name || 'N/A'}</TableCell>
                                         <TableCell>{platforms.find(p => p.id === res.platformId)?.name || 'N/A'}</TableCell>
+                                        <TableCell className="font-mono text-xs">{res.variantSku || 'N/A'}</TableCell>
                                         <TableCell className="font-mono text-xs">{res.externalId}</TableCell>
                                         <TableCell>{res.customerEmail}</TableCell>
                                         <TableCell className="text-right font-medium">{res.quantity}</TableCell>

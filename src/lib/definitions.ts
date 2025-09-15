@@ -183,6 +183,8 @@ export const CreateReservationFormSchema = z.object({
   customerEmail: z.string().email('Debe ingresar un correo de cliente válido.'),
   externalId: z.string().min(1, 'Debe ingresar un ID externo.'),
   quantity: z.coerce.number().int().min(1, 'La cantidad debe ser al menos 1.'),
+  variantId: z.string().optional(),
+  variantSku: z.string().optional(),
 });
 
 export type CreateReservationFormValues = z.infer<typeof CreateReservationFormSchema>;
@@ -196,6 +198,7 @@ export type CreateReservationFormState = {
     customerEmail?: string[];
     externalId?: string[];
     quantity?: string[];
+    variantId?: string[];
   };
   success: boolean;
 };

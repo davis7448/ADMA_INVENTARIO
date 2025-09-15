@@ -749,8 +749,22 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
         }
         
         const productData = productSnap.data() as Product;
-        const totalReserved = (await getReservationsByProductId(reservationData.productId)).reduce((sum, res) => sum + res.quantity, 0);
-        const availableStock = productData.stock - totalReserved;
+        let stockToCheck = productData.stock;
+        
+        if (reservationData.variantId && productData.variants) {
+            const variant = productData.variants.find(v => v.id === reservationData.variantId);
+            if (!variant) {
+                throw new Error("Variante no encontrada.");
+            }
+            stockToCheck = variant.stock;
+        }
+
+        const reservations = await getReservationsByProductId(reservationData.productId);
+        const totalReservedForProductOrVariant = reservations
+            .filter(r => reservationData.variantId ? r.variantId === reservationData.variantId : !r.variantId)
+            .reduce((sum, r) => sum + r.quantity, 0);
+
+        const availableStock = stockToCheck - totalReservedForProductOrVariant;
 
         if (reservationData.quantity > availableStock) {
             throw new Error(`No hay suficiente stock para reservar. Stock disponible: ${availableStock}, se intentó reservar: ${reservationData.quantity}.`);

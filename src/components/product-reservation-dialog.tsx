@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { Product, Vendedor, Platform, Reservation } from '@/lib/types';
@@ -21,7 +21,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { createReservation, deleteReservation } from '@/lib/api';
+import { createReservationAction } from '@/app/actions/products';
+import { deleteReservation } from '@/lib/api';
 import {
     Table,
     TableBody,
@@ -70,6 +71,7 @@ interface ProductReservationDialogProps {
 export function ProductReservationDialog({ product, vendedores, platforms, open, onOpenChange, onSuccess }: ProductReservationDialogProps) {
   const [isProcessing, startTransition] = useTransition();
   const { toast } = useToast();
+  const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>();
 
   const form = useForm<CreateReservationFormValues>({
     resolver: zodResolver(CreateReservationFormSchema),
@@ -79,16 +81,65 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
         customerEmail: '',
         externalId: '',
         quantity: 1,
+        variantId: '',
     },
   });
 
-  const totalReserved = useMemo(() => {
-    return product.reservations?.reduce((sum, r) => sum + r.quantity, 0) || 0;
-  }, [product.reservations]);
+  const selectedVariant = useMemo(() => {
+    if (product.productType === 'variable' && selectedVariantId) {
+        return product.variants?.find(v => v.id === selectedVariantId);
+    }
+    return null;
+  }, [product, selectedVariantId]);
 
-  const availableToReserve = product.stock - totalReserved;
+  const totalReserved = useMemo(() => {
+    if (!product.reservations) return 0;
+
+    if (product.productType === 'simple') {
+        return product.reservations.reduce((sum, r) => sum + r.quantity, 0);
+    }
+    // For variable, we sum reservations for the selected variant
+    if (selectedVariant) {
+        return product.reservations
+            .filter(r => r.variantId === selectedVariant.id)
+            .reduce((sum, r) => sum + r.quantity, 0);
+    }
+    return 0; // Or sum all variant reservations if none is selected? Let's stick to selected one.
+  }, [product, selectedVariant]);
+
+  const stockFisico = useMemo(() => {
+    if (product.productType === 'simple') {
+        return product.stock;
+    }
+    if (selectedVariant) {
+        return selectedVariant.stock;
+    }
+    return product.stock; // Show total stock if no variant selected
+  }, [product, selectedVariant]);
+  
+  const availableToReserve = stockFisico - totalReserved;
+  
+  useEffect(() => {
+    if (open) {
+      form.reset();
+      setSelectedVariantId(undefined);
+    }
+  }, [open, form]);
 
   const onSubmit = (values: CreateReservationFormValues) => {
+    if (product.productType === 'variable') {
+        if (!selectedVariantId) {
+            toast({
+                variant: 'destructive',
+                title: 'Error de Validación',
+                description: `Debe seleccionar una variante para reservar.`,
+            });
+            return;
+        }
+        values.variantId = selectedVariantId;
+        values.variantSku = product.variants?.find(v => v.id === selectedVariantId)?.sku;
+    }
+
     if (values.quantity > availableToReserve) {
         toast({
             variant: 'destructive',
@@ -99,19 +150,18 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
     }
 
     startTransition(async () => {
-      try {
-        await createReservation({
-            productId: product.id,
-            ...values
-        });
+      const result = await createReservationAction(product.id, values);
+
+      if (result.success) {
         toast({
             title: '¡Éxito!',
             description: 'La reserva se ha creado correctamente.',
         });
         form.reset();
+        setSelectedVariantId(undefined);
         onSuccess();
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'No se pudo crear la reserva.';
+      } else {
+        const errorMessage = result.message || 'No se pudo crear la reserva.';
         toast({
             variant: 'destructive',
             title: 'Error al Crear',
@@ -158,7 +208,7 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
                 <div className="grid grid-cols-3 gap-4 text-center p-4 bg-muted rounded-lg">
                     <div>
                         <p className="text-sm font-medium text-muted-foreground">Stock Físico</p>
-                        <p className="text-2xl font-bold">{product.stock}</p>
+                        <p className="text-2xl font-bold">{stockFisico}</p>
                     </div>
                     <div>
                         <p className="text-sm font-medium text-muted-foreground">Total Reservado</p>
@@ -172,6 +222,20 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
 
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        {product.productType === 'variable' && (
+                             <FormItem>
+                                <FormLabel>Variante</FormLabel>
+                                <Select onValueChange={setSelectedVariantId} value={selectedVariantId}>
+                                    <FormControl>
+                                        <SelectTrigger><SelectValue placeholder="Selecciona una variante" /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {product.variants?.map(v => <SelectItem key={v.id} value={v.id}>{v.name} ({v.sku}) - Stock: {v.stock}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                        )}
                         <FormField
                             control={form.control}
                             name="vendedorId"
@@ -262,7 +326,7 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
                         <TableHeader className="sticky top-0 bg-secondary">
                             <TableRow>
                                 <TableHead>Vendedor</TableHead>
-                                <TableHead>ID Externo</TableHead>
+                                <TableHead>Variante (SKU)</TableHead>
                                 <TableHead>Cant.</TableHead>
                                 <TableHead>Acción</TableHead>
                             </TableRow>
@@ -272,7 +336,7 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
                                 product.reservations.map(res => (
                                     <TableRow key={res.id}>
                                         <TableCell className="font-medium text-xs">{vendedores.find(v => v.id === res.vendedorId)?.name || 'N/A'}</TableCell>
-                                        <TableCell className="font-mono text-xs">{res.externalId}</TableCell>
+                                        <TableCell className="font-mono text-xs">{res.variantSku || 'N/A'}</TableCell>
                                         <TableCell className="font-bold">{res.quantity}</TableCell>
                                         <TableCell>
                                             <AlertDialog>

@@ -1,4 +1,5 @@
 
+
 export type ProductVariant = {
   id: string; // Can be a temporary client-side ID before saving
   name: string;
@@ -38,6 +39,8 @@ export type Reservation = {
   externalId: string;
   quantity: number;
   date: string;
+  variantId?: string;
+  variantSku?: string;
 };
 
 export type Supplier = {
