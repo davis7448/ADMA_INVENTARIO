@@ -119,7 +119,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-7xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Product Details</DialogTitle>
           <DialogDescription>Detailed information and performance for the selected product.</DialogDescription>
