@@ -273,36 +273,38 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             </CardHeader>
             <CardContent>
                 <div className="border rounded-md">
-                    <Accordion type="single" collapsible className="w-full">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[80px] hidden sm:table-cell" />
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Rotación</TableHead>
-                                    <TableHead>SKU</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Stock</TableHead>
-                                    <TableHead>Pendiente</TableHead>
-                                    <TableHead>Averiado</TableHead>
-                                    <TableHead>Price</TableHead>
-                                    {canEdit && <TableHead className="w-[50px]"><span className="sr-only">Actions</span></TableHead>}
-                                    <TableHead className="w-[50px]"><span className="sr-only">Expand</span></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[80px] hidden sm:table-cell" />
+                                <TableHead>Name</TableHead>
+                                <TableHead>Rotación</TableHead>
+                                <TableHead>SKU</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Stock</TableHead>
+                                <TableHead>Pendiente</TableHead>
+                                <TableHead>Averiado</TableHead>
+                                <TableHead>Price</TableHead>
+                                {canEdit && <TableHead className="w-[50px]"><span className="sr-only">Actions</span></TableHead>}
+                                <TableHead className="w-[50px]"><span className="sr-only">Expand</span></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <Accordion type="single" collapsible className="w-full" asChild>
+                            <>
                             {loading ? (
-                                Array.from({ length: 5 }).map((_, i) => (
+                                <TableBody>
+                                {Array.from({ length: 5 }).map((_, i) => (
                                     <TableRow key={i}>
                                         <TableCell colSpan={canEdit ? 11 : 10}>
                                             <Skeleton className="h-16 w-full" />
                                         </TableCell>
                                     </TableRow>
-                                ))
+                                ))}
+                                </TableBody>
                             ) : filteredProducts.length > 0 ? (
                                 filteredProducts.map((product) => (
                                     <AccordionItem value={product.id} key={product.id} asChild>
-                                        <React.Fragment>
+                                        <TableBody>
                                             <TableRow 
                                                 className={cn("data-[state=closed]:border-b", product.productType === 'simple' && 'cursor-pointer hover:bg-muted/50')}
                                                 onClick={() => handleRowClick(product)}
@@ -393,19 +395,21 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                     </TableCell>
                                                 </TableRow>
                                             )}
-                                        </React.Fragment>
+                                        </TableBody>
                                     </AccordionItem>
                                 ))
                             ) : (
-                                <TableRow>
-                                    <TableCell colSpan={canEdit ? 11 : 10} className="text-center h-24">
-                                        No se encontraron productos con los filtros actuales.
-                                    </TableCell>
-                                </TableRow>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell colSpan={canEdit ? 11 : 10} className="text-center h-24">
+                                            No se encontraron productos con los filtros actuales.
+                                        </TableCell>
+                                    </TableRow>
+                                </TableBody>
                             )}
-                            </TableBody>
-                        </Table>
-                    </Accordion>
+                            </>
+                        </Accordion>
+                    </Table>
                 </div>
             </CardContent>
           </Card>
