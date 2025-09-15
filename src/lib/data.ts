@@ -1,4 +1,4 @@
-import type { Product, Supplier, Order, ReturnRequest, User } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement } from './types';
 import { PlaceHolderImages } from './placeholder-images';
 
 const findImage = (id: string) => {
@@ -123,6 +123,17 @@ export const updateProductStock = (productId: string, quantity: number) => {
       products[productIndex].stock -= quantity;
     }
 };
+
+export let inventoryMovements: InventoryMovement[] = [];
+
+export const addInventoryMovement = (movement: Omit<InventoryMovement, 'id' | 'date'>) => {
+  inventoryMovements.unshift({
+    id: `mov-${Date.now()}`,
+    date: new Date().toISOString(),
+    ...movement,
+  });
+};
+
 
 export const suppliers: Supplier[] = [
   {

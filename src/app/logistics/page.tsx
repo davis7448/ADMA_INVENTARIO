@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { products, updateProductStock } from '@/lib/data';
+import { products, updateProductStock, addInventoryMovement } from '@/lib/data';
 import type { Product } from '@/lib/types';
 import { Barcode, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -125,15 +125,16 @@ export default function LogisticsPage() {
             return;
         }
 
-        // Update stock for each dispatched product
+        // Update stock and create inventory movement for each dispatched product
         dispatchedProducts.forEach(product => {
             updateProductStock(product.id, product.dispatchQuantity);
-        });
-
-        console.log({
-            platform,
-            carrier,
-            products: dispatchedProducts.map(p => ({ id: p.id, sku: p.sku, quantity: p.dispatchQuantity }))
+            addInventoryMovement({
+                type: 'Salida',
+                productId: product.id,
+                productName: product.name,
+                quantity: product.dispatchQuantity,
+                notes: `Plataforma: ${platform}, Transportadora: ${carrier}`
+            });
         });
 
         toast({
@@ -144,7 +145,7 @@ export default function LogisticsPage() {
         setPlatform('');
         setCarrier('');
         setDispatchedProducts([]);
-        router.refresh(); // Refresh the page to show updated stock in other components
+        router.refresh();
     }
 
     const handleReturnBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -168,7 +169,6 @@ export default function LogisticsPage() {
             setReturnedProducts(prev => [...prev, { ...productToAdd, trackingNumber: currentTrackingNumber }]);
             toast({ title: "Producto Agregado", description: `${productToAdd.name} añadido a la devolución.` });
             
-            // Close dialog and reset state
             setIsReturnDialogOpen(false);
             setProductToAdd(null);
             setCurrentTrackingNumber('');
@@ -495,7 +495,7 @@ export default function LogisticsPage() {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                      <div className="space-y-2">
-                        <Label htmlFor="tracking-number">Número de Guía</Label>_
+                        <Label htmlFor="tracking-number">Número de Guía</Label>
                         <Input
                             id="tracking-number"
                             value={currentTrackingNumber}

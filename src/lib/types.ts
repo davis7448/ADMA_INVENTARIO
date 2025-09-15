@@ -52,3 +52,13 @@ export type User = {
   role: UserRole;
   avatarUrl: string;
 };
+
+export type InventoryMovement = {
+  id: string;
+  type: 'Entrada' | 'Salida';
+  productId: string;
+  productName: string;
+  quantity: number;
+  date: string;
+  notes: string;
+};

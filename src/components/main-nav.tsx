@@ -9,6 +9,7 @@ const navItems = [
   { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial'] },
   { href: '/products', label: 'Products', roles: ['admin', 'commercial'] },
   { href: '/logistics', label: 'Logística', roles: ['admin', 'logistics'] },
+  { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
 ];
 
 export default function MainNav() {
