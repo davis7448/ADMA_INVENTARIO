@@ -88,6 +88,8 @@ export default function LogisticsPage() {
     // Averías State
     const [damagedSku, setDamagedSku] = useState('');
     const [damageDescription, setDamageDescription] = useState('');
+    const [damageCarrier, setDamageCarrier] = useState('');
+    const [damageTrackingNumber, setDamageTrackingNumber] = useState('');
 
 
     useEffect(() => {
@@ -296,6 +298,14 @@ export default function LogisticsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor, describe el daño.' });
             return;
         }
+        if (!damageCarrier) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, selecciona la transportadora.' });
+            return;
+        }
+        if (!damageTrackingNumber) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, ingresa el número de guía.' });
+            return;
+        }
 
         updateProductStock(product.id, 1, 'subtract');
         addInventoryMovement({
@@ -303,12 +313,14 @@ export default function LogisticsPage() {
             productId: product.id,
             productName: product.name,
             quantity: 1,
-            notes: `Producto averiado: ${damageDescription}`
+            notes: `Producto averiado: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${damageCarrier}`
         });
 
         toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name} y se ha ajustado el stock.` });
         setDamagedSku('');
         setDamageDescription('');
+        setDamageCarrier('');
+        setDamageTrackingNumber('');
         router.refresh();
     };
 
@@ -322,6 +334,7 @@ export default function LogisticsPage() {
     }
     
     return (
+    <>
         <Dialog open={isReturnDialogOpen} onOpenChange={(open) => {
             setIsReturnDialogOpen(open);
             if (!open) {
@@ -329,296 +342,6 @@ export default function LogisticsPage() {
                 setCurrentTrackingNumber('');
             }
         }}>
-            <div className="space-y-6">
-                <div>
-                  <h1 className="text-3xl font-bold font-headline tracking-tight">Panel de Logística</h1>
-                  <p className="text-muted-foreground">Gestiona las entradas, salidas y devoluciones de inventario.</p>
-                </div>
-
-                <Tabs defaultValue="salidas" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="salidas">Salidas</TabsTrigger>
-                        <TabsTrigger value="entradas">Entradas</TabsTrigger>
-                        <TabsTrigger value="devoluciones">Devoluciones</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="salidas">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Crear Salida de Pedido</CardTitle>
-                                <CardDescription>Selecciona la plataforma, transportadora y agrega los productos a despachar.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <Label htmlFor="platform">Plataforma</Label>
-                                        <Select value={platform} onValueChange={setPlatform}>
-                                            <SelectTrigger id="platform">
-                                            <SelectValue placeholder="Seleccionar una plataforma" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            {platforms.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="carrier">Transportadora</Label>
-                                        <Select value={carrier} onValueChange={setCarrier}>
-                                            <SelectTrigger id="carrier">
-                                            <SelectValue placeholder="Seleccionar una transportadora" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <div>
-                                    <Label htmlFor="barcode-salida">Escanear Código de Barras (SKU)</Label>
-                                    <div className="relative">
-                                        <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                        <Input 
-                                            id="barcode-salida"
-                                            ref={barcodeRef}
-                                            placeholder="Escanear SKU del producto y presionar Enter" 
-                                            className="pl-8"
-                                            onKeyDown={handleBarcodeScan}
-                                        />
-                                    </div>
-                                    <p className="text-sm text-muted-foreground mt-1">Usa el SKU del producto (ej: WM-ERGO-01) como código de barras.</p>
-                                </div>
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Productos a Despachar</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-[80px]">Imagen</TableHead>
-                                                    <TableHead>Producto</TableHead>
-                                                    <TableHead>SKU</TableHead>
-                                                    <TableHead className="text-center">Cantidad</TableHead>
-                                                    <TableHead className="text-right">Acciones</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                            {dispatchedProducts.length > 0 ? (
-                                                dispatchedProducts.map(product => (
-                                                <TableRow key={product.id}>
-                                                    <TableCell>
-                                                        <Image
-                                                            src={product.imageUrl}
-                                                            alt={product.name}
-                                                            width={64}
-                                                            height={64}
-                                                            className="rounded-md object-cover"
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell className="font-medium">{product.name}</TableCell>
-                                                    <TableCell>{product.sku}</TableCell>
-                                                    <TableCell className="text-center">{product.dispatchQuantity}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(product.id)}>
-                                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                                        </Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                <TableCell colSpan={5} className="text-center">Aún no hay productos en el despacho.</TableCell>
-                                                </TableRow>
-                                            )}
-                                            </TableBody>
-                                        </Table>
-                                    </CardContent>
-                                </Card>
-                            </CardContent>
-                            <CardFooter>
-                                <Button onClick={handleCreateDispatch}>Crear Salida</Button>
-                            </CardFooter>
-                        </Card>
-                    </TabsContent>
-
-                    <TabsContent value="entradas">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Registrar Entrada de Mercancía</CardTitle>
-                                <CardDescription>Añade productos al inventario al recibirlos del proveedor.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div>
-                                    <Label htmlFor="barcode-entrada">Escanear Código de Barras (SKU)</Label>
-                                    <div className="relative">
-                                        <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                        <Input 
-                                            id="barcode-entrada"
-                                            ref={entryBarcodeRef}
-                                            placeholder="Escanear SKU para agregar producto" 
-                                            className="pl-8"
-                                            onKeyDown={handleEntryBarcodeScan}
-                                        />
-                                    </div>
-                                </div>
-                                 <Card>
-                                    <CardHeader><CardTitle>Productos Recibidos</CardTitle></CardHeader>
-                                    <CardContent>
-                                         <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Producto</TableHead>
-                                                    <TableHead>SKU</TableHead>
-                                                    <TableHead className="text-center w-[150px]">Cantidad</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {receivedProducts.length > 0 ? (
-                                                    receivedProducts.map(product => (
-                                                        <TableRow key={product.id}>
-                                                            <TableCell className="font-medium">{product.name}</TableCell>
-                                                            <TableCell>{product.sku}</TableCell>
-                                                            <TableCell>
-                                                                <Input 
-                                                                    type="number"
-                                                                    className="w-24 text-center mx-auto"
-                                                                    value={product.receiveQuantity}
-                                                                    onChange={(e) => handleReceivedQuantityChange(product.id, parseInt(e.target.value, 10))}
-                                                                    min="0"
-                                                                />
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ))
-                                                ) : (
-                                                    <TableRow>
-                                                        <TableCell colSpan={3} className="text-center">Escanea un producto para comenzar.</TableCell>
-                                                    </TableRow>
-                                                )}
-                                            </TableBody>
-                                        </Table>
-                                    </CardContent>
-                                </Card>
-                            </CardContent>
-                            <CardFooter>
-                                <Button onClick={handleRegisterEntry}>Registrar Entrada</Button>
-                            </CardFooter>
-                        </Card>
-                    </TabsContent>
-
-                    <TabsContent value="devoluciones">
-                        <Tabs defaultValue="general" className="w-full">
-                            <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="general">Devoluciones Generales</TabsTrigger>
-                                <TabsTrigger value="averias">Averías</TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="general">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>Procesar Devolución</CardTitle>
-                                        <CardDescription>Gestiona las devoluciones masivas de clientes.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-6">
-                                        <div>
-                                            <Label htmlFor="return-carrier">Transportadora</Label>
-                                            <Select value={returnCarrier} onValueChange={setReturnCarrier}>
-                                                <SelectTrigger id="return-carrier">
-                                                    <SelectValue placeholder="Seleccionar una transportadora" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                         <div>
-                                            <Label htmlFor="return-barcode">Escanear Código de Barras (SKU)</Label>
-                                            <div className="relative">
-                                                <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                                <Input 
-                                                    id="return-barcode"
-                                                    ref={returnBarcodeRef}
-                                                    placeholder="Escanear SKU para agregar producto a la devolución" 
-                                                    className="pl-8"
-                                                    onKeyDown={handleReturnBarcodeScan}
-                                                />
-                                            </div>
-                                        </div>
-                                         <Card>
-                                            <CardHeader><CardTitle>Productos a Devolver</CardTitle></CardHeader>
-                                            <CardContent>
-                                                <Table>
-                                                    <TableHeader>
-                                                        <TableRow>
-                                                            <TableHead>Producto</TableHead>
-                                                            <TableHead>SKU</TableHead>
-                                                            <TableHead>Nº Guía</TableHead>
-                                                            <TableHead className="text-right">Acciones</TableHead>
-                                                        </TableRow>
-                                                    </TableHeader>
-                                                    <TableBody>
-                                                        {returnedProducts.length > 0 ? (
-                                                            returnedProducts.map((p, index) => (
-                                                                <TableRow key={`${p.sku}-${index}`}>
-                                                                    <TableCell className="font-medium">{p.name}</TableCell>
-                                                                    <TableCell>{p.sku}</TableCell>
-                                                                    <TableCell>{p.trackingNumber}</TableCell>
-                                                                    <TableCell className="text-right">
-                                                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveReturnedProduct(index)}>
-                                                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                                                        </Button>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))
-                                                        ) : (
-                                                            <TableRow>
-                                                                <TableCell colSpan={4} className="text-center">Aún no hay productos en la devolución.</TableCell>
-                                                            </TableRow>
-                                                        )}
-                                                    </TableBody>
-                                                </Table>
-                                            </CardContent>
-                                        </Card>
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button onClick={handleProcessReturn}>Procesar Devolución</Button>
-                                    </CardFooter>
-                                </Card>
-                            </TabsContent>
-                            <TabsContent value="averias">
-                                 <Card>
-                                    <CardHeader>
-                                        <CardTitle>Registrar Producto Averiado</CardTitle>
-                                        <CardDescription>Registra productos que llegaron dañados o no son aptos para la venta.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                         <div>
-                                            <Label htmlFor="damage-product-sku">SKU del Producto Averiado</Label>
-                                            <Input 
-                                                id="damage-product-sku" 
-                                                placeholder="Ej: WM-ERGO-01" 
-                                                value={damagedSku}
-                                                onChange={(e) => setDamagedSku(e.target.value)}
-                                            />
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="damage-description">Descripción del Daño</Label>
-                                            <Textarea 
-                                                id="damage-description"
-                                                placeholder="Describe el daño o el problema del producto..." 
-                                                value={damageDescription}
-                                                onChange={(e) => setDamageDescription(e.target.value)}
-                                            />
-                                        </div>
-                                    </CardContent>
-                                    <CardFooter>
-                                        <Button variant="destructive" onClick={handleRegisterDamage}>Registrar Avería</Button>
-                                    </CardFooter>
-                                </Card>
-                            </TabsContent>
-                        </Tabs>
-                    </TabsContent>
-                </Tabs>
-            </div>
-            
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Añadir Producto a Devolución</DialogTitle>
@@ -635,6 +358,7 @@ export default function LogisticsPage() {
                             onChange={(e) => setCurrentTrackingNumber(e.target.value)}
                             placeholder="Ej: TRK123456789"
                             onKeyDown={handleAddProductKeyDown}
+                            autoFocus
                         />
                     </div>
                 </div>
@@ -648,5 +372,318 @@ export default function LogisticsPage() {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        
+        <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold font-headline tracking-tight">Panel de Logística</h1>
+              <p className="text-muted-foreground">Gestiona las entradas, salidas y devoluciones de inventario.</p>
+            </div>
+
+            <Tabs defaultValue="salidas" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="salidas">Salidas</TabsTrigger>
+                    <TabsTrigger value="entradas">Entradas</TabsTrigger>
+                    <TabsTrigger value="devoluciones">Devoluciones</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="salidas">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Crear Salida de Pedido</CardTitle>
+                            <CardDescription>Selecciona la plataforma, transportadora y agrega los productos a despachar.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <Label htmlFor="platform">Plataforma</Label>
+                                    <Select value={platform} onValueChange={setPlatform}>
+                                        <SelectTrigger id="platform">
+                                        <SelectValue placeholder="Seleccionar una plataforma" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                        {platforms.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label htmlFor="carrier">Transportadora</Label>
+                                    <Select value={carrier} onValueChange={setCarrier}>
+                                        <SelectTrigger id="carrier">
+                                        <SelectValue placeholder="Seleccionar una transportadora" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                        {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div>
+                                <Label htmlFor="barcode-salida">Escanear Código de Barras (SKU)</Label>
+                                <div className="relative">
+                                    <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input 
+                                        id="barcode-salida"
+                                        ref={barcodeRef}
+                                        placeholder="Escanear SKU del producto y presionar Enter" 
+                                        className="pl-8"
+                                        onKeyDown={handleBarcodeScan}
+                                    />
+                                </div>
+                                <p className="text-sm text-muted-foreground mt-1">Usa el SKU del producto (ej: WM-ERGO-01) como código de barras.</p>
+                            </div>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Productos a Despachar</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-[80px]">Imagen</TableHead>
+                                                <TableHead>Producto</TableHead>
+                                                <TableHead>SKU</TableHead>
+                                                <TableHead className="text-center">Cantidad</TableHead>
+                                                <TableHead className="text-right">Acciones</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                        {dispatchedProducts.length > 0 ? (
+                                            dispatchedProducts.map(product => (
+                                            <TableRow key={product.id}>
+                                                <TableCell>
+                                                    <Image
+                                                        src={product.imageUrl}
+                                                        alt={product.name}
+                                                        width={64}
+                                                        height={64}
+                                                        className="rounded-md object-cover"
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="font-medium">{product.name}</TableCell>
+                                                <TableCell>{product.sku}</TableCell>
+                                                <TableCell className="text-center">{product.dispatchQuantity}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveProduct(product.id)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                            <TableCell colSpan={5} className="text-center">Aún no hay productos en el despacho.</TableCell>
+                                            </TableRow>
+                                        )}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </Card>
+                        </CardContent>
+                        <CardFooter>
+                            <Button onClick={handleCreateDispatch}>Crear Salida</Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="entradas">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Registrar Entrada de Mercancía</CardTitle>
+                            <CardDescription>Añade productos al inventario al recibirlos del proveedor.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div>
+                                <Label htmlFor="barcode-entrada">Escanear Código de Barras (SKU)</Label>
+                                <div className="relative">
+                                    <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input 
+                                        id="barcode-entrada"
+                                        ref={entryBarcodeRef}
+                                        placeholder="Escanear SKU para agregar producto" 
+                                        className="pl-8"
+                                        onKeyDown={handleEntryBarcodeScan}
+                                    />
+                                </div>
+                            </div>
+                             <Card>
+                                <CardHeader><CardTitle>Productos Recibidos</CardTitle></CardHeader>
+                                <CardContent>
+                                     <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Producto</TableHead>
+                                                <TableHead>SKU</TableHead>
+                                                <TableHead className="text-center w-[150px]">Cantidad</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {receivedProducts.length > 0 ? (
+                                                receivedProducts.map(product => (
+                                                    <TableRow key={product.id}>
+                                                        <TableCell className="font-medium">{product.name}</TableCell>
+                                                        <TableCell>{product.sku}</TableCell>
+                                                        <TableCell>
+                                                            <Input 
+                                                                type="number"
+                                                                className="w-24 text-center mx-auto"
+                                                                value={product.receiveQuantity}
+                                                                onChange={(e) => handleReceivedQuantityChange(product.id, parseInt(e.target.value, 10))}
+                                                                min="0"
+                                                            />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="text-center">Escanea un producto para comenzar.</TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </Card>
+                        </CardContent>
+                        <CardFooter>
+                            <Button onClick={handleRegisterEntry}>Registrar Entrada</Button>
+                        </CardFooter>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="devoluciones">
+                    <Tabs defaultValue="general" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="general">Devoluciones Generales</TabsTrigger>
+                            <TabsTrigger value="averias">Averías</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="general">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Procesar Devolución</CardTitle>
+                                    <CardDescription>Gestiona las devoluciones masivas de clientes.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    <div>
+                                        <Label htmlFor="return-carrier">Transportadora</Label>
+                                        <Select value={returnCarrier} onValueChange={setReturnCarrier}>
+                                            <SelectTrigger id="return-carrier">
+                                                <SelectValue placeholder="Seleccionar una transportadora" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                     <div>
+                                        <Label htmlFor="return-barcode">Escanear Código de Barras (SKU)</Label>
+                                        <div className="relative">
+                                            <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                            <Input 
+                                                id="return-barcode"
+                                                ref={returnBarcodeRef}
+                                                placeholder="Escanear SKU para agregar producto a la devolución" 
+                                                className="pl-8"
+                                                onKeyDown={handleReturnBarcodeScan}
+                                            />
+                                        </div>
+                                    </div>
+                                     <Card>
+                                        <CardHeader><CardTitle>Productos a Devolver</CardTitle></CardHeader>
+                                        <CardContent>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Producto</TableHead>
+                                                        <TableHead>SKU</TableHead>
+                                                        <TableHead>Nº Guía</TableHead>
+                                                        <TableHead className="text-right">Acciones</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {returnedProducts.length > 0 ? (
+                                                        returnedProducts.map((p, index) => (
+                                                            <TableRow key={`${p.sku}-${index}`}>
+                                                                <TableCell className="font-medium">{p.name}</TableCell>
+                                                                <TableCell>{p.sku}</TableCell>
+                                                                <TableCell>{p.trackingNumber}</TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveReturnedProduct(index)}>
+                                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                                    </Button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))
+                                                    ) : (
+                                                        <TableRow>
+                                                            <TableCell colSpan={4} className="text-center">Aún no hay productos en la devolución.</TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </CardContent>
+                                    </Card>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button onClick={handleProcessReturn}>Procesar Devolución</Button>
+                                </CardFooter>
+                            </Card>
+                        </TabsContent>
+                        <TabsContent value="averias">
+                             <Card>
+                                <CardHeader>
+                                    <CardTitle>Registrar Producto Averiado</CardTitle>
+                                    <CardDescription>Registra productos que llegaron dañados o no son aptos para la venta.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <Label htmlFor="damage-carrier">Transportadora</Label>
+                                            <Select value={damageCarrier} onValueChange={setDamageCarrier}>
+                                                <SelectTrigger id="damage-carrier">
+                                                    <SelectValue placeholder="Seleccionar transportadora" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {carriers.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="damage-tracking-number">Número de Guía</Label>
+                                            <Input
+                                                id="damage-tracking-number"
+                                                placeholder="Ej: TRK123456789"
+                                                value={damageTrackingNumber}
+                                                onChange={(e) => setDamageTrackingNumber(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                     <div>
+                                        <Label htmlFor="damage-product-sku">SKU del Producto Averiado</Label>
+                                        <Input 
+                                            id="damage-product-sku" 
+                                            placeholder="Ej: WM-ERGO-01" 
+                                            value={damagedSku}
+                                            onChange={(e) => setDamagedSku(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="damage-description">Descripción del Daño</Label>
+                                        <Textarea 
+                                            id="damage-description"
+                                            placeholder="Describe el daño o el problema del producto..." 
+                                            value={damageDescription}
+                                            onChange={(e) => setDamageDescription(e.target.value)}
+                                        />
+                                    </div>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button variant="destructive" onClick={handleRegisterDamage}>Registrar Avería</Button>
+                                </CardFooter>
+                            </Card>
+                        </TabsContent>
+                    </Tabs>
+                </TabsContent>
+            </Tabs>
+        </div>
+    </>
     );
 }

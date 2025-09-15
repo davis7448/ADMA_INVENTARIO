@@ -123,7 +123,7 @@ export const updateProductStock = (productId: string, quantity: number, operatio
     if (operation === 'add') {
       products[productIndex].stock += quantity;
     } else {
-      products[productIndex].stock -= quantity;
+      products[productIndex].stock = Math.max(0, products[productIndex].stock - quantity);
     }
   }
 };
@@ -133,7 +133,7 @@ export let inventoryMovements: InventoryMovement[] = [];
 
 export const addInventoryMovement = (movement: Omit<InventoryMovement, 'id' | 'date'>) => {
   inventoryMovements.unshift({
-    id: `mov-${Date.now()}-${Math.random()}`,
+    id: `mov-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
     date: new Date().toISOString(),
     ...movement,
   });
