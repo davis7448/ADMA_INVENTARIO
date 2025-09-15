@@ -49,7 +49,7 @@ export const getProductById = async (id: string): Promise<Product | null> => {
 
 export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> => {
   const productsCol = collection(db, 'products');
-  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0 });
+  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
 };
 

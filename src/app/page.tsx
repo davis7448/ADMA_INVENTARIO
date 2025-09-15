@@ -36,12 +36,14 @@ export default async function DashboardPage() {
     .slice(0, 5)
     .map(p => ({ name: p.name, stock: p.stock }));
     
-  const getBadgeClass = (type: 'Entrada' | 'Salida') => {
+  const getBadgeClass = (type: 'Entrada' | 'Salida' | 'Averia') => {
     switch (type) {
       case 'Entrada':
         return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
       case 'Salida':
         return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
+      case 'Averia':
+        return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300';
       default:
         return '';
     }

@@ -66,7 +66,7 @@ export type User = {
 export type InventoryMovement = {
   id: string; // Firestore document ID
   movementId: number; // Sequential ID
-  type: 'Entrada' | 'Salida';
+  type: 'Entrada' | 'Salida' | 'Averia';
   productId: string;
   productName: string;
   quantity: number;

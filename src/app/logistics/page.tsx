@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -443,14 +444,14 @@ export default function LogisticsPage() {
         try {
             await registerDamagedProduct(product.id, 1);
             await addInventoryMovement({
-                type: 'Salida',
+                type: 'Averia',
                 productId: product.id,
                 productName: product.name,
                 quantity: 1,
-                notes: `Producto averiado: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
+                notes: `Devolución averiada: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
             });
 
-            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name} y se ha ajustado el stock.` });
+            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name}.` });
             setDamagedSku('');
             setDamageDescription('');
             setDamageCarrier('');
