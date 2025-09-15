@@ -36,6 +36,8 @@ import ReturnsChart from './returns-chart';
 import { subDays, format, startOfDay } from 'date-fns';
 import { Button } from './ui/button';
 import { ProductReservationDialog } from './product-reservation-dialog';
+import { LinkIcon } from 'lucide-react';
+import Link from 'next/link';
 
 interface ProductDetailDialogProps {
   productId: string;
@@ -161,6 +163,18 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                         <h2 className="text-2xl font-bold font-headline break-words">{product.name}</h2>
                         <p className="text-sm text-muted-foreground font-mono">{product.sku}</p>
                         <p className="pt-2 text-muted-foreground break-words">{product.description}</p>
+
+                        {product.contentLink && (
+                          <div className="pt-2">
+                            <Button asChild variant="outline">
+                              <Link href={product.contentLink} target="_blank" rel="noopener noreferrer">
+                                <LinkIcon className="mr-2 h-4 w-4" />
+                                Ver Contenido en Drive
+                              </Link>
+                            </Button>
+                          </div>
+                        )}
+                        
                         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-4 text-center">
                             <Card>
                                 <CardHeader className="pb-2">
