@@ -1,0 +1,88 @@
+
+"use client";
+
+import { useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { getCategories } from '@/lib/api';
+import type { Category } from '@/lib/types';
+import { AddCategoryForm } from '@/components/add-category-form';
+import { useAuth } from '@/hooks/use-auth';
+import { Skeleton } from '@/components/ui/skeleton';
+
+interface CategoriesContentProps {
+    initialCategories: Category[];
+}
+
+export function CategoriesContent({ initialCategories }: CategoriesContentProps) {
+    const [categories, setCategories] = useState<Category[]>(initialCategories);
+    const [loading, setLoading] = useState(false);
+    const { user } = useAuth();
+
+    const refreshCategories = async () => {
+        setLoading(true);
+        const fetchedCategories = await getCategories();
+        setCategories(fetchedCategories);
+        setLoading(false);
+    }
+    
+    const canEdit = user?.role === 'admin';
+
+    return (
+        <div className="space-y-6">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold font-headline tracking-tight">Categories</h1>
+              <p className="text-muted-foreground">Manage your product categories.</p>
+            </div>
+            {canEdit && <AddCategoryForm onCategoryAdded={refreshCategories} />}
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>All Categories</CardTitle>
+              <CardDescription>A list of all product categories.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                     Array.from({ length: 3 }).map((_, i) => (
+                        <TableRow key={i}>
+                            <TableCell><Skeleton className="h-4 w-40" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-80" /></TableCell>
+                        </TableRow>
+                     ))
+                  ) : (
+                    categories.map((category) => (
+                        <TableRow key={category.id}>
+                            <TableCell className="font-medium">{category.name}</TableCell>
+                            <TableCell>{category.description}</TableCell>
+                        </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+    )
+}
