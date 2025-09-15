@@ -29,19 +29,6 @@ export default function LoginPage() {
     setLoading(false);
   };
 
-  const handleDemoLogin = async (demoEmail: string) => {
-    const demoPassword = 'password123';
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setLoading(true);
-    setError(null);
-    const success = await login(demoEmail, demoPassword);
-     if (!success) {
-      setError('Invalid credentials. Please try again.');
-    }
-    setLoading(false);
-  }
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
@@ -87,14 +74,6 @@ export default function LoginPage() {
                 {loading ? 'Logging in...' : 'Login'}
               </Button>
             </form>
-             <div className="mt-4 text-center text-sm">
-                <p className="text-muted-foreground">Or log in as a demo user (password: password123):</p>
-                <div className="mt-2 flex justify-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleDemoLogin('admin@example.com')}>Admin</Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDemoLogin('logistics@example.com')}>Logistics</Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDemoLogin('commercial@example.com')}>Commercial</Button>
-                </div>
-            </div>
           </CardContent>
         </Card>
       </div>
