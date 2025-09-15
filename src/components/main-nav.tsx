@@ -30,7 +30,7 @@ type NavItem = {
   
   const navItems: NavItem[] = [
     { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial'] },
-    { href: '/products', label: 'Products', roles: ['admin', 'commercial'] },
+    { href: '/products', label: 'Inventario', roles: ['admin', 'commercial'] },
     {
         label: 'Activos',
         roles: ['admin', 'commercial'],
@@ -41,9 +41,15 @@ type NavItem = {
             { href: '/platforms', label: 'Platforms', roles: ['admin', 'commercial'] },
         ],
     },
-    { href: '/logistics', label: 'Logística', roles: ['admin', 'logistics'] },
-    { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics'] },
-    { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics'] },
+    {
+        label: 'Logística',
+        roles: ['admin', 'logistics'],
+        children: [
+            { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics'] },
+            { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics'] },
+            { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics'] },
+        ],
+    },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
     { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
   ];
