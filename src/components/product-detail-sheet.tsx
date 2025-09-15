@@ -107,9 +107,9 @@ export function ProductDetailSheet({ productId, open, onOpenChange }: ProductDet
                       />
                     </div>
                     <div className="sm:w-2/3 space-y-2">
-                      <h2 className="text-2xl font-bold font-headline">{product.name}</h2>
+                      <h2 className="text-2xl font-bold font-headline break-words">{product.name}</h2>
                       <p className="text-sm text-muted-foreground font-mono">{product.sku}</p>
-                      <p className="pt-2 text-muted-foreground">{product.description}</p>
+                      <p className="pt-2 text-muted-foreground break-words">{product.description}</p>
                     </div>
                   </div>
                 </CardContent>
