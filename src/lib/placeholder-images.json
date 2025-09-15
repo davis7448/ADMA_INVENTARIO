@@ -1,3 +1,52 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "prod-1",
+      "description": "A modern, wireless ergonomic mouse designed for comfort and precision.",
+      "imageUrl": "https://picsum.photos/seed/p1/600/400",
+      "imageHint": "wireless mouse"
+    },
+    {
+      "id": "prod-2",
+      "description": "A mechanical keyboard with customizable RGB backlighting and tactile switches.",
+      "imageUrl": "https://picsum.photos/seed/p2/600/400",
+      "imageHint": "mechanical keyboard"
+    },
+    {
+      "id": "prod-3",
+      "description": "A 27-inch 4K UHD monitor with vibrant colors and wide viewing angles.",
+      "imageUrl": "https://picsum.photos/seed/p3/600/400",
+      "imageHint": "computer monitor"
+    },
+    {
+      "id": "prod-4",
+      "description": "Noise-cancelling over-ear headphones with high-fidelity audio.",
+      "imageUrl": "https://picsum.photos/seed/p4/600/400",
+      "imageHint": "wireless headphones"
+    },
+    {
+      "id": "prod-5",
+      "description": "A lightweight and powerful laptop for professionals on the go.",
+      "imageUrl": "https://picsum.photos/seed/p5/600/400",
+      "imageHint": "modern laptop"
+    },
+    {
+      "id": "prod-6",
+      "description": "A smart watch with fitness tracking and notification features.",
+      "imageUrl": "https://picsum.photos/seed/p6/600/400",
+      "imageHint": "smart watch"
+    },
+    {
+      "id": "prod-7",
+      "description": "A high-speed USB-C hub with multiple ports for all your devices.",
+      "imageUrl": "https://picsum.photos/seed/p7/600/400",
+      "imageHint": "USB hub"
+    },
+    {
+      "id": "prod-8",
+      "description": "An adjustable standing desk for a healthier and more ergonomic workspace.",
+      "imageUrl": "https://picsum.photos/seed/p8/600/400",
+      "imageHint": "standing desk"
+    }
+  ]
 }
