@@ -412,7 +412,7 @@ function DispatchPageContent() {
                                             </div>
                                         </AccordionTrigger>
                                         <div 
-                                          className="pr-4"
+                                          className="flex justify-end pr-4"
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                             <ProcessDispatchDialog
