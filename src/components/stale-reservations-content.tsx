@@ -34,6 +34,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from './ui/skeleton';
+import { subDays } from 'date-fns';
 
 interface StaleReservationsContentProps {
     initialAlerts: StaleReservationAlert[];
@@ -70,6 +71,20 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
         }
     });
   }
+  
+  const fakeAlert: StaleReservationAlert = {
+    id: 'fake-alert-1',
+    alertDate: new Date().toISOString(),
+    reservationId: 'fake-res-1',
+    reservationDate: subDays(new Date(), 6).toISOString(),
+    productId: 'prod-1',
+    productName: 'Ergo-Wireless Mouse (Ejemplo)',
+    productSku: 'WM-ERGO-01',
+    vendedorName: 'Vendedor de Ejemplo',
+    quantity: 2,
+  };
+
+  const allAlertsToShow = [fakeAlert, ...alerts];
 
   return (
     <div className="space-y-6">
@@ -105,8 +120,8 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
                         <TableCell colSpan={6}><Skeleton className="h-8 w-full" /></TableCell>
                     </TableRow>
                 ))
-              ) : alerts.length > 0 ? (
-                alerts.map((alert) => (
+              ) : allAlertsToShow.length > 0 ? (
+                allAlertsToShow.map((alert) => (
                   <TableRow key={alert.id} className="hover:bg-amber-50 dark:hover:bg-amber-900/20">
                     <TableCell>
                       <div className="font-medium">{alert.productName}</div>
@@ -119,7 +134,7 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
                     <TableCell className="text-right">
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="sm">Liberar Reserva</Button>
+                                <Button variant="destructive" size="sm" disabled={alert.id.startsWith('fake-')}>Liberar Reserva</Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
