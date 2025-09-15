@@ -398,17 +398,17 @@ function DispatchPageContent() {
                                     <div className="flex justify-between items-center w-full hover:bg-muted/50 rounded-md pr-4">
                                         <AccordionTrigger className="flex-1 p-4 cursor-pointer">
                                             <div className="flex items-center justify-between w-full">
-                                                <div className="flex-shrink-0 w-1/3 text-left">
+                                                <div className="w-1/3 text-left">
                                                     <p className="font-semibold">{order.dispatchId}</p>
                                                     <p className="text-sm text-muted-foreground">
                                                         {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
                                                     </p>
                                                 </div>
-                                                <div className="flex-1 text-center px-4">
+                                                <div className="w-1/3 text-center">
                                                     <p className="text-sm font-medium">{platformNames[order.platformId]}</p>
                                                     <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                                 </div>
-                                                <div className="flex-shrink-0 w-1/3 text-right">
+                                                <div className="w-1/3 text-right">
                                                     {/* This div is to balance the flex layout, the arrow will be here */}
                                                 </div>
                                             </div>
