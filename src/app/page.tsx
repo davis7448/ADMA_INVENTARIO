@@ -9,10 +9,18 @@ import {
   CardTitle,
   CardDescription
 } from '@/components/ui/card';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+  } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { getDispatchOrders, getProducts, getCarriers, getCategories } from '@/lib/api';
-import type { DispatchOrder, Product, Carrier, Category } from '@/lib/types';
-import { CalendarIcon, PackageCheck, PackageX, AlertTriangle, Percent } from 'lucide-react';
+import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventoryMovements } from '@/lib/api';
+import type { DispatchOrder, Product, Carrier, Category, InventoryMovement } from '@/lib/types';
+import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -22,6 +30,9 @@ import DashboardOrdersChart from '@/components/dashboard-orders-chart';
 import DashboardPendingChart from '@/components/dashboard-pending-chart';
 import { Skeleton } from '@/components/ui/skeleton';
 import DashboardCategoryChart from '@/components/dashboard-category-chart';
+import DashboardReturnsChart from '@/components/dashboard-returns-chart';
+import { Progress } from '@/components/ui/progress';
+
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -32,21 +43,24 @@ export default function DashboardPage() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [allCarriers, setAllCarriers] = useState<Carrier[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [allMovements, setAllMovements] = useState<InventoryMovement[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [orders, products, carriers, categories] = await Promise.all([
+      const [orders, products, carriers, categories, movements] = await Promise.all([
           getDispatchOrders(), 
           getProducts(), 
           getCarriers(),
-          getCategories()
+          getCategories(),
+          getInventoryMovements() // Fetch all movements
         ]);
       setAllOrders(orders);
       setAllProducts(products);
       setAllCarriers(carriers);
       setAllCategories(categories);
+      setAllMovements(movements);
       setLoading(false);
     };
     fetchData();
@@ -66,6 +80,19 @@ export default function DashboardPage() {
     );
     const totalPendingOrders = pendingAndPartialInPeriod.length;
 
+    const returnMovementsInPeriod = allMovements.filter(m => {
+        const movementDate = new Date(m.date);
+        const isReturn = m.type === 'Entrada' && (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia'));
+        return isReturn && movementDate >= fromDate && movementDate <= toDate;
+    });
+    const totalReturns = returnMovementsInPeriod.reduce((sum, m) => sum + m.quantity, 0);
+
+    const returnsByDay = returnMovementsInPeriod.reduce((acc, m) => {
+        const day = format(new Date(m.date), 'yyyy-MM-dd');
+        acc[day] = (acc[day] || 0) + m.quantity;
+        return acc;
+    }, {} as Record<string, number>);
+
     const ordersByDay = ordersInPeriod.reduce((acc, order) => {
         const day = format(new Date(order.date), 'yyyy-MM-dd');
         acc[day] = (acc[day] || 0) + 1;
@@ -81,6 +108,7 @@ export default function DashboardPage() {
 
     const chartData = [];
     const pendingChartData = [];
+    const returnsChartData = [];
     let currentDate = new Date(fromDate);
     
     while (currentDate <= toDate) {
@@ -92,6 +120,10 @@ export default function DashboardPage() {
         pendingChartData.push({
             date: dayKey,
             orders: pendingByDay[dayKey] || 0,
+        });
+        returnsChartData.push({
+            date: dayKey,
+            returns: returnsByDay[dayKey] || 0,
         });
         currentDate.setDate(currentDate.getDate() + 1);
     }
@@ -123,25 +155,21 @@ export default function DashboardPage() {
         .map(([categoryId, count]) => ({
             name: categoryNameMap[categoryId] || 'Unknown',
             value: count,
+            percentage: totalItemsSold > 0 ? (count / totalItemsSold) * 100 : 0,
         }))
         .sort((a, b) => b.value - a.value);
-
-    const mostMovedCategory = categoryChartData[0] || null;
-    const mostMovedCategoryPercentage = mostMovedCategory && totalItemsSold > 0
-        ? (mostMovedCategory.value / totalItemsSold) * 100
-        : 0;
 
 
     return {
       ordersInPeriod,
       totalPendingOrders,
+      totalReturns,
+      returnsChartData,
       pendingChartData,
       chartData,
       categoryChartData,
-      mostMovedCategory,
-      mostMovedCategoryPercentage,
     };
-  }, [dateRange, allOrders, allCarriers, allProducts, allCategories]);
+  }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allMovements]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -221,36 +249,73 @@ export default function DashboardPage() {
                 </div>
             </CardContent>
             </Card>
-            <Card className="flex flex-col">
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Categoría Principal</CardTitle>
-                    <CardDescription>
-                        La categoría de productos más vendida en el período.
-                    </CardDescription>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Devoluciones Recibidas</CardTitle>
+                    <CornerDownLeft className="h-4 w-4 text-destructive" />
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col justify-center">
-                   {filteredData.mostMovedCategory ? (
-                        <>
-                            <div className="flex items-baseline gap-2 justify-center">
-                               <p className="text-2xl font-bold">{filteredData.mostMovedCategory.name}</p>
-                               <p className="text-sm font-semibold text-green-500">
-                                   ({filteredData.mostMovedCategoryPercentage.toFixed(1)}%)
-                               </p>
-                            </div>
-                            <div className="h-32 mt-2">
-                                <DashboardCategoryChart data={filteredData.categoryChartData} />
-                            </div>
-                        </>
-                   ) : (
-                        <div className="flex items-center justify-center h-full text-muted-foreground">
-                            No hay datos de ventas.
-                        </div>
-                   )}
+                <CardContent>
+                    <div className="text-2xl font-bold">{filteredData.totalReturns}</div>
+                    <p className="text-xs text-muted-foreground">
+                        Total de productos retornados en el período.
+                    </p>
+                    <div className="h-32 mt-4">
+                        <DashboardReturnsChart data={filteredData.returnsChartData} />
+                    </div>
                 </CardContent>
             </Card>
         </div>
       )}
 
+        <Card>
+            <CardHeader>
+                <CardTitle>Rendimiento por Categoría</CardTitle>
+                <CardDescription>
+                    Distribución de los productos vendidos por categoría en el período seleccionado.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                {loading ? <Skeleton className="h-64" /> : filteredData.categoryChartData.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                        <div className="h-64">
+                            <DashboardCategoryChart data={filteredData.categoryChartData} />
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Categoría</TableHead>
+                                        <TableHead className="text-right">Unidades</TableHead>
+                                        <TableHead className="w-32 text-right">% del Total</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredData.categoryChartData.map(cat => (
+                                        <TableRow key={cat.name}>
+                                            <TableCell className="font-medium">{cat.name}</TableCell>
+                                            <TableCell className="text-right">{cat.value}</TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <span className="text-xs">{cat.percentage.toFixed(1)}%</span>
+                                                    <Progress value={cat.percentage} className="h-2 w-16" />
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground py-16">
+                        No hay datos de ventas por categoría en el período seleccionado.
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+
     </div>
   );
 }
+
+    
