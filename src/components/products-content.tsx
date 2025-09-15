@@ -33,15 +33,14 @@ import {
     TooltipTrigger,
   } from "@/components/ui/tooltip"
 import { Button } from '@/components/ui/button';
-import { getProducts, getSuppliersByIds, getCategoriesByIds } from '@/lib/api';
+import { getProducts } from '@/lib/api';
 import type { Product, RotationCategory } from '@/lib/types';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditProductForm } from './edit-product-form';
-import { cn } from '@/lib/utils';
 import { ProductDetailDialog } from './product-detail-dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -49,6 +48,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from './ui/switch';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
+import { cn } from '@/lib/utils';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -107,8 +108,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         });
     }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending]);
 
-    const handleRowClick = (productId: string) => {
-        setSelectedProductId(productId);
+    const handleRowClick = (product: Product) => {
+        if (product.productType === 'simple') {
+            setSelectedProductId(product.id);
+        }
     };
 
     const handleDialogChange = (open: boolean) => {
@@ -184,7 +187,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
 
         // If user is not admin, remove the Cost property from all objects
         if (!canEdit) {
-            dataToExport.forEach(item => delete item.Costo);
+            dataToExport.forEach(item => delete (item as any).Costo);
         }
     
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -268,110 +271,144 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                 </div>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="hidden w-[100px] sm:table-cell">
-                      <span className="sr-only">Image</span>
-                    </TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Rotación</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead className="hidden md:table-cell">Stock</TableHead>
-                    <TableHead className="hidden md:table-cell">Pendiente</TableHead>
-                    <TableHead className="hidden md:table-cell">Averiado</TableHead>
-                    <TableHead>Price</TableHead>
-                    {canEdit && (
-                      <TableHead>
-                        <span className="sr-only">Actions</span>
-                      </TableHead>
+                <div className="border rounded-md">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[80px] hidden sm:table-cell" />
+                                <TableHead>Name</TableHead>
+                                <TableHead>Rotación</TableHead>
+                                <TableHead>SKU</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Stock</TableHead>
+                                <TableHead>Pendiente</TableHead>
+                                <TableHead>Averiado</TableHead>
+                                <TableHead>Price</TableHead>
+                                {canEdit && <TableHead className="w-[50px]"><span className="sr-only">Actions</span></TableHead>}
+                                <TableHead className="w-[50px]"><span className="sr-only">Expand</span></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                    </Table>
+                    {loading ? (
+                         Array.from({ length: 5 }).map((_, i) => (
+                             <div key={i} className="flex items-center p-4 border-b">
+                                <Skeleton className="h-16 w-16 rounded-md mr-4" />
+                                <div className="space-y-2 flex-1">
+                                    <Skeleton className="h-4 w-4/5" />
+                                    <Skeleton className="h-4 w-2/5" />
+                                </div>
+                             </div>
+                         ))
+                    ) : filteredProducts.length > 0 ? (
+                        <Accordion type="single" collapsible className="w-full">
+                        {filteredProducts.map((product) => (
+                            <AccordionItem value={product.id} key={product.id} className="border-b last:border-b-0">
+                                <div 
+                                    className={cn(
+                                        "flex items-center",
+                                        product.productType === 'simple' && "cursor-pointer hover:bg-muted/50 transition-colors"
+                                    )}
+                                    onClick={() => handleRowClick(product)}
+                                >
+                                    <div className="flex-1">
+                                        <Table>
+                                            <TableBody>
+                                                <TableRow className="border-none hover:bg-transparent">
+                                                    <TableCell className="w-[80px] hidden sm:table-cell">
+                                                        <Image
+                                                            alt={product.name}
+                                                            className="aspect-square rounded-md object-cover"
+                                                            height="64"
+                                                            src={product.imageUrl}
+                                                            width="64"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="font-medium">{product.name}</TableCell>
+                                                    <TableCell>
+                                                        <Tooltip>
+                                                            <TooltipTrigger>
+                                                                {getRotationIcon(product.rotationCategoryName)}
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>{product.rotationCategoryName}</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                    <TableCell>{product.sku}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
+                                                    </TableCell>
+                                                    <TableCell>{product.stock}</TableCell>
+                                                    <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
+                                                    <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
+                                                    <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
+                                                    {canEdit && (
+                                                        <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button aria-haspopup="true" size="icon" variant="ghost">
+                                                                        <MoreHorizontal className="h-4 w-4" />
+                                                                        <span className="sr-only">Toggle menu</span>
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                                    <EditProductForm product={product} onProductUpdated={refreshProducts}>
+                                                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Edit</DropdownMenuItem>
+                                                                    </EditProductForm>
+                                                                    <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </TableCell>
+                                                    )}
+                                                     <TableCell className="w-[50px] pr-4">
+                                                        {product.productType === 'variable' && (
+                                                            <AccordionTrigger className="p-1 rounded-md hover:bg-accent [&[data-state=open]>svg]:rotate-180">
+                                                                <ChevronDown className="h-5 w-5 shrink-0 transition-transform duration-200" />
+                                                            </AccordionTrigger>
+                                                        )}
+                                                     </TableCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                                {product.productType === 'variable' && product.variants && product.variants.length > 0 && (
+                                    <AccordionContent>
+                                        <div className="bg-muted/50 p-4">
+                                            <h4 className="font-semibold mb-2 ml-4">Variantes</h4>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="hover:bg-transparent">
+                                                        <TableHead>Nombre</TableHead>
+                                                        <TableHead>SKU</TableHead>
+                                                        <TableHead>Precio</TableHead>
+                                                        <TableHead>Stock</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                {product.variants.map((variant) => (
+                                                    <TableRow key={variant.id} className="border-t-0 hover:bg-transparent">
+                                                        <TableCell>{variant.name}</TableCell>
+                                                        <TableCell>{variant.sku}</TableCell>
+                                                        <TableCell>${variant.price.toFixed(0)}</TableCell>
+                                                        <TableCell>{variant.stock}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </AccordionContent>
+                                )}
+                            </AccordionItem>
+                        ))}
+                        </Accordion>
+                    ) : (
+                        <div className="text-center py-12 text-muted-foreground">
+                            <p>No se encontraron productos con los filtros actuales.</p>
+                        </div>
                     )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                     Array.from({ length: 5 }).map((_, i) => (
-                        <TableRow key={i}>
-                            <TableCell className="hidden sm:table-cell">
-                                <Skeleton className="h-16 w-16 rounded-md" />
-                            </TableCell>
-                            <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                            <TableCell><Skeleton className="h-4 w-10" /></TableCell>
-                            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                            <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                            <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
-                            <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
-                            <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
-                            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                            {canEdit && <TableCell><Skeleton className="h-8 w-8" /></TableCell>}
-                        </TableRow>
-                     ))
-                  ) : (
-                    filteredProducts.map((product) => (
-                        <TableRow key={product.id} onClick={() => handleRowClick(product.id)} className="cursor-pointer">
-                        <TableCell className="hidden sm:table-cell">
-                            <Image
-                            alt={product.name}
-                            className="aspect-square rounded-md object-cover"
-                            height="64"
-                            src={product.imageUrl}
-                            width="64"
-                            />
-                        </TableCell>
-                        <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell>
-                            <Badge variant={product.productType === 'simple' ? 'secondary' : 'outline'}>{product.productType}</Badge>
-                        </TableCell>
-                        <TableCell>
-                            <Tooltip>
-                                <TooltipTrigger>
-                                    {getRotationIcon(product.rotationCategoryName)}
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{product.rotationCategoryName}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TableCell>
-                        <TableCell>{product.sku}</TableCell>
-                        <TableCell>
-                            <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">{product.stock}</TableCell>
-                        <TableCell className="hidden md:table-cell text-center text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
-                        <TableCell className="hidden md:table-cell text-center text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
-                        <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
-                        {canEdit && (
-                            <TableCell onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                <Button aria-haspopup="true" size="icon" variant="ghost">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                    <span className="sr-only">Toggle menu</span>
-                                </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <EditProductForm product={product} onProductUpdated={refreshProducts}>
-                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Edit</DropdownMenuItem>
-                                </EditProductForm>
-                                <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                            </TableCell>
-                        )}
-                        </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-              {filteredProducts.length === 0 && !loading && (
-                <div className="text-center py-12 text-muted-foreground">
-                    <p>No se encontraron productos con los filtros actuales.</p>
                 </div>
-              )}
             </CardContent>
           </Card>
         </div>
