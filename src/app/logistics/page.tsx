@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -73,6 +74,17 @@ interface ReturnedProduct extends Product {
     trackingNumber: string;
 }
 
+// Represents a product or variant in one of the logistics lists
+interface LogisticItem {
+    productId: string; // Always the parent product ID
+    variantId?: string; // The variant's own ID
+    name: string; // Can be product or variant name
+    sku: string;
+    imageUrl: string;
+    quantity: number;
+}
+
+
 type SearchContext = 'salidas' | 'entradas' | 'averias' | 'devoluciones';
 
 
@@ -88,7 +100,7 @@ export default function LogisticsPage() {
     // Salidas State
     const [platform, setPlatform] = useState('');
     const [carrier, setCarrier] = useState('');
-    const [dispatchedProducts, setDispatchedProducts] = useState<DispatchedProduct[]>([]);
+    const [dispatchedProducts, setDispatchedProducts] = useState<LogisticItem[]>([]);
     const barcodeRef = useRef<HTMLInputElement>(null);
     const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -97,15 +109,15 @@ export default function LogisticsPage() {
     const [productToConfirm, setProductToConfirm] = useState<Product | null>(null);
 
     // Entradas State
-    const [receivedProducts, setReceivedProducts] = useState<ReceivedProduct[]>([]);
+    const [receivedProducts, setReceivedProducts] = useState<LogisticItem[]>([]);
     const entryBarcodeRef = useRef<HTMLInputElement>(null);
     
     // Devoluciones State
     const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
     const [returnCarrier, setReturnCarrier] = useState('');
-    const [returnedProducts, setReturnedProducts] = useState<ReturnedProduct[]>([]);
+    const [returnedProducts, setReturnedProducts] = useState<(LogisticItem & {trackingNumber: string})[]>([]);
     const [currentTrackingNumber, setCurrentTrackingNumber] = useState('');
-    const [productToAdd, setProductToAdd] = useState<Product | ProductVariant | null>(null);
+    const [productToAdd, setProductToAdd] = useState<(Product | ProductVariant) & { parentId?: string, parentImageUrl?: string } | null>(null);
     const returnBarcodeRef = useRef<HTMLInputElement>(null);
 
     // Averías State
@@ -141,75 +153,78 @@ export default function LogisticsPage() {
 
     // --- GENERIC PRODUCT/VARIANT ADDITION ---
 
-    const addProductOrVariant = (product: Product | ProductVariant, context: SearchContext, parentImageUrl?: string) => {
-        const productToAdd = {
-            ...product,
-            id: 'id' in product ? product.id : `variant-${product.sku}`,
-            name: 'name' in product ? product.name : 'Unknown',
-            imageUrl: parentImageUrl || ('imageUrl' in product ? product.imageUrl : ''),
-            // Ensure all required Product fields are present for type compatibility
-            categoryId: 'categoryId' in product ? product.categoryId : productForVariantSelection?.categoryId || '',
-            price: 'price' in product ? product.price : 0,
-            restockThreshold: 'restockThreshold' in product ? product.restockThreshold : productForVariantSelection?.restockThreshold || 0,
-            vendorId: 'vendorId' in product ? product.vendorId : productForVariantSelection?.vendorId || '',
-            productType: 'simple' as 'simple', // Treat variants as simple products in lists
-            variants: [],
-            pendingStock: 0,
-            damagedStock: 0,
+    const addProductOrVariant = (
+        item: (Product | ProductVariant) & { parentId?: string, parentImageUrl?: string },
+        context: SearchContext
+    ) => {
+        const parentId = 'parentId' in item ? item.parentId : item.id;
+        const parentProduct = allProductsList.find(p => p.id === parentId);
+        
+        if (!parentProduct) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Producto padre no encontrado.' });
+            return;
+        }
+    
+        const logisticItem: LogisticItem = {
+            productId: parentId, // Use parent product ID
+            variantId: 'productType' in item ? undefined : item.id, // Only variants have variantId
+            name: item.name,
+            sku: item.sku || '',
+            imageUrl: item.parentImageUrl || ('imageUrl' in item ? item.imageUrl : parentProduct.imageUrl),
+            quantity: 1 // Default quantity
         };
     
         switch (context) {
             case 'salidas':
-                addProductToDispatch(productToAdd);
+                setDispatchedProducts(prev => {
+                    const existing = prev.find(p => p.sku === logisticItem.sku);
+                    if (existing) {
+                        return prev.map(p => p.sku === logisticItem.sku ? { ...p, quantity: p.quantity + 1 } : p);
+                    }
+                    return [...prev, logisticItem];
+                });
+                toast({ title: "Producto Agregado", description: `${logisticItem.name} añadido al despacho.` });
                 break;
             case 'entradas':
-                addProductToEntry(productToAdd);
+                setReceivedProducts(prev => {
+                    const existing = prev.find(p => p.sku === logisticItem.sku);
+                    if (existing) {
+                        return prev.map(p => p.sku === logisticItem.sku ? { ...p, quantity: p.quantity + 1 } : p);
+                    }
+                    return [...prev, logisticItem];
+                });
+                toast({ title: 'Producto Agregado', description: `${logisticItem.name} añadido a la recepción.` });
                 break;
             case 'devoluciones':
-                setProductToAdd(productToAdd);
+                setProductToAdd(item);
                 setIsReturnDialogOpen(true);
                 break;
             case 'averias':
-                setDamagedSku(productToAdd.sku || '');
+                setDamagedSku(logisticItem.sku || '');
                 break;
         }
     };
     
     // --- SALIDAS ---
 
-    const addProductToDispatch = (product: Product) => {
-        setDispatchedProducts(prev => {
-            const existingProduct = prev.find(p => p.sku === product.sku);
-            if (existingProduct) {
-              return prev.map(p => 
-                p.sku === product.sku 
-                  ? { ...p, dispatchQuantity: p.dispatchQuantity + 1 } 
-                  : p
-              );
-            }
-            return [...prev, { ...product, dispatchQuantity: 1 }];
-          });
-          toast({ title: "Producto Agregado", description: `${product.name} añadido al despacho.` });
-    }
-
     const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           const barcode = e.currentTarget.value;
-          const product = allProductsList.find(p => 
+          const parentProduct = allProductsList.find(p => 
             p.sku === barcode || p.variants?.some(v => v.sku === barcode)
           );
     
-          if (product) {
-            if (product.productType === 'variable') {
-                const variant = product.variants?.find(v => v.sku === barcode);
+          if (parentProduct) {
+            if (parentProduct.productType === 'variable') {
+                const variant = parentProduct.variants?.find(v => v.sku === barcode);
                 if (variant) {
-                    addProductOrVariant(variant, 'salidas', product.imageUrl);
+                    addProductOrVariant({ ...variant, parentId: parentProduct.id, parentImageUrl: parentProduct.imageUrl }, 'salidas');
                 } else {
                      toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
                 }
             } else {
-                 addProductToDispatch(product);
+                 addProductOrVariant(parentProduct, 'salidas');
             }
           } else {
             toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
@@ -223,17 +238,6 @@ export default function LogisticsPage() {
         setIsSearchDialogOpen(true);
     };
 
-    const addProductToEntry = (product: Product) => {
-        setReceivedProducts(prev => {
-            const existing = prev.find(p => p.sku === product.sku);
-            if (existing) {
-                return prev.map(p => p.sku === product.sku ? { ...p, receiveQuantity: p.receiveQuantity + 1 } : p);
-            }
-            return [...prev, { ...product, receiveQuantity: 1 }];
-        });
-        toast({ title: 'Producto Agregado', description: `${product.name} añadido a la recepción.` });
-    }
-
     const handleProductSearchSelect = (product: Product) => {
         setIsSearchDialogOpen(false);
         setSearchQuery('');
@@ -246,7 +250,7 @@ export default function LogisticsPage() {
                 setProductToConfirm(product);
                 setTimeout(() => setIsConfirmDialogOpen(true), 150);
             } else {
-                addProductOrVariant(product, searchContext, product.imageUrl);
+                addProductOrVariant(product, searchContext);
             }
         }
     };
@@ -254,15 +258,14 @@ export default function LogisticsPage() {
     const handleVariantSelect = (variant: ProductVariant) => {
         setIsVariantDialogOpen(false);
         if (productForVariantSelection) {
-            addProductOrVariant(variant, searchContext, productForVariantSelection.imageUrl);
+            addProductOrVariant({ ...variant, parentId: productForVariantSelection.id, parentImageUrl: productForVariantSelection.imageUrl }, searchContext);
         }
         setProductForVariantSelection(null);
     }
 
-
     const handleConfirmAddProduct = () => {
         if (productToConfirm) {
-            addProductToDispatch(productToConfirm);
+            addProductOrVariant(productToConfirm, 'salidas');
         }
         setIsConfirmDialogOpen(false);
         setProductToConfirm(null);
@@ -284,7 +287,7 @@ export default function LogisticsPage() {
     const handleDispatchQuantityChange = (sku: string, quantity: number) => {
         if (quantity >= 0) {
             setDispatchedProducts(prev => 
-                prev.map(p => p.sku === sku ? { ...p, dispatchQuantity: quantity } : p)
+                prev.map(p => p.sku === sku ? { ...p, quantity: quantity } : p)
             );
         }
     };
@@ -322,10 +325,10 @@ export default function LogisticsPage() {
         const dispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
 
         const productsForDispatch: DispatchOrderProduct[] = dispatchedProducts.map(p => ({
-            productId: p.id,
-            sku: p.sku!,
+            productId: p.productId, // Use parent product ID
+            sku: p.sku,
             name: p.name,
-            quantity: p.dispatchQuantity
+            quantity: p.quantity
         }));
 
         try {
@@ -337,16 +340,16 @@ export default function LogisticsPage() {
             });
 
             const pdfProducts = dispatchedProducts.map(p => ({
-                sku: p.sku!,
+                sku: p.sku,
                 name: p.name,
-                dispatchQuantity: p.dispatchQuantity,
+                dispatchQuantity: p.quantity,
             }))
             
             generatePickingListPDF(dispatchId, pdfProducts, platformName, carrierName);
     
             toast({
                 title: "Salida Creada y PDF Generado",
-                description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.dispatchQuantity, 0)} unidades. El stock ha sido actualizado.`
+                description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.quantity, 0)} unidades. El stock ha sido actualizado.`
             });
     
             setPlatform('');
@@ -370,20 +373,20 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = allProductsList.find(p => 
+            const parentProduct = allProductsList.find(p => 
                 p.sku === barcode || p.variants?.some(v => v.sku === barcode)
             );
 
-            if (product) {
-                if (product.productType === 'variable') {
-                    const variant = product.variants?.find(v => v.sku === barcode);
+            if (parentProduct) {
+                if (parentProduct.productType === 'variable') {
+                    const variant = parentProduct.variants?.find(v => v.sku === barcode);
                     if (variant) {
-                        addProductOrVariant(variant, 'entradas', product.imageUrl);
+                        addProductOrVariant({ ...variant, parentId: parentProduct.id, parentImageUrl: parentProduct.imageUrl }, 'entradas');
                     } else {
                         toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
                     }
                 } else {
-                    addProductToEntry(product);
+                    addProductOrVariant(parentProduct, 'entradas');
                 }
             } else {
                 toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado.' });
@@ -394,7 +397,7 @@ export default function LogisticsPage() {
     
     const handleReceivedQuantityChange = (sku: string, quantity: number) => {
         if (quantity >= 0) {
-            setReceivedProducts(prev => prev.map(p => p.sku === sku ? { ...p, receiveQuantity: quantity } : p));
+            setReceivedProducts(prev => prev.map(p => p.sku === sku ? { ...p, quantity: quantity } : p));
         }
     };
 
@@ -409,13 +412,13 @@ export default function LogisticsPage() {
         }
 
         const promises = receivedProducts.map(product => {
-            if(product.receiveQuantity > 0) {
-                updateProductStock(product.id, product.receiveQuantity, 'add');
+            if(product.quantity > 0) {
+                updateProductStock(product.productId, product.quantity, 'add'); // Always use parent ID
                 return addInventoryMovement({
                     type: 'Entrada',
-                    productId: product.id,
-                    productName: product.name,
-                    quantity: product.receiveQuantity,
+                    productId: product.productId, // Use parent ID
+                    productName: product.name, // Use variant name if applicable
+                    quantity: product.quantity,
                     notes: 'Recepción de mercancía de proveedor.'
                 });
             }
@@ -433,21 +436,21 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = allProductsList.find(p => 
+            const parentProduct = allProductsList.find(p => 
                 p.sku === barcode || p.variants?.some(v => v.sku === barcode)
             );
 
-            if (product) {
-                 if (product.productType === 'variable') {
-                    const variant = product.variants?.find(v => v.sku === barcode);
+            if (parentProduct) {
+                 if (parentProduct.productType === 'variable') {
+                    const variant = parentProduct.variants?.find(v => v.sku === barcode);
                     if (variant) {
-                        setProductToAdd(variant);
+                        setProductToAdd({ ...variant, parentId: parentProduct.id, parentImageUrl: parentProduct.imageUrl });
                         setIsReturnDialogOpen(true);
                     } else {
                          toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
                     }
                 } else {
-                    setProductToAdd(product);
+                    setProductToAdd(parentProduct);
                     setIsReturnDialogOpen(true);
                 }
             } else {
@@ -459,7 +462,20 @@ export default function LogisticsPage() {
     
     const handleAddProductToReturn = () => {
         if (productToAdd && currentTrackingNumber) {
-            setReturnedProducts(prev => [...prev, { ...(productToAdd as Product), trackingNumber: currentTrackingNumber }]);
+            const parentId = productToAdd.parentId || (productToAdd as Product).id;
+            const parentProduct = allProductsList.find(p => p.id === parentId);
+
+            const logisticItem: LogisticItem & { trackingNumber: string } = {
+                productId: parentId,
+                variantId: 'productType' in productToAdd ? undefined : productToAdd.id,
+                name: productToAdd.name,
+                sku: productToAdd.sku || '',
+                imageUrl: productToAdd.parentImageUrl || parentProduct!.imageUrl,
+                quantity: 1,
+                trackingNumber: currentTrackingNumber,
+            };
+
+            setReturnedProducts(prev => [...prev, logisticItem]);
             toast({ title: "Producto Agregado", description: `${productToAdd.name} añadido a la devolución.` });
             
             setIsReturnDialogOpen(false);
@@ -493,10 +509,10 @@ export default function LogisticsPage() {
         }
 
         const promises = returnedProducts.map(product => {
-            updateProductStock(product.id, 1, 'add');
+            updateProductStock(product.productId, 1, 'add');
             return addInventoryMovement({
                 type: 'Entrada',
-                productId: product.id,
+                productId: product.productId,
                 productName: product.name,
                 quantity: 1,
                 notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${carriers.find(c => c.id === returnCarrier)?.name}`
@@ -517,9 +533,9 @@ export default function LogisticsPage() {
 
     // --- AVERÍAS ---
     const handleRegisterDamage = async () => {
-        const product = allProductsList.find(p => p.sku?.toLowerCase() === damagedSku.toLowerCase() || p.variants?.some(v => v.sku.toLowerCase() === damagedSku.toLowerCase()));
+        const parentProduct = allProductsList.find(p => p.sku?.toLowerCase() === damagedSku.toLowerCase() || p.variants?.some(v => v.sku.toLowerCase() === damagedSku.toLowerCase()));
 
-        if (!product) {
+        if (!parentProduct) {
             toast({ variant: 'destructive', title: 'Error', description: 'Producto o variante no encontrado con ese SKU.' });
             return;
         }
@@ -536,9 +552,9 @@ export default function LogisticsPage() {
             return;
         }
 
-        const productToRegisterDamage = product.productType === 'variable' 
-            ? product.variants?.find(v => v.sku.toLowerCase() === damagedSku.toLowerCase()) 
-            : product;
+        const productToRegisterDamage = parentProduct.productType === 'variable' 
+            ? parentProduct.variants?.find(v => v.sku.toLowerCase() === damagedSku.toLowerCase()) 
+            : parentProduct;
 
         if (!productToRegisterDamage) {
             toast({ variant: 'destructive', title: 'Error', description: 'Variante no encontrada.' });
@@ -546,16 +562,16 @@ export default function LogisticsPage() {
         }
 
         try {
-            await registerDamagedProduct(product.id, 1); // We can simplify this to always use parent product ID for damage tracking if variant specific damage stock isn't a feature.
+            await registerDamagedProduct(parentProduct.id, 1);
             await addInventoryMovement({
                 type: 'Averia',
-                productId: product.id, // Use parent product ID
-                productName: `${product.name} (${productToRegisterDamage.name})`,
+                productId: parentProduct.id,
+                productName: `${parentProduct.name} (${productToRegisterDamage.name})`,
                 quantity: 1,
                 notes: `Devolución averiada: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}`
             });
 
-            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${product.name}.` });
+            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${parentProduct.name}.` });
             setDamagedSku('');
             setDamageDescription('');
             setDamageCarrier('');
@@ -833,7 +849,7 @@ export default function LogisticsPage() {
                                                     <Input 
                                                         type="number"
                                                         className="w-24 text-center mx-auto"
-                                                        value={product.dispatchQuantity}
+                                                        value={product.quantity}
                                                         onChange={(e) => handleDispatchQuantityChange(product.sku!, parseInt(e.target.value, 10))}
                                                         min="1"
                                                     />
@@ -919,7 +935,7 @@ export default function LogisticsPage() {
                                                             <Input 
                                                                 type="number"
                                                                 className="w-24 text-center mx-auto"
-                                                                value={product.receiveQuantity}
+                                                                value={product.quantity}
                                                                 onChange={(e) => handleReceivedQuantityChange(product.sku!, parseInt(e.target.value, 10))}
                                                                 min="0"
                                                             />
