@@ -395,6 +395,15 @@ function DispatchPageContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <div className="flex w-full items-center border-b">
+                                        <div className="pl-4 pr-2" onClick={(e) => e.stopPropagation()}>
+                                            <ProcessDispatchDialog
+                                                order={orderForDialog}
+                                                productsById={productsById}
+                                                onDispatchProcessed={handleDispatchProcessed}
+                                            >
+                                                <Button>Procesar Pendientes</Button>
+                                            </ProcessDispatchDialog>
+                                        </div>
                                         <AccordionTrigger className="flex-grow">
                                             <div className="grid grid-cols-2 w-full items-center text-sm">
                                                 <div className="text-left">
@@ -409,15 +418,6 @@ function DispatchPageContent() {
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
-                                        <div className="pr-4" onClick={(e) => e.stopPropagation()}>
-                                            <ProcessDispatchDialog
-                                                order={orderForDialog}
-                                                productsById={productsById}
-                                                onDispatchProcessed={handleDispatchProcessed}
-                                            >
-                                                <Button>Procesar Pendientes</Button>
-                                            </ProcessDispatchDialog>
-                                        </div>
                                     </div>
                                     <AccordionContent>
                                         <div className="p-4 bg-muted/50 rounded-md">
@@ -491,5 +491,3 @@ export default function DispatchPage() {
         </AuthProviderWrapper>
     )
 }
-
-    
