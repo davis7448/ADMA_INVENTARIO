@@ -74,12 +74,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     }
   }, [open]);
 
-  useEffect(() => {
-    if (!open) {
-      form.reset();
-    }
-  }, [open, form]);
-
   const onSubmit = (values: AddProductFormValues) => {
     const formData = new FormData();
     Object.entries(values).forEach(([key, value]) => {
@@ -121,6 +115,12 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
         }
     });
   };
+  
+  useEffect(() => {
+    if (!open) {
+      form.reset();
+    }
+  }, [open, form]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -186,7 +186,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormControl>
                                <Input 
                                 type="file" 
-                                accept="image/*"
+                                accept="image/png, image/jpeg, image/webp"
                                 onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     onChange(file);

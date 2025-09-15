@@ -1,6 +1,10 @@
 
 import { z } from 'zod';
 
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+
 export const AddProductFormSchema = z.object({
   name: z.string().min(1, 'Product name is required.'),
   sku: z.string().min(1, 'SKU is required.'),
@@ -19,7 +23,17 @@ export const AddProductFormSchema = z.object({
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Threshold must be a number.' }).int('Threshold must be a whole number.').min(0, 'Threshold must be a non-negative number.').optional()
   ),
-  image: z.any().refine((file): file is File => file instanceof File && file.size > 0, 'Image is required.'),
+  image: z
+    .any()
+    .refine((file): file is File => file instanceof File && file.size > 0, 'Image is required.')
+    .refine(
+        (file): file is File => file instanceof File && file.size <= MAX_FILE_SIZE,
+        `Max file size is 2MB.`
+    )
+    .refine(
+        (file): file is File => file instanceof File && ACCEPTED_IMAGE_TYPES.includes(file.type),
+        "Only .jpg, .jpeg, .png and .webp formats are supported."
+    ),
 });
 
 export type AddProductFormValues = z.infer<typeof AddProductFormSchema>;
