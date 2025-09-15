@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/lib/seed.ts",
     "deploy:rules": "firebase deploy --only firestore:rules",
-    "deploy:storage": "firebase deploy --only storage"
+    "deploy:storage": "firebase deploy --only storage",
+    "deploy:cors": "gsutil cors set cors.json gs://studio-9748962172-82b35.appspot.com"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",
