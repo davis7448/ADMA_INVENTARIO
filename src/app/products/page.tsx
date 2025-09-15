@@ -55,6 +55,7 @@ export default async function ProductsPage() {
           initialProducts={productsWithRotation}
           initialSupplierNames={supplierNames}
           initialCategoryNames={categoryNames}
+          allRotationCategories={rotationCategories}
         />
       </AuthProviderWrapper>
     );

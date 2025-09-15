@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -34,8 +34,8 @@ import {
   } from "@/components/ui/tooltip"
 import { Button } from '@/components/ui/button';
 import { getProducts, getSuppliersByIds, getCategoriesByIds } from '@/lib/api';
-import type { Product } from '@/lib/types';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle } from 'lucide-react';
+import type { Product, RotationCategory } from '@/lib/types';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
@@ -43,26 +43,64 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EditProductForm } from './edit-product-form';
 import { cn } from '@/lib/utils';
 import { ProductDetailDialog } from './product-detail-dialog';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Switch } from './ui/switch';
+import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
 
 interface ProductsContentProps {
     initialProducts: Product[];
     initialSupplierNames: Record<string, string>;
     initialCategoryNames: Record<string, string>;
+    allRotationCategories: RotationCategory[];
 }
 
-export function ProductsContent({ initialProducts, initialSupplierNames, initialCategoryNames }: ProductsContentProps) {
+export function ProductsContent({ initialProducts, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [supplierNames, setSupplierNames] = useState<Record<string, string>>(initialSupplierNames);
     const [categoryNames, setCategoryNames] = useState<Record<string, string>>(initialCategoryNames);
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+
+    // Filter states
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('all');
+    const [selectedRotation, setSelectedRotation] = useState('all');
+    const [minStock, setMinStock] = useState('');
+    const [hasPending, setHasPending] = useState(false);
     
     const refreshProducts = async () => {
         setLoading(true);
         // This should be refetched from the server page component to get updated rotation
         window.location.reload();
     }
+
+    const filteredProducts = useMemo(() => {
+        return products.filter(product => {
+            // Text search
+            const searchMatch = searchQuery.length > 2 
+                ? product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                  product.sku?.toLowerCase().includes(searchQuery.toLowerCase())
+                : true;
+            
+            // Category filter
+            const categoryMatch = selectedCategory === 'all' || product.categoryId === selectedCategory;
+
+            // Rotation filter
+            const rotationMatch = selectedRotation === 'all' || product.rotationCategoryName === selectedRotation;
+
+            // Min stock filter
+            const stockMatch = minStock === '' || product.stock >= parseInt(minStock, 10);
+
+            // Has pending filter
+            const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
+
+            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch;
+        });
+    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending]);
 
     const handleRowClick = (productId: string) => {
         setSelectedProductId(productId);
@@ -72,6 +110,14 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         if (!open) {
             setSelectedProductId(null);
         }
+    };
+
+    const clearFilters = () => {
+        setSearchQuery('');
+        setSelectedCategory('all');
+        setSelectedRotation('all');
+        setMinStock('');
+        setHasPending(false);
     };
 
     const canEdit = user?.role === 'admin';
@@ -97,6 +143,28 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         }
     }
 
+    const handleExportExcel = () => {
+        const dataToExport = filteredProducts.map(p => ({
+            'Nombre': p.name,
+            'SKU': p.sku || (p.productType === 'variable' ? 'N/A (Variable)' : 'N/A'),
+            'Tipo': p.productType,
+            'Categoría': categoryNames[p.categoryId] || 'Unknown',
+            'Rotación': p.rotationCategoryName || 'N/A',
+            'Stock Físico': p.stock,
+            'Stock Pendiente': p.pendingStock || 0,
+            'Stock Averiado': p.damagedStock || 0,
+            'Precio': p.price,
+            'Costo': canEdit ? p.cost : undefined, // Only include cost for admins
+            'Proveedor': supplierNames[p.vendorId] || 'Unknown',
+            'Fecha Compra': p.purchaseDate ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
+        }));
+    
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Productos");
+        XLSX.writeFile(workbook, `Productos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      };
+
 
     return (
         <TooltipProvider>
@@ -108,10 +176,68 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             </div>
             {canEdit && <AddProductForm onProductAdded={refreshProducts} />}
           </div>
+
           <Card>
             <CardHeader>
-              <CardTitle>All Products</CardTitle>
-              <CardDescription>A list of all products in your catalog.</CardDescription>
+                <div className="flex justify-between items-center">
+                    <CardTitle>Filtros</CardTitle>
+                    <Button variant="ghost" onClick={clearFilters}>Limpiar Filtros</Button>
+                </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="search">Buscar producto</Label>
+                        <Input id="search" placeholder="Nombre o SKU..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="category">Categoría</Label>
+                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                            <SelectTrigger id="category"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todas las Categorías</SelectItem>
+                                {Object.entries(categoryNames).map(([id, name]) => (
+                                    <SelectItem key={id} value={id}>{name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="rotation">Rotación</Label>
+                        <Select value={selectedRotation} onValueChange={setSelectedRotation}>
+                            <SelectTrigger id="rotation"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Toda la Rotación</SelectItem>
+                                {allRotationCategories.map(cat => (
+                                    <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="min-stock">Stock Mínimo</Label>
+                        <Input id="min-stock" type="number" placeholder="Ej: 10" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
+                    </div>
+                </div>
+                 <div className="flex items-center space-x-2 pt-2">
+                    <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
+                    <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
+                </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle>All Products</CardTitle>
+                        <CardDescription>A list of all products in your catalog. ({filteredProducts.length} de {products.length} mostrados)</CardDescription>
+                    </div>
+                    <Button variant="outline" onClick={handleExportExcel}>
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        Exportar a Excel
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -156,7 +282,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                         </TableRow>
                      ))
                   ) : (
-                    products.map((product) => (
+                    filteredProducts.map((product) => (
                         <TableRow key={product.id} onClick={() => handleRowClick(product.id)} className="cursor-pointer">
                         <TableCell className="hidden sm:table-cell">
                             <Image
@@ -213,6 +339,11 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                   )}
                 </TableBody>
               </Table>
+              {filteredProducts.length === 0 && !loading && (
+                <div className="text-center py-12 text-muted-foreground">
+                    <p>No se encontraron productos con los filtros actuales.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
