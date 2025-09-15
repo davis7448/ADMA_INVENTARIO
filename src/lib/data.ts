@@ -3,7 +3,7 @@ import { PlaceHolderImages } from './placeholder-images';
 
 const findImage = (id: string) => {
   const image = PlaceHolderImages.find(img => img.id === id);
-  return image ? { url: image.imageUrl, hint: image.imageHint, description: image.description } : { url: 'https://placehold.co/600x400', hint: 'placeholder', description: 'Placeholder image' };
+  return image ? { url: image.imageUrl, hint: image.imageHint, description: image.description } : { url: `https://picsum.photos/seed/${id}/600/400`, hint: 'placeholder', description: 'Placeholder image' };
 };
 
 export let products: Product[] = [
@@ -113,12 +113,8 @@ export let products: Product[] = [
   },
 ];
 
-export const addProductToData = (product: Omit<Product, 'id'>) => {
-  const newProduct: Product = {
-    id: `prod-${Date.now()}`,
-    ...product,
-  };
-  products.unshift(newProduct);
+export const addProductToData = (product: Product) => {
+  products.unshift(product);
 };
 
 export const updateProductStock = (productId: string, quantity: number, operation: 'add' | 'subtract') => {

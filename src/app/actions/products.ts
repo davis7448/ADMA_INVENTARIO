@@ -21,10 +21,12 @@ export async function addProduct(
   }
 
   try {
-    const newProduct: Omit<Product, 'id'> = {
+    const newProductId = `prod-${Date.now()}`;
+    const newProduct: Product = {
+      id: newProductId,
       ...validatedFields.data,
-      imageUrl: 'https://placehold.co/600x400',
-      imageHint: 'placeholder',
+      imageUrl: `https://picsum.photos/seed/${newProductId}/600/400`,
+      imageHint: 'new product',
     };
     
     addProductToData(newProduct);
