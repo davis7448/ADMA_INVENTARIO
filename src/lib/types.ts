@@ -207,3 +207,21 @@ export type StaleReservationAlert = {
     vendedorName: string;
     quantity: number;
 };
+
+export interface StockAlertItem {
+    id: string; // Composite ID like `product-id` or `product-id-variant-id`
+    name: string;
+    sku: string;
+    imageUrl: string;
+    physicalStock: number;
+    reservedStock: number;
+    availableForSale: number;
+    dailyAverageSales: number;
+    alertMessage: string;
+}
+
+export interface GetStockAlertsResult {
+    alerts: StockAlertItem[];
+    error?: string;
+    lastGenerated?: string;
+}

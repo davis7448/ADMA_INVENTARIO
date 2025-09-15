@@ -4,9 +4,10 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant, GetStockAlertsResult, StockAlertItem } from './types';
 import {v4 as uuidv4} from 'uuid';
-import { startOfDay, endOfDay, subDays, format } from 'date-fns';
+import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
+import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
 
 // Image Upload Function
 export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => {
@@ -432,7 +433,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         exceptions: [],
         cancelledExceptions: [],
     };
-    setDoc(dispatchOrderRef, newDispatchOrder);
+    await setDoc(dispatchOrderRef, newDispatchOrder);
 
 
     const platformName = (await getDoc(doc(db, 'platforms', platformId))).data()?.name || 'N/A';
@@ -919,4 +920,156 @@ export const resolveStaleReservationAlert = async (alertId: string): Promise<voi
     batch.delete(alertRef);
     
     await batch.commit();
+};
+
+// Stock Alert Functions
+export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> => {
+    const metadataRef = doc(db, 'stockAlertsCache', 'metadata');
+    const metadataSnap = await getDoc(metadataRef);
+
+    if (metadataSnap.exists()) {
+        const lastGenerated = (metadataSnap.data().lastGenerated as Timestamp).toDate();
+        if (isToday(lastGenerated)) {
+            // Data is fresh, return from cache
+            const alertsCol = collection(db, 'stockAlertsCache');
+            const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
+            const alertSnapshot = await getDocs(q);
+            const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
+            return { alerts, lastGenerated: lastGenerated.toISOString() };
+        }
+    }
+
+    // Data is stale or doesn't exist, regenerate
+    try {
+        const [products, allMovements, rotationCategories] = await Promise.all([
+            getProducts(),
+            getInventoryMovements(),
+            getRotationCategories(),
+        ]);
+
+        const sevenDaysAgo = subDays(new Date(), 7);
+        const recentSaleMovements = allMovements.filter(
+            (m) => m.type === 'Salida' && new Date(m.date) >= sevenDaysAgo
+        );
+
+        const salesBySku: Record<string, number> = {};
+        for (const movement of recentSaleMovements) {
+            const product = products.find(p => p.id === movement.productId);
+            if (product) {
+                 if (product.productType === 'variable' && product.variants) {
+                    for (const variant of product.variants) {
+                        salesBySku[variant.sku] = (salesBySku[variant.sku] || 0) + movement.quantity;
+                    }
+                } else if (product.sku) {
+                     salesBySku[product.sku] = (salesBySku[product.sku] || 0) + movement.quantity;
+                }
+            }
+        }
+        
+        const sortedRotationCategories = [...rotationCategories].sort((a,b) => b.salesThreshold - a.salesThreshold);
+        const getRotationCategoryName = (sales: number): string => {
+            for (const category of sortedRotationCategories) {
+                if (sales >= category.salesThreshold) {
+                    return category.name;
+                }
+            }
+            return 'Inactivo';
+        }
+
+        const itemsToCheck: any[] = [];
+        for (const product of products) {
+            const totalReserved = product.reservations?.reduce((sum, res) => sum + res.quantity, 0) || 0;
+            const salesLast7Days = salesBySku[product.sku || ''] || 0;
+            const rotationName = getRotationCategoryName(salesLast7Days);
+
+            if (rotationName === 'Inactivo') continue;
+
+            if (product.productType === 'simple' && product.sku) {
+                itemsToCheck.push({
+                    productName: product.name,
+                    physicalStock: product.stock,
+                    reservedStock: totalReserved,
+                    salesLast7Days: salesLast7Days,
+                    // Pass through data for storage
+                    id: product.id, name: product.name, sku: product.sku, imageUrl: product.imageUrl,
+                });
+            } else if (product.productType === 'variable' && product.variants) {
+                for (const variant of product.variants) {
+                    const variantReserved = product.reservations?.filter(r => r.variantId === variant.id).reduce((sum, res) => sum + res.quantity, 0) || 0;
+                    const variantSales = salesBySku[variant.sku] || 0;
+                    const variantRotationName = getRotationCategoryName(variantSales);
+
+                    if (variantRotationName === 'Inactivo') continue;
+
+                    itemsToCheck.push({
+                        productName: `${product.name} - ${variant.name}`,
+                        physicalStock: variant.stock,
+                        reservedStock: variantReserved,
+                        salesLast7Days: variantSales,
+                        // Pass through data for storage
+                        id: `${product.id}-${variant.id}`, name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
+                    });
+                }
+            }
+        }
+
+        const analysisPromises = itemsToCheck.map(item => 
+            checkStockAvailability({
+                productName: item.productName,
+                physicalStock: item.physicalStock,
+                reservedStock: item.reservedStock,
+                salesLast7Days: item.salesLast7Days
+            }).then(analysis => ({...item, analysis}))
+        );
+
+        const allAnalyses = await Promise.all(analysisPromises);
+        const triggeredAlerts = allAnalyses.filter(item => item.analysis.alertTriggered);
+
+        const newAlerts: StockAlertItem[] = triggeredAlerts.map(item => ({
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            imageUrl: item.imageUrl,
+            physicalStock: item.physicalStock,
+            reservedStock: item.reservedStock,
+            availableForSale: item.analysis.availableForSale,
+            dailyAverageSales: item.analysis.dailyAverageSales,
+            alertMessage: item.analysis.alertMessage,
+        }));
+        
+        // Cache new alerts in Firestore
+        const batch = writeBatch(db);
+        const alertsCol = collection(db, 'stockAlertsCache');
+        // Clear old alerts first
+        const oldAlertsSnap = await getDocs(query(alertsCol, where(documentId(), '!=', 'metadata')));
+        oldAlertsSnap.forEach(doc => batch.delete(doc.ref));
+
+        newAlerts.forEach(alert => {
+            const docRef = doc(alertsCol, alert.id);
+            batch.set(docRef, alert);
+        });
+
+        const newGeneratedDate = new Date();
+        batch.set(metadataRef, { lastGenerated: newGeneratedDate });
+        await batch.commit();
+
+        return { alerts: newAlerts, lastGenerated: newGeneratedDate.toISOString() };
+
+    } catch (e: any) {
+        console.error("Failed to generate stock alerts:", e);
+        // Try to return cached data if generation fails
+        const metadataSnap = await getDoc(metadataRef);
+        if (metadataSnap.exists()) {
+            const alertsCol = collection(db, 'stockAlertsCache');
+            const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
+            const alertSnapshot = await getDocs(q);
+            const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
+            return {
+                alerts,
+                error: e.message || "An unknown error occurred during AI analysis.",
+                lastGenerated: (metadataSnap.data().lastGenerated as Timestamp).toDate().toISOString()
+            };
+        }
+        return { alerts: [], error: e.message || "An unknown error occurred during AI analysis." };
+    }
 }

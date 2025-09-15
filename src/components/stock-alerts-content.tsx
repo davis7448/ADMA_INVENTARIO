@@ -1,8 +1,9 @@
 
+
 "use client";
 
-import { useState, useEffect } from 'react';
-import type { Product, ProductVariant } from '@/lib/types';
+import { useState } from 'react';
+import type { StockAlertItem } from '@/lib/types';
 import {
   Card,
   CardContent,
@@ -18,85 +19,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { checkStockAvailability, StockAvailabilityOutput } from '@/ai/flows/stock-monitoring';
 import { Skeleton } from './ui/skeleton';
-import { AlertCircle } from 'lucide-react';
-import { Badge } from './ui/badge';
+import { AlertCircle, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { formatToTimeZone } from '@/lib/utils';
+
 
 interface StockAlertsContentProps {
-    initialProducts: Product[];
-    salesBySku: Record<string, number>;
+    initialAlerts: StockAlertItem[];
+    error?: string;
+    lastGenerated?: string;
 }
 
-interface AlertableItem {
-    id: string;
-    name: string;
-    sku: string;
-    imageUrl: string;
-    physicalStock: number;
-    reservedStock: number;
-    salesLast7Days: number;
-}
-
-export function StockAlertsContent({ initialProducts, salesBySku }: StockAlertsContentProps) {
-  const [alerts, setAlerts] = useState<(AlertableItem & { analysis: StockAvailabilityOutput })[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const generateAlerts = async () => {
-        setLoading(true);
-
-        const itemsToCheck: AlertableItem[] = [];
-
-        for (const product of initialProducts) {
-            const totalReserved = product.reservations?.reduce((sum, res) => sum + res.quantity, 0) || 0;
-            
-            if (product.productType === 'simple' && product.sku) {
-                itemsToCheck.push({
-                    id: product.id,
-                    name: product.name,
-                    sku: product.sku,
-                    imageUrl: product.imageUrl,
-                    physicalStock: product.stock,
-                    reservedStock: totalReserved,
-                    salesLast7Days: salesBySku[product.sku] || 0,
-                });
-            } else if (product.productType === 'variable' && product.variants) {
-                for (const variant of product.variants) {
-                    const variantReserved = product.reservations?.filter(r => r.variantId === variant.id).reduce((sum, res) => sum + res.quantity, 0) || 0;
-                    itemsToCheck.push({
-                        id: `${product.id}-${variant.id}`,
-                        name: `${product.name} - ${variant.name}`,
-                        sku: variant.sku,
-                        imageUrl: product.imageUrl,
-                        physicalStock: variant.stock,
-                        reservedStock: variantReserved,
-                        salesLast7Days: salesBySku[variant.sku] || 0,
-                    });
-                }
-            }
-        }
-        
-        const analysisPromises = itemsToCheck.map(item => 
-            checkStockAvailability({
-                productName: item.name,
-                physicalStock: item.physicalStock,
-                reservedStock: item.reservedStock,
-                salesLast7Days: item.salesLast7Days
-            }).then(analysis => ({...item, analysis}))
-        );
-
-        const allAnalyses = await Promise.all(analysisPromises);
-        const triggeredAlerts = allAnalyses.filter(item => item.analysis.alertTriggered);
-        
-        setAlerts(triggeredAlerts);
-        setLoading(false);
-    };
-
-    generateAlerts();
-  }, [initialProducts, salesBySku]);
-
+export function StockAlertsContent({ initialAlerts, error, lastGenerated }: StockAlertsContentProps) {
+  const [alerts] = useState<StockAlertItem[]>(initialAlerts);
+  const [loading] = useState(false); // Loading is now handled on the server
 
   return (
     <div className="space-y-6">
@@ -106,12 +44,29 @@ export function StockAlertsContent({ initialProducts, salesBySku }: StockAlertsC
             Productos cuyo stock disponible para reservar es peligrosamente bajo en comparación con su demanda.
         </p>
       </div>
+
+      {error && (
+        <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Error al Generar Alertas</AlertTitle>
+            <AlertDescription>
+                No se pudieron generar nuevas alertas desde la IA. Los datos mostrados (si los hay) pueden ser de una ejecución anterior.
+                <p className="mt-2 text-xs">{error}</p>
+            </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Productos en Riesgo</CardTitle>
           <CardDescription>
             Estos productos podrían quedarse sin stock para nuevas reservas si no se toman acciones. 
             La alerta se activa si el stock disponible es menor a 3 días de ventas promedio.
+            {lastGenerated && (
+                <p className="text-xs text-muted-foreground mt-2">
+                    Última actualización: {formatToTimeZone(new Date(lastGenerated), 'dd/MM/yyyy HH:mm:ss')}
+                </p>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -148,19 +103,19 @@ export function StockAlertsContent({ initialProducts, salesBySku }: StockAlertsC
                     <TableCell>
                         <div className="flex items-start gap-2">
                            <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
-                            <p className="text-sm">{item.analysis.alertMessage}</p>
+                            <p className="text-sm">{item.alertMessage}</p>
                         </div>
                     </TableCell>
                     <TableCell className="text-center font-medium">{item.physicalStock}</TableCell>
                     <TableCell className="text-center font-medium text-blue-600">{item.reservedStock}</TableCell>
-                    <TableCell className="text-center font-bold text-destructive">{item.analysis.availableForSale}</TableCell>
-                     <TableCell className="text-center font-medium text-amber-600">{item.analysis.dailyAverageSales.toFixed(1)}</TableCell>
+                    <TableCell className="text-center font-bold text-destructive">{item.availableForSale}</TableCell>
+                     <TableCell className="text-center font-medium text-amber-600">{item.dailyAverageSales.toFixed(1)}</TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center h-24">
-                    ¡No hay alertas de stock! El inventario disponible parece saludable.
+                    {!error ? "¡No hay alertas de stock! El inventario disponible parece saludable." : "No hay datos de alertas disponibles."}
                   </TableCell>
                 </TableRow>
               )}
