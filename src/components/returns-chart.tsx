@@ -19,6 +19,14 @@ type ReturnsChartProps = {
 };
 
 export default function ReturnsChart({ data }: ReturnsChartProps) {
+    if (!data || data.length === 0) {
+      return (
+        <div className="flex h-[250px] w-full items-center justify-center text-muted-foreground">
+          No se encontraron datos de devoluciones.
+        </div>
+      );
+    }
+    
     if (data.every(d => d.returns === 0)) {
         return (
             <div className="flex h-[250px] w-full items-center justify-center text-muted-foreground">
