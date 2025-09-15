@@ -395,9 +395,9 @@ function DispatchPageContent() {
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
-                                    <div className="flex justify-between items-center w-full hover:bg-muted/50 rounded-md">
-                                        <AccordionTrigger className="flex-1 cursor-pointer group">
-                                            <div className="grid grid-cols-3 w-full items-center text-sm p-4">
+                                    <div className="flex justify-between items-center w-full hover:bg-muted/50 rounded-md group">
+                                        <AccordionTrigger className="flex-grow">
+                                            <div className="grid grid-cols-3 w-full items-center text-sm px-4">
                                                 <div className="text-left">
                                                     <p className="font-semibold">{order.dispatchId}</p>
                                                     <p className="text-muted-foreground">
@@ -408,8 +408,8 @@ function DispatchPageContent() {
                                                     <p className="font-medium">{platformNames[order.platformId]}</p>
                                                     <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                                 </div>
-                                                <div className="text-right group-hover:no-underline">
-                                                     {/* This div is a placeholder for alignment, the chevron will appear here via the Trigger */}
+                                                <div className="text-right">
+                                                     {/* Placeholder for chevron */}
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
