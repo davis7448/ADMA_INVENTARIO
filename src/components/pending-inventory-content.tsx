@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo } from 'react';
@@ -19,7 +18,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import {
@@ -43,13 +41,19 @@ interface PendingInventoryContentProps {
     allProducts: Product[];
 }
 
-interface GroupedByTrackingNumber {
+interface GroupedByProduct {
     [key: string]: {
-      items: PendingInventoryItem[];
-      date: string;
-      isCompound: boolean;
+        productInfo: Pick<PendingInventoryItem, 'productName' | 'productSku' | 'productImageUrl'>;
+        totalPending: number;
+        exceptions: {
+            trackingNumber: string;
+            quantity: number;
+            date: string;
+            dispatchId: string;
+        }[];
     };
 }
+
 
 export function PendingInventoryContent({ initialPendingItems, allProducts }: PendingInventoryContentProps) {
     const [pendingItems] = useState<PendingInventoryItem[]>(initialPendingItems);
@@ -78,33 +82,41 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
             items = items.filter(item => trackingList.includes(item.trackingNumber));
         }
         
-        // Group by tracking number
-        const grouped = items.reduce<GroupedByTrackingNumber>((acc, item) => {
-            if (!acc[item.trackingNumber]) {
-              acc[item.trackingNumber] = {
-                items: [],
-                date: item.date,
-                isCompound: false
+        // Group by product ID
+        const grouped = items.reduce<GroupedByProduct>((acc, item) => {
+            if (!acc[item.productId]) {
+              acc[item.productId] = {
+                productInfo: {
+                    productName: item.productName,
+                    productSku: item.productSku,
+                    productImageUrl: item.productImageUrl,
+                },
+                totalPending: 0,
+                exceptions: [],
               };
             }
-            acc[item.trackingNumber].items.push(item);
+            acc[item.productId].totalPending += item.quantity;
+            acc[item.productId].exceptions.push({
+                trackingNumber: item.trackingNumber,
+                quantity: item.quantity,
+                date: item.date,
+                dispatchId: item.dispatchId,
+            });
             return acc;
         }, {});
         
-        // Determine if it's compound after grouping
-        Object.keys(grouped).forEach(key => {
-            grouped[key].isCompound = grouped[key].items.length > 1;
-        });
-
         return grouped;
 
     }, [pendingItems, filterProductId, dateRange, filterTrackingNumbers]);
     
-    const sortedTrackingNumbers = useMemo(() => {
+    const sortedProductIds = useMemo(() => {
+        // Sort products by name for consistent ordering
         return Object.keys(groupedAndFilteredItems).sort((a, b) => {
-            const dateA = new Date(groupedAndFilteredItems[a].date).getTime();
-            const dateB = new Date(groupedAndFilteredItems[b].date).getTime();
-            return dateB - dateA;
+            const nameA = groupedAndFilteredItems[a].productInfo.productName.toLowerCase();
+            const nameB = groupedAndFilteredItems[b].productInfo.productName.toLowerCase();
+            if (nameA < nameB) return -1;
+            if (nameA > nameB) return 1;
+            return 0;
         });
     }, [groupedAndFilteredItems]);
 
@@ -198,58 +210,57 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
                 <CardHeader>
                     <CardTitle>Productos en Estado Pendiente</CardTitle>
                     <CardDescription>
-                        Esta lista muestra las guías de excepción. Expande cada una para ver los productos pendientes.
+                        Esta lista muestra los productos con stock pendiente. Expande cada uno para ver las guías de excepción asociadas.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     {renderFilters()}
-                    {sortedTrackingNumbers.length > 0 ? (
+                    {sortedProductIds.length > 0 ? (
                         <Accordion type="single" collapsible className="w-full">
-                            {sortedTrackingNumbers.map((trackingNumber) => {
-                                const group = groupedAndFilteredItems[trackingNumber];
+                            {sortedProductIds.map((productId) => {
+                                const group = groupedAndFilteredItems[productId];
                                 return (
-                                <AccordionItem value={trackingNumber} key={trackingNumber}>
+                                <AccordionItem value={productId} key={productId}>
                                     <AccordionTrigger>
-                                        <div className="flex justify-between items-center w-full pr-4">
-                                            <div className="text-left font-semibold">
-                                                <span>Guía: </span>
-                                                <Badge variant="secondary">{trackingNumber}</Badge>
-                                                {group.isCompound && <Badge variant="outline" className="ml-2">Compuesto</Badge>}
+                                        <div className="flex justify-between items-center w-full pr-4 gap-4">
+                                            <div className="flex items-center gap-4 flex-1">
+                                                <Image
+                                                    src={group.productInfo.productImageUrl}
+                                                    alt={group.productInfo.productName}
+                                                    width={64}
+                                                    height={64}
+                                                    className="rounded-md object-cover"
+                                                />
+                                                <div className="text-left">
+                                                    <p className="font-semibold">{group.productInfo.productName}</p>
+                                                    <p className="text-sm text-muted-foreground">{group.productInfo.productSku}</p>
+                                                </div>
                                             </div>
-                                            <div className="text-right text-sm text-muted-foreground">
-                                                {formatToTimeZone(new Date(group.date), 'dd/MM/yyyy')}
+                                            <div className="text-right">
+                                                <p className="text-sm text-muted-foreground">Pendientes</p>
+                                                <p className="text-2xl font-bold">{group.totalPending}</p>
                                             </div>
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent>
                                         <div className="p-4 bg-muted/50 rounded-md">
-                                            <h4 className="font-semibold mb-2">Productos en esta Guía</h4>
+                                            <h4 className="font-semibold mb-2">Desglose de Guías de Excepción</h4>
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
-                                                        <TableHead className="w-20">Imagen</TableHead>
-                                                        <TableHead>Producto</TableHead>
-                                                        <TableHead>SKU</TableHead>
+                                                        <TableHead>Guía de Excepción</TableHead>
                                                         <TableHead>ID Despacho Original</TableHead>
-                                                        <TableHead className="text-right">Cantidad</TableHead>
+                                                        <TableHead>Fecha Despacho</TableHead>
+                                                        <TableHead className="text-right">Cantidad Pendiente</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
-                                                    {group.items.map((item) => (
-                                                        <TableRow key={item.id}>
-                                                            <TableCell>
-                                                                <Image
-                                                                    src={item.productImageUrl}
-                                                                    alt={item.productName}
-                                                                    width={48}
-                                                                    height={48}
-                                                                    className="rounded-md object-cover"
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell className="font-medium">{item.productName}</TableCell>
-                                                            <TableCell>{item.productSku}</TableCell>
-                                                            <TableCell>{item.dispatchId}</TableCell>
-                                                            <TableCell className="text-right font-medium">{item.quantity}</TableCell>
+                                                    {group.exceptions.map((ex, index) => (
+                                                        <TableRow key={index}>
+                                                            <TableCell className="font-mono">{ex.trackingNumber}</TableCell>
+                                                            <TableCell>{ex.dispatchId}</TableCell>
+                                                            <TableCell>{formatToTimeZone(new Date(ex.date), 'dd/MM/yyyy')}</TableCell>
+                                                            <TableCell className="text-right font-medium">{ex.quantity}</TableCell>
                                                         </TableRow>
                                                     ))}
                                                 </TableBody>
