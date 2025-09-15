@@ -124,11 +124,14 @@ export interface AuditAlert {
     exceptionTrackingNumber: string;
 }
 
-export interface PendingInventoryItem extends Product {
-    exceptionDetails: {
-        trackingNumber: string;
-        quantity: number;
-        dispatchId: string;
-        date: string;
-    }[];
+export interface PendingInventoryItem {
+    id: string; // Unique ID for the specific pending item instance
+    productId: string;
+    productName: string;
+    productSku: string;
+    productImageUrl: string;
+    quantity: number;
+    dispatchId: string;
+    trackingNumber: string;
+    date: string; // Date of the original dispatch
 }

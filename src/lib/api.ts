@@ -444,40 +444,40 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
 
 // Pending Inventory Functions
 export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => {
-    const productsRef = collection(db, 'products');
-    const q = query(productsRef, where('pendingStock', '>', 0));
-    const productSnapshot = await getDocs(q);
-    
-    if (productSnapshot.empty) {
-        return [];
-    }
+    // 1. Get all products to create a lookup map
+    const products = await getProducts();
+    const productsById = new Map(products.map(p => [p.id, p]));
 
-    const pendingProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-    const dispatchOrders = await getDispatchOrders();
+    // 2. Get all dispatch orders with exceptions
+    const dispatchOrders = await getPartialDispatchOrders();
     
-    const pendingInventory: PendingInventoryItem[] = pendingProducts.map(product => {
-        const exceptionDetails: PendingInventoryItem['exceptionDetails'] = [];
+    // 3. Create a flat list of all individual pending items
+    const pendingItems: PendingInventoryItem[] = [];
 
-        for (const order of dispatchOrders) {
-            if (order.exceptions && order.exceptions.length > 0) {
-                for (const exception of order.exceptions) {
-                    if (exception.products) {
-                        for (const exProduct of exception.products) {
-                            if (exProduct.productId === product.id) {
-                                exceptionDetails.push({
-                                    trackingNumber: exception.trackingNumber,
-                                    quantity: exProduct.quantity,
-                                    dispatchId: order.dispatchId,
-                                    date: order.date,
-                                });
-                            }
+    for (const order of dispatchOrders) {
+        if (order.exceptions?.length) {
+            for (const exception of order.exceptions) {
+                if(exception.products?.length) {
+                    for (const exProduct of exception.products) {
+                        const productInfo = productsById.get(exProduct.productId);
+                        if (productInfo) {
+                            pendingItems.push({
+                                id: `${order.id}-${exception.trackingNumber}-${exProduct.productId}`,
+                                productId: exProduct.productId,
+                                productName: productInfo.name,
+                                productSku: productInfo.sku,
+                                productImageUrl: productInfo.imageUrl,
+                                quantity: exProduct.quantity,
+                                dispatchId: order.dispatchId,
+                                trackingNumber: exception.trackingNumber,
+                                date: order.date,
+                            });
                         }
                     }
                 }
             }
         }
-        return { ...product, exceptionDetails };
-    });
+    }
 
-    return pendingInventory;
+    return pendingItems;
 };
