@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { db, storage } from './firebase';
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
@@ -680,4 +680,17 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
         salesByDay,
         returnsByDay,
     };
+};
+
+// Vendedor Functions
+export const getVendedores = async (): Promise<Vendedor[]> => {
+    const vendedoresCol = collection(db, 'vendedores');
+    const snapshot = await getDocs(vendedoresCol);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vendedor));
+};
+
+export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<string> => {
+    const vendedoresCol = collection(db, 'vendedores');
+    const docRef = await addDoc(vendedoresCol, vendedor);
+    return docRef.id;
 };

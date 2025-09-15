@@ -153,3 +153,13 @@ export interface ProductPerformanceData {
     salesByDay: Record<string, number>;
     returnsByDay: Record<string, number>;
 }
+
+export type Vendedor = {
+  id: string;
+  name: string;
+  contact: {
+    email: string;
+    phone: string;
+  };
+};
+

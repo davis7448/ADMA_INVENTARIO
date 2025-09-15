@@ -39,6 +39,7 @@ type NavItem = {
             { href: '/categories', label: 'Categories', roles: ['admin', 'commercial'] },
             { href: '/carriers', label: 'Carriers', roles: ['admin', 'commercial'] },
             { href: '/platforms', label: 'Platforms', roles: ['admin', 'commercial'] },
+            { href: '/vendedores', label: 'Vendedores', roles: ['admin', 'commercial'] },
         ],
     },
     {

@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
@@ -119,4 +120,27 @@ export type AddCategoryFormState = {
         description?: string[];
     };
     success: boolean;
+};
+
+export const AddVendedorFormSchema = z.object({
+  name: z.string().min(1, 'El nombre del vendedor es requerido.'),
+  contact: z.object({
+    email: z.string().email('Email inválido.'),
+    phone: z.string().min(1, 'El teléfono es requerido.'),
+  }),
+});
+
+export type AddVendedorFormValues = z.infer<typeof AddVendedorFormSchema>;
+
+export type AddVendedorFormState = {
+  message: string;
+  errors?: {
+    _form?: string[];
+    name?: string[];
+    contact?: {
+      email?: string[];
+      phone?: string[];
+    };
+  };
+  success: boolean;
 };
