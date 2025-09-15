@@ -45,5 +45,5 @@ export const generatePickingListPDF = (
         startY: 65,
     });
 
-    doc.save(`picking-list-${dispatchId}.pdf`);
+    doc.save(`picking-list-${dispatchId.replace(/\s/g, '-')}.pdf`);
 };

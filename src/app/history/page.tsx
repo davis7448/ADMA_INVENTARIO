@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -26,10 +27,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Download } from 'lucide-react';
+import { Download, X } from 'lucide-react';
 import { generatePickingListPDF } from '@/lib/pdf';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  } from '@/components/ui/select';
 
 interface DispatchOrderProduct {
+    productId: string;
     name: string;
     sku: string;
     quantity: number;
@@ -50,6 +59,7 @@ export default function HistoryPage() {
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterProductId, setFilterProductId] = useState<string>('');
 
   useEffect(() => {
     if (user && user.role !== 'logistics' && user.role !== 'admin') {
@@ -102,12 +112,19 @@ export default function HistoryPage() {
         
         const product = productsById.get(m.productId);
         
-        dispatches[dispatchId].products.push({ name: m.productName, sku: product?.sku || 'N/A', quantity: m.quantity });
+        dispatches[dispatchId].products.push({ productId: m.productId, name: m.productName, sku: product?.sku || 'N/A', quantity: m.quantity });
         dispatches[dispatchId].totalItems += m.quantity;
     });
 
-    return Object.values(dispatches).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [movements, products]);
+    const allOrders = Object.values(dispatches).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (!filterProductId) {
+        return allOrders;
+    }
+    
+    return allOrders.filter(order => order.products.some(p => p.productId === filterProductId));
+
+  }, [movements, products, filterProductId]);
 
   const handleDownloadPdf = (order: DispatchOrder) => {
     const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
@@ -210,9 +227,29 @@ export default function HistoryPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Órdenes de Despacho Generadas</CardTitle>
-                    <CardDescription>Un historial de todos los picking lists generados.</CardDescription>
+                    <CardDescription>
+                        Un historial de todos los picking lists generados. Filtra por producto para encontrar órdenes específicas.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
+                    <div className="mb-4 flex items-center gap-4">
+                        <Select value={filterProductId} onValueChange={setFilterProductId}>
+                            <SelectTrigger className="w-full md:w-[300px]">
+                                <SelectValue placeholder="Filtrar por producto..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {products.map(p => (
+                                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {filterProductId && (
+                            <Button variant="ghost" onClick={() => setFilterProductId('')}>
+                                <X className="mr-2 h-4 w-4" />
+                                Limpiar filtro
+                            </Button>
+                        )}
+                    </div>
                     {loading ? (
                         <div className="space-y-4">
                             <Skeleton className="h-12 w-full" />
@@ -249,7 +286,7 @@ export default function HistoryPage() {
                                                 </TableHeader>
                                                 <TableBody>
                                                     {order.products.map((p, i) => (
-                                                        <TableRow key={i}>
+                                                        <TableRow key={i} className={p.productId === filterProductId ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
                                                             <TableCell>{p.name}</TableCell>
                                                             <TableCell>{p.sku}</TableCell>
                                                             <TableCell className="text-right">{p.quantity}</TableCell>
@@ -270,7 +307,10 @@ export default function HistoryPage() {
                         </Accordion>
                     ) : (
                         <div className="text-center text-muted-foreground py-8">
-                            No se han generado órdenes de despacho.
+                            {filterProductId 
+                                ? "No se encontraron órdenes de despacho para el producto seleccionado."
+                                : "No se han generado órdenes de despacho."
+                            }
                         </div>
                     )}
                 </CardContent>
