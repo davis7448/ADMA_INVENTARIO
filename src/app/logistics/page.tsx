@@ -56,7 +56,10 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import jsPDF from 'jspdf';
+import { v4 as uuidv4 } from 'uuid';
+import { format } from 'date-fns';
 
 interface DispatchedProduct extends Product {
     dispatchQuantity: number;
@@ -188,6 +191,40 @@ export default function LogisticsPage() {
     const handleRemoveProduct = (productId: string) => {
         setDispatchedProducts(prev => prev.filter(p => p.id !== productId));
     };
+    
+    const generatePickingListPDF = (dispatchId: string, products: DispatchedProduct[], platformName: string, carrierName: string) => {
+        const doc = new jsPDF();
+        
+        doc.setFontSize(20);
+        doc.text("Picking List", 105, 20, { align: 'center' });
+
+        doc.setFontSize(12);
+        doc.text(`Dispatch ID: ${dispatchId}`, 15, 35);
+        doc.text(`Date: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 15, 42);
+        doc.text(`Platform: ${platformName}`, 15, 49);
+        doc.text(`Carrier: ${carrierName}`, 15, 56);
+
+        const tableColumn = ["SKU", "Product Name", "Quantity"];
+        const tableRows: (string|number)[][] = [];
+
+        products.forEach(product => {
+            const productData = [
+                product.sku,
+                product.name,
+                product.dispatchQuantity
+            ];
+            tableRows.push(productData);
+        });
+
+        // @ts-ignore - jspdf types might not be perfectly up to date with autoTable
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 65,
+        });
+
+        doc.save(`picking-list-${dispatchId}.pdf`);
+    };
 
     const handleCreateDispatch = () => {
         if (!platform || !carrier || dispatchedProducts.length === 0) {
@@ -199,6 +236,10 @@ export default function LogisticsPage() {
             return;
         }
 
+        const dispatchId = `DSP-${uuidv4()}`;
+        const platformName = platforms.find(p => p.id === platform)?.name || 'N/A';
+        const carrierName = carriers.find(c => c.id === carrier)?.name || 'N/A';
+
         dispatchedProducts.forEach(product => {
             updateProductStock(product.id, product.dispatchQuantity, 'subtract');
             addInventoryMovement({
@@ -206,12 +247,14 @@ export default function LogisticsPage() {
                 productId: product.id,
                 productName: product.name,
                 quantity: product.dispatchQuantity,
-                notes: `Plataforma: ${platforms.find(p => p.id === platform)?.name}, Transportadora: ${carriers.find(c => c.id === carrier)?.name}`
+                notes: `Dispatch ID: ${dispatchId}. Plataforma: ${platformName}, Transportadora: ${carrierName}`
             });
         });
+        
+        generatePickingListPDF(dispatchId, dispatchedProducts, platformName, carrierName);
 
         toast({
-            title: "Salida Creada",
+            title: "Salida Creada y PDF Generado",
             description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.dispatchQuantity, 0)} unidades. El stock ha sido actualizado.`
         });
 
