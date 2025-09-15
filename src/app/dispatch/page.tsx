@@ -36,6 +36,7 @@ import type { DateRange } from 'react-day-picker';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { Check, ChevronsUpDown, Calendar as CalendarIcon, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 interface GroupedPendingProduct {
     product: Product;
@@ -58,6 +59,7 @@ function DispatchPageContent() {
   // Filter states
   const [filterProductId, setFilterProductId] = useState<string>('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [filterTrackingNumbers, setFilterTrackingNumbers] = useState('');
   const [comboboxOpen, setComboboxOpen] = useState(false);
 
   const fetchData = async () => {
@@ -98,6 +100,7 @@ function DispatchPageContent() {
 
   const filteredPartialOrders = useMemo(() => {
     let allOrders = [...partialOrders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const trackingList = filterTrackingNumbers.split('\n').map(t => t.trim()).filter(Boolean);
 
     if (filterProductId) {
         allOrders = allOrders.filter(order => order.exceptions.some(ex => ex.products?.some(p => p.productId === filterProductId)));
@@ -108,9 +111,12 @@ function DispatchPageContent() {
     if (dateRange?.to) {
         allOrders = allOrders.filter(order => new Date(order.date) <= endOfDay(dateRange.to!));
     }
+    if (trackingList.length > 0) {
+        allOrders = allOrders.filter(order => order.exceptions.some(ex => trackingList.includes(ex.trackingNumber)));
+    }
     
     return allOrders;
-  }, [partialOrders, filterProductId, dateRange]);
+  }, [partialOrders, filterProductId, dateRange, filterTrackingNumbers]);
 
 
   const handleDispatchProcessed = () => {
@@ -133,91 +139,109 @@ function DispatchPageContent() {
   const clearFilters = () => {
     setFilterProductId('');
     setDateRange(undefined);
+    setFilterTrackingNumbers('');
   };
-  const hasActiveFilters = filterProductId || dateRange;
+  const hasActiveFilters = filterProductId || dateRange || filterTrackingNumbers;
 
   const renderFilters = () => (
-    <div className="mb-4 space-y-4">
-        <div className="flex flex-wrap items-center gap-4">
-            <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={comboboxOpen}
-                        className="w-full md:w-[250px] justify-between"
-                    >
-                        {filterProductId
-                            ? products.find((p) => p.id === filterProductId)?.name
-                            : "Filtrar por producto pendiente..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                    <Command>
-                        <CommandInput placeholder="Buscar producto..." />
-                        <CommandEmpty>No se encontró el producto.</CommandEmpty>
-                        <CommandGroup>
-                            {products.map((p) => (
-                                <CommandItem
-                                    key={p.id}
-                                    value={p.name}
-                                    onSelect={() => {
-                                        setFilterProductId(p.id === filterProductId ? '' : p.id)
-                                        setComboboxOpen(false)
-                                    }}
-                                >
-                                    <Check
-                                        className={cn(
-                                            "mr-2 h-4 w-4",
-                                            filterProductId === p.id ? "opacity-100" : "opacity-0"
-                                        )}
-                                    />
-                                    {p.name}
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </Command>
-                </PopoverContent>
-            </Popover>
+    <div className="mb-6 space-y-4 p-4 border rounded-lg bg-muted/50">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-2">
+                <Label>Filtrar por producto</Label>
+                <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={comboboxOpen}
+                            className="w-full justify-between"
+                        >
+                            {filterProductId
+                                ? products.find((p) => p.id === filterProductId)?.name
+                                : "Filtrar por producto pendiente..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                        <Command>
+                            <CommandInput placeholder="Buscar producto..." />
+                            <CommandEmpty>No se encontró el producto.</CommandEmpty>
+                            <CommandGroup>
+                                {products.map((p) => (
+                                    <CommandItem
+                                        key={p.id}
+                                        value={p.name}
+                                        onSelect={() => {
+                                            setFilterProductId(p.id === filterProductId ? '' : p.id)
+                                            setComboboxOpen(false)
+                                        }}
+                                    >
+                                        <Check
+                                            className={cn(
+                                                "mr-2 h-4 w-4",
+                                                filterProductId === p.id ? "opacity-100" : "opacity-0"
+                                            )}
+                                        />
+                                        {p.name}
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
+            </div>
             
-            <Popover>
-                <PopoverTrigger asChild>
-                    <Button
-                        variant={"outline"}
-                        className={cn(
-                        "w-full md:w-[240px] justify-start text-left font-normal",
-                        !dateRange && "text-muted-foreground"
-                        )}
-                    >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dateRange?.from ? (
-                        dateRange.to ? (
-                            <>
-                            {format(dateRange.from, "LLL dd, y")} -{" "}
-                            {format(dateRange.to, "LLL dd, y")}
-                            </>
-                        ) : (
-                            format(dateRange.from, "LLL dd, y")
-                        )
-                        ) : (
-                        <span>Rango de fechas</span>
-                        )}
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        initialFocus
-                        mode="range"
-                        defaultMonth={dateRange?.from}
-                        selected={dateRange}
-                        onSelect={setDateRange}
-                        numberOfMonths={2}
+             <div className="space-y-2">
+                <Label>Filtrar por fecha</Label>
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant={"outline"}
+                            className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !dateRange && "text-muted-foreground"
+                            )}
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {dateRange?.from ? (
+                            dateRange.to ? (
+                                <>
+                                {format(dateRange.from, "LLL dd, y")} -{" "}
+                                {format(dateRange.to, "LLL dd, y")}
+                                </>
+                            ) : (
+                                format(dateRange.from, "LLL dd, y")
+                            )
+                            ) : (
+                            <span>Rango de fechas</span>
+                            )}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                            initialFocus
+                            mode="range"
+                            defaultMonth={dateRange?.from}
+                            selected={dateRange}
+                            onSelect={setDateRange}
+                            numberOfMonths={2}
+                        />
+                    </PopoverContent>
+                </Popover>
+            </div>
+
+            <div className="space-y-2">
+                    <Label htmlFor="tracking-filter">Filtrar por guías (una por línea)</Label>
+                    <Textarea
+                        id="tracking-filter"
+                        placeholder="GUIA001\nGUIA002\nGUIA003"
+                        value={filterTrackingNumbers}
+                        onChange={(e) => setFilterTrackingNumbers(e.target.value)}
+                        rows={3}
                     />
-                </PopoverContent>
-            </Popover>
+                </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 mt-2">
              {hasActiveFilters && (
                 <Button variant="ghost" onClick={clearFilters}>
                     <X className="mr-2 h-4 w-4" />
