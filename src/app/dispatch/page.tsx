@@ -407,13 +407,12 @@ function DispatchPageContent() {
                                                     <p className="font-medium">{platformNames[order.platformId]}</p>
                                                     <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                                 </div>
-                                                {/* Empty div as a spacer for the 3-column grid */}
                                                 <div></div>
                                             </div>
                                         </AccordionTrigger>
                                         <div 
-                                          className="flex justify-end pr-4"
                                           onClick={(e) => e.stopPropagation()}
+                                          className="pr-4"
                                         >
                                             <ProcessDispatchDialog
                                                 order={orderForDialog}
@@ -496,5 +495,7 @@ export default function DispatchPage() {
         </AuthProviderWrapper>
     )
 }
+
+    
 
     
