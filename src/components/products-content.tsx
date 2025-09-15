@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -55,12 +55,12 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         if (fetchedProducts.length > 0) {
             const uniqueVendorIds = [...new Set(fetchedProducts.map(p => p.vendorId))];
             const uniqueCategoryIds = [...new Set(fetchedProducts.map(p => p.categoryId))];
-             const [supplierNames, categoryNames] = await Promise.all([
+             const [newSupplierNames, newCategoryNames] = await Promise.all([
                 getSuppliersByIds(uniqueVendorIds),
                 getCategoriesByIds(uniqueCategoryIds)
             ]);
-            setSupplierNames(supplierNames);
-            setCategoryNames(categoryNames);
+            setSupplierNames(newSupplierNames);
+            setCategoryNames(newCategoryNames);
         }
         setLoading(false);
     }
@@ -164,3 +164,5 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         </div>
     )
 }
+
+    

@@ -235,11 +235,11 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Supplier</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <Select onValuechange={field.onChange} defaultValue={field.value}>
                                     <FormControl>
                                         <SelectTrigger>
                                         <SelectValue placeholder="Select a supplier" />
-                                        </Trigger>
+                                        </SelectTrigger>
                                     </FormControl>
                                     <SelectContent>
                                         {suppliers.map(supplier => (
