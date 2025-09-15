@@ -46,6 +46,8 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
   const [isResolving, startTransition] = useTransition();
   const { toast } = useToast();
   
+  const [showFakeAlert, setShowFakeAlert] = useState(true);
+
   const refreshAlerts = async () => {
     setLoading(true);
     const fetchedAlerts = await getStaleReservationAlerts();
@@ -71,6 +73,16 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
         }
     });
   }
+
+  const handleResolveFakeAlert = () => {
+    startTransition(() => {
+        toast({
+            title: "Reserva Liberada (Ejemplo)",
+            description: "La reserva de ejemplo ha sido eliminada de la vista.",
+        });
+        setShowFakeAlert(false);
+    });
+  }
   
   const fakeAlert: StaleReservationAlert = {
     id: 'fake-alert-1',
@@ -84,7 +96,7 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
     quantity: 2,
   };
 
-  const allAlertsToShow = [fakeAlert, ...alerts];
+  const allAlertsToShow = showFakeAlert ? [fakeAlert, ...alerts] : alerts;
 
   return (
     <div className="space-y-6">
@@ -134,7 +146,7 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
                     <TableCell className="text-right">
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="sm" disabled={alert.id.startsWith('fake-')}>Liberar Reserva</Button>
+                                <Button variant="destructive" size="sm">Liberar Reserva</Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
@@ -150,7 +162,13 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction 
-                                        onClick={() => handleResolveAlert(alert.id)}
+                                        onClick={() => {
+                                            if (alert.id.startsWith('fake-')) {
+                                                handleResolveFakeAlert();
+                                            } else {
+                                                handleResolveAlert(alert.id);
+                                            }
+                                        }}
                                         disabled={isResolving}
                                     >
                                         {isResolving ? "Liberando..." : "Confirmar y Liberar"}
