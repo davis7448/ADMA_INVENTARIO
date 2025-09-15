@@ -395,22 +395,25 @@ function DispatchPageContent() {
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
-                                    <div className="flex items-center w-full hover:bg-muted/50 rounded-md">
+                                    <div className="flex justify-between items-center w-full hover:bg-muted/50 rounded-md pr-4">
                                         <AccordionTrigger className="flex-1 p-4 cursor-pointer">
-                                            <div className="flex items-center justify-start w-full">
-                                                <div className="w-1/3 text-left">
+                                            <div className="flex items-center justify-between w-full">
+                                                <div className="flex-shrink-0 w-1/3 text-left">
                                                     <p className="font-semibold">{order.dispatchId}</p>
                                                     <p className="text-sm text-muted-foreground">
                                                         {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
                                                     </p>
                                                 </div>
-                                                <div className="w-1/3 text-center">
+                                                <div className="flex-1 text-center px-4">
                                                     <p className="text-sm font-medium">{platformNames[order.platformId]}</p>
                                                     <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                                 </div>
+                                                <div className="flex-shrink-0 w-1/3 text-right">
+                                                    {/* This div is to balance the flex layout, the arrow will be here */}
+                                                </div>
                                             </div>
                                         </AccordionTrigger>
-                                        <div className="w-1/3 text-right pr-8" onClick={(e) => e.stopPropagation()}>
+                                        <div onClick={(e) => e.stopPropagation()}>
                                             <ProcessDispatchDialog 
                                                 order={orderForDialog}
                                                 productsById={productsById}
