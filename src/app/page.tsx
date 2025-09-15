@@ -426,18 +426,21 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
                 {loading ? <Skeleton className="h-80" /> : filteredData.platformCarrierChartData.length > 0 ? (
-                    <>
-                        <div className="h-80">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+                        <div className="lg:col-span-2 h-80">
                            <DashboardPlatformCarrierChart 
                                 data={filteredData.platformCarrierChartData} 
                                 carriers={filteredData.allCarrierNames}
                             />
                         </div>
-                         <div className="mt-4 text-center text-sm text-muted-foreground space-y-1">
-                            <p>La transportadora más usada en común es: <strong className="text-foreground">{filteredData.mostUsedCarrier}</strong>.</p>
-                            <p>La plataforma con más órdenes despachadas es: <strong className="text-foreground">{filteredData.platformWithMostOrders}</strong>.</p>
+                         <div className="lg:col-span-1 space-y-4 text-center lg:text-left">
+                            <h4 className="font-semibold text-lg">Resumen Técnico</h4>
+                            <div className="text-sm text-muted-foreground space-y-2">
+                                <p>La transportadora más usada en el período es: <strong className="block text-xl text-foreground">{filteredData.mostUsedCarrier}</strong>.</p>
+                                <p>La plataforma con más despachos es: <strong className="block text-xl text-foreground">{filteredData.platformWithMostOrders}</strong>.</p>
+                            </div>
                         </div>
-                    </>
+                    </div>
                 ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground py-16">
                         No hay datos de despachos en el período seleccionado.

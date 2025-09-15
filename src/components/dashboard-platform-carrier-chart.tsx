@@ -45,9 +45,14 @@ export default function DashboardPlatformCarrierChart({ data, carriers }: Platfo
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer>
-        <BarChart data={data} layout="vertical" stackOffset="expand">
-          <XAxis type="number" hide domain={[0, 1]} tickFormatter={(value) => `${value * 100}%`} />
+        <BarChart data={data} stackOffset="expand">
           <YAxis
+            type="number"
+            hide
+            domain={[0, 1]}
+            tickFormatter={(value) => `${value * 100}%`}
+          />
+          <XAxis
             type="category"
             dataKey="name"
             stroke="#888888"
