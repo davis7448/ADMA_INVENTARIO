@@ -211,6 +211,37 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                 </DialogFooter>
               </Card>
 
+              {product.productType === 'variable' && product.variants && product.variants.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Detalle de Variantes</CardTitle>
+                        <CardDescription>Desglose de inventario para cada variante del producto.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Nombre de Variante</TableHead>
+                                    <TableHead>SKU</TableHead>
+                                    <TableHead className="text-right">Precio</TableHead>
+                                    <TableHead className="text-right">Stock</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {product.variants.map(variant => (
+                                    <TableRow key={variant.id}>
+                                        <TableCell className="font-medium">{variant.name}</TableCell>
+                                        <TableCell>{variant.sku}</TableCell>
+                                        <TableCell className="text-right">${variant.price.toFixed(2)}</TableCell>
+                                        <TableCell className="text-right font-semibold">{variant.stock}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+              )}
+
               {product.reservations && product.reservations.length > 0 && (
                 <Card>
                     <CardHeader>
