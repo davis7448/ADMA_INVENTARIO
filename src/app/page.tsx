@@ -7,11 +7,12 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { getDispatchOrders, getProducts, getCarriers } from '@/lib/api';
-import type { DispatchOrder, Product, Carrier } from '@/lib/types';
-import { CalendarIcon, PackageCheck, PackageX, AlertTriangle } from 'lucide-react';
+import { getDispatchOrders, getProducts, getCarriers, getCategories } from '@/lib/api';
+import type { DispatchOrder, Product, Carrier, Category } from '@/lib/types';
+import { CalendarIcon, PackageCheck, PackageX, AlertTriangle, Percent } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -20,6 +21,7 @@ import { cn } from '@/lib/utils';
 import DashboardOrdersChart from '@/components/dashboard-orders-chart';
 import DashboardPendingChart from '@/components/dashboard-pending-chart';
 import { Skeleton } from '@/components/ui/skeleton';
+import DashboardCategoryChart from '@/components/dashboard-category-chart';
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -29,15 +31,22 @@ export default function DashboardPage() {
   const [allOrders, setAllOrders] = useState<DispatchOrder[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [allCarriers, setAllCarriers] = useState<Carrier[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [orders, products, carriers] = await Promise.all([getDispatchOrders(), getProducts(), getCarriers()]);
+      const [orders, products, carriers, categories] = await Promise.all([
+          getDispatchOrders(), 
+          getProducts(), 
+          getCarriers(),
+          getCategories()
+        ]);
       setAllOrders(orders);
       setAllProducts(products);
       setAllCarriers(carriers);
+      setAllCategories(categories);
       setLoading(false);
     };
     fetchData();
@@ -87,14 +96,52 @@ export default function DashboardPage() {
         currentDate.setDate(currentDate.getDate() + 1);
     }
     
+    const productCategoryMap = allProducts.reduce((acc, product) => {
+        acc[product.id] = product.categoryId;
+        return acc;
+    }, {} as Record<string, string>);
+
+    const categoryNameMap = allCategories.reduce((acc, category) => {
+        acc[category.id] = category.name;
+        return acc;
+    }, {} as Record<string, string>);
+
+    const salesByCategory: Record<string, number> = {};
+    let totalItemsSold = 0;
+
+    ordersInPeriod.forEach(order => {
+        order.products.forEach(product => {
+            const categoryId = productCategoryMap[product.productId];
+            if (categoryId) {
+                salesByCategory[categoryId] = (salesByCategory[categoryId] || 0) + product.quantity;
+            }
+            totalItemsSold += product.quantity;
+        });
+    });
+
+    const categoryChartData = Object.entries(salesByCategory)
+        .map(([categoryId, count]) => ({
+            name: categoryNameMap[categoryId] || 'Unknown',
+            value: count,
+        }))
+        .sort((a, b) => b.value - a.value);
+
+    const mostMovedCategory = categoryChartData[0] || null;
+    const mostMovedCategoryPercentage = mostMovedCategory && totalItemsSold > 0
+        ? (mostMovedCategory.value / totalItemsSold) * 100
+        : 0;
+
 
     return {
       ordersInPeriod,
       totalPendingOrders,
       pendingChartData,
       chartData,
+      categoryChartData,
+      mostMovedCategory,
+      mostMovedCategoryPercentage,
     };
-  }, [dateRange, allOrders, allCarriers]);
+  }, [dateRange, allOrders, allCarriers, allProducts, allCategories]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -139,12 +186,13 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-         <div className="grid gap-4 md:grid-cols-2">
+         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
          </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card className="col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Órdenes Movilizadas</CardTitle>
@@ -172,6 +220,33 @@ export default function DashboardPage() {
                     <DashboardPendingChart data={filteredData.pendingChartData} />
                 </div>
             </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Categoría Principal</CardTitle>
+                    <CardDescription>
+                        La categoría de productos más vendida en el período.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col justify-between h-full pb-4">
+                   {filteredData.mostMovedCategory ? (
+                        <>
+                            <div className="flex items-baseline gap-2">
+                               <p className="text-2xl font-bold">{filteredData.mostMovedCategory.name}</p>
+                               <p className="text-sm font-semibold text-green-500">
+                                   ({filteredData.mostMovedCategoryPercentage.toFixed(1)}%)
+                               </p>
+                            </div>
+                            <div className="h-32 mt-2">
+                                <DashboardCategoryChart data={filteredData.categoryChartData} />
+                            </div>
+                        </>
+                   ) : (
+                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                            No hay datos de ventas.
+                        </div>
+                   )}
+                </CardContent>
             </Card>
         </div>
       )}
