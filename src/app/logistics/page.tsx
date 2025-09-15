@@ -62,9 +62,8 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
           e.preventDefault();
           const barcode = e.currentTarget.value;
-          // In a real app, you'd find the product by barcode.
-          // Here, we'll simulate by using the product ID as a "barcode".
-          const product = products.find(p => p.id === barcode);
+          // Find product by SKU
+          const product = products.find(p => p.sku === barcode);
     
           if (product) {
             setDispatchedProducts(prev => {
@@ -105,7 +104,7 @@ export default function LogisticsPage() {
         console.log({
             platform,
             carrier,
-            products: dispatchedProducts.map(p => ({ id: p.id, quantity: p.dispatchQuantity }))
+            products: dispatchedProducts.map(p => ({ id: p.id, sku: p.sku, quantity: p.dispatchQuantity }))
         });
 
         toast({
@@ -166,18 +165,18 @@ export default function LogisticsPage() {
                 </div>
 
                 <div>
-                    <Label htmlFor="barcode">Escanear Código de Barras</Label>
+                    <Label htmlFor="barcode">Escanear Código de Barras (SKU)</Label>
                     <div className="relative">
                         <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input 
                             id="barcode"
                             ref={barcodeRef}
-                            placeholder="Pistolear código de barras del producto y presionar Enter" 
+                            placeholder="Escanear SKU del producto y presionar Enter" 
                             className="pl-8"
                             onKeyDown={handleBarcodeScan}
                         />
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">Simulación: usa el ID del producto (ej: prod-1, prod-2) como código de barras.</p>
+                    <p className="text-sm text-muted-foreground mt-1">Usa el SKU del producto (ej: WM-ERGO-01) como código de barras.</p>
                 </div>
                 
                 <Card>
