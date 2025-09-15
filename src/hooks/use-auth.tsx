@@ -61,6 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user && pathname !== '/login') {
       router.push('/login');
     }
+    // If we have a user and are on the login page, redirect to home
+    if (user && pathname === '/login') {
+        router.push('/');
+    }
   }, [user, loading, pathname, router]);
 
 
