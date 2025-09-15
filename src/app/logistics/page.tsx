@@ -58,6 +58,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 
@@ -875,7 +876,3 @@ export default function LogisticsPage() {
     </>
     );
 }
-
-    
-
-    
