@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
@@ -66,7 +67,7 @@ export default function LogisticsPage() {
     const { user } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
-    const allProducts = getProducts();
+    const [allProductsList, setAllProductsList] = useState<Product[]>([]);
 
     // Salidas State
     const [platform, setPlatform] = useState('');
@@ -99,12 +100,20 @@ export default function LogisticsPage() {
         }
     }, [user, router]);
 
+    useEffect(() => {
+        async function fetchProducts() {
+            const products = await getProducts();
+            setAllProductsList(products);
+        }
+        fetchProducts();
+    }, []);
+
     // --- SALIDAS ---
     const handleBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           const barcode = e.currentTarget.value;
-          const product = allProducts.find(p => p.sku === barcode);
+          const product = allProductsList.find(p => p.sku === barcode);
     
           if (product) {
             setDispatchedProducts(prev => {
@@ -167,7 +176,7 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = allProducts.find(p => p.sku === barcode);
+            const product = allProductsList.find(p => p.sku === barcode);
 
             if (product) {
                 setReceivedProducts(prev => {
@@ -220,7 +229,7 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const product = allProducts.find(p => p.sku === barcode);
+            const product = allProductsList.find(p => p.sku === barcode);
 
             if (product) {
                 setProductToAdd(product);
@@ -290,7 +299,7 @@ export default function LogisticsPage() {
 
     // --- AVERÍAS ---
     const handleRegisterDamage = () => {
-        const product = allProducts.find(p => p.sku.toLowerCase() === damagedSku.toLowerCase());
+        const product = allProductsList.find(p => p.sku.toLowerCase() === damagedSku.toLowerCase());
         if (!product) {
             toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado con ese SKU.' });
             return;
@@ -688,3 +697,4 @@ export default function LogisticsPage() {
     </>
     );
 }
+
