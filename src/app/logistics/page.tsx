@@ -760,6 +760,7 @@ export default function LogisticsPage() {
                                      <Table>
                                         <TableHeader>
                                             <TableRow>
+                                                <TableHead className="w-[80px]">Imagen</TableHead>
                                                 <TableHead>Producto</TableHead>
                                                 <TableHead>SKU</TableHead>
                                                 <TableHead className="text-center w-[150px]">Cantidad</TableHead>
@@ -769,6 +770,15 @@ export default function LogisticsPage() {
                                             {receivedProducts.length > 0 ? (
                                                 receivedProducts.map(product => (
                                                     <TableRow key={product.id}>
+                                                        <TableCell>
+                                                            <Image
+                                                                src={product.imageUrl}
+                                                                alt={product.name}
+                                                                width={64}
+                                                                height={64}
+                                                                className="rounded-md object-cover"
+                                                            />
+                                                        </TableCell>
                                                         <TableCell className="font-medium">{product.name}</TableCell>
                                                         <TableCell>{product.sku}</TableCell>
                                                         <TableCell>
@@ -784,7 +794,7 @@ export default function LogisticsPage() {
                                                 ))
                                             ) : (
                                                 <TableRow>
-                                                    <TableCell colSpan={3} className="text-center">Escanea o busca un producto para comenzar.</TableCell>
+                                                    <TableCell colSpan={4} className="text-center">Escanea o busca un producto para comenzar.</TableCell>
                                                 </TableRow>
                                             )}
                                         </TableBody>
