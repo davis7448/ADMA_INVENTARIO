@@ -166,6 +166,7 @@ export default function LogisticsPage() {
             setIsReturnDialogOpen(false);
             setProductToAdd(null);
             setCurrentTrackingNumber('');
+            returnBarcodeRef.current?.focus();
         } else {
             toast({ variant: 'destructive', title: "Error", description: "Por favor, ingresa un número de guía." });
         }
@@ -488,7 +489,7 @@ export default function LogisticsPage() {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                      <div className="space-y-2">
-                        <Label htmlFor="tracking-number">Número de Guía</Label>
+                        <Label htmlFor="tracking-number">Número de Guía</Label>_
                         <Input
                             id="tracking-number"
                             value={currentTrackingNumber}
