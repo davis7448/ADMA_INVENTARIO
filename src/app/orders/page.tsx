@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { MoreHorizontal } from 'lucide-react';
 import { orders } from '@/lib/data';
 
-const statusStyles = {
+const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
   Processing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
   Shipped: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300',

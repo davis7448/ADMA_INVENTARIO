@@ -1,29 +1,14 @@
 "use client";
 
-import {
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from '@/components/ui/sidebar';
-import {
-  LayoutDashboard,
-  Box,
-  ShoppingCart,
-  Truck,
-  Undo2,
-  Wrench,
-} from 'lucide-react';
-import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'logistics', 'commercial'] },
-  { href: '/products', label: 'Products', icon: Box, roles: ['admin', 'commercial'] },
-  { href: '/orders', label: 'Orders', icon: ShoppingCart, roles: ['admin', 'commercial'] },
-  { href: '/suppliers', label: 'Suppliers', icon: Truck, roles: ['admin', 'logistics'] },
-  { href: '/returns', label: 'Returns', icon: Undo2, roles: ['admin', 'logistics'] },
-  { href: '/restock-alerts', label: 'Restock Alerts', icon: Wrench, roles: ['admin', 'logistics'] },
+  { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial'] },
+  { href: '/products', label: 'Products', roles: ['admin', 'commercial'] },
+  { href: '/logistics', label: 'Logística', roles: ['admin', 'logistics'] },
 ];
 
 export default function MainNav() {
@@ -33,21 +18,19 @@ export default function MainNav() {
   const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
 
   return (
-    <SidebarMenu>
+    <nav className="hidden md:flex items-center space-x-4 lg:space-x-6 ml-6">
       {filteredNavItems.map((item) => (
-        <SidebarMenuItem key={item.href}>
-          <SidebarMenuButton
-            asChild
-            isActive={pathname === item.href}
-            tooltip={item.label}
-          >
-            <Link href={item.href}>
-              <item.icon />
-              <span>{item.label}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        <Link
+          key={item.href}
+          href={item.href}
+          className={cn(
+            "text-sm font-medium transition-colors hover:text-primary",
+            pathname === item.href ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          {item.label}
+        </Link>
       ))}
-    </SidebarMenu>
+    </nav>
   );
 }

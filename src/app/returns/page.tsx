@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/dialog';
 import { returnRequests } from '@/lib/data';
 
-const statusStyles = {
+const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
   Approved: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
   Rejected: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
