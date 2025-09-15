@@ -346,12 +346,18 @@ export const findUserByEmail = async (email: string): Promise<User | null> => {
 
 
 // Inventory Movement Functions
-export const getInventoryMovements = async (): Promise<InventoryMovement[]> => {
+export const getInventoryMovements = async (days?: number): Promise<InventoryMovement[]> => {
     const movementsCol = collection(db, 'inventoryMovements');
-    const movementSnapshot = await getDocs(movementsCol);
+    let q = query(movementsCol);
+
+    if (days) {
+        const startDate = subDays(new Date(), days);
+        q = query(movementsCol, where('date', '>=', startDate));
+    }
+
+    const movementSnapshot = await getDocs(q);
     const movementList = movementSnapshot.docs.map(doc => {
       const data = doc.data();
-      // Firestore Timestamps need to be converted to strings
       const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
       return { 
         id: doc.id, 
@@ -957,18 +963,15 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
     try {
         const [products, allMovements, rotationCategories] = await Promise.all([
             getProducts(),
-            getInventoryMovements(),
+            getInventoryMovements(7), // Only fetch last 7 days of movements
             getRotationCategories(),
         ]);
 
-        const sevenDaysAgo = subDays(new Date(), 7);
-        const recentSaleMovements = allMovements.filter(
-            (m) => m.type === 'Salida' && new Date(m.date) >= sevenDaysAgo
-        );
-
         const salesByProductId: Record<string, number> = {};
-        for (const movement of recentSaleMovements) {
-            salesByProductId[movement.productId] = (salesByProductId[movement.productId] || 0) + movement.quantity;
+        for (const movement of allMovements) {
+            if (movement.type === 'Salida') {
+                salesByProductId[movement.productId] = (salesByProductId[movement.productId] || 0) + movement.quantity;
+            }
         }
         
         const sortedRotationCategories = [...rotationCategories].sort((a,b) => b.salesThreshold - a.salesThreshold);
@@ -987,9 +990,10 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
             const rotationName = getRotationCategoryName(product.id);
             if (rotationName === 'Inactivo') continue;
 
+            const salesLast7Days = salesByProductId[product.id] || 0;
+
             if (product.productType === 'simple' && product.sku) {
-                const totalReserved = (Array.isArray(product.reservations) ? product.reservations : []).reduce((sum, res) => sum + res.quantity, 0);
-                const salesLast7Days = salesByProductId[product.id] || 0;
+                const totalReserved = Array.isArray(product.reservations) ? product.reservations.reduce((sum, res) => sum + res.quantity, 0) : 0;
                 itemsToCheck.push({
                     productName: product.name,
                     physicalStock: product.stock,
@@ -1000,9 +1004,6 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
                 });
             } else if (product.productType === 'variable' && product.variants) {
                 for (const variant of product.variants) {
-                    // Sales are aggregated at the parent level, so we use the parent's sales data for the check.
-                    // This is a simplification; a more complex system might track variant-level sales.
-                    const salesLast7Days = salesByProductId[product.id] || 0; 
                     const variantReserved = (Array.isArray(product.reservations) ? product.reservations : [])
                         .filter(r => r.variantId === variant.id)
                         .reduce((sum, res) => sum + res.quantity, 0);
@@ -1011,7 +1012,7 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
                         productName: `${product.name} - ${variant.name}`,
                         physicalStock: variant.stock,
                         reservedStock: variantReserved,
-                        salesLast7Days: salesLast7Days,
+                        salesLast7Days: salesLast7Days, // Use parent's sales for variant check
                         // Pass through data for storage
                         id: `${product.id}-${variant.id}`, name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
                     });

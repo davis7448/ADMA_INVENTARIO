@@ -4,31 +4,21 @@ import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovemen
 import type { Product, InventoryMovement, RotationCategory } from '@/lib/types';
 import { ProductsContent } from '@/components/products-content';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
-import { subDays } from 'date-fns';
 
 export default async function ProductsPage() {
-    const products: Product[] = await getProducts();
-    const uniqueVendorIds = [...new Set(products.map(p => p.vendorId))];
-    const uniqueCategoryIds = [...new Set(products.map(p => p.categoryId))];
-    
-    const sevenDaysAgo = subDays(new Date(), 7);
-
-    const [supplierNames, categoryNames, allMovements, rotationCategories] = await Promise.all([
-        getSuppliersByIds(uniqueVendorIds),
-        getCategoriesByIds(uniqueCategoryIds),
-        getInventoryMovements(),
+    const [products, supplierIdMap, categoryIdMap, allMovements, rotationCategories] = await Promise.all([
+        getProducts(),
+        getSuppliersByIds([]), // Fetch logic is now inside component
+        getCategoriesByIds([]), // Fetch logic is now inside component
+        getInventoryMovements(7), // Fetch only last 7 days of movements
         getRotationCategories(),
     ]);
 
-    const recentSaleMovements = allMovements.filter(
-        (m) => m.type === 'Salida' && new Date(m.date) >= sevenDaysAgo
-    );
-
     const salesByProduct: Record<string, number> = {};
-    for (const movement of recentSaleMovements) {
-        // All movements are stored with the parent productId, so this aggregation is correct
-        // for both simple and variable products.
-        salesByProduct[movement.productId] = (salesByProduct[movement.productId] || 0) + movement.quantity;
+    for (const movement of allMovements) {
+        if (movement.type === 'Salida') {
+            salesByProduct[movement.productId] = (salesByProduct[movement.productId] || 0) + movement.quantity;
+        }
     }
 
     const sortedRotationCategories = [...rotationCategories].sort((a,b) => b.salesThreshold - a.salesThreshold);
@@ -47,6 +37,15 @@ export default async function ProductsPage() {
         ...product,
         rotationCategoryName: getRotationCategoryName(product.id),
     }));
+
+    // We pass empty maps because the content component will fetch them based on the initial products
+    const uniqueVendorIds = [...new Set(productsWithRotation.map(p => p.vendorId))];
+    const uniqueCategoryIds = [...new Set(productsWithRotation.map(p => p.categoryId))];
+    
+    const [supplierNames, categoryNames] = await Promise.all([
+        getSuppliersByIds(uniqueVendorIds),
+        getCategoriesByIds(uniqueCategoryIds),
+    ]);
 
 
     return (
