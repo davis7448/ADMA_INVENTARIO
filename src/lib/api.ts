@@ -192,3 +192,5 @@ export const addInventoryMovement = async (movement: Omit<InventoryMovement, 'id
         date: new Date(),
     });
 };
+
+    

@@ -51,7 +51,7 @@ function SubmitButton() {
         <Button type="submit" disabled={pending}>
             {pending ? 'Adding Product...' : 'Add Product'}
         </Button>
-    )
+    );
 }
 
 export function AddProductForm({ onProductAdded }: AddProductFormProps) {
@@ -99,7 +99,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       });
       setOpen(false); 
       onProductAdded();
-      form.reset();
     } else if (state.message && !state.success) {
        toast({
         title: 'Error',
@@ -123,6 +122,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   useEffect(() => {
     if (!open) {
       form.reset();
+      formRef.current?.reset();
     }
   }, [open, form]);
   
