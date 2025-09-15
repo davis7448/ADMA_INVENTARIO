@@ -30,11 +30,12 @@ export default function LoginPage() {
   };
 
   const handleDemoLogin = async (demoEmail: string) => {
+    const demoPassword = 'password123';
     setEmail(demoEmail);
-    setPassword('password123'); // Default password for demo users
+    setPassword(demoPassword);
     setLoading(true);
     setError(null);
-    const success = await login(demoEmail, 'password123');
+    const success = await login(demoEmail, demoPassword);
      if (!success) {
       setError('Invalid credentials. Please try again.');
     }
