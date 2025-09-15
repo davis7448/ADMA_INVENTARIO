@@ -26,6 +26,8 @@ export default async function ProductsPage() {
 
     const salesByProduct: Record<string, number> = {};
     for (const movement of recentSaleMovements) {
+        // All movements are stored with the parent productId, so this aggregation is correct
+        // for both simple and variable products.
         salesByProduct[movement.productId] = (salesByProduct[movement.productId] || 0) + movement.quantity;
     }
 
