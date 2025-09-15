@@ -28,6 +28,7 @@ import { products, suppliers } from '@/lib/data';
 import { MoreHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/use-auth';
+import { AddProductForm } from '@/components/add-product-form';
 
 const getSupplierName = (vendorId: string) => {
   return suppliers.find((s) => s.id === vendorId)?.name ?? 'Unknown';
@@ -44,7 +45,7 @@ export default function ProductsPage() {
           <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
           <p className="text-muted-foreground">Browse and manage your product listings.</p>
         </div>
-        {canEdit && <Button>Add Product</Button>}
+        {canEdit && <AddProductForm />}
       </div>
       <Card>
         <CardHeader>

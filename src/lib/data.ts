@@ -6,7 +6,7 @@ const findImage = (id: string) => {
   return image ? { url: image.imageUrl, hint: image.imageHint, description: image.description } : { url: 'https://placehold.co/600x400', hint: 'placeholder', description: 'Placeholder image' };
 };
 
-export const products: Product[] = [
+export let products: Product[] = [
   {
     id: 'prod-1',
     name: 'Ergo-Wireless Mouse',
@@ -104,6 +104,11 @@ export const products: Product[] = [
     vendorId: 'sup-4',
   },
 ];
+
+export const addProduct = (product: Product) => {
+  products.unshift(product);
+};
+
 
 export const suppliers: Supplier[] = [
   {
