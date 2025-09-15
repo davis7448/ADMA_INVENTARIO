@@ -2,8 +2,9 @@
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
+import Image from 'next/image';
 import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders } from '@/lib/api';
-import type { DispatchOrder, Product, Platform, Carrier } from '@/lib/types';
+import type { DispatchOrder, Product, Platform, Carrier, DispatchExceptionProduct } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import {
   Card,
@@ -34,6 +35,15 @@ import type { DateRange } from 'react-day-picker';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { Check, ChevronsUpDown, Calendar as CalendarIcon, X } from 'lucide-react';
 import { Label } from '@/components/ui/label';
+
+interface GroupedPendingProduct {
+    product: Product;
+    totalPending: number;
+    guides: {
+        trackingNumber: string;
+        quantity: number;
+    }[];
+}
 
 
 function DispatchPageContent() {
@@ -217,6 +227,33 @@ function DispatchPageContent() {
     </div>
   );
 
+  const getGroupedPendingProducts = (order: DispatchOrder): GroupedPendingProduct[] => {
+    const pendingProducts: { [key: string]: GroupedPendingProduct } = {};
+
+    order.exceptions?.forEach(ex => {
+        ex.products?.forEach(p => {
+            if (!pendingProducts[p.productId]) {
+                const productInfo = productsById[p.productId];
+                if (productInfo) {
+                    pendingProducts[p.productId] = {
+                        product: productInfo,
+                        totalPending: 0,
+                        guides: [],
+                    };
+                }
+            }
+            if (pendingProducts[p.productId]) {
+                pendingProducts[p.productId].totalPending += p.quantity;
+                pendingProducts[p.productId].guides.push({
+                    trackingNumber: ex.trackingNumber,
+                    quantity: p.quantity,
+                });
+            }
+        });
+    });
+    return Object.values(pendingProducts);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -329,6 +366,7 @@ function DispatchPageContent() {
                                 );
 
                                 const orderForDialog = { ...order, products: productsForDialog };
+                                const groupedPendingProducts = getGroupedPendingProducts(order);
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
@@ -357,30 +395,50 @@ function DispatchPageContent() {
                                     </AccordionTrigger>
                                     <AccordionContent>
                                         <div className="p-4 bg-muted/50 rounded-md">
-                                            <h4 className="font-semibold mb-2 text-destructive">Productos Pendientes (Excepciones)</h4>
-                                            {order.exceptions.map((ex, index) => (
-                                                <div key={index} className="mb-3">
-                                                    <p className="text-sm font-semibold">Guía de Excepción: <span className="font-mono bg-destructive/10 px-2 py-1 rounded">{ex.trackingNumber}</span></p>
-                                                    {ex.products && ex.products.length > 0 && (
-                                                        <Table>
-                                                            <TableHeader>
-                                                                <TableRow>
-                                                                    <TableHead>Producto</TableHead>
-                                                                    <TableHead className="text-right">Cant. Pendiente</TableHead>
-                                                                </TableRow>
-                                                            </TableHeader>
-                                                            <TableBody>
-                                                                {ex.products.map(p => (
-                                                                    <TableRow key={p.productId}>
-                                                                        <TableCell>{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
-                                                                        <TableCell className="text-right">{p.quantity}</TableCell>
+                                            <h4 className="font-semibold mb-4 text-destructive">Productos Pendientes (Excepciones)</h4>
+                                            <div className="space-y-4">
+                                                {groupedPendingProducts.map(group => (
+                                                    <div key={group.product.id} className="border p-3 rounded-md bg-background">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-4">
+                                                                <Image 
+                                                                    src={group.product.imageUrl} 
+                                                                    alt={group.product.name} 
+                                                                    width={64} height={64} 
+                                                                    className="rounded-md object-cover"
+                                                                />
+                                                                <div>
+                                                                    <p className="font-semibold">{group.product.name}</p>
+                                                                    <p className="text-sm text-muted-foreground">{group.product.sku}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-sm text-muted-foreground">Total Pendiente</p>
+                                                                <p className="text-2xl font-bold">{group.totalPending}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-3">
+                                                            <p className="text-xs font-semibold text-muted-foreground mb-1">Desglose por Guía de Excepción:</p>
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow>
+                                                                        <TableHead>Guía</TableHead>
+                                                                        <TableHead className="text-right">Cantidad</TableHead>
                                                                     </TableRow>
-                                                                ))}
-                                                            </TableBody>
-                                                        </Table>
-                                                    )}
-                                                </div>
-                                            ))}
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {group.guides.map((guide, idx) => (
+                                                                        <TableRow key={idx}>
+                                                                            <TableCell className="font-mono text-xs">{guide.trackingNumber}</TableCell>
+                                                                            <TableCell className="text-right">{guide.quantity}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </AccordionContent>
                                 </AccordionItem>
