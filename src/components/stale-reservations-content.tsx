@@ -34,7 +34,6 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from './ui/skeleton';
-import { subDays } from 'date-fns';
 
 interface StaleReservationsContentProps {
     initialAlerts: StaleReservationAlert[];
@@ -45,8 +44,6 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
   const [loading, setLoading] = useState(false);
   const [isResolving, startTransition] = useTransition();
   const { toast } = useToast();
-  
-  const [showFakeAlert, setShowFakeAlert] = useState(true);
 
   const refreshAlerts = async () => {
     setLoading(true);
@@ -73,30 +70,6 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
         }
     });
   }
-
-  const handleResolveFakeAlert = () => {
-    startTransition(() => {
-        toast({
-            title: "Reserva Liberada (Ejemplo)",
-            description: "La reserva de ejemplo ha sido eliminada de la vista.",
-        });
-        setShowFakeAlert(false);
-    });
-  }
-  
-  const fakeAlert: StaleReservationAlert = {
-    id: 'fake-alert-1',
-    alertDate: new Date().toISOString(),
-    reservationId: 'fake-res-1',
-    reservationDate: subDays(new Date(), 6).toISOString(),
-    productId: 'prod-1',
-    productName: 'Ergo-Wireless Mouse (Ejemplo)',
-    productSku: 'WM-ERGO-01',
-    vendedorName: 'Vendedor de Ejemplo',
-    quantity: 2,
-  };
-
-  const allAlertsToShow = showFakeAlert ? [fakeAlert, ...alerts] : alerts;
 
   return (
     <div className="space-y-6">
@@ -132,8 +105,8 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
                         <TableCell colSpan={6}><Skeleton className="h-8 w-full" /></TableCell>
                     </TableRow>
                 ))
-              ) : allAlertsToShow.length > 0 ? (
-                allAlertsToShow.map((alert) => (
+              ) : alerts.length > 0 ? (
+                alerts.map((alert) => (
                   <TableRow key={alert.id} className="hover:bg-amber-50 dark:hover:bg-amber-900/20">
                     <TableCell>
                       <div className="font-medium">{alert.productName}</div>
@@ -162,13 +135,7 @@ export function StaleReservationsContent({ initialAlerts }: StaleReservationsCon
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction 
-                                        onClick={() => {
-                                            if (alert.id.startsWith('fake-')) {
-                                                handleResolveFakeAlert();
-                                            } else {
-                                                handleResolveAlert(alert.id);
-                                            }
-                                        }}
+                                        onClick={() => handleResolveAlert(alert.id)}
                                         disabled={isResolving}
                                     >
                                         {isResolving ? "Liberando..." : "Confirmar y Liberar"}
