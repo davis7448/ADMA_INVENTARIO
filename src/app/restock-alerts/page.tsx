@@ -1,4 +1,3 @@
-"use client";
 
 import {
   Card,
@@ -18,66 +17,74 @@ import {
 import { Badge } from '@/components/ui/badge';
 import RestockForm from '@/components/restock-form';
 import { getProducts, getSupplierById } from '@/lib/api';
-import { useAuth } from '@/hooks/use-auth';
+import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
+
+async function LowStockList() {
+    const allProducts = await getProducts();
+    const lowStockProducts = allProducts.filter(p => p.stock < p.restockThreshold);
+
+    return (
+         <Card>
+            <CardHeader>
+            <CardTitle>Low Stock Items</CardTitle>
+            <CardDescription>These products are below their restock threshold and require attention.</CardDescription>
+            </CardHeader>
+            <CardContent>
+            <Table>
+                <TableHeader>
+                <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead className="text-center">Current Stock</TableHead>
+                    <TableHead className="text-center">Threshold</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                </TableRow>
+                </TableHeader>
+                <TableBody>
+                {lowStockProducts.length > 0 ? (
+                    await Promise.all(lowStockProducts.map(async (product) => {
+                        const supplierName = (await getSupplierById(product.vendorId))?.name || 'Unknown';
+                        return (
+                            <TableRow key={product.id}>
+                                <TableCell className="font-medium">{product.name}</TableCell>
+                                <TableCell>{supplierName}</TableCell>
+                                <TableCell className="text-center">{product.stock}</TableCell>
+                                <TableCell className="text-center">{product.restockThreshold}</TableCell>
+                                <TableCell className="text-center">
+                                <Badge variant="destructive">Low Stock</Badge>
+                                </TableCell>
+                            </TableRow>
+                        );
+                    }))
+                ) : (
+                    <TableRow>
+                    <TableCell colSpan={5} className="text-center">All product inventory levels are healthy.</TableCell>
+                    </TableRow>
+                )}
+                </TableBody>
+            </Table>
+            </CardContent>
+        </Card>
+    );
+}
+
+function RestockAlertsPageContent() {
+    return (
+        <div className="space-y-8">
+            <div>
+                <h1 className="text-3xl font-bold font-headline tracking-tight">Restock Alerts</h1>
+                <p className="text-muted-foreground">Monitor inventory levels and generate restock alerts.</p>
+            </div>
+            <RestockForm />
+            <LowStockList />
+        </div>
+    );
+}
 
 export default function RestockAlertsPage() {
-  const { user } = useAuth();
-  const allProducts = getProducts();
-  const lowStockProducts = allProducts.filter(p => p.stock < p.restockThreshold);
-
-  const getSupplierName = (vendorId: string) => {
-    return getSupplierById(vendorId)?.name || 'Unknown';
-  };
-  
-  const canManageRestock = user?.role === 'admin' || user?.role === 'logistics';
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Restock Alerts</h1>
-        <p className="text-muted-foreground">Monitor inventory levels and generate restock alerts.</p>
-      </div>
-
-      {canManageRestock && <RestockForm />}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Low Stock Items</CardTitle>
-          <CardDescription>These products are below their restock threshold and require attention.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>Supplier</TableHead>
-                <TableHead className="text-center">Current Stock</TableHead>
-                <TableHead className="text-center">Threshold</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lowStockProducts.length > 0 ? (
-                lowStockProducts.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>{getSupplierName(product.vendorId)}</TableCell>
-                    <TableCell className="text-center">{product.stock}</TableCell>
-                    <TableCell className="text-center">{product.restockThreshold}</TableCell>
-                    <TableCell className="text-center">
-                       <Badge variant="destructive">Low Stock</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center">All product inventory levels are healthy.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
-  );
+    return (
+        <AuthProviderWrapper allowedRoles={['admin', 'logistics']}>
+            <RestockAlertsPageContent />
+        </AuthProviderWrapper>
+    );
 }
