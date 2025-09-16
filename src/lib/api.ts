@@ -114,7 +114,6 @@ export const updateProductStock = async (productId: string, quantity: number, op
       
         const productData = productSnap.data() as Product;
       
-        // If it's a simple product, just update its stock regardless of variantSku
         if (productData.productType === 'simple') {
             const currentStock = productData.stock || 0;
             let newStock;
@@ -127,43 +126,42 @@ export const updateProductStock = async (productId: string, quantity: number, op
                 newStock = currentStock - quantity;
             }
             transaction.update(productRef, { stock: newStock });
-        } else { // It's a variable product
-            if (!variantSku) {
-                // This case should be handled carefully. If no SKU, what to do?
-                // For now, let's throw an error to enforce providing a SKU for variable products.
-                throw new Error(`Debe proporcionar un SKU de variante para actualizar el stock de un producto variable como ${productData.name}.`);
+            return; // End transaction for simple product
+        }
+        
+        // Handle variable product
+        if (!variantSku) {
+            throw new Error(`Debe proporcionar un SKU de variante para actualizar el stock de un producto variable como ${productData.name}.`);
+        }
+
+        const variants = productData.variants ? [...productData.variants] : [];
+        const variantIndex = variants.findIndex(v => v.sku === variantSku);
+
+        if (variantIndex === -1) {
+            throw new Error(`Variante con SKU ${variantSku} no encontrada en el producto ${productData.name}.`);
+        }
+
+        const variant = variants[variantIndex];
+        const currentVariantStock = variant.stock || 0;
+        let newVariantStock;
+
+        if (operation === 'add') {
+            newVariantStock = currentVariantStock + quantity;
+        } else {
+            if (currentVariantStock < quantity) {
+                throw new Error(`No hay suficiente stock para la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
             }
-            const variants = productData.variants ? [...productData.variants] : [];
-            const variantIndex = variants.findIndex(v => v.sku === variantSku);
-  
-            if (variantIndex === -1) {
-                throw new Error(`Variante con SKU ${variantSku} no encontrada en el producto ${productData.name}.`);
-            }
-  
-            const variant = variants[variantIndex];
-            const currentVariantStock = variant.stock || 0;
-            let newVariantStock;
-  
-            if (operation === 'add') {
-                newVariantStock = currentVariantStock + quantity;
-            } else {
-                if (currentVariantStock < quantity) {
-                    throw new Error(`No hay suficiente stock para la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
-                }
-                newVariantStock = currentVariantStock - quantity;
-            }
-          
-            // Update the specific variant's stock
-            variants[variantIndex].stock = newVariantStock;
-          
-            // Recalculate the parent product's total stock
-            const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
-          
-            transaction.update(productRef, { 
-                variants: variants,
-                stock: newTotalStock 
-            });
-      }
+            newVariantStock = currentVariantStock - quantity;
+        }
+      
+        variants[variantIndex].stock = newVariantStock;
+      
+        const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
+      
+        transaction.update(productRef, { 
+            variants: variants,
+            stock: newTotalStock 
+        });
     });
 };
 
