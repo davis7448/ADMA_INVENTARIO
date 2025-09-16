@@ -306,22 +306,12 @@ export const addPlatform = async (platform: Omit<Platform, 'id'>): Promise<strin
 // Order Functions
 export const getOrders = (): Order[] => {
     // This is mock data
-    return [
-      { id: 'ORD001', customerName: 'John Doe', customerEmail: 'john.doe@example.com', date: '2023-05-20', status: 'Delivered', total: 150.00 },
-      { id: 'ORD002', customerName: 'Jane Smith', customerEmail: 'jane.smith@example.com', date: '2023-05-21', status: 'Shipped', total: 75.50 },
-      { id: 'ORD003', customerName: 'Alice Johnson', customerEmail: 'alice.j@example.com', date: '2023-05-22', status: 'Processing', total: 200.00 },
-      { id: 'ORD004', customerName: 'Bob Brown', customerEmail: 'bob.b@example.com', date: '2023-05-23', status: 'Pending', total: 45.00 },
-      { id: 'ORD005', customerName: 'Charlie Davis', customerEmail: 'charlie.d@example.com', date: '2023-05-23', status: 'Cancelled', total: 99.99 },
-    ];
+    return [];
   };
 
 // Return Request Functions
 export const getReturnRequests = (): ReturnRequest[] => {
-    return [
-        { id: 'RET001', orderId: 'ORD002', customerName: 'Jane Smith', productName: 'Mechanical Keyboard Pro', reason: 'Defective key', status: 'Pending', date: '2023-05-25' },
-        { id: 'RET002', orderId: 'ORD001', customerName: 'John Doe', productName: 'Ergo-Wireless Mouse', reason: 'Accidental order', status: 'Approved', date: '2023-05-24' },
-        { id: 'RET003', orderId: 'ORD003', customerName: 'Alice Johnson', productName: '4K UHD Monitor', reason: 'Does not fit desk', status: 'Rejected', date: '2023-05-26' },
-    ];
+    return [];
 };
 
 

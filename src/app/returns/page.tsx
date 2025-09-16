@@ -55,18 +55,26 @@ export default function ReturnsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {returnRequests.map((request) => (
-                <TableRow key={request.id}>
-                  <TableCell className="font-medium">{request.id}</TableCell>
-                  <TableCell>{request.customerName}</TableCell>
-                  <TableCell>{request.productName}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{request.reason}</TableCell>
-                  <TableCell>{request.date}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={statusStyles[request.status]}>{request.status}</Badge>
+              {returnRequests.length > 0 ? (
+                returnRequests.map((request) => (
+                  <TableRow key={request.id}>
+                    <TableCell className="font-medium">{request.id}</TableCell>
+                    <TableCell>{request.customerName}</TableCell>
+                    <TableCell>{request.productName}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{request.reason}</TableCell>
+                    <TableCell>{request.date}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={statusStyles[request.status]}>{request.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center">
+                    No return requests found.
                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </CardContent>
