@@ -1,6 +1,6 @@
 import {genkit} from 'genkit';
-import {googleAI as googleAIPlugin} from '@genkit-ai/googleai';
+import {googleAI} from '@genkit-ai/googleai';
 
 export const ai = genkit({
-  plugins: [googleAIPlugin({api: 'vertex'})],
+  plugins: [googleAI()],
 });
