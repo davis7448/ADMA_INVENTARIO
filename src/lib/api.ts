@@ -9,6 +9,8 @@ import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
 
+const storage = getStorage();
+
 // Image Upload Function
 export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => {
   if (!imageFile) {
@@ -16,7 +18,6 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
   }
   const fileExtension = imageFile.name.split('.').pop();
   const fileName = `${uuidv4()}.${fileExtension}`;
-  const storage = getStorage();
   const storageRef = ref(storage, `product-images/${fileName}`);
 
   try {
