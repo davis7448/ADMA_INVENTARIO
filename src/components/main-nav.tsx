@@ -39,7 +39,7 @@ type NavItem = {
         roles: ['admin', 'commercial'],
         children: [
             { href: '/orders', label: 'Órdenes', roles: ['admin', 'commercial'] },
-            { href: '/returns', label: 'Devoluciones', roles: ['admin', 'commercial'] },
+            { href: '/returns', label: 'Garantías', roles: ['admin', 'commercial'] },
         ],
     },
     {

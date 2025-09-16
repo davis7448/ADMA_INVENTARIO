@@ -18,7 +18,8 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { getReturnRequests } from '@/lib/api';
-import { ReturnPolicyDialog } from '@/components/return-policy-dialog';
+import { WarrantyPolicyDialog } from '@/components/warranty-policy-dialog';
+import type { ReturnRequest } from '@/lib/types';
 
 const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
@@ -26,32 +27,32 @@ const statusStyles: { [key: string]: string } = {
   Rejected: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
 };
 
-export default function ReturnsPage() {
-  const returnRequests = getReturnRequests();
+export default function GarantiasPage() {
+  const returnRequests: ReturnRequest[] = getReturnRequests();
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold font-headline tracking-tight">Returns</h1>
-          <p className="text-muted-foreground">Process and manage customer return requests.</p>
+          <h1 className="text-3xl font-bold font-headline tracking-tight">Garantías</h1>
+          <p className="text-muted-foreground">Procesa y gestiona las solicitudes de garantía de clientes.</p>
         </div>
-        <ReturnPolicyDialog />
+        <WarrantyPolicyDialog />
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Return Requests</CardTitle>
-          <CardDescription>A list of all return requests from customers.</CardDescription>
+          <CardTitle>Solicitudes de Garantía</CardTitle>
+          <CardDescription>Una lista de todas las solicitudes de garantía de los clientes.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Return ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>ID Solicitud</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Producto</TableHead>
+                <TableHead>Razón</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Estado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -71,7 +72,7 @@ export default function ReturnsPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center">
-                    No return requests found.
+                    No se encontraron solicitudes de garantía.
                   </TableCell>
                 </TableRow>
               )}
