@@ -9,7 +9,8 @@
  * - RestockAlertOutput - The return type for the generateRestockAlert function.
  */
 
-import {ai, googleAI} from '@/ai/genkit';
+import {ai} from '@/ai/genkit';
+import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
 
 const RestockAlertInputSchema = z.object({
@@ -55,3 +56,5 @@ const restockAlertFlow = ai.defineFlow(
   async input => {
     const {output} = await prompt(input);
     return output!;
+  }
+);
