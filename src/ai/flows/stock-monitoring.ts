@@ -10,36 +10,27 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {googleAI} from '@genkit-ai/googleai';
+import { googleAI } from '@genkit-ai/googleai';
 import {z} from 'genkit';
 
 const StockAvailabilityInputSchema = z.object({
-  productName: z.string().describe('The name of the product or variant.'),
-  physicalStock: z.number().describe('The total physical stock count.'),
-  reservedStock: z.number().describe('The total reserved stock count.'),
-  salesLast7Days: z.number().describe('Total units sold in the last 7 days.'),
+  productName: z.string().describe('The name of the product.'),
+  physicalStock: z.number().describe('The total physical stock count of the product.'),
+  reservedStock: z.number().describe('The stock quantity that is reserved and not available for sale.'),
+  salesLast7Days: z.number().describe('The total number of units sold in the last 7 days.'),
 });
 export type StockAvailabilityInput = z.infer<typeof StockAvailabilityInputSchema>;
 
 const StockAvailabilityOutputSchema = z.object({
-  alertTriggered: z
-    .boolean()
-    .describe(
-      'Whether the available stock is critically low based on sales velocity.'
-    ),
-  alertMessage: z
-    .string()
-    .describe('A human-readable message explaining the stock status.'),
-  dailyAverageSales: z.number().describe('The calculated average daily sales.'),
-  availableForSale: z.number().describe('The calculated stock available for sale (physical - reserved).'),
+  availableForSale: z.number().describe('The stock available for new sales/reservations (physical - reserved).'),
+  dailyAverageSales: z.number().describe('The average number of units sold per day over the last 7 days.'),
+  daysOfStockLeft: z.number().describe('The estimated number of days until the available stock runs out, based on average daily sales. Is -1 if sales are 0.'),
+  alertTriggered: z.boolean().describe('Whether a low stock alert should be triggered (true if days of stock are less than 3, false otherwise).'),
+  alertMessage: z.string().describe('A human-readable message explaining the stock situation and why an alert was or was not triggered.'),
 });
-export type StockAvailabilityOutput = z.infer<
-  typeof StockAvailabilityOutputSchema
->;
+export type StockAvailabilityOutput = z.infer<typeof StockAvailabilityOutputSchema>;
 
-export async function checkStockAvailability(
-  input: StockAvailabilityInput
-): Promise<StockAvailabilityOutput> {
+export async function checkStockAvailability(input: StockAvailabilityInput): Promise<StockAvailabilityOutput> {
   return stockAvailabilityFlow(input);
 }
 
@@ -50,20 +41,21 @@ const prompt = ai.definePrompt({
   output: {schema: StockAvailabilityOutputSchema},
   prompt: `You are an expert inventory analyst. Your task is to determine if a product is at risk of running out of stock available for new reservations.
 
-Calculate the stock available for sale by subtracting reserved stock from physical stock.
-Calculate the average daily sales based on the sales from the last 7 days.
-
-The alert condition is triggered if the stock available for sale is less than the average daily sales multiplied by 3 (our safety buffer).
-
-Analyze the following data:
-- Product Name: {{{productName}}}
-- Physical Stock: {{{physicalStock}}}
-- Reserved Stock: {{{reservedStock}}}
-- Sales in the last 7 days: {{{salesLast7Days}}}
-
-Based on your analysis, set the 'alertTriggered' field to true or false.
-Then, generate a concise 'alertMessage' that summarizes the situation. For example: "OK: Stock disponible (25) es suficiente para la venta diaria promedio (2.1).", or "Alerta: Stock disponible (5) es bajo comparado con la venta diaria promedio (4.3)."
-Finally, fill in the 'dailyAverageSales' and 'availableForSale' fields with your calculated values.`,
+  You will be given the following information:
+  - Product Name: {{{productName}}}
+  - Physical Stock: {{{physicalStock}}}
+  - Reserved Stock: {{{reservedStock}}}
+  - Sales in Last 7 Days: {{{salesLast7Days}}}
+  
+  Your calculations must follow these steps:
+  1.  Calculate 'availableForSale': This is 'physicalStock' - 'reservedStock'.
+  2.  Calculate 'dailyAverageSales': This is 'salesLast7Days' / 7.
+  3.  Calculate 'daysOfStockLeft': This is 'availableForSale' / 'dailyAverageSales'. If 'dailyAverageSales' is 0, this should be -1.
+  4.  Determine 'alertTriggered': The alert is triggered if 'daysOfStockLeft' is greater than or equal to 0 AND less than 3.
+  5.  Generate 'alertMessage': A concise, human-readable message in Spanish explaining the stock situation. If the alert is triggered, the message should be urgent.
+  
+  Execute these calculations and populate all the fields in the output schema.
+  `,
 });
 
 const stockAvailabilityFlow = ai.defineFlow(
