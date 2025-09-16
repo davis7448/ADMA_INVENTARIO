@@ -11,6 +11,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import {googleAI} from '@genkit-ai/googleai';
 
 const StockAvailabilityInputSchema = z.object({
   productName: z.string().describe('The name of the product or variant.'),
@@ -44,6 +45,7 @@ export async function checkStockAvailability(
 
 const prompt = ai.definePrompt({
   name: 'stockAvailabilityPrompt',
+  model: googleAI.model('gemini-1.5-pro'),
   input: {schema: StockAvailabilityInputSchema},
   output: {schema: StockAvailabilityOutputSchema},
   prompt: `You are an expert inventory analyst. Your task is to determine if a product is at risk of running out of stock available for new reservations.

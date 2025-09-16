@@ -11,6 +11,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import {googleAI} from '@genkit-ai/googleai';
 
 const RestockAlertInputSchema = z.object({
   productName: z.string().describe('The name of the product.'),
@@ -32,6 +33,7 @@ export async function generateRestockAlert(input: RestockAlertInput): Promise<Re
 
 const prompt = ai.definePrompt({
   name: 'restockAlertPrompt',
+  model: googleAI.model('gemini-1.5-pro'),
   input: {schema: RestockAlertInputSchema},
   output: {schema: RestockAlertOutputSchema},
   prompt: `You are an inventory management assistant. Your task is to generate restock alerts for products when their inventory level falls below a predefined threshold.
