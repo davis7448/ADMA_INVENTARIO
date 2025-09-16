@@ -35,6 +35,14 @@ type NavItem = {
     { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial'] },
     { href: '/products', label: 'Inventario', roles: ['admin', 'commercial'] },
     {
+        label: 'Ventas',
+        roles: ['admin', 'commercial'],
+        children: [
+            { href: '/orders', label: 'Órdenes', roles: ['admin', 'commercial'] },
+            { href: '/returns', label: 'Devoluciones', roles: ['admin', 'commercial'] },
+        ],
+    },
+    {
         label: 'Activos',
         roles: ['admin', 'commercial'],
         children: [
