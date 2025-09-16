@@ -211,23 +211,21 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
           e.preventDefault();
           const barcode = e.currentTarget.value;
-          const parentProduct = allProductsList.find(p => 
-            p.sku === barcode || p.variants?.some(v => v.sku === barcode)
-          );
-    
-          if (parentProduct) {
-            if (parentProduct.productType === 'variable') {
+          const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku === barcode);
+          if (simpleProduct) {
+              addProductOrVariant(simpleProduct, 'salidas');
+          } else {
+            const parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku === barcode));
+            if (parentProduct) {
                 const variant = parentProduct.variants?.find(v => v.sku === barcode);
                 if (variant) {
                     addProductOrVariant({ ...variant, parentId: parentProduct.id, parentImageUrl: parentProduct.imageUrl }, 'salidas');
                 } else {
-                     toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
+                     toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado para producto variable." });
                 }
             } else {
-                 addProductOrVariant(parentProduct, 'salidas');
+                 toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
             }
-          } else {
-            toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
           }
           if(barcodeRef.current) barcodeRef.current.value = '';
         }
@@ -374,23 +372,21 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const parentProduct = allProductsList.find(p => 
-                p.sku === barcode || p.variants?.some(v => v.sku === barcode)
-            );
-
-            if (parentProduct) {
-                if (parentProduct.productType === 'variable') {
+            const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku === barcode);
+            if (simpleProduct) {
+                addProductOrVariant(simpleProduct, 'entradas');
+            } else {
+                const parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku === barcode));
+                if (parentProduct) {
                     const variant = parentProduct.variants?.find(v => v.sku === barcode);
                     if (variant) {
                         addProductOrVariant({ ...variant, parentId: parentProduct.id, parentImageUrl: parentProduct.imageUrl }, 'entradas');
                     } else {
-                        toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
+                        toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado para producto variable." });
                     }
                 } else {
-                    addProductOrVariant(parentProduct, 'entradas');
+                    toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado.' });
                 }
-            } else {
-                toast({ variant: 'destructive', title: 'Error', description: 'Producto no encontrado.' });
             }
             if (entryBarcodeRef.current) entryBarcodeRef.current.value = '';
         }
@@ -437,12 +433,14 @@ export default function LogisticsPage() {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = e.currentTarget.value;
-            const parentProduct = allProductsList.find(p => 
-                p.sku === barcode || p.variants?.some(v => v.sku === barcode)
-            );
+            const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku === barcode);
 
-            if (parentProduct) {
-                 if (parentProduct.productType === 'variable') {
+            if (simpleProduct) {
+                setProductToAdd(simpleProduct);
+                setIsReturnDialogOpen(true);
+            } else {
+                const parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku === barcode));
+                if (parentProduct) {
                     const variant = parentProduct.variants?.find(v => v.sku === barcode);
                     if (variant) {
                         setProductToAdd({ ...variant, parentId: parentProduct.id, parentImageUrl: parentProduct.imageUrl });
@@ -451,11 +449,8 @@ export default function LogisticsPage() {
                          toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
                     }
                 } else {
-                    setProductToAdd(parentProduct);
-                    setIsReturnDialogOpen(true);
+                    toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
                 }
-            } else {
-                toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
             }
             if(returnBarcodeRef.current) returnBarcodeRef.current.value = '';
         }
