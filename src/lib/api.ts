@@ -114,6 +114,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
       
         const productData = productSnap.data() as Product;
       
+        // If the product is simple, update its stock and finish.
         if (productData.productType === 'simple') {
             const currentStock = productData.stock || 0;
             let newStock;
@@ -126,7 +127,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
                 newStock = currentStock - quantity;
             }
             transaction.update(productRef, { stock: newStock });
-            return; // End transaction for simple product
+            return; // IMPORTANT: End transaction for simple product
         }
         
         // Handle variable product
