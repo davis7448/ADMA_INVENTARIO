@@ -1,5 +1,4 @@
 
-
 "use server";
 
 import { z } from 'zod';
@@ -16,25 +15,23 @@ import { app } from '@/lib/firebase';
 export async function addProductAction(
   formData: FormData
 ): Promise<AddProductFormState> {
+
+  const rawData = Object.fromEntries(formData.entries());
   
-  const rawData: Record<string, any> = {};
   const variantsData: Record<number, Partial<ProductVariant>> = {};
-  
-  for (const [key, value] of formData.entries()) {
-    const variantMatch = key.match(/variants\[(\d+)\]\.(id|name|sku|priceDropshipping|priceWholesale|stock)/);
-    if (variantMatch) {
-      const index = parseInt(variantMatch[1], 10);
-      const field = variantMatch[2] as keyof ProductVariant;
-      
+  const variantKeys = Object.keys(rawData).filter(key => key.startsWith('variants['));
+
+  variantKeys.forEach(key => {
+    const match = key.match(/variants\[(\d+)\]\.(id|name|sku|priceDropshipping|priceWholesale|stock)/);
+    if (match) {
+      const index = parseInt(match[1], 10);
+      const field = match[2] as keyof ProductVariant;
       if (!variantsData[index]) {
         variantsData[index] = {};
       }
-      (variantsData[index] as any)[field] = value;
-
-    } else {
-      rawData[key] = value;
+      (variantsData[index] as any)[field] = rawData[key];
     }
-  }
+  });
 
   const variants: ProductVariant[] = Object.values(variantsData).map(v => ({
     id: (v.id as string) || uuidv4(),
@@ -44,26 +41,19 @@ export async function addProductAction(
     priceWholesale: Number(v.priceWholesale) || 0,
     stock: Number(v.stock) || 0,
   }));
-
-  rawData.variants = variants;
-
-  const purchaseDate = formData.get('purchaseDate');
-
-  const validatedFields = AddProductFormSchema.safeParse({
+  
+  const dataToValidate = {
     ...rawData,
-    image: formData.get('image'),
     priceDropshipping: rawData.priceDropshipping ? Number(rawData.priceDropshipping) : undefined,
     priceWholesale: rawData.priceWholesale ? Number(rawData.priceWholesale) : undefined,
     cost: rawData.cost ? Number(rawData.cost) : undefined,
-    purchaseDate: purchaseDate ? new Date(purchaseDate as string) : undefined,
     stock: rawData.stock ? Number(rawData.stock) : undefined,
-    variants: rawData.variants.map((v: any) => ({
-      ...v,
-      priceDropshipping: Number(v.priceDropshipping),
-      priceWholesale: v.priceWholesale ? Number(v.priceWholesale) : 0,
-      stock: Number(v.stock),
-    })),
-  });
+    purchaseDate: rawData.purchaseDate ? new Date(rawData.purchaseDate as string) : undefined,
+    image: formData.get('image'),
+    variants: variants,
+  };
+
+  const validatedFields = AddProductFormSchema.safeParse(dataToValidate);
   
   if (!validatedFields.success) {
     return {
@@ -224,7 +214,13 @@ export async function createReservationAction(productId: string, data: CreateRes
     }
 
     try {
-        await createReservation({ productId, ...validatedFields.data });
+        const auth = getAuth(app);
+        const user = auth.currentUser;
+        await createReservation({ 
+            productId, 
+            ...validatedFields.data, 
+            createdBy: user ? { id: user.uid, name: user.displayName || user.email! } : undefined 
+        });
         revalidatePath('/products');
         revalidatePath('/stale-reservations'); // Revalidate alerts page too
         return {
@@ -262,6 +258,8 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
     }
 
     try {
+        const auth = getAuth(app);
+        const user = auth.currentUser;
         const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => {
             const product: Omit<Product, 'id'> = {
                 name: p.name,
@@ -280,6 +278,7 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
                 purchaseDate: p.purchasedate ? new Date(p.purchasedate).toISOString() : undefined,
                 imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
                 imageHint: 'product',
+                createdBy: user ? { id: user.uid, name: user.displayName || user.email! } : undefined
             };
             if (product.cost === undefined) {
                 delete product.cost;
@@ -306,10 +305,11 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
         };
     }
 }
-
-
       
 
     
 
   
+
+
+    
