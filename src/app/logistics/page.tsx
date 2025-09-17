@@ -121,12 +121,11 @@ export default function LogisticsPage() {
     const returnBarcodeRef = useRef<HTMLInputElement>(null);
 
     // Averías State
-    const [damagedSku, setDamagedSku] = useState('');
+    const [damagedProduct, setDamagedProduct] = useState<(Product | (ProductVariant & { parentId?: string, parentImageUrl?: string })) | null>(null);
     const [damageDescription, setDamageDescription] = useState('');
     const [damageCarrier, setDamageCarrier] = useState('');
     const [damageTrackingNumber, setDamageTrackingNumber] = useState('');
     const [isDamageConfirmDialogOpen, setIsDamageConfirmDialogOpen] = useState(false);
-    const [productToConfirmForDamage, setProductToConfirmForDamage] = useState<(Product | (ProductVariant & { parentImageUrl?: string })) | null>(null);
 
     // Variant Selection State
     const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
@@ -202,7 +201,7 @@ export default function LogisticsPage() {
                 setIsReturnDialogOpen(true);
                 break;
             case 'averias':
-                setDamagedSku(logisticItem.sku || '');
+                setDamagedProduct(item);
                 break;
         }
     };
@@ -250,7 +249,7 @@ export default function LogisticsPage() {
                 setProductToConfirm(product);
                 setTimeout(() => setIsConfirmDialogOpen(true), 150);
             } else if (searchContext === 'averias') {
-                setProductToConfirmForDamage(product);
+                setDamagedProduct(product);
                 setTimeout(() => setIsDamageConfirmDialogOpen(true), 150);
             } else {
                 addProductOrVariant(product, searchContext);
@@ -263,7 +262,7 @@ export default function LogisticsPage() {
         if (productForVariantSelection) {
             const variantWithContext = { ...variant, parentId: productForVariantSelection.id, parentImageUrl: productForVariantSelection.imageUrl };
             if (searchContext === 'averias') {
-                setProductToConfirmForDamage(variantWithContext);
+                setDamagedProduct(variantWithContext);
                 setTimeout(() => setIsDamageConfirmDialogOpen(true), 150);
             } else {
                 addProductOrVariant(variantWithContext, searchContext);
@@ -543,47 +542,21 @@ export default function LogisticsPage() {
 
     // --- AVERÍAS ---
     const handleConfirmDamageProduct = () => {
-        if (productToConfirmForDamage) {
-            setDamagedSku(productToConfirmForDamage.sku || '');
-        }
         setIsDamageConfirmDialogOpen(false);
-        setProductToConfirmForDamage(null);
+        // The damagedProduct state is already set, we just close the dialog
     };
 
     const handleRegisterDamage = async () => {
-        if (!damagedSku || !damageDescription || !damageCarrier || !damageTrackingNumber) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
+        if (!damagedProduct || !damageDescription || !damageCarrier || !damageTrackingNumber) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos, incluido el producto.' });
             return;
         }
     
-        const lowercasedSku = damagedSku.toLowerCase();
-        let productId: string | undefined;
-        let finalSku: string | undefined;
-    
-        // 1. Find the product or variant matching the SKU, case-insensitively
-        const simpleProduct = allProductsList.find(p => 
-            p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku
-        );
-    
-        if (simpleProduct) {
-            productId = simpleProduct.id;
-            finalSku = simpleProduct.sku;
-        } else {
-            const parentProduct = allProductsList.find(p =>
-                p.productType === 'variable' &&
-                p.variants?.some(v => v.sku.toLowerCase() === lowercasedSku)
-            );
-            if (parentProduct) {
-                const variant = parentProduct.variants?.find(v => v.sku.toLowerCase() === lowercasedSku);
-                if (variant) {
-                    productId = parentProduct.id;
-                    finalSku = variant.sku;
-                }
-            }
-        }
+        const productId = 'parentId' in damagedProduct ? damagedProduct.parentId : damagedProduct.id;
+        const finalSku = damagedProduct.sku;
     
         if (!productId || !finalSku) {
-            toast({ variant: 'destructive', title: 'Error', description: 'SKU del producto no encontrado.' });
+            toast({ variant: 'destructive', title: 'Error', description: 'No se pudo identificar el producto o SKU.' });
             return;
         }
     
@@ -597,8 +570,8 @@ export default function LogisticsPage() {
                 damageDescription
             );
     
-            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para el SKU ${damagedSku}.` });
-            setDamagedSku('');
+            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para el SKU ${finalSku}.` });
+            setDamagedProduct(null);
             setDamageDescription('');
             setDamageCarrier('');
             setDamageTrackingNumber('');
@@ -663,23 +636,23 @@ export default function LogisticsPage() {
                         Se usará el SKU de este producto en el formulario de avería.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
-                {productToConfirmForDamage && (
+                {damagedProduct && (
                     <div className="flex flex-col items-center justify-center gap-4 my-4">
                         <Image
-                            src={productToConfirmForDamage.parentImageUrl || (productToConfirmForDamage as Product).imageUrl}
-                            alt={productToConfirmForDamage.name}
+                            src={damagedProduct.parentImageUrl || (damagedProduct as Product).imageUrl}
+                            alt={damagedProduct.name}
                             width={128}
                             height={128}
                             className="rounded-md object-cover"
                         />
                         <div className="text-center">
-                            <p className="font-semibold">{productToConfirmForDamage.name}</p>
-                            <p className="text-sm text-muted-foreground">SKU: {productToConfirmForDamage.sku}</p>
+                            <p className="font-semibold">{damagedProduct.name}</p>
+                            <p className="text-sm text-muted-foreground">SKU: {damagedProduct.sku}</p>
                         </div>
                     </div>
                 )}
                 <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setProductToConfirmForDamage(null)}>Cancelar</AlertDialogCancel>
+                    <AlertDialogCancel onClick={() => setDamagedProduct(null)}>Cancelar</AlertDialogCancel>
                     <AlertDialogAction onClick={handleConfirmDamageProduct}>Confirmar</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
@@ -1138,8 +1111,8 @@ export default function LogisticsPage() {
                                             <Input 
                                                 id="damage-product-sku" 
                                                 placeholder="Ej: WM-ERGO-01" 
-                                                value={damagedSku}
-                                                onChange={(e) => setDamagedSku(e.target.value)}
+                                                value={damagedProduct?.sku || ''}
+                                                readOnly
                                             />
                                              <Button variant="outline" size="icon" onClick={() => openSearchDialog('averias')}>
                                                 <Search className="h-4 w-4" />
@@ -1169,6 +1142,8 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
 
     
 
