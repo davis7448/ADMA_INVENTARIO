@@ -221,8 +221,9 @@ export const updateProductStock = async (productId: string, quantity: number, op
     });
 };
 
-export const registerDamagedProduct = async (productId: string, quantity: number, variantSku?: string, carrierId?: string, trackingNumber?: string, damageDescription?: string) => {
+export const registerDamagedProduct = async (productId: string, quantity: number, variantSku: string, carrierId?: string, trackingNumber?: string, damageDescription?: string) => {
     const productRef = doc(db, 'products', productId);
+    let productNameForMovement = '';
     
     await runTransaction(db, async (transaction) => {
         const productSnap = await transaction.get(productRef);
@@ -231,30 +232,35 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         }
         
         const productData = productSnap.data() as Product;
+        productNameForMovement = productData.name;
         const currentDamagedStock = productData.damagedStock || 0;
         const newDamagedStock = currentDamagedStock + quantity;
         
         let updateData: { damagedStock: number, variants?: ProductVariant[], stock?: number } = { damagedStock: newDamagedStock };
 
-        // Also decrement stock from the correct variant if applicable
-        if (productData.productType === 'variable' && variantSku) {
+        // Also decrement stock from the correct variant or simple product
+        if (productData.productType === 'variable') {
             const variants = productData.variants ? [...productData.variants] : [];
             const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
     
-            if (variantIndex !== -1) {
-                const variant = variants[variantIndex];
-                const currentVariantStock = variant.stock || 0;
-
-                if (currentVariantStock < quantity) {
-                    throw new Error(`No hay suficiente stock para marcar como averiado en la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
-                }
-                
-                variants[variantIndex].stock = currentVariantStock - quantity;
-                const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
-                
-                updateData.variants = variants;
-                updateData.stock = newTotalStock;
+            if (variantIndex === -1) {
+                throw new Error(`Variante con SKU ${variantSku} no encontrada.`);
             }
+            
+            const variant = variants[variantIndex];
+            productNameForMovement = `${productData.name} (${variant.name})`; // More specific name for movement
+            const currentVariantStock = variant.stock || 0;
+
+            if (currentVariantStock < quantity) {
+                throw new Error(`No hay suficiente stock para marcar como averiado en la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
+            }
+            
+            variants[variantIndex].stock = currentVariantStock - quantity;
+            const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
+            
+            updateData.variants = variants;
+            updateData.stock = newTotalStock;
+
         } else if (productData.productType === 'simple') {
             const currentStock = productData.stock || 0;
             if (currentStock < quantity) {
@@ -266,21 +272,11 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         transaction.update(productRef, updateData);
     });
 
-    const productData = (await getDoc(productRef)).data() as Product;
-    const productToRegisterDamage = productData.productType === 'variable' 
-    ? productData.variants?.find(v => v.sku.toLowerCase() === variantSku?.toLowerCase()) 
-    : productData;
-
-    if (!productToRegisterDamage) {
-        throw new Error('Variante no encontrada para registrar la avería.');
-    }
-    
-    const carrierName = carrierId ? (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || '' : '';
-
+    // Create the inventory movement after the transaction is successful
     await addInventoryMovement({
         type: 'Averia',
         productId: productId,
-        productName: `${productData.name} (${productToRegisterDamage.name})`,
+        productName: productNameForMovement,
         quantity: quantity,
         notes: `Devolución averiada: ${damageDescription}. Guía: ${trackingNumber}. SKU: ${variantSku}`,
         carrierId: carrierId,
@@ -538,14 +534,14 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
       }
 
       const newMovementRef = doc(movementCollectionRef);
-      const dataToSet = {
+      const dataToSet: Record<string, any> = {
         ...movementData,
         movementId: newId,
         date: Timestamp.now(),
       };
       
       // Clean up undefined fields before setting
-      Object.keys(dataToSet).forEach(key => dataToSet[key as keyof typeof dataToSet] === undefined && delete dataToSet[key as keyof typeof dataToSet]);
+      Object.keys(dataToSet).forEach(key => dataToSet[key] === undefined && delete dataToSet[key]);
 
       transaction.set(newMovementRef, dataToSet);
 
