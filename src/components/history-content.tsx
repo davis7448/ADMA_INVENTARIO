@@ -323,7 +323,8 @@ export function HistoryContent({
                             <TableHead>Fecha</TableHead>
                             <TableHead>Producto</TableHead>
                             <TableHead>Tipo</TableHead>
-                            <TableHead>Plataforma/Transportadora</TableHead>
+                            <TableHead>Plataforma</TableHead>
+                            <TableHead>Transportadora</TableHead>
                             <TableHead className="text-center">Cantidad</TableHead>
                             <TableHead>Notas</TableHead>
                         </TableRow>
@@ -343,8 +344,10 @@ export function HistoryContent({
                             </Badge>
                             </TableCell>
                             <TableCell>
-                                {movement.platformId && <p className="text-xs">P: {platformNames[movement.platformId]}</p>}
-                                {movement.carrierId && <p className="text-xs">T: {carrierNames[movement.carrierId]}</p>}
+                                {movement.platformId ? platformNames[movement.platformId] : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                                {movement.carrierId ? carrierNames[movement.carrierId] : 'N/A'}
                             </TableCell>
                             <TableCell className="text-center">{movement.quantity}</TableCell>
                             <TableCell className="text-muted-foreground">{movement.notes}</TableCell>
@@ -352,7 +355,7 @@ export function HistoryContent({
                         ))
                     ) : (
                         <TableRow>
-                        <TableCell colSpan={7} className="text-center h-24">
+                        <TableCell colSpan={8} className="text-center h-24">
                             No se encontraron movimientos para los filtros seleccionados.
                         </TableCell>
                         </TableRow>
