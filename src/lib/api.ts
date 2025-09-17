@@ -221,7 +221,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
     });
 };
 
-export const registerDamagedProduct = async (productId: string, quantity: number, variantSku?: string) => {
+export const registerDamagedProduct = async (productId: string, quantity: number, variantSku?: string, carrierId?: string, trackingNumber?: string, damageDescription?: string) => {
     const productRef = doc(db, 'products', productId);
     
     await runTransaction(db, async (transaction) => {
@@ -264,6 +264,25 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         }
 
         transaction.update(productRef, updateData);
+    });
+
+    const productToRegisterDamage = productData.productType === 'variable' 
+    ? productData.variants?.find(v => v.sku.toLowerCase() === variantSku?.toLowerCase()) 
+    : productData;
+
+    if (!productToRegisterDamage) {
+        throw new Error('Variante no encontrada para registrar la avería.');
+    }
+    
+    const carrierName = carrierId ? (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || '' : '';
+
+    await addInventoryMovement({
+        type: 'Averia',
+        productId: productId,
+        productName: `${productData.name} (${productToRegisterDamage.name})`,
+        quantity: quantity,
+        notes: `Devolución averiada: ${damageDescription}. Guía: ${trackingNumber}. SKU: ${variantSku}`,
+        carrierId: carrierId,
     });
 };
 
@@ -508,20 +527,26 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   try {
     const newMovementId = await runTransaction(db, async (transaction) => {
       const counterDoc = await transaction.get(counterRef);
+      let newId;
       if (!counterDoc.exists()) {
-        transaction.set(counterRef, { currentId: 1000 });
-        return 1000;
+        newId = 1000;
+        transaction.set(counterRef, { currentId: newId });
+      } else {
+        newId = counterDoc.data().currentId + 1;
+        transaction.update(counterRef, { currentId: newId });
       }
 
-      const newId = counterDoc.data().currentId + 1;
-      transaction.update(counterRef, { currentId: newId });
-
       const newMovementRef = doc(movementCollectionRef);
-      transaction.set(newMovementRef, {
+      const dataToSet = {
         ...movementData,
         movementId: newId,
         date: Timestamp.now(),
-      });
+      };
+      
+      // Clean up undefined fields before setting
+      Object.keys(dataToSet).forEach(key => dataToSet[key as keyof typeof dataToSet] === undefined && delete dataToSet[key as keyof typeof dataToSet]);
+
+      transaction.set(newMovementRef, dataToSet);
 
       return newId;
     });
@@ -552,12 +577,6 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
     };
     await setDoc(dispatchOrderRef, newDispatchOrder);
 
-
-    const platformName = (await getDoc(doc(db, 'platforms', platformId))).data()?.name || 'N/A';
-    const carrierName = (await getDoc(doc(db, 'carriers', carrierId))).data()?.name || 'N/A';
-    const notes = `Dispatch ID: ${dispatchId}. Plataforma: ${platformName}, Transportadora: ${carrierName}`;
-
-
     // 2. Create inventory movements and update stock for each product
     for (const product of products) {
         await updateProductStock(product.productId, product.quantity, 'subtract', product.sku);
@@ -566,7 +585,10 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
             productId: product.productId,
             productName: product.name,
             quantity: product.quantity,
-            notes: notes,
+            notes: `Salida para despacho ${dispatchId}.`,
+            platformId,
+            carrierId,
+            dispatchId,
         });
     }
 
@@ -1159,7 +1181,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
                 if (productInfo) {
                     const alertRef = doc(collection(db, 'staleReservationAlerts'));
                     const newAlert: Omit<StaleReservationAlert, 'id'> = {
-                        alertDate: Timestamp.now() as any, // Will be converted later
+                        alertDate: Timestamp.now(),
                         reservationId: reservation.id,
                         reservationDate: Timestamp.fromDate(new Date(reservation.date)),
                         productId: reservation.productId,

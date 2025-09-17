@@ -103,6 +103,9 @@ export type InventoryMovement = {
   quantity: number;
   date: string;
   notes: string;
+  platformId?: string;
+  carrierId?: string;
+  dispatchId?: string;
 };
 
 export type Carrier = {

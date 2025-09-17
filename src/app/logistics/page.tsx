@@ -503,7 +503,9 @@ export default function LogisticsPage() {
             });
             return;
         }
-
+    
+        const carrierName = carriers.find(c => c.id === returnCarrier)?.name || '';
+    
         const promises = returnedProducts.map(product => {
             updateProductStock(product.productId, 1, 'add', product.sku);
             return addInventoryMovement({
@@ -511,10 +513,11 @@ export default function LogisticsPage() {
                 productId: product.productId,
                 productName: product.name,
                 quantity: 1,
-                notes: `Devolución de cliente. Guía: ${product.trackingNumber}, Transportadora: ${carriers.find(c => c.id === returnCarrier)?.name}. SKU: ${product.sku}`
+                notes: `Devolución de cliente. Guía: ${product.trackingNumber}. SKU: ${product.sku}`,
+                carrierId: returnCarrier
             });
         });
-
+    
         await Promise.all(promises);
         
         toast({
@@ -529,45 +532,22 @@ export default function LogisticsPage() {
 
     // --- AVERÍAS ---
     const handleRegisterDamage = async () => {
-        const parentProduct = allProductsList.find(p => p.sku?.toLowerCase() === damagedSku.toLowerCase() || p.variants?.some(v => v.sku.toLowerCase() === damagedSku.toLowerCase()));
-
-        if (!parentProduct) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Producto o variante no encontrado con ese SKU.' });
-            return;
-        }
-        if (!damageDescription) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, describe el daño.' });
-            return;
-        }
-        if (!damageCarrier) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, selecciona la transportadora.' });
-            return;
-        }
-        if (!damageTrackingNumber) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, ingresa el número de guía.' });
-            return;
-        }
-
-        const productToRegisterDamage = parentProduct.productType === 'variable' 
-            ? parentProduct.variants?.find(v => v.sku.toLowerCase() === damagedSku.toLowerCase()) 
-            : parentProduct;
-
-        if (!productToRegisterDamage) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Variante no encontrada.' });
+        if (!damagedSku || !damageDescription || !damageCarrier || !damageTrackingNumber) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
             return;
         }
 
         try {
-            await registerDamagedProduct(parentProduct.id, 1, damagedSku);
-            await addInventoryMovement({
-                type: 'Averia',
-                productId: parentProduct.id,
-                productName: `${parentProduct.name} (${productToRegisterDamage.name})`,
-                quantity: 1,
-                notes: `Devolución averiada: ${damageDescription}. Guía: ${damageTrackingNumber}, Transportadora: ${carriers.find(c => c.id === damageCarrier)?.name}. SKU: ${damagedSku}`
-            });
-
-            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para ${parentProduct.name}.` });
+            await registerDamagedProduct(
+                damagedSku, // Here we pass the SKU and the API will find the product
+                1, 
+                damagedSku, 
+                damageCarrier, 
+                damageTrackingNumber, 
+                damageDescription
+            );
+    
+            toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para el SKU ${damagedSku}.` });
             setDamagedSku('');
             setDamageDescription('');
             setDamageCarrier('');
@@ -580,7 +560,7 @@ export default function LogisticsPage() {
                 variant: 'destructive',
                 title: 'Error al Registrar Avería',
                 description: errorMessage,
-            })
+            });
         }
     };
 

@@ -88,6 +88,16 @@ export function HistoryContent({
         if (filterMovementType !== 'all') {
             movements = movements.filter(m => m.type === filterMovementType);
         }
+        
+        // Filter Movements by Platform
+        if (filterPlatformId !== 'all') {
+            movements = movements.filter(m => m.platformId === filterPlatformId);
+        }
+
+        // Filter Movements by Carrier
+        if (filterCarrierId !== 'all') {
+            movements = movements.filter(m => m.carrierId === filterCarrierId);
+        }
 
         // Filter by Platform (only affects dispatch orders)
         if (filterPlatformId !== 'all') {
@@ -124,6 +134,8 @@ export function HistoryContent({
             'Tipo': movement.type,
             'SKU Producto': productsById[movement.productId]?.sku || 'N/A',
             'Nombre Producto': movement.productName,
+            'Plataforma': movement.platformId ? platformNames[movement.platformId] : 'N/A',
+            'Transportadora': movement.carrierId ? carrierNames[movement.carrierId] : 'N/A',
             'Cantidad': movement.quantity,
             'Notas': movement.notes,
         }));
@@ -311,6 +323,7 @@ export function HistoryContent({
                             <TableHead>Fecha</TableHead>
                             <TableHead>Producto</TableHead>
                             <TableHead>Tipo</TableHead>
+                            <TableHead>Plataforma/Transportadora</TableHead>
                             <TableHead className="text-center">Cantidad</TableHead>
                             <TableHead>Notas</TableHead>
                         </TableRow>
@@ -329,13 +342,17 @@ export function HistoryContent({
                                 {movement.type}
                             </Badge>
                             </TableCell>
+                            <TableCell>
+                                {movement.platformId && <p className="text-xs">P: {platformNames[movement.platformId]}</p>}
+                                {movement.carrierId && <p className="text-xs">T: {carrierNames[movement.carrierId]}</p>}
+                            </TableCell>
                             <TableCell className="text-center">{movement.quantity}</TableCell>
                             <TableCell className="text-muted-foreground">{movement.notes}</TableCell>
                         </TableRow>
                         ))
                     ) : (
                         <TableRow>
-                        <TableCell colSpan={6} className="text-center h-24">
+                        <TableCell colSpan={7} className="text-center h-24">
                             No se encontraron movimientos para los filtros seleccionados.
                         </TableCell>
                         </TableRow>
