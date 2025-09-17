@@ -138,6 +138,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         sku: sku?.trim() || '',
         name: name?.trim() || '',
         priceDropshipping: parseFloat(price?.trim()) || 0,
+        priceWholesale: parseFloat(price?.trim()) || 0,
         stock: parseInt(stock?.trim(), 10) || 0,
       };
     }).filter(v => v.name && v.sku);
@@ -395,7 +396,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => append({ id: uuidv4(), sku: '', name: '', priceDropshipping: 0, stock: 0 })}
+                                    onClick={() => append({ id: uuidv4(), sku: '', name: '', priceDropshipping: 0, priceWholesale: 0, stock: 0 })}
                                 >
                                     Add Variant
                                 </Button>
@@ -405,10 +406,11 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                       <CardContent className="space-y-4">
                         <div className="grid grid-cols-12 gap-2 items-start px-2">
                             <Label className="col-span-3">SKU</Label>
-                            <Label className="col-span-3">Nombre de Variante</Label>
-                            <Label className="col-span-2">Precio</Label>
-                            <Label className="col-span-2">Stock</Label>
-                            <Label className="col-span-2 text-right">Acciones</Label>
+                            <Label className="col-span-3">Nombre</Label>
+                            <Label className="col-span-2">P. Drop</Label>
+                            <Label className="col-span-2">P. x Mayor</Label>
+                            <Label className="col-span-1">Stock</Label>
+                            <Label className="col-span-1 text-right">Acción</Label>
                         </div>
                         {fields.map((field, index) => (
                           <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
@@ -450,9 +452,21 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                             />
                             <FormField
                               control={form.control}
-                              name={`variants.${index}.stock`}
+                              name={`variants.${index}.priceWholesale`}
                               render={({ field }) => (
                                 <FormItem className="col-span-2">
+                                  <FormControl>
+                                    <Input type="number" placeholder="Price" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`variants.${index}.stock`}
+                              render={({ field }) => (
+                                <FormItem className="col-span-1">
                                   <FormControl>
                                     <Input type="number" placeholder="Stock" {...field} />
                                   </FormControl>
@@ -460,7 +474,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                                 </FormItem>
                               )}
                             />
-                            <div className="col-span-2 flex items-center justify-end">
+                            <div className="col-span-1 flex items-center justify-end">
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -493,6 +507,26 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                                           type="number" 
                                           step="0.01" 
                                           placeholder="e.g., 79.99" 
+                                          {...field} 
+                                          value={productType === 'variable' ? '' : field.value ?? ''}
+                                          disabled={productType === 'variable'}
+                                      />
+                                  </FormControl>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                       <FormField
+                          control={form.control}
+                          name="priceWholesale"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Precio x Mayor</FormLabel>
+                                  <FormControl>
+                                      <Input 
+                                          type="number" 
+                                          step="0.01" 
+                                          placeholder="e.g., 69.99" 
                                           {...field} 
                                           value={productType === 'variable' ? '' : field.value ?? ''}
                                           disabled={productType === 'variable'}
