@@ -8,6 +8,8 @@ import type { Product, ProductVariant } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues } from '@/lib/definitions';
 import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema } from '@/lib/definitions';
 import { v4 as uuidv4 } from 'uuid';
+import { getAuth } from 'firebase/auth';
+import { app } from '@/lib/firebase';
 
 
 export async function addProductAction(
