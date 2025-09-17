@@ -5,6 +5,8 @@ import type { Product, InventoryMovement, RotationCategory } from '@/lib/types';
 import { ProductsContent } from '@/components/products-content';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 
+export const revalidate = 0;
+
 export default async function ProductsPage() {
     const [products, supplierIdMap, categoryIdMap, allMovements, rotationCategories] = await Promise.all([
         getProducts(),

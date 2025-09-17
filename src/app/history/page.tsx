@@ -16,6 +16,8 @@ import type {
 } from '@/lib/types';
 import { HistoryContent } from '@/components/history-content';
 
+export const revalidate = 0;
+
 async function HistoryPageContent() {
   const [
     fetchedMovements,
