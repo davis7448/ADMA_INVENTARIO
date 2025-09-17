@@ -131,8 +131,9 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   }
 
   // Remove undefined fields before sending to Firestore
-  if (dataToAdd.priceWholesale === undefined) delete dataToAdd.priceWholesale;
-  if (dataToAdd.cost === undefined) delete dataToAdd.cost;
+  if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
+    delete dataToAdd.cost;
+  }
 
   const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
@@ -286,23 +287,8 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
             
-            const currentVariantStock = variant.stock || 0;
-            if (currentVariantStock < quantity) {
-                throw new Error(`Not enough stock for variant ${variant.name} to mark as damaged. Available: ${currentVariantStock}, Damaged: ${quantity}.`);
-            }
-            
-            variants[variantIndex].stock = currentVariantStock - quantity;
-            const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
-
             updateData.variants = variants;
-            updateData.stock = newTotalStock;
 
-        } else { // Simple product
-            const currentStock = productData.stock || 0;
-            if (currentStock < quantity) {
-                throw new Error(`Not enough stock for product ${productData.name} to mark as damaged. Available: ${currentStock}, Damaged: ${quantity}.`);
-            }
-            updateData.stock = currentStock - quantity;
         }
         
         transaction.update(productRef, updateData);
@@ -594,7 +580,7 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'>) => {
+export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'> & { createdBy?: { id: string; name: string }}) => {
     const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
 
     // 1. Create the new dispatch order document
@@ -1472,4 +1458,3 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
     }
 }
     
-
