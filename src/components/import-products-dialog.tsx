@@ -65,7 +65,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet) as ProductToImport[];
+            const json = XLSX.utils.sheet_to_json(worksheet, { defval: null }) as ProductToImport[];
 
             if (json.length > 0) {
                 const headers = Object.keys(json[0]);
