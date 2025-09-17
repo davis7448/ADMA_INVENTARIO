@@ -437,10 +437,16 @@ export const getInventoryMovements = async (days?: number): Promise<InventoryMov
     const movementList = movementSnapshot.docs.map(doc => {
       const data = doc.data();
       const dateValue = data.date;
+      let formattedDate: string;
+      if (dateValue instanceof Timestamp) {
+        formattedDate = dateValue.toDate().toISOString();
+      } else {
+        formattedDate = dateValue; // Assume it's already a string
+      }
       return { 
         id: doc.id, 
         ...data,
-        date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
+        date: formattedDate,
       } as InventoryMovement
     });
     return movementList;
@@ -452,10 +458,17 @@ export const getInventoryMovementsByProductId = async (productId: string): Promi
     const movementSnapshot = await getDocs(q);
     const movementList = movementSnapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue; // Assume it's already a string
+        }
         return {
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
+            date: formattedDate,
         } as InventoryMovement;
     });
     return movementList;
@@ -471,10 +484,17 @@ export const getInventoryMovementsByDate = async (date: Date): Promise<Inventory
     
     const movementList = movementSnapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue; // Assume it's already a string
+        }
         return {
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
+            date: formattedDate,
         } as InventoryMovement;
     });
 
@@ -489,7 +509,8 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     const newMovementId = await runTransaction(db, async (transaction) => {
       const counterDoc = await transaction.get(counterRef);
       if (!counterDoc.exists()) {
-        throw new Error("Counter document does not exist!");
+        transaction.set(counterRef, { currentId: 1000 });
+        return 1000;
       }
 
       const newId = counterDoc.data().currentId + 1;
@@ -559,10 +580,16 @@ export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
     return snapshot.docs.map(doc => {
         const data = doc.data();
         const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue; // Assume it's already a string
+        }
         return { 
             id: doc.id,
             ...data,
-            date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
+            date: formattedDate,
         } as DispatchOrder
     });
 }
@@ -573,10 +600,17 @@ export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue; // Assume it's already a string
+        }
         return { 
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString()
+            date: formattedDate
         } as DispatchOrder
     });
 }
@@ -586,10 +620,17 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue; // Assume it's already a string
+        }
         return { 
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString()
+            date: formattedDate
         } as DispatchOrder
     });
 }
@@ -640,7 +681,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
                 // Create audit alert
                 const alertRef = doc(collection(db, 'auditAlerts'));
                 const newAlert: Omit<AuditAlert, 'id'> = {
-                    date: Timestamp.now() as any, // Will be converted later
+                    date: Timestamp.now(), // Use Timestamp here
                     productId: exProd.productId,
                     productName: productData.name,
                     productSku: exProd.variantSku || productData.sku || 'N/A',
@@ -727,10 +768,16 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
     const alertList = alertSnapshot.docs.map(doc => {
         const data = doc.data();
         const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue;
+        }
         return {
             id: doc.id,
             ...data,
-            date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
+            date: formattedDate,
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -943,10 +990,17 @@ export const getAllReservations = async (): Promise<Reservation[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue; // Assume it's already a string
+        }
         return { 
             id: doc.id, 
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
+            date: formattedDate,
         } as Reservation;
     });
 }
@@ -956,10 +1010,17 @@ export const getReservationsByProductId = async (productId: string): Promise<Res
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue; // Assume it's already a string
+        }
         return { 
             id: doc.id, 
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
+            date: formattedDate,
         } as Reservation;
     });
 };
@@ -1025,11 +1086,28 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
     const snapshot = await getDocs(alertsCol);
     const alertList = snapshot.docs.map(doc => {
       const data = doc.data();
+      const alertDateValue = data.alertDate;
+      const reservationDateValue = data.reservationDate;
+
+      let formattedAlertDate: string;
+      if (alertDateValue instanceof Timestamp) {
+          formattedAlertDate = alertDateValue.toDate().toISOString();
+      } else {
+          formattedAlertDate = alertDateValue;
+      }
+
+      let formattedReservationDate: string;
+      if (reservationDateValue instanceof Timestamp) {
+        formattedReservationDate = reservationDateValue.toDate().toISOString();
+      } else {
+        formattedReservationDate = reservationDateValue;
+      }
+
       return { 
         id: doc.id, 
         ...data,
-        alertDate: (data.alertDate as Timestamp).toDate().toISOString(),
-        reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
+        alertDate: formattedAlertDate,
+        reservationDate: formattedReservationDate,
       } as StaleReservationAlert;
     });
     return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
@@ -1083,7 +1161,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
                     const newAlert: Omit<StaleReservationAlert, 'id'> = {
                         alertDate: Timestamp.now() as any, // Will be converted later
                         reservationId: reservation.id,
-                        reservationDate: reservation.date,
+                        reservationDate: Timestamp.fromDate(new Date(reservation.date)),
                         productId: reservation.productId,
                         productName: productInfo.name,
                         productSku: productInfo.sku!,
@@ -1255,3 +1333,4 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
         return { alerts: [], error: e.message || "An unknown error occurred during AI analysis." };
     }
 }
+    
