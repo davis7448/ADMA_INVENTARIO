@@ -24,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
     Tooltip,
@@ -34,7 +35,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getProducts } from '@/lib/api';
 import type { Product, RotationCategory } from '@/lib/types';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
@@ -210,12 +211,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
               <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
               <p className="text-muted-foreground">Browse and manage your product listings.</p>
             </div>
-            {canEdit && (
-                <div className="flex gap-2">
-                    <ImportProductsDialog onImportSuccess={refreshProducts} />
-                    <AddProductForm onProductAdded={refreshProducts} />
-                </div>
-            )}
+            {canEdit && <AddProductForm onProductAdded={refreshProducts} />}
           </div>
 
           <div className="p-4 border rounded-lg bg-muted/50">
@@ -271,10 +267,26 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                         <CardTitle>All Products</CardTitle>
                         <CardDescription>A list of all products in your catalog. ({filteredProducts.length} de {products.length} mostrados)</CardDescription>
                     </div>
-                    <Button variant="outline" onClick={handleExportExcel}>
-                        <FileSpreadsheet className="mr-2 h-4 w-4" />
-                        Exportar a Excel
-                    </Button>
+                     <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                <Settings className="mr-2 h-4 w-4" />
+                                Opciones
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <ImportProductsDialog onImportSuccess={refreshProducts}>
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    Importar desde Excel
+                                </DropdownMenuItem>
+                            </ImportProductsDialog>
+                             <DropdownMenuItem onClick={handleExportExcel}>
+                                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                Exportar a Excel
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </CardHeader>
             <CardContent>
