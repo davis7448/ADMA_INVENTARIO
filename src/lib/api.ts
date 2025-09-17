@@ -85,7 +85,7 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   if (product.productType === 'variable') {
     product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
     // For variable products, price could be the lowest variant price, or 0. Let's use 0 for now.
-    product.price = 0; 
+    product.priceDropshipping = 0; 
   }
 
   const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
@@ -97,7 +97,7 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
 
   if (productUpdate.productType === 'variable') {
     productUpdate.stock = productUpdate.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
-    productUpdate.price = 0;
+    productUpdate.priceDropshipping = 0;
   }
 
   await updateDoc(productRef, productUpdate);
@@ -105,7 +105,7 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
 
 export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract', variantSku?: string) => {
     const productRef = doc(db, 'products', productId);
-    
+
     await runTransaction(db, async (transaction) => {
         const productSnap = await transaction.get(productRef);
         if (!productSnap.exists()) {
@@ -117,6 +117,8 @@ export const updateProductStock = async (productId: string, quantity: number, op
         // If product is variable, handle variant logic
         if (productData.productType === 'variable') {
             if (!variantSku) {
+                // If no SKU is provided for a variable product, we can't determine which variant to update.
+                // Depending on business logic, you might want to throw an error or handle it differently.
                 throw new Error(`Debe proporcionar un SKU de variante para actualizar el stock de un producto variable como ${productData.name}.`);
             }
             
@@ -142,6 +144,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
           
             variants[variantIndex].stock = newVariantStock;
           
+            // The total stock of the parent product is the sum of its variants' stock
             const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
           
             transaction.update(productRef, { 

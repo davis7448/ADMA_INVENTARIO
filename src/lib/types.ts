@@ -4,7 +4,8 @@ export type ProductVariant = {
   id: string; // Can be a temporary client-side ID before saving
   name: string;
   sku: string;
-  price: number;
+  priceDropshipping: number;
+  priceWholesale?: number;
   stock: number;
 };
 
@@ -16,7 +17,8 @@ export type Product = {
   imageUrl: string;
   imageHint: string;
   categoryId: string;
-  price: number;
+  priceDropshipping: number;
+  priceWholesale?: number;
   cost?: number;
   purchaseDate?: string;
   stock: number;

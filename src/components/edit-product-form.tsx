@@ -75,7 +75,8 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         productType: product.productType || 'simple',
         categoryId: product.categoryId,
         vendorId: product.vendorId,
-        price: product.price,
+        priceDropshipping: product.priceDropshipping,
+        priceWholesale: product.priceWholesale,
         cost: product.cost,
         purchaseDate: product.purchaseDate ? new Date(product.purchaseDate) : undefined,
         stock: product.stock,
@@ -114,7 +115,8 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
             productType: product.productType || 'simple',
             categoryId: product.categoryId,
             vendorId: product.vendorId,
-            price: product.price,
+            priceDropshipping: product.priceDropshipping,
+            priceWholesale: product.priceWholesale,
             cost: product.cost,
             purchaseDate: product.purchaseDate ? new Date(product.purchaseDate) : undefined,
             stock: product.stock,
@@ -135,7 +137,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         id: uuidv4(),
         sku: sku?.trim() || '',
         name: name?.trim() || '',
-        price: parseFloat(price?.trim()) || 0,
+        priceDropshipping: parseFloat(price?.trim()) || 0,
         stock: parseInt(stock?.trim(), 10) || 0,
       };
     }).filter(v => v.name && v.sku);
@@ -393,7 +395,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => append({ id: uuidv4(), sku: '', name: '', price: 0, stock: 0 })}
+                                    onClick={() => append({ id: uuidv4(), sku: '', name: '', priceDropshipping: 0, stock: 0 })}
                                 >
                                     Add Variant
                                 </Button>
@@ -436,7 +438,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                             />
                             <FormField
                               control={form.control}
-                              name={`variants.${index}.price`}
+                              name={`variants.${index}.priceDropshipping`}
                               render={({ field }) => (
                                 <FormItem className="col-span-2">
                                   <FormControl>
@@ -482,10 +484,10 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                           control={form.control}
-                          name="price"
+                          name="priceDropshipping"
                           render={({ field }) => (
                               <FormItem>
-                                  <FormLabel>Price</FormLabel>
+                                  <FormLabel>Precio Dropshipping</FormLabel>
                                   <FormControl>
                                       <Input 
                                           type="number" 
@@ -506,7 +508,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                             name="cost"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Cost</FormLabel>
+                                    <FormLabel>Costo</FormLabel>
                                     <FormControl>
                                         <Input type="number" step="0.01" placeholder="e.g., 45.50" {...field} value={field.value ?? ''} />
                                     </FormControl>

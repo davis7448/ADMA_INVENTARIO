@@ -214,7 +214,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                           </div>
                         )}
                         
-                        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 pt-4 text-center">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-4 text-center">
                              <Card>
                                 <CardHeader className="pb-2">
                                     <CardDescription>Stock Físico</CardDescription>
@@ -255,14 +255,6 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                     <p className="text-2xl font-bold text-destructive">{product.damagedStock || 0}</p>
                                 </CardContent>
                             </Card>
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardDescription>Price</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-2xl font-bold">${product.price.toLocaleString('en-US')}</p>
-                                </CardContent>
-                            </Card>
                         </div>
                     </div>
                   </div>
@@ -293,7 +285,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                     <TableRow key={variant.id}>
                                         <TableCell className="font-medium">{variant.name}</TableCell>
                                         <TableCell>{variant.sku}</TableCell>
-                                        <TableCell className="text-right">${variant.price.toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">${variant.priceDropshipping.toFixed(2)}</TableCell>
                                         <TableCell className="text-right font-semibold">{variant.stock}</TableCell>
                                     </TableRow>
                                 ))}
@@ -302,6 +294,26 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                     </CardContent>
                 </Card>
               )}
+
+              <Card>
+                <CardHeader>
+                    <CardTitle>Lista de Precios</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableBody>
+                            <TableRow>
+                                <TableCell className="font-medium">Precio Dropshipping</TableCell>
+                                <TableCell className="text-right font-semibold text-lg">${(product.priceDropshipping || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                                <TableCell className="font-medium">Precio x Mayor</TableCell>
+                                <TableCell className="text-right font-semibold text-lg">${(product.priceWholesale || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </CardContent>
+              </Card>
 
               {product.reservations && product.reservations.length > 0 && (
                 <Card>

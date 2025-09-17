@@ -173,7 +173,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                     'Tipo': 'variable',
                     ...baseData,
                     'Stock Físico': variant.stock,
-                    'Precio': variant.price,
+                    'Precio Dropshipping': variant.priceDropshipping,
+                    'Precio x Mayor': variant.priceWholesale,
                 }));
             } else {
                 return {
@@ -182,7 +183,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                     'Tipo': 'simple',
                     ...baseData,
                     'Stock Físico': p.stock,
-                    'Precio': p.price,
+                    'Precio Dropshipping': p.priceDropshipping,
+                    'Precio x Mayor': p.priceWholesale,
                 };
             }
         });
@@ -332,7 +334,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                             <TableCell>{product.stock}</TableCell>
                                             <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
                                             <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
-                                            <TableCell>${Math.round(product.price).toFixed(0)}</TableCell>
+                                            <TableCell>${Math.round(product.priceDropshipping).toFixed(0)}</TableCell>
                                             {canEdit && (
                                                 <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
                                                     <DropdownMenu>
@@ -386,7 +388,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                                 <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
                                                                     <TableCell>{variant.name}</TableCell>
                                                                     <TableCell>{variant.sku}</TableCell>
-                                                                    <TableCell>${variant.price.toFixed(0)}</TableCell>
+                                                                    <TableCell>${variant.priceDropshipping.toFixed(0)}</TableCell>
                                                                     <TableCell>{variant.stock}</TableCell>
                                                                 </TableRow>
                                                             ))}

@@ -10,7 +10,8 @@ const ProductVariantSchema = z.object({
   id: z.string(),
   name: z.string().min(1, 'Variant name is required.'),
   sku: z.string().min(1, 'Variant SKU is required.'),
-  price: z.coerce.number().min(0, 'Price must be non-negative.'),
+  priceDropshipping: z.coerce.number().min(0, 'Price must be non-negative.'),
+  priceWholesale: z.coerce.number().min(0, 'Price must be non-negative.').optional(),
   stock: z.coerce.number().int().min(0, 'Stock must be non-negative.'),
 });
 
@@ -23,7 +24,11 @@ const ProductFormSchemaBase = z.object({
   }),
   categoryId: z.string().min(1, 'Category is required.'),
   vendorId: z.string().min(1, 'Supplier is required.'),
-  price: z.preprocess(
+  priceDropshipping: z.preprocess(
+    (val) => (String(val).trim() === '' ? undefined : val),
+    z.coerce.number({ invalid_type_error: 'Price must be a number.' }).min(0, 'Price must be a non-negative number.').optional()
+  ),
+  priceWholesale: z.preprocess(
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Price must be a number.' }).min(0, 'Price must be a non-negative number.').optional()
   ),
