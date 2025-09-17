@@ -538,15 +538,16 @@ export default function LogisticsPage() {
         }
     
         let productToDamage: (Product | (ProductVariant & { parentId: string })) | undefined;
+        const lowercasedSku = damagedSku.toLowerCase();
         
         // Find if the SKU belongs to a simple product or a variant
-        let parentProduct = allProductsList.find(p => p.productType === 'simple' && p.sku === damagedSku);
+        let parentProduct = allProductsList.find(p => p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku);
         if (parentProduct) {
             productToDamage = parentProduct;
         } else {
-            parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku === damagedSku));
+            parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku.toLowerCase() === lowercasedSku));
             if (parentProduct) {
-                const variant = parentProduct.variants?.find(v => v.sku === damagedSku);
+                const variant = parentProduct.variants?.find(v => v.sku.toLowerCase() === lowercasedSku);
                 if (variant) {
                     productToDamage = { ...variant, parentId: parentProduct.id };
                 }
@@ -1120,3 +1121,4 @@ export default function LogisticsPage() {
     
 
     
+
