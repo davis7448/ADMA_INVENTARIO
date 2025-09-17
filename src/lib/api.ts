@@ -135,7 +135,7 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     delete dataToAdd.cost;
   }
   if (dataToAdd.priceWholesale === undefined || dataToAdd.priceWholesale === null) {
-    delete dataToAdd.priceWholesale;
+    dataToAdd.priceWholesale = 0;
   }
 
   const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
@@ -275,9 +275,9 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         const productData = productSnap.data() as Product;
         productNameForMovement = productData.name;
         
-        let updateData: Record<string, any> = {};
+        const updateData: Record<string, any> = {};
+        let currentStock = productData.stock || 0;
 
-        // Determine product name for movement log and update stock
         if (productData.productType === 'variable') {
             const variants = [...(productData.variants || [])];
             const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
@@ -288,8 +288,9 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
+            currentStock = variant.stock || 0;
 
-            const newVariantStock = (variant.stock || 0) - quantity;
+            const newVariantStock = currentStock - quantity;
             if (newVariantStock < 0) {
                 throw new Error(`Cannot register damage for variant ${variant.name}. Stock would become negative.`);
             }
@@ -299,15 +300,14 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             
             updateData.variants = variants;
             updateData.stock = newTotalStock;
-
         } else {
-            const newStock = (productData.stock || 0) - quantity;
+            const newStock = currentStock - quantity;
             if (newStock < 0) {
                 throw new Error(`Cannot register damage for product ${productData.name}. Stock would become negative.`);
             }
             updateData.stock = newStock;
         }
-
+        
         const newDamagedStock = (productData.damagedStock || 0) + quantity;
         updateData.damagedStock = newDamagedStock;
         
@@ -1347,23 +1347,25 @@ export const resolveStaleReservationAlert = async (alertId: string): Promise<voi
 };
 
 // Stock Alert Functions
-export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> => {
+export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise<GetStockAlertsResult> => {
     const metadataRef = doc(db, 'stockAlertsCache', 'metadata');
-    const metadataSnap = await getDoc(metadataRef);
-
-    if (metadataSnap.exists()) {
-        const lastGenerated = (metadataSnap.data().lastGenerated as Timestamp).toDate();
-        if (isToday(lastGenerated)) {
-            // Data is fresh, return from cache
-            const alertsCol = collection(db, 'stockAlertsCache');
-            const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
-            const alertSnapshot = await getDocs(q);
-            const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
-            return { alerts, lastGenerated: lastGenerated.toISOString() };
+    
+    if (!forceRegenerate) {
+        const metadataSnap = await getDoc(metadataRef);
+        if (metadataSnap.exists()) {
+            const lastGenerated = (metadataSnap.data().lastGenerated as Timestamp).toDate();
+            if (isToday(lastGenerated)) {
+                // Data is fresh, return from cache
+                const alertsCol = collection(db, 'stockAlertsCache');
+                const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
+                const alertSnapshot = await getDocs(q);
+                const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
+                return { alerts, lastGenerated: lastGenerated.toISOString() };
+            }
         }
     }
 
-    // Data is stale or doesn't exist, regenerate
+    // Data is stale or doesn't exist, or regeneration is forced
     try {
         const [products, allMovements, rotationCategories] = await Promise.all([
             getProducts(),
@@ -1485,4 +1487,3 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
     }
 }
     
-

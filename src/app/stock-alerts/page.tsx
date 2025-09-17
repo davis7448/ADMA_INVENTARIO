@@ -4,6 +4,8 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { StockAlertsContent } from '@/components/stock-alerts-content';
 import { subDays } from 'date-fns';
 
+export const revalidate = 0; // Disable caching for this page
+
 export default async function StockAlertsPage() {
     const result = await getOrGenerateStockAlerts();
 
