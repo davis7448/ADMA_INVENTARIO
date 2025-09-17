@@ -39,6 +39,15 @@ export default function DashboardOrdersChart({ data }: DashboardOrdersChartProps
                 labelFormatter={(value) => new Date(value).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })}
             />}
           />
+          <XAxis
+            dataKey="date"
+            stroke="#888888"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={8}
+            tickFormatter={(value) => new Date(value).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+          />
           <YAxis
             stroke="#888888"
             fontSize={12}
