@@ -292,9 +292,14 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
 
-            if (variant.stock >= quantity) {
+            // Reduce stock from the variant, not the main product
+             if (variant.stock >= quantity) {
                 variant.stock -= quantity;
             } else {
+                // If there's not enough stock in the variant, what happens?
+                // For now, let's assume this is an error condition.
+                // Or maybe it should pull from pending stock first?
+                // For now, simple validation.
                 throw new Error(`Not enough stock for variant ${variant.name} to mark as damaged. Available: ${variant.stock}, Damaged: ${quantity}`);
             }
 
@@ -303,6 +308,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             updateData.stock = variants.reduce((acc, v) => acc + v.stock, 0);
 
         } else { // Simple product
+             // If it's a simple product, reduce its stock
              if (productData.stock >= quantity) {
                 updateData.stock = productData.stock - quantity;
             } else {
@@ -743,28 +749,40 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         }
         const orderData = orderSnap.data() as DispatchOrder;
 
+        // Get all products to have a local map for names and SKUs.
         const allProductsInOrder = await getProducts();
         const productMap = new Map(allProductsInOrder.map(p => [p.id, p]));
 
-        const existingExceptions = orderData.exceptions || [];
-        const allExceptionsForValidation = [...existingExceptions, ...newExceptions];
-
-        const productExceptionQuantities: Record<string, number> = {};
-        for (const ex of allExceptionsForValidation) {
+        // Calculate quantities of products in existing exceptions.
+        const existingExceptionQuantities: Record<string, number> = {};
+        for (const ex of orderData.exceptions || []) {
             for (const p of ex.products) {
                 const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
-                productExceptionQuantities[key] = (productExceptionQuantities[key] || 0) + p.quantity;
+                existingExceptionQuantities[key] = (existingExceptionQuantities[key] || 0) + p.quantity;
             }
         }
 
+        // Calculate quantities of products in the new exceptions being added.
+        const newExceptionQuantities: Record<string, number> = {};
+        for (const ex of newExceptions) {
+            for (const p of ex.products) {
+                const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+                newExceptionQuantities[key] = (newExceptionQuantities[key] || 0) + p.quantity;
+            }
+        }
+
+        // Validate that the total exceptions (new + existing) do not exceed the order quantity for any product.
         for (const orderProduct of orderData.products) {
             const key = orderProduct.variantId ? `${orderProduct.productId}-${orderProduct.variantId}` : orderProduct.productId;
-            if ((productExceptionQuantities[key] || 0) > orderProduct.quantity) {
-                throw new Error(`La cantidad total de excepción para ${orderProduct.name} (${productExceptionQuantities[key]}) excede la cantidad de la orden (${orderProduct.quantity}).`);
+            const totalExceptionQty = (existingExceptionQuantities[key] || 0) + (newExceptionQuantities[key] || 0);
+            
+            if (totalExceptionQty > orderProduct.quantity) {
+                throw new Error(`La cantidad total de excepción para producto ${orderProduct.name} (${totalExceptionQty}) excede la cantidad de la orden (${orderProduct.quantity}).`);
             }
         }
 
-        const finalExceptions = [...existingExceptions, ...newExceptions];
+        // If validation passes, proceed.
+        const finalExceptions = [...(orderData.exceptions || []), ...newExceptions];
         const status = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
 
         transaction.update(orderRef, {
@@ -773,6 +791,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             exceptions: finalExceptions
         });
         
+        // Handle stock movement for new exceptions.
         for (const ex of newExceptions) {
             for (const exProd of ex.products) {
                 const productRef = doc(db, 'products', exProd.productId);
@@ -786,6 +805,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
                         transaction.update(productRef, { pendingStock: newPendingStock });
                     }
 
+                    // Create an audit alert for the exception.
                     const alertRef = doc(collection(db, 'auditAlerts'));
                     const newAlert: Omit<AuditAlert, 'id'> = {
                         date: Timestamp.now(),
@@ -1495,3 +1515,4 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
     }
 }
     
+
