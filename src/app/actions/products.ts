@@ -261,13 +261,13 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
         const auth = getAuth(app);
         const user = auth.currentUser;
         const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => {
-            const product: Omit<Product, 'id'> = {
+            const product: Partial<Omit<Product, 'id'>> = {
                 name: p.name,
                 sku: p.sku,
                 description: p.description,
                 priceDropshipping: p.pricedropshipping,
                 priceWholesale: p.pricewholesale ?? 0,
-                cost: p.cost ?? undefined,
+                cost: p.cost,
                 stock: p.stock,
                 categoryId: p.categoryid,
                 vendorId: p.vendorid,
@@ -278,12 +278,14 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
                 purchaseDate: p.purchasedate ? new Date(p.purchasedate).toISOString() : undefined,
                 imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
                 imageHint: 'product',
-                createdBy: user ? { id: user.uid, name: user.displayName || user.email! } : undefined
             };
-            if (product.cost === undefined) {
+            if (user) {
+              product.createdBy = { id: user.uid, name: user.displayName || user.email! };
+            }
+            if (product.cost === undefined || product.cost === null) {
                 delete product.cost;
             }
-            return product;
+            return product as Omit<Product, 'id'>;
         });
 
         await addMultipleProducts(productsToAdd);
