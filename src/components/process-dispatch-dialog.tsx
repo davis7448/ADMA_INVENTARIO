@@ -200,7 +200,7 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                                             </TableCell>
                                             <TableCell>
                                                 {exceptionTracking ? (
-                                                    <span className="font-mono text-xs bg-destructive/10 text-destructive-foreground px-2 py-1 rounded">
+                                                    <span className="font-mono text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded">
                                                         {exceptionTracking}
                                                     </span>
                                                 ) : (
@@ -227,80 +227,82 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                         rows={5}
                     />
                 </div>
-                <div>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Excepciones (No Enviados)</CardTitle>
-                            <CardDescription>Agrupa por guía los productos que no salieron. Se moverán a stock pendiente.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex gap-2">
-                                <Input 
-                                    placeholder="Guía de la excepción..."
-                                    value={newExceptionTracking}
-                                    onChange={(e) => setNewExceptionTracking(e.target.value)}
-                                />
-                                <Button onClick={handleAddExceptionGroup}>Añadir Grupo</Button>
-                            </div>
+                {!isPartial && (
+                  <div>
+                      <Card>
+                          <CardHeader>
+                              <CardTitle>Excepciones (No Enviados)</CardTitle>
+                              <CardDescription>Agrupa por guía los productos que no salieron. Se moverán a stock pendiente.</CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                              <div className="flex gap-2">
+                                  <Input 
+                                      placeholder="Guía de la excepción..."
+                                      value={newExceptionTracking}
+                                      onChange={(e) => setNewExceptionTracking(e.target.value)}
+                                  />
+                                  <Button onClick={handleAddExceptionGroup}>Añadir Grupo</Button>
+                              </div>
 
-                            <Accordion type="multiple" className="w-full">
-                                {exceptions.map((ex, groupIndex) => (
-                                <AccordionItem value={`item-${groupIndex}`} key={groupIndex}>
-                                    <AccordionTrigger>
-                                        <div className="flex justify-between items-center w-full pr-4">
-                                            <span>Guía: {ex.trackingNumber}</span>
-                                            <div
-                                                role="button"
-                                                className="p-1 rounded-md hover:bg-muted"
-                                                onClick={(e) => { e.stopPropagation(); handleRemoveExceptionGroup(groupIndex)}}
-                                            >
-                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                            </div>
-                                        </div>
-                                    </AccordionTrigger>
-                                    <AccordionContent className="space-y-2 pt-2">
-                                        {ex.products.map((prod, prodIndex) => (
-                                            <div key={prodIndex} className="flex items-center gap-2 pl-2">
-                                                <Select 
-                                                    value={prod.variantId ? `${prod.productId}|${prod.variantId}` : prod.productId} 
-                                                    onValueChange={(val) => handleExceptionProductChange(groupIndex, prodIndex, 'productId', val)}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Producto" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {selectableProducts.map(p => (
-                                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <Input 
-                                                    type="number" 
-                                                    className="w-24"
-                                                    placeholder="Cant."
-                                                    value={prod.quantity}
-                                                    onChange={(e) => handleExceptionProductChange(groupIndex, prodIndex, 'quantity', e.target.value)}
-                                                    min="1"
-                                                />
-                                                <Button variant="ghost" size="icon" onClick={() => handleRemoveProductFromException(groupIndex, prodIndex)}>
-                                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                                </Button>
-                                            </div>
-                                        ))}
-                                        <Button variant="outline" size="sm" className="ml-2 mt-2" onClick={() => handleAddProductToException(groupIndex)}>
-                                            <Plus className="mr-2 h-4 w-4" /> Añadir Producto
-                                        </Button>
-                                    </AccordionContent>
-                                </AccordionItem>
-                                ))}
-                            </Accordion>
-                            
-                            {exceptions.length === 0 && (
-                                <p className="text-sm text-muted-foreground text-center py-4">No hay excepciones registradas.</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
+                              <Accordion type="multiple" className="w-full">
+                                  {exceptions.map((ex, groupIndex) => (
+                                  <AccordionItem value={`item-${groupIndex}`} key={groupIndex}>
+                                      <AccordionTrigger>
+                                          <div className="flex justify-between items-center w-full pr-4">
+                                              <span>Guía: {ex.trackingNumber}</span>
+                                              <div
+                                                  role="button"
+                                                  className="p-1 rounded-md hover:bg-muted"
+                                                  onClick={(e) => { e.stopPropagation(); handleRemoveExceptionGroup(groupIndex)}}
+                                              >
+                                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                              </div>
+                                          </div>
+                                      </AccordionTrigger>
+                                      <AccordionContent className="space-y-2 pt-2">
+                                          {ex.products.map((prod, prodIndex) => (
+                                              <div key={prodIndex} className="flex items-center gap-2 pl-2">
+                                                  <Select 
+                                                      value={prod.variantId ? `${prod.productId}|${prod.variantId}` : prod.productId} 
+                                                      onValueChange={(val) => handleExceptionProductChange(groupIndex, prodIndex, 'productId', val)}
+                                                  >
+                                                      <SelectTrigger>
+                                                          <SelectValue placeholder="Producto" />
+                                                      </SelectTrigger>
+                                                      <SelectContent>
+                                                          {selectableProducts.map(p => (
+                                                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                                          ))}
+                                                      </SelectContent>
+                                                  </Select>
+                                                  <Input 
+                                                      type="number" 
+                                                      className="w-24"
+                                                      placeholder="Cant."
+                                                      value={prod.quantity}
+                                                      onChange={(e) => handleExceptionProductChange(groupIndex, prodIndex, 'quantity', e.target.value)}
+                                                      min="1"
+                                                  />
+                                                  <Button variant="ghost" size="icon" onClick={() => handleRemoveProductFromException(groupIndex, prodIndex)}>
+                                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                                  </Button>
+                                              </div>
+                                          ))}
+                                          <Button variant="outline" size="sm" className="ml-2 mt-2" onClick={() => handleAddProductToException(groupIndex)}>
+                                              <Plus className="mr-2 h-4 w-4" /> Añadir Producto
+                                          </Button>
+                                      </AccordionContent>
+                                  </AccordionItem>
+                                  ))}
+                              </Accordion>
+                              
+                              {exceptions.length === 0 && (
+                                  <p className="text-sm text-muted-foreground text-center py-4">No hay excepciones registradas.</p>
+                              )}
+                          </CardContent>
+                      </Card>
+                  </div>
+                )}
             </div>
         </div>
 
