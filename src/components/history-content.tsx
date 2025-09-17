@@ -55,6 +55,7 @@ export function HistoryContent({
     const [filterPlatformId, setFilterPlatformId] = useState<string>('all');
     const [filterCarrierId, setFilterCarrierId] = useState<string>('all');
     const [filterProductId, setFilterProductId] = useState<string>('all');
+    const [filterMovementType, setFilterMovementType] = useState<string>('all');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
     const [productComboboxOpen, setProductComboboxOpen] = useState(false);
 
@@ -83,6 +84,11 @@ export function HistoryContent({
             dispatchOrders = dispatchOrders.filter(o => o.products.some(p => p.productId === filterProductId));
         }
 
+        // Filter Movements by Type
+        if (filterMovementType !== 'all') {
+            movements = movements.filter(m => m.type === filterMovementType);
+        }
+
         // Filter by Platform (only affects dispatch orders)
         if (filterPlatformId !== 'all') {
             dispatchOrders = dispatchOrders.filter(o => o.platformId === filterPlatformId);
@@ -99,7 +105,7 @@ export function HistoryContent({
 
         return { filteredMovements: movements, filteredDispatchOrders: dispatchOrders };
 
-    }, [initialMovements, initialDispatchOrders, filterPlatformId, filterCarrierId, filterProductId, dateRange]);
+    }, [initialMovements, initialDispatchOrders, filterPlatformId, filterCarrierId, filterProductId, filterMovementType, dateRange]);
 
 
     const productsById = useMemo(() => allProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>), [allProducts]);
@@ -177,14 +183,15 @@ export function HistoryContent({
         setFilterPlatformId('all');
         setFilterCarrierId('all');
         setFilterProductId('all');
+        setFilterMovementType('all');
         setDateRange(undefined);
     };
 
-    const hasActiveFilters = filterPlatformId !== 'all' || filterCarrierId !== 'all' || filterProductId !== 'all' || dateRange;
+    const hasActiveFilters = filterPlatformId !== 'all' || filterCarrierId !== 'all' || filterProductId !== 'all' || filterMovementType !== 'all' || dateRange;
 
     const renderFilters = () => (
         <div className="mb-6 space-y-4 p-4 border rounded-lg bg-muted/50">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div className="space-y-2">
                     <Label>Filtrar por producto</Label>
                     <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
@@ -231,6 +238,18 @@ export function HistoryContent({
                         <SelectContent>
                             <SelectItem value="all">Todas</SelectItem>
                             {allCarriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="movement-type-filter">Tipo de Movimiento</Label>
+                    <Select value={filterMovementType} onValueChange={setFilterMovementType}>
+                        <SelectTrigger id="movement-type-filter"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="Entrada">Entrada</SelectItem>
+                            <SelectItem value="Salida">Salida</SelectItem>
+                            <SelectItem value="Averia">Averia</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
