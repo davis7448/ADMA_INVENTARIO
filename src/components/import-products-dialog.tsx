@@ -103,7 +103,6 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     }
 
     startTransition(async () => {
-        // Sanitize the objects before passing them to the server action.
         const plainProducts = JSON.parse(JSON.stringify(products));
         const result = await importProductsAction(plainProducts);
         if (result.success) {
