@@ -536,14 +536,37 @@ export default function LogisticsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
             return;
         }
+    
+        let productToDamage: (Product | (ProductVariant & { parentId: string })) | undefined;
+        
+        // Find if the SKU belongs to a simple product or a variant
+        let parentProduct = allProductsList.find(p => p.productType === 'simple' && p.sku === damagedSku);
+        if (parentProduct) {
+            productToDamage = parentProduct;
+        } else {
+            parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku === damagedSku));
+            if (parentProduct) {
+                const variant = parentProduct.variants?.find(v => v.sku === damagedSku);
+                if (variant) {
+                    productToDamage = { ...variant, parentId: parentProduct.id };
+                }
+            }
+        }
+    
+        if (!productToDamage) {
+            toast({ variant: 'destructive', title: 'Error', description: 'SKU del producto no encontrado.' });
+            return;
+        }
+
+        const productId = 'parentId' in productToDamage ? productToDamage.parentId : productToDamage.id;
 
         try {
             await registerDamagedProduct(
-                damagedSku, // Here we pass the SKU and the API will find the product
-                1, 
-                damagedSku, 
-                damageCarrier, 
-                damageTrackingNumber, 
+                productId,
+                1,
+                damagedSku,
+                damageCarrier,
+                damageTrackingNumber,
                 damageDescription
             );
     
