@@ -28,6 +28,7 @@ import {
     TableRow,
   } from '@/components/ui/table';
 import { DropdownMenuItem } from './ui/dropdown-menu';
+import { format } from 'date-fns';
 
 interface ImportProductsDialogProps {
   onImportSuccess: () => void;
@@ -43,9 +44,6 @@ const sanitizeHeaders = (products: ProductToImport[]): ProductToImport[] => {
         const sanitizedProduct: ProductToImport = {};
         for (const key in product) {
             let newKey = key.trim().toLowerCase().replace(/\s+/g, '');
-            // Specific corrections
-            if (newKey === 'categoryld') newKey = 'categoryid';
-            if (newKey === 'vendorld') newKey = 'vendorid';
             sanitizedProduct[newKey] = product[key];
         }
         return sanitizedProduct;
@@ -76,7 +74,10 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet, { defval: null }) as ProductToImport[];
+            const json = XLSX.utils.sheet_to_json(worksheet, { 
+                defval: null,
+                cellDates: true, // This is crucial to parse Excel dates
+            }) as ProductToImport[];
 
             if (json.length > 0) {
                 // Sanitize headers first (convert to lowercase and fix typos)
@@ -163,9 +164,25 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     ];
     const data = [templateHeaders.reduce((acc, h) => ({ ...acc, [h]: ''}), {})];
     const worksheet = XLSX.utils.json_to_sheet(data);
+    
+    // Set a date format for the purchasedate column
+    // This is a hint for Excel users how to format the date
+    if(worksheet['J1']) { // 'J' is the 10th column, for purchasedate
+        worksheet['J2'] = { t: 'd', v: new Date() };
+        worksheet['!cols'] = worksheet['!cols'] || [];
+        worksheet['!cols'][9] = { wch: 12 }; // Set column width
+    }
+    
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Productos");
     XLSX.writeFile(workbook, "plantilla_productos_simples.xlsx");
+  }
+
+  const formatCell = (value: any) => {
+    if (value instanceof Date) {
+        return format(value, 'dd/MM/yyyy');
+    }
+    return String(value);
   }
 
   return (
@@ -225,7 +242,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
                     <TableBody>
                         {products.slice(0, 10).map((product, index) => (
                             <TableRow key={index}>
-                                {Object.values(product).map((value, i) => <TableCell key={i}>{String(value)}</TableCell>)}
+                                {Object.keys(product).map((key) => <TableCell key={key}>{formatCell(product[key])}</TableCell>)}
                             </TableRow>
                         ))}
                          {products.length > 10 && (
