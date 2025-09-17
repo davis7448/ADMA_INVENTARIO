@@ -44,7 +44,7 @@ type NavItem = {
     },
     {
         label: 'Activos',
-        roles: ['admin', 'commercial'],
+        roles: ['admin'],
         children: [
             { href: '/suppliers', label: 'Suppliers', roles: ['admin', 'commercial'] },
             { href: '/categories', label: 'Categories', roles: ['admin', 'commercial'] },
