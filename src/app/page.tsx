@@ -107,7 +107,10 @@ export default function DashboardPage() {
         : null;
 
     let ordersInPeriod = allOrders.filter(order => {
+        if (!order.date) return false;
         const orderDate = new Date(order.date);
+        if (isNaN(orderDate.getTime())) return false;
+
         const dateMatch = orderDate >= fromDate && orderDate <= toDate;
         
         const platformMatch = filterPlatforms.length === 0 || filterPlatforms.includes(order.platformId);
@@ -131,7 +134,10 @@ export default function DashboardPage() {
     const totalPendingOrders = pendingAndPartialInPeriod.length;
 
     const returnMovementsInPeriod = allMovements.filter(m => {
+        if (!m.date) return false;
         const movementDate = new Date(m.date);
+        if (isNaN(movementDate.getTime())) return false;
+
         const isReturn = m.type === 'Entrada' && (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia'));
         if (!isReturn || !(movementDate >= fromDate && movementDate <= toDate)) {
             return false;

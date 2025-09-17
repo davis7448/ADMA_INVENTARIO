@@ -395,10 +395,11 @@ export const getInventoryMovements = async (days?: number): Promise<InventoryMov
     const movementSnapshot = await getDocs(q);
     const movementList = movementSnapshot.docs.map(doc => {
       const data = doc.data();
+      const dateValue = data.date;
       return { 
         id: doc.id, 
         ...data,
-        date: (data.date as Timestamp).toDate().toISOString(),
+        date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
       } as InventoryMovement
     });
     return movementList;
@@ -516,10 +517,11 @@ export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
         return { 
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString()
+            date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
         } as DispatchOrder
     });
 }
@@ -683,10 +685,11 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
     const alertSnapshot = await getDocs(query(alertsCol));
     const alertList = alertSnapshot.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
         return {
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
+            date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -984,8 +987,8 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
       return { 
         id: doc.id, 
         ...data,
-        alertDate: (data.alertDate as Timestamp).toDate().toISOString(),
-        reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
+        alertDate: data.alertDate,
+        reservationDate: data.reservationDate,
       } as StaleReservationAlert;
     });
     return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
