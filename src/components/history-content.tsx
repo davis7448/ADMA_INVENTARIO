@@ -326,6 +326,8 @@ export function HistoryContent({
                             <TableHead>Producto</TableHead>
                             <TableHead>Tipo</TableHead>
                             <TableHead>Usuario</TableHead>
+                            <TableHead>Plataforma</TableHead>
+                            <TableHead>Transportadora</TableHead>
                             <TableHead className="text-center">Cantidad</TableHead>
                             <TableHead>Notas</TableHead>
                         </TableRow>
@@ -345,13 +347,15 @@ export function HistoryContent({
                             </Badge>
                             </TableCell>
                             <TableCell>{movement.userName || 'Sistema'}</TableCell>
+                            <TableCell>{movement.platformId ? platformNames[movement.platformId] : 'N/A'}</TableCell>
+                            <TableCell>{movement.carrierId ? carrierNames[movement.carrierId] : 'N/A'}</TableCell>
                             <TableCell className="text-center">{movement.quantity}</TableCell>
                             <TableCell className="text-muted-foreground">{movement.notes}</TableCell>
                         </TableRow>
                         ))
                     ) : (
                         <TableRow>
-                        <TableCell colSpan={8} className="text-center h-24">
+                        <TableCell colSpan={9} className="text-center h-24">
                             No se encontraron movimientos para los filtros seleccionados.
                         </TableCell>
                         </TableRow>
