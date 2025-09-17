@@ -129,7 +129,10 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
         return;
     }
 
-    const allProductsInExceptions = [...(order.exceptions || []).flatMap(ex => ex.products), ...exceptions.flatMap(ex => ex.products)];
+    const allProductsInNewExceptions = exceptions.flatMap(ex => ex.products);
+    const allProductsInExistingExceptions = order.exceptions?.flatMap(ex => ex.products) || [];
+    const allProductsInExceptions = [...allProductsInExistingExceptions, ...allProductsInNewExceptions];
+
     const productQuantities: Record<string, number> = {};
 
     for(const p of allProductsInExceptions) {
