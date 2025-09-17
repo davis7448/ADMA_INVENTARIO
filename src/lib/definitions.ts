@@ -253,11 +253,17 @@ export const ImportProductSchema = z.object({
     name: z.string({ required_error: "La columna 'name' es obligatoria." }).min(1),
     sku: z.string().optional(),
     description: z.string({ required_error: "La columna 'description' es obligatoria." }).min(1),
-    imageUrl: z.string({ required_error: "La columna 'imageUrl' es obligatoria." }).url(),
+    imageUrl: z.string({ required_error: "La columna 'imageUrl' es obligatoria." }).url().optional().or(z.literal('')),
     imageHint: z.string().optional(),
     categoryId: z.string({ required_error: "La columna 'categoryId' es obligatoria." }).min(1),
-    priceDropshipping: z.coerce.number({ required_error: "La columna 'priceDropshipping' es obligatoria." }),
-    stock: z.coerce.number({ required_error: "La columna 'stock' es obligatoria." }).int(),
+    priceDropshipping: z.preprocess(
+      (val) => (val === null || String(val).trim() === '' ? undefined : val),
+      z.coerce.number().optional()
+    ),
+    stock: z.preprocess(
+      (val) => (val === null || String(val).trim() === '' ? undefined : val),
+      z.coerce.number().int().optional()
+    ),
     vendorId: z.string({ required_error: "La columna 'vendorId' es obligatoria." }).min(1),
     productType: z.enum(['simple', 'variable']).default('simple'),
     priceWholesale: z.coerce.number().optional(),
@@ -265,12 +271,28 @@ export const ImportProductSchema = z.object({
     purchaseDate: z.string().optional(), // String because it comes from Excel
     contentLink: z.string().url().optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
-    if (data.productType === 'simple' && (!data.sku || data.sku.trim() === '')) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['sku'],
-        message: 'La columna SKU es obligatoria para productos de tipo "simple".',
-      });
+    if (data.productType === 'simple') {
+      if (!data.sku || data.sku.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sku'],
+          message: 'La columna SKU es obligatoria para productos de tipo "simple".',
+        });
+      }
+      if (typeof data.priceDropshipping !== 'number') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['priceDropshipping'],
+          message: 'El precio es obligatorio para productos de tipo "simple".',
+        });
+      }
+      if (typeof data.stock !== 'number') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['stock'],
+          message: 'El stock es obligatorio para productos de tipo "simple".',
+        });
+      }
     }
   });
 
