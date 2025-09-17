@@ -75,6 +75,7 @@ export async function addProductAction(
       ...productData,
       productType: productData.productType,
       priceDropshipping: productData.priceDropshipping ?? 0,
+      priceWholesale: productData.priceWholesale ?? 0,
       stock: productData.stock ?? 0,
       purchaseDate: productData.purchaseDate?.toISOString(),
       imageUrl: imageUrl || `https://picsum.photos/seed/${productData.sku || uuidv4()}/600/400`,
@@ -169,6 +170,7 @@ export async function updateProductAction(
         const productUpdate: Partial<Omit<Product, 'id'>> = {
             ...productData,
             priceDropshipping: productData.priceDropshipping ?? 0,
+            priceWholesale: productData.priceWholesale ?? 0,
             stock: productData.stock ?? 0,
             purchaseDate: productData.purchaseDate?.toISOString(),
         };

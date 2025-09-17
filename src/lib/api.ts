@@ -130,6 +130,9 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     }
   }
 
+  // Remove undefined fields before sending to Firestore
+  if (dataToAdd.priceWholesale === undefined) delete (dataToAdd as any).priceWholesale;
+  if (dataToAdd.cost === undefined) delete (dataToAdd as any).cost;
 
   const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
