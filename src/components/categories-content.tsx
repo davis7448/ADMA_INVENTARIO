@@ -22,6 +22,7 @@ import type { Category } from '@/lib/types';
 import { AddCategoryForm } from '@/components/add-category-form';
 import { useAuth } from '@/hooks/use-auth';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 
 interface CategoriesContentProps {
     initialCategories: Category[];
@@ -74,7 +75,10 @@ export function CategoriesContent({ initialCategories }: CategoriesContentProps)
                   ) : (
                     categories.map((category) => (
                         <TableRow key={category.id}>
-                            <TableCell className="font-medium">{category.name}</TableCell>
+                            <TableCell className="font-medium">
+                              <div>{category.name}</div>
+                              <Badge variant="secondary" className="mt-1 font-mono">{category.id}</Badge>
+                            </TableCell>
                             <TableCell>{category.description}</TableCell>
                         </TableRow>
                     ))
