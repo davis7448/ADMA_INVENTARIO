@@ -46,11 +46,11 @@ type NavItem = {
         label: 'Activos',
         roles: ['admin'],
         children: [
-            { href: '/suppliers', label: 'Suppliers', roles: ['admin', 'commercial'] },
-            { href: '/categories', label: 'Categories', roles: ['admin', 'commercial'] },
-            { href: '/carriers', label: 'Carriers', roles: ['admin', 'commercial'] },
-            { href: '/platforms', label: 'Platforms', roles: ['admin', 'commercial'] },
-            { href: '/vendedores', label: 'Vendedores', roles: ['admin', 'commercial'] },
+            { href: '/suppliers', label: 'Suppliers', roles: ['admin'] },
+            { href: '/categories', label: 'Categories', roles: ['admin'] },
+            { href: '/carriers', label: 'Carriers', roles: ['admin'] },
+            { href: '/platforms', label: 'Platforms', roles: ['admin'] },
+            { href: '/vendedores', label: 'Vendedores', roles: ['admin'] },
         ],
     },
     {
@@ -65,11 +65,11 @@ type NavItem = {
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
     {
         label: 'Alertas',
-        roles: ['admin'],
+        roles: ['admin', 'logistics', 'commercial'],
         children: [
             { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
             { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin'], badge: 'stale_alerts' },
-            { href: '/stock-alerts', label: 'Stock', roles: ['admin'] },
+            { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'logistics'] },
         ]
     }
   ];
