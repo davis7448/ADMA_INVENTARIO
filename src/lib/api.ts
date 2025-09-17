@@ -119,7 +119,7 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
   }
   
-  const dataToAdd: Omit<Product, 'id'> & { purchaseDate?: Timestamp | string } = { ...product } as any;
+  const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
 
   if (product.purchaseDate) {
     const date = new Date(product.purchaseDate);
@@ -131,8 +131,8 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   }
 
   // Remove undefined fields before sending to Firestore
-  if (dataToAdd.priceWholesale === undefined) delete (dataToAdd as any).priceWholesale;
-  if (dataToAdd.cost === undefined) delete (dataToAdd as any).cost;
+  if (dataToAdd.priceWholesale === undefined) delete dataToAdd.priceWholesale;
+  if (dataToAdd.cost === undefined) delete dataToAdd.cost;
 
   const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
@@ -145,7 +145,7 @@ export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
     products.forEach((product) => {
       const docRef = doc(productsCol);
       
-      const dataToAdd: Omit<Product, 'id'> & { purchaseDate?: Timestamp | string } = { ...product } as any;
+      const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
       if (product.purchaseDate) {
         const date = new Date(product.purchaseDate);
         if (!isNaN(date.getTime())) {
@@ -153,6 +153,11 @@ export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
         } else {
           delete dataToAdd.purchaseDate;
         }
+      }
+
+      // Ensure 'cost' is not undefined before adding
+      if (dataToAdd.cost === undefined) {
+        delete dataToAdd.cost;
       }
       
       batch.set(docRef, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
@@ -264,39 +269,16 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         
         let updateData: Record<string, any> = { damagedStock: newDamagedStock };
 
-        // Also decrement stock from the correct variant or simple product
+        // Determine product name for movement log
         if (productData.productType === 'variable') {
-            const variants = productData.variants ? [...productData.variants] : [];
-            const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
-    
-            if (variantIndex === -1) {
-                throw new Error(`Variante con SKU ${variantSku} no encontrada en el producto ${productData.name}.`);
+            const variant = productData.variants?.find(v => v.sku.toLowerCase() === variantSku.toLowerCase());
+            if (variant) {
+                productNameForMovement = `${productData.name} (${variant.name})`;
             }
-            
-            const variant = variants[variantIndex];
-            productNameForMovement = `${productData.name} (${variant.name})`; // More specific name for movement
-            const currentVariantStock = variant.stock || 0;
-
-            if (currentVariantStock < quantity) {
-                throw new Error(`No hay suficiente stock para marcar como averiado en la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
-            }
-            
-            variants[variantIndex].stock = currentVariantStock - quantity;
-            const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
-            
-            updateData.variants = variants;
-            updateData.stock = newTotalStock;
-
-        } else if (productData.productType === 'simple' && productData.sku?.toLowerCase() === variantSku.toLowerCase()) {
-            const currentStock = productData.stock || 0;
-            if (currentStock < quantity) {
-                throw new Error(`No hay suficiente stock para marcar como averiado en ${productData.name}. Stock actual: ${currentStock}, se requieren: ${quantity}.`);
-            }
-            updateData.stock = currentStock - quantity;
-        } else {
-            throw new Error(`SKU ${variantSku} no encontrado en el producto simple ${productData.name}.`);
         }
-
+        
+        // This transaction now ONLY updates the damagedStock count.
+        // It no longer touches the main `stock` or `variants` stock.
         transaction.update(productRef, updateData);
     });
 
