@@ -87,7 +87,17 @@ export type AddProductFormState = {
 };
 
 export const EditProductFormSchema = ProductFormSchemaBase.extend({
-    image: z.any().optional(),
+  image: z
+    .any()
+    .optional()
+    .refine(
+        (file) => !file || (file instanceof File && file.size <= MAX_FILE_SIZE),
+        `Max file size is 2MB.`
+    )
+    .refine(
+        (file) => !file || (file instanceof File && ACCEPTED_IMAGE_TYPES.includes(file.type)),
+        "Only .jpg, .jpeg, .png and .webp formats are supported."
+    ),
 }).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
         if (!data.sku || data.sku.length === 0) {

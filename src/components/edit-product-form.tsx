@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { v4 as uuidv4 } from 'uuid';
@@ -41,7 +41,7 @@ import type { EditProductFormValues } from '@/lib/definitions';
 import { EditProductFormSchema } from '@/lib/definitions';
 import type { Supplier, Category, Product } from '@/lib/types';
 import Image from 'next/image';
-import { CalendarIcon, Trash2, Upload } from 'lucide-react';
+import { CalendarIcon, Trash2, Upload, Camera } from 'lucide-react';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/use-auth';
@@ -49,6 +49,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Calendar } from './ui/calendar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Alert, AlertTitle, AlertDescription } from './ui/alert';
 
 interface EditProductFormProps {
   product: Product;
@@ -65,6 +66,13 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
   const [isPending, startTransition] = useTransition();
   const [isImporting, setIsImporting] = useState(false);
   const [importText, setImportText] = useState('');
+  const [imagePreview, setImagePreview] useState<string | null>(product.imageUrl);
+
+  // Camera state
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const form = useForm<EditProductFormValues>({
     resolver: zodResolver(EditProductFormSchema),
@@ -123,8 +131,62 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
             contentLink: product.contentLink || '',
             variants: product.variants?.map(v => ({...v, id: v.id || uuidv4()})) || [],
         });
+        setImagePreview(product.imageUrl);
     }
   }, [open, form, product]);
+
+  // Camera Permission Effect
+  useEffect(() => {
+    if (isCameraOpen) {
+      const getCameraPermission = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          setHasCameraPermission(true);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+          }
+        } catch (error) {
+          console.error('Error accessing camera:', error);
+          setHasCameraPermission(false);
+        }
+      };
+      getCameraPermission();
+
+       return () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+        }
+      }
+    }
+  }, [isCameraOpen]);
+
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        
+        if (context) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg');
+            setImagePreview(dataUrl);
+
+            canvas.toBlob(blob => {
+                if (blob) {
+                    const file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+                    form.setValue('image', file, { shouldValidate: true });
+                }
+            }, 'image/jpeg');
+
+            setIsCameraOpen(false);
+        }
+    }
+  };
+
 
   const handleImport = () => {
     const lines = importText.trim().split('\n');
@@ -291,30 +353,45 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                           </FormItem>
                       )}
                   />
-                  <div className="flex gap-4 items-center">
-                      <Image src={product.imageUrl} alt={product.name} width={64} height={64} className="rounded-md object-cover" />
-                      <FormField
-                          control={form.control}
-                          name="image"
-                          render={({ field: { onChange, value, ...rest } }) => (
-                              <FormItem className="flex-1">
-                                  <FormLabel>New Product Image (Optional)</FormLabel>
+                  <FormField
+                      control={form.control}
+                      name="image"
+                      render={({ field: { onChange, value, ...rest } }) => (
+                          <FormItem>
+                              <FormLabel>Product Image</FormLabel>
+                                <div className="flex items-center gap-4">
+                                {imagePreview && (
+                                    <Image src={imagePreview} alt="Product preview" width={80} height={80} className="rounded-md object-cover" />
+                                )}
+                                <div className="flex-1 space-y-2">
                                   <FormControl>
-                                  <Input 
+                                    <Input 
                                       type="file" 
                                       accept="image/png, image/jpeg, image/webp"
                                       onChange={(e) => {
                                           const file = e.target.files?.[0];
-                                          onChange(file);
+                                          if (file) {
+                                            onChange(file);
+                                            const reader = new FileReader();
+                                            reader.onloadend = () => {
+                                              setImagePreview(reader.result as string);
+                                            };
+                                            reader.readAsDataURL(file);
+                                          }
                                       }}
                                       {...rest}
-                                  />
+                                    />
                                   </FormControl>
-                                  <FormMessage />
-                              </FormItem>
-                          )}
-                      />
-                  </div>
+                                  <Button type="button" variant="outline" onClick={() => setIsCameraOpen(true)}>
+                                      <Camera className="mr-2 h-4 w-4" />
+                                      Take Photo
+                                  </Button>
+                                </div>
+                              </div>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
                   <FormField
                       control={form.control}
                       name="contentLink"
@@ -655,6 +732,38 @@ CAM-01-V,Verde,25.00,20.00,12"
             <Button onClick={handleImport}>Importar</Button>
           </DialogFooter>
         </DialogContent>
+      </Dialog>
+        {/* Camera Dialog */}
+       <Dialog open={isCameraOpen} onOpenChange={setIsCameraOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Take Photo</DialogTitle>
+                    <DialogDescription>
+                        Position the product in front of the camera and capture the image.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    {hasCameraPermission === false ? (
+                        <Alert variant="destructive">
+                            <AlertTitle>Camera Access Denied</AlertTitle>
+                            <AlertDescription>
+                                Please enable camera permissions in your browser settings to use this feature.
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <div>
+                            <video ref={videoRef} className="w-full aspect-video rounded-md" autoPlay muted />
+                            <canvas ref={canvasRef} className="hidden" />
+                        </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="secondary" onClick={() => setIsCameraOpen(false)}>Cancel</Button>
+                    <Button onClick={handleCapture} disabled={hasCameraPermission !== true}>
+                        Capture
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
       </Dialog>
     </>
   );
