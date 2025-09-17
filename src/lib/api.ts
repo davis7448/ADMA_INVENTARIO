@@ -88,7 +88,7 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     product.priceDropshipping = 0; 
   }
 
-  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
+  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0, restockThreshold: 0 });
   return docRef.id;
 };
 
@@ -100,7 +100,10 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
     productUpdate.priceDropshipping = 0;
   }
 
-  await updateDoc(productRef, productUpdate);
+  // Ensure restockThreshold is not part of the update
+  const { restockThreshold, ...updateData } = productUpdate as any;
+
+  await updateDoc(productRef, updateData);
 };
 
 export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract', variantSku?: string) => {
@@ -531,6 +534,9 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     }
     const orderData = orderSnap.data() as DispatchOrder;
 
+    const allProductsInOrder = await getProducts();
+    const productMap = new Map(allProductsInOrder.map(p => [p.id, p]));
+
     const currentExceptions = orderData.exceptions || [];
     const newExceptions = [...currentExceptions, ...exceptions];
 
@@ -544,20 +550,36 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         exceptions: newExceptions
     });
 
-    // 3. Handle exceptions by moving stock to pending
+    // 3. Handle exceptions by moving stock to pending and creating audit alerts
     for (const ex of exceptions) {
         for (const exProd of ex.products) {
             const productRef = doc(db, 'products', exProd.productId);
-            await runTransaction(db, async (transaction) => {
-                const productSnap = await transaction.get(productRef);
-                
-                if (productSnap.exists()) {
-                    const productData = productSnap.data() as Product;
-                    // Move stock to pending
-                    const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
-                    transaction.update(productRef, { pendingStock: newPendingStock });
-                }
-            });
+            const productData = productMap.get(exProd.productId);
+            
+            if (productData) {
+                // Move stock to pending
+                 await runTransaction(db, async (transaction) => {
+                    const freshProductSnap = await transaction.get(productRef);
+                    if (freshProductSnap.exists()) {
+                        const freshProductData = freshProductSnap.data() as Product;
+                        const newPendingStock = (freshProductData.pendingStock || 0) + exProd.quantity;
+                        transaction.update(productRef, { pendingStock: newPendingStock });
+                    }
+                });
+
+                // Create audit alert
+                const alertRef = doc(collection(db, 'auditAlerts'));
+                const newAlert: Omit<AuditAlert, 'id'> = {
+                    date: new Date().toISOString(),
+                    productId: exProd.productId,
+                    productName: productData.name,
+                    productSku: exProd.variantSku || productData.sku || 'N/A',
+                    message: `Excepción en despacho: El producto se marcó como no disponible para envío a pesar de tener stock registrado durante el picking.`,
+                    dispatchId: orderData.dispatchId,
+                    exceptionTrackingNumber: ex.trackingNumber,
+                };
+                batch.set(alertRef, newAlert);
+            }
         }
     }
 
