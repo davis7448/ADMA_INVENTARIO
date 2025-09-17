@@ -564,12 +564,19 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
     const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
 
     // 1. Create the new dispatch order document
+    const cleanProducts = products.map(p => {
+        const product: any = {...p};
+        if (product.variantId === undefined) delete product.variantId;
+        if (product.variantSku === undefined) delete product.variantSku;
+        return product;
+    });
+
     const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
         dispatchId,
         date: Timestamp.now(),
         platformId,
         carrierId,
-        products,
+        products: cleanProducts,
         totalItems: products.reduce((acc, p) => acc + p.quantity, 0),
         status: 'Pendiente',
         trackingNumbers: [],
