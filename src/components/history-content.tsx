@@ -62,19 +62,19 @@ export function HistoryContent({
         let movements = [...initialMovements];
         let dispatchOrders = [...initialDispatchOrders];
         
-        const fromDate = dateRange?.from ? startOfDay(dateRange.from) : null;
-        const toDate = dateRange?.to ? endOfDay(dateRange.to) : null;
+        const fromDate = dateRange?.from;
+        const toDate = dateRange?.to;
 
         // Filter by Date Range
-        if (fromDate && toDate) {
-            movements = movements.filter(m => {
-                const moveDate = new Date(m.date);
-                return moveDate >= fromDate && moveDate <= toDate;
-            });
-            dispatchOrders = dispatchOrders.filter(o => {
-                const orderDate = new Date(o.date);
-                return orderDate >= fromDate && orderDate <= toDate;
-            });
+        if (fromDate) {
+            const startDate = startOfDay(fromDate);
+            movements = movements.filter(m => new Date(m.date) >= startDate);
+            dispatchOrders = dispatchOrders.filter(o => new Date(o.date) >= startDate);
+        }
+        if (toDate) {
+            const endDate = endOfDay(toDate);
+            movements = movements.filter(m => new Date(m.date) <= endDate);
+            dispatchOrders = dispatchOrders.filter(o => new Date(o.date) <= endDate);
         }
         
         // Filter by Product
