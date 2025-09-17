@@ -53,8 +53,10 @@ const prompt = ai.definePrompt({
   1.  Calculate 'availableForSale': This is 'physicalStock' - 'reservedStock'.
   2.  Calculate 'dailyAverageSales': This is 'salesLast7Days' / 'numberOfDaysWithSales'. If 'numberOfDaysWithSales' is 0, this should be 0.
   3.  Calculate 'daysOfStockLeft': This is 'availableForSale' / 'dailyAverageSales'. If 'dailyAverageSales' is 0, this should be -1.
-  4.  Determine 'alertTriggered': The alert is triggered if 'daysOfStockLeft' is greater than or equal to 0 AND less than 3.
-  5.  Generate 'alertMessage': A concise, human-readable message in Spanish explaining the stock situation. If the alert is triggered, the message should be urgent.
+  4.  Determine 'alertTriggered': The alert is triggered if EITHER of these conditions is true:
+      a) 'daysOfStockLeft' is greater than or equal to 0 AND less than 3.
+      b) 'availableForSale' is less than or equal to 50% of 'physicalStock' (and physicalStock is greater than 0).
+  5.  Generate 'alertMessage': A concise, human-readable message in Spanish explaining the stock situation. If the alert is triggered, the message should be urgent and explain which condition was met (low days of stock, or high percentage of reservations).
   
   Execute these calculations and populate all the fields in the output schema.
   `,
