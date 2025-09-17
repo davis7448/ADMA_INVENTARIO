@@ -536,36 +536,38 @@ export default function LogisticsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
             return;
         }
-    
-        let productToDamage: (Product | (ProductVariant & { parentId: string })) | undefined;
+
+        let productId: string | undefined;
+        let finalSku: string = damagedSku;
+
+        // Find product or variant by SKU, ignoring case
         const lowercasedSku = damagedSku.toLowerCase();
         
-        // Find if the SKU belongs to a simple product or a variant
-        let parentProduct = allProductsList.find(p => p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku);
-        if (parentProduct) {
-            productToDamage = parentProduct;
+        const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku);
+
+        if (simpleProduct) {
+            productId = simpleProduct.id;
         } else {
-            parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku.toLowerCase() === lowercasedSku));
+            const parentProduct = allProductsList.find(p => 
+                p.productType === 'variable' && p.variants?.some(v => v.sku.toLowerCase() === lowercasedSku)
+            );
             if (parentProduct) {
-                const variant = parentProduct.variants?.find(v => v.sku.toLowerCase() === lowercasedSku);
-                if (variant) {
-                    productToDamage = { ...variant, parentId: parentProduct.id };
-                }
+                productId = parentProduct.id;
+                // We pass the variant SKU to the API
+                finalSku = parentProduct.variants?.find(v => v.sku.toLowerCase() === lowercasedSku)?.sku || damagedSku;
             }
         }
-    
-        if (!productToDamage) {
+
+        if (!productId) {
             toast({ variant: 'destructive', title: 'Error', description: 'SKU del producto no encontrado.' });
             return;
         }
-
-        const productId = 'parentId' in productToDamage ? productToDamage.parentId : productToDamage.id;
 
         try {
             await registerDamagedProduct(
                 productId,
                 1,
-                damagedSku,
+                finalSku,
                 damageCarrier,
                 damageTrackingNumber,
                 damageDescription
@@ -1113,12 +1115,3 @@ export default function LogisticsPage() {
     </>
     );
 }
-
-    
-
-    
-
-    
-
-    
-
