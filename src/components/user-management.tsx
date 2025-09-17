@@ -23,29 +23,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-    DialogFooter,
-    DialogClose,
-  } from '@/components/ui/dialog';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
-  } from '@/components/ui/form';
 import {
     Select,
     SelectContent,
@@ -55,15 +34,12 @@ import {
   } from '@/components/ui/select';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { MoreHorizontal, PlusCircle } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 import type { User, UserRole } from '@/lib/types';
-import type { CreateUserFormValues } from '@/lib/definitions';
-import { CreateUserFormSchema } from '@/lib/definitions';
-import { createUserAction, updateUserRoleAction, resetUserPasswordAction } from '@/app/actions/users';
+import { updateUserRoleAction, resetUserPasswordAction } from '@/app/actions/users';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { Badge } from './ui/badge';
 
 interface UserManagementProps {
     initialUsers: User[];
@@ -72,9 +48,6 @@ interface UserManagementProps {
 }
 
 export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserManagementProps) {
-    const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-    const { toast } = useToast();
-
     // Filter states
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedRole, setSelectedRole] = useState('all');
@@ -99,15 +72,9 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                     <div>
                         <CardTitle>User Management</CardTitle>
                         <CardDescription>
-                            Create users, assign roles, and manage access.
+                            Manage user roles and access. New users should be created directly in the Firebase console.
                         </CardDescription>
                     </div>
-                    <AddUserDialog onUserAdded={() => { setIsAddUserOpen(false); onUsersUpdate(); }}>
-                        <Button>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Add User
-                        </Button>
-                    </AddUserDialog>
                 </div>
             </CardHeader>
             <CardContent>
@@ -239,121 +206,4 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
             </TableCell>
         </TableRow>
     )
-}
-
-function AddUserDialog({ children, onUserAdded }: { children: React.ReactNode, onUserAdded: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [isPending, startTransition] = useTransition();
-    const { toast } = useToast();
-
-    const form = useForm<CreateUserFormValues>({
-        resolver: zodResolver(CreateUserFormSchema),
-        defaultValues: {
-            name: '',
-            email: '',
-            password: '',
-            role: 'commercial',
-        },
-    });
-
-    const onSubmit = (values: CreateUserFormValues) => {
-        startTransition(async () => {
-            const result = await createUserAction(values);
-            if (result.success) {
-                toast({ title: 'Success!', description: result.message });
-                onUserAdded();
-                setOpen(false);
-                form.reset();
-            } else {
-                toast({ title: 'Error', description: result.message, variant: 'destructive' });
-            }
-        });
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>{children}</DialogTrigger>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Add New User</DialogTitle>
-                    <DialogDescription>
-                        Create a new user and assign them a role. They will receive an email to set their password.
-                    </DialogDescription>
-                </DialogHeader>
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Full Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="John Doe" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="email"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Email</FormLabel>
-                                    <FormControl>
-                                        <Input type="email" placeholder="user@example.com" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                         <FormField
-                            control={form.control}
-                            name="password"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Password</FormLabel>
-                                    <FormControl>
-                                        <Input type="password" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                         <FormField
-                            control={form.control}
-                            name="role"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Role</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="admin">Admin</SelectItem>
-                                            <SelectItem value="logistics">Logistics</SelectItem>
-                                            <SelectItem value="commercial">Commercial</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <DialogFooter>
-                            <DialogClose asChild>
-                                <Button type="button" variant="secondary">Cancel</Button>
-                            </DialogClose>
-                            <Button type="submit" disabled={isPending}>
-                                {isPending ? 'Creating...' : 'Create User'}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </Form>
-            </DialogContent>
-        </Dialog>
-    );
 }
