@@ -8,7 +8,7 @@ export default async function VendedoresPage() {
     const vendedores: Vendedor[] = await getVendedores();
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'commercial']}>
+      <AuthProviderWrapper allowedRoles={['admin']}>
         <VendedoresContent initialVendedores={vendedores} />
       </AuthProviderWrapper>
     );

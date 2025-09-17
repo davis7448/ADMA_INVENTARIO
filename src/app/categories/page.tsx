@@ -8,7 +8,7 @@ export default async function CategoriesPage() {
     const categories: Category[] = await getCategories();
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'commercial']}>
+      <AuthProviderWrapper allowedRoles={['admin']}>
         <CategoriesContent initialCategories={categories} />
       </AuthProviderWrapper>
     );
