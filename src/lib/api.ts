@@ -743,64 +743,74 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
     await runTransaction(db, async (transaction) => {
+        // ========== 1. READ PHASE ==========
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error('Order not found');
         }
         const orderData = orderSnap.data() as DispatchOrder;
 
-        // Get all products to have a local map for names and SKUs.
-        const allProductsInOrder = await getProducts();
-        const productMap = new Map(allProductsInOrder.map(p => [p.id, p]));
+        const productIdsInExceptions = newExceptions.map(ex => ex.products.map(p => p.productId)).flat();
+        const uniqueProductIds = [...new Set(productIdsInExceptions)];
+        const productRefs = uniqueProductIds.map(id => doc(db, 'products', id));
+        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
 
-        const productsBeingProcessed = new Map<string, { ordered: number, pending: number }>();
+        const productDataMap = new Map<string, Product>();
+        for (const snap of productSnaps) {
+            if (snap.exists()) {
+                productDataMap.set(snap.id, snap.data() as Product);
+            }
+        }
 
-        // Initialize with quantities from the original order
+        // ========== 2. LOGIC / VALIDATION PHASE ==========
+        const productsToProcess = new Map<string, { orderedQty: number, pendingQty: number }>();
+
+        // Initialize map with quantities from the original order
         orderData.products.forEach(p => {
             const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-            productsBeingProcessed.set(key, { ordered: p.quantity, pending: 0 });
+            productsToProcess.set(key, { orderedQty: p.quantity, pendingQty: 0 });
         });
-
-        // If the order is already partial, calculate the actual pending units
+        
+        // Calculate the actual pending units if the order is already 'Parcial'
         if (orderData.status === 'Parcial') {
             orderData.exceptions.forEach(ex => {
                 ex.products.forEach(p => {
                     const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                    const productInfo = productsBeingProcessed.get(key);
+                    const productInfo = productsToProcess.get(key);
                     if (productInfo) {
-                        productInfo.pending += p.quantity;
+                        productInfo.pendingQty += p.quantity;
                     }
                 });
             });
         } else { // If 'Pendiente', all units are pending
              orderData.products.forEach(p => {
                 const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                const productInfo = productsBeingProcessed.get(key);
+                const productInfo = productsToProcess.get(key);
                 if (productInfo) {
-                    productInfo.pending = productInfo.ordered;
+                    productInfo.pendingQty = productInfo.orderedQty;
                 }
             });
         }
-        
+
         // Validate new exceptions against the real pending quantity
         const newExceptionQuantities = new Map<string, number>();
-        for (const ex of newExceptions) {
-            for (const p of ex.products) {
+        newExceptions.forEach(ex => {
+            ex.products.forEach(p => {
                 const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
                 const currentQty = newExceptionQuantities.get(key) || 0;
                 newExceptionQuantities.set(key, currentQty + p.quantity);
-            }
-        }
+            });
+        });
         
         for (const [key, qty] of newExceptionQuantities.entries()) {
-            const productInfo = productsBeingProcessed.get(key);
+            const productInfo = productsToProcess.get(key);
             const productName = orderData.products.find(p => (p.variantId ? `${p.productId}|${p.variantId}` : p.productId) === key)?.name || 'Unknown';
-            if (!productInfo || qty > productInfo.pending) {
-                 throw new Error(`La cantidad de excepción para ${productName} (${qty}) excede las unidades pendientes (${productInfo?.pending || 0}).`);
+            if (!productInfo || qty > productInfo.pendingQty) {
+                 throw new Error(`La cantidad de excepción para ${productName} (${qty}) excede las unidades pendientes (${productInfo?.pendingQty || 0}).`);
             }
         }
 
-        // If validation passes, proceed.
+        // ========== 3. WRITE PHASE ==========
         const finalExceptions = [...(orderData.exceptions || []), ...newExceptions];
         const status = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
 
@@ -814,15 +824,11 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         for (const ex of newExceptions) {
             for (const exProd of ex.products) {
                 const productRef = doc(db, 'products', exProd.productId);
-                const productData = productMap.get(exProd.productId);
+                const productData = productDataMap.get(exProd.productId);
                 
                 if (productData) {
-                    const freshProductSnap = await transaction.get(productRef);
-                    if (freshProductSnap.exists()) {
-                        const freshProductData = freshProductSnap.data() as Product;
-                        const newPendingStock = (freshProductData.pendingStock || 0) + exProd.quantity;
-                        transaction.update(productRef, { pendingStock: newPendingStock });
-                    }
+                    const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
+                    transaction.update(productRef, { pendingStock: newPendingStock });
 
                     // Create an audit alert for the exception.
                     const alertRef = doc(collection(db, 'auditAlerts'));
@@ -841,6 +847,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         }
     });
 };
+
 
 
 export const cancelPendingDispatchItems = async (orderId: string, cancelledTrackingNumbers: string[], user: { id: string; name: string; } | null) => {
