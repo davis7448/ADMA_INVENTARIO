@@ -135,7 +135,7 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     delete dataToAdd.cost;
   }
   if (dataToAdd.priceWholesale === undefined || dataToAdd.priceWholesale === null) {
-    dataToAdd.priceWholesale = 0;
+    delete dataToAdd.priceWholesale;
   }
 
   const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
@@ -276,7 +276,6 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         productNameForMovement = productData.name;
         
         const updateData: Record<string, any> = {};
-        let currentStock = productData.stock || 0;
 
         if (productData.productType === 'variable') {
             const variants = [...(productData.variants || [])];
@@ -288,9 +287,9 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
-            currentStock = variant.stock || 0;
+            const currentVariantStock = variant.stock || 0;
 
-            const newVariantStock = currentStock - quantity;
+            const newVariantStock = currentVariantStock - quantity;
             if (newVariantStock < 0) {
                 throw new Error(`Cannot register damage for variant ${variant.name}. Stock would become negative.`);
             }
@@ -301,6 +300,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             updateData.variants = variants;
             updateData.stock = newTotalStock;
         } else {
+            const currentStock = productData.stock || 0;
             const newStock = currentStock - quantity;
             if (newStock < 0) {
                 throw new Error(`Cannot register damage for product ${productData.name}. Stock would become negative.`);
@@ -1373,18 +1373,23 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
             getRotationCategories(),
         ]);
 
-        const salesByProductId: Record<string, number> = {};
+        const salesByProductId: Record<string, { sales: number; daysWithSales: Set<string> }> = {};
         for (const movement of allMovements) {
             if (movement.type === 'Salida') {
-                salesByProductId[movement.productId] = (salesByProductId[movement.productId] || 0) + movement.quantity;
+                if (!salesByProductId[movement.productId]) {
+                    salesByProductId[movement.productId] = { sales: 0, daysWithSales: new Set() };
+                }
+                salesByProductId[movement.productId].sales += movement.quantity;
+                salesByProductId[movement.productId].daysWithSales.add(format(new Date(movement.date), 'yyyy-MM-dd'));
             }
         }
         
         const sortedRotationCategories = [...rotationCategories].sort((a,b) => b.salesThreshold - a.salesThreshold);
         const getRotationCategoryName = (productId: string): string => {
-            const sales = salesByProductId[productId] || 0;
+            const salesData = salesByProductId[productId];
+            const salesLast7Days = salesData ? salesData.sales : 0;
             for (const category of sortedRotationCategories) {
-                if (sales >= category.salesThreshold) {
+                if (salesLast7Days >= category.salesThreshold) {
                     return category.name;
                 }
             }
@@ -1396,7 +1401,10 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
             const rotationName = getRotationCategoryName(product.id);
             if (rotationName === 'Inactivo') continue;
 
-            const salesLast7Days = salesByProductId[product.id] || 0;
+            const salesData = salesByProductId[product.id];
+            const salesLast7Days = salesData ? salesData.sales : 0;
+            const numberOfDaysWithSales = salesData ? salesData.daysWithSales.size : 0;
+
 
             if (product.productType === 'simple' && product.sku) {
                 const totalReserved = Array.isArray(product.reservations) ? product.reservations.reduce((sum, res) => sum + res.quantity, 0) : 0;
@@ -1404,7 +1412,8 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                     productName: product.name,
                     physicalStock: product.stock,
                     reservedStock: totalReserved,
-                    salesLast7Days: salesLast7Days,
+                    salesLast7Days,
+                    numberOfDaysWithSales,
                     // Pass through data for storage
                     id: product.id, name: product.name, sku: product.sku, imageUrl: product.imageUrl,
                 });
@@ -1418,7 +1427,8 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                         productName: `${product.name} - ${variant.name}`,
                         physicalStock: variant.stock,
                         reservedStock: variantReserved,
-                        salesLast7Days: salesLast7Days, // Use parent's sales for variant check
+                        salesLast7Days, // Use parent's sales for variant check
+                        numberOfDaysWithSales,
                         // Pass through data for storage
                         id: `${product.id}-${variant.id}`, name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
                     });
@@ -1431,7 +1441,8 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                 productName: item.productName,
                 physicalStock: item.physicalStock,
                 reservedStock: item.reservedStock,
-                salesLast7Days: item.salesLast7Days
+                salesLast7Days: item.salesLast7Days,
+                numberOfDaysWithSales: item.numberOfDaysWithSales,
             }).then(analysis => ({...item, analysis}))
         );
 

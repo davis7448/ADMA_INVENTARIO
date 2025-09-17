@@ -18,6 +18,7 @@ const StockAvailabilityInputSchema = z.object({
   physicalStock: z.number().describe('The total physical stock count of the product.'),
   reservedStock: z.number().describe('The stock quantity that is reserved and not available for sale.'),
   salesLast7Days: z.number().describe('The total number of units sold in the last 7 days.'),
+  numberOfDaysWithSales: z.number().describe('The number of days within the 7-day period that had at least one sale.'),
 });
 export type StockAvailabilityInput = z.infer<typeof StockAvailabilityInputSchema>;
 
@@ -46,10 +47,11 @@ const prompt = ai.definePrompt({
   - Physical Stock: {{{physicalStock}}}
   - Reserved Stock: {{{reservedStock}}}
   - Sales in Last 7 Days: {{{salesLast7Days}}}
+  - Number of Days With Sales (in last 7 days): {{{numberOfDaysWithSales}}}
   
   Your calculations must follow these steps:
   1.  Calculate 'availableForSale': This is 'physicalStock' - 'reservedStock'.
-  2.  Calculate 'dailyAverageSales': This is 'salesLast7Days' / 7.
+  2.  Calculate 'dailyAverageSales': This is 'salesLast7Days' / 'numberOfDaysWithSales'. If 'numberOfDaysWithSales' is 0, this should be 0.
   3.  Calculate 'daysOfStockLeft': This is 'availableForSale' / 'dailyAverageSales'. If 'dailyAverageSales' is 0, this should be -1.
   4.  Determine 'alertTriggered': The alert is triggered if 'daysOfStockLeft' is greater than or equal to 0 AND less than 3.
   5.  Generate 'alertMessage': A concise, human-readable message in Spanish explaining the stock situation. If the alert is triggered, the message should be urgent.
