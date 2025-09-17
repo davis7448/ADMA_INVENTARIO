@@ -150,6 +150,18 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     }
     return [{ id: p.productId, name: p.name }];
   });
+  
+  const getExceptionTrackingForProduct = (productId: string, variantId?: string): string | null => {
+    if (!order.exceptions) return null;
+
+    for (const exception of order.exceptions) {
+        const found = exception.products.some(p => p.productId === productId && p.variantId === variantId);
+        if (found) {
+            return exception.trackingNumber;
+        }
+    }
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -173,18 +185,32 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Producto</TableHead>
-                                    <TableHead>SKU</TableHead>
+                                    <TableHead>Guía Excepción</TableHead>
                                     <TableHead className="text-right">Cant.</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {order.products.map(p => (
-                                    <TableRow key={p.productId + (p.variantId || '')}>
-                                        <TableCell>{p.name}</TableCell>
-                                        <TableCell>{p.sku}</TableCell>
-                                        <TableCell className="text-right">{p.quantity}</TableCell>
-                                    </TableRow>
-                                ))}
+                                {order.products.map(p => {
+                                    const exceptionTracking = isPartial ? getExceptionTrackingForProduct(p.productId, p.variantId) : null;
+                                    return (
+                                        <TableRow key={p.productId + (p.variantId || '')}>
+                                            <TableCell>
+                                                <div>{p.name}</div>
+                                                <div className="text-xs text-muted-foreground">{p.sku}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {exceptionTracking ? (
+                                                    <span className="font-mono text-xs bg-destructive/10 text-destructive-foreground px-2 py-1 rounded">
+                                                        {exceptionTracking}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground">N/A</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">{p.quantity}</TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     </CardContent>
