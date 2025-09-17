@@ -30,6 +30,10 @@ export type Product = {
   contentLink?: string;
   productType: 'simple' | 'variable';
   variants?: ProductVariant[]; // Array to hold variants
+  createdBy?: {
+    id: string;
+    name: string;
+  }
 };
 
 export type Reservation = {
@@ -44,6 +48,10 @@ export type Reservation = {
   date: string;
   variantId?: string;
   variantSku?: string;
+  createdBy?: {
+    id: string;
+    name: string;
+  }
 };
 
 export type Supplier = {
