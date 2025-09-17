@@ -42,16 +42,18 @@ const REQUIRED_HEADERS = [
     'categoryId', 'priceDropshipping', 'stock', 'vendorId'
 ];
 
-// Helper to sanitize headers
+// Helper to sanitize headers to fix common typos
 const sanitizeHeaders = (products: ProductToImport[]): ProductToImport[] => {
     return products.map(product => {
         const sanitizedProduct: ProductToImport = {};
         for (const key in product) {
             let newKey = key.trim().toLowerCase();
-            if (newKey === 'categoryld') {
+            if (newKey === 'categoryld') { // Common typo 'l' instead of 'i'
                 newKey = 'categoryId';
-            } else if (newKey === 'vendorld') {
-                newKey = 'vendorId';
+            } else if (newKey === 'vendorld') { // Common typo 'l' instead of 'i'
+                 newKey = 'vendorId';
+            } else if (newKey === 'pricedropshipping') { // Normalize to camelCase
+                newKey = 'priceDropshipping';
             }
             sanitizedProduct[newKey] = product[key];
         }
@@ -87,9 +89,11 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
             const json = XLSX.utils.sheet_to_json(worksheet, { defval: null }) as ProductToImport[];
 
             if (json.length > 0) {
+                // Sanitize headers first
                 const sanitizedJson = sanitizeHeaders(json);
                 const headers = Object.keys(sanitizedJson[0]).map(h => h.toLowerCase());
-                const missingHeaders = REQUIRED_HEADERS.filter(h => !headers.includes(h));
+                const missingHeaders = REQUIRED_HEADERS.filter(h => !headers.includes(h.toLowerCase()));
+                
                 if (missingHeaders.length > 0) {
                     setError(`Faltan las siguientes columnas obligatorias en el archivo: ${missingHeaders.join(', ')}. Revisa que los nombres sean correctos.`);
                     setProducts([]);
