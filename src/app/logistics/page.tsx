@@ -345,7 +345,8 @@ export default function LogisticsPage() {
                 dispatchId,
                 platformId: platform,
                 carrierId: carrier,
-                products: productsForDispatch
+                products: productsForDispatch,
+                createdBy: user ? { id: user.id, name: user.name } : undefined,
             });
 
             const pdfProducts = dispatchedProducts.map(p => ({
@@ -426,7 +427,9 @@ export default function LogisticsPage() {
                     productId: product.productId,
                     productName: product.name,
                     quantity: product.quantity,
-                    notes: 'Recepción de mercancía de proveedor.'
+                    notes: 'Recepción de mercancía de proveedor.',
+                    userId: user?.id,
+                    userName: user?.name,
                 });
             }
         });
@@ -524,7 +527,9 @@ export default function LogisticsPage() {
                 productName: product.name,
                 quantity: 1,
                 notes: `Devolución de cliente. Guía: ${product.trackingNumber}. SKU: ${product.sku}`,
-                carrierId: returnCarrier
+                carrierId: returnCarrier,
+                userId: user?.id,
+                userName: user?.name,
             });
         });
     
@@ -567,7 +572,8 @@ export default function LogisticsPage() {
                 finalSku,
                 damageCarrier,
                 damageTrackingNumber,
-                damageDescription
+                damageDescription,
+                user ? { id: user.id, name: user.name } : null
             );
     
             toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para el SKU ${finalSku}.` });
@@ -1148,3 +1154,4 @@ export default function LogisticsPage() {
     
 
     
+

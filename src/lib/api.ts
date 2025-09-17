@@ -610,7 +610,12 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         cancelledExceptions: [],
         createdBy,
     };
-    await setDoc(dispatchOrderRef, newDispatchOrder);
+
+    const dataToSet: Record<string, any> = { ...newDispatchOrder };
+    if (!dataToSet.createdBy) {
+      delete dataToSet.createdBy;
+    }
+    await setDoc(dispatchOrderRef, dataToSet);
 
     // 2. Create inventory movements and update stock for each product
     for (const product of products) {
