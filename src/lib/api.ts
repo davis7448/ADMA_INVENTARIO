@@ -39,7 +39,8 @@ export const getProducts = async (): Promise<Product[]> => {
     const data = doc.data();
     return { 
         id: doc.id, 
-        ...data, 
+        ...data,
+        purchaseDate: data.purchaseDate ? (data.purchaseDate as Timestamp).toDate().toISOString() : undefined,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
     } as Product
@@ -69,7 +70,8 @@ export const getProductById = async (id: string): Promise<Product | null> => {
     const reservations = await getReservationsByProductId(id);
     return { 
         id: productSnap.id, 
-        ...data, 
+        ...data,
+        purchaseDate: data.purchaseDate ? (data.purchaseDate as Timestamp).toDate().toISOString() : undefined,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
         reservations: reservations || [],
@@ -84,27 +86,32 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   
   if (product.productType === 'variable') {
     product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
-    // For variable products, price could be the lowest variant price, or 0. Let's use 0 for now.
     product.priceDropshipping = 0; 
   }
+  
+  const dataToAdd: Omit<Product, 'id'> & { purchaseDate?: Timestamp } = { ...product } as any;
 
-  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
+  if (product.purchaseDate) {
+    dataToAdd.purchaseDate = Timestamp.fromDate(new Date(product.purchaseDate));
+  }
+
+
+  const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
 };
 
 export const updateProduct = async (productId: string, productUpdate: Partial<Omit<Product, 'id'>>) => {
   const productRef = doc(db, 'products', productId);
 
+  const updateData: Record<string, any> = { ...productUpdate };
+
   if (productUpdate.productType === 'variable') {
-    productUpdate.stock = productUpdate.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
-    productUpdate.priceDropshipping = 0;
+    updateData.stock = productUpdate.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
+    updateData.priceDropshipping = 0;
   }
 
-  // The cost field will only be present in formData if the admin user submitted it.
-  // If not, it will be undefined and won't be included in the update, preserving the existing value.
-  const updateData: Partial<Product> = { ...productUpdate };
-  if ('cost' in productUpdate && productUpdate.cost === undefined) {
-    delete updateData.cost;
+  if (productUpdate.purchaseDate) {
+    updateData.purchaseDate = Timestamp.fromDate(new Date(productUpdate.purchaseDate));
   }
   
   await updateDoc(productRef, updateData);
@@ -390,11 +397,10 @@ export const getInventoryMovements = async (days?: number): Promise<InventoryMov
     const movementSnapshot = await getDocs(q);
     const movementList = movementSnapshot.docs.map(doc => {
       const data = doc.data();
-      const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
       return { 
         id: doc.id, 
         ...data,
-        date,
+        date: (data.date as Timestamp).toDate().toISOString(),
       } as InventoryMovement
     });
     return movementList;
@@ -406,11 +412,10 @@ export const getInventoryMovementsByProductId = async (productId: string): Promi
     const movementSnapshot = await getDocs(q);
     const movementList = movementSnapshot.docs.map(doc => {
         const data = doc.data();
-        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
         return {
             id: doc.id,
             ...data,
-            date,
+            date: (data.date as Timestamp).toDate().toISOString(),
         } as InventoryMovement;
     });
     return movementList;
@@ -426,11 +431,10 @@ export const getInventoryMovementsByDate = async (date: Date): Promise<Inventory
     
     const movementList = movementSnapshot.docs.map(doc => {
         const data = doc.data();
-        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
         return {
             id: doc.id,
             ...data,
-            date,
+            date: (data.date as Timestamp).toDate().toISOString(),
         } as InventoryMovement;
     });
 
@@ -455,7 +459,7 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
       transaction.set(newMovementRef, {
         ...movementData,
         movementId: newId,
-        date: new Date(),
+        date: Timestamp.now(),
       });
 
       return newId;
@@ -512,20 +516,41 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
 export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const q = query(collection(db, 'dispatchOrders'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DispatchOrder));
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString()
+        } as DispatchOrder
+    });
 }
 
 
 export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const q = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DispatchOrder));
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString()
+        } as DispatchOrder
+    });
 }
 
 export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const q = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DispatchOrder));
+    return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString()
+        } as DispatchOrder
+    });
 }
 
 export const processDispatch = async (orderId: string, trackingNumbers: string[], exceptions: DispatchException[]) => {
@@ -629,15 +654,12 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
                     await updateProductStock(exProd.productId, exProd.quantity, 'add', exProd.variantSku);
 
                     // Create "Entrada" movement for the cancellation
-                    const movementRef = doc(collection(db, 'inventoryMovements'));
-                    transaction.set(movementRef, {
+                    await addInventoryMovement({
                         type: 'Entrada',
                         productId: exProd.productId,
                         productName: productData.name || 'Unknown Product',
                         quantity: exProd.quantity,
-                        date: new Date(),
                         notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}. SKU: ${exProd.variantSku || productData.sku}`,
-                        movementId: 0, // This will be set by addInventoryMovement if we refactor to use it
                     });
                 }
             });
@@ -663,11 +685,10 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
     const alertSnapshot = await getDocs(query(alertsCol));
     const alertList = alertSnapshot.docs.map(doc => {
         const data = doc.data();
-        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
         return {
             id: doc.id,
             ...data,
-            date,
+            date: (data.date as Timestamp).toDate().toISOString(),
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -893,11 +914,10 @@ export const getReservationsByProductId = async (productId: string): Promise<Res
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        const date = data.date instanceof Timestamp ? data.date.toDate().toISOString() : new Date().toISOString();
         return { 
             id: doc.id, 
             ...data,
-            date,
+            date: (data.date as Timestamp).toDate().toISOString(),
         } as Reservation;
     });
 };
@@ -939,7 +959,7 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
         transaction.set(newReservationRef, {
             ...reservationData,
             reservationId,
-            date: new Date(),
+            date: Timestamp.now(),
         });
     });
 };
@@ -970,7 +990,7 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
         reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
       } as StaleReservationAlert;
     });
-    return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.date).getTime());
+    return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
 };
 
 export const checkForStaleReservations = async (): Promise<void> => {
