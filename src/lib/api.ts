@@ -37,10 +37,11 @@ export const getProducts = async (): Promise<Product[]> => {
   const productSnapshot = await getDocs(productsCol);
   const productList = productSnapshot.docs.map(doc => {
     const data = doc.data();
+    const purchaseDate = data.purchaseDate;
     return { 
         id: doc.id, 
         ...data,
-        purchaseDate: data.purchaseDate ? (data.purchaseDate as Timestamp).toDate().toISOString() : undefined,
+        purchaseDate: purchaseDate && typeof purchaseDate.toDate === 'function' ? (purchaseDate as Timestamp).toDate().toISOString() : purchaseDate,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
     } as Product
@@ -68,10 +69,11 @@ export const getProductById = async (id: string): Promise<Product | null> => {
   if (productSnap.exists()) {
     const data = productSnap.data();
     const reservations = await getReservationsByProductId(id);
+    const purchaseDate = data.purchaseDate;
     return { 
         id: productSnap.id, 
         ...data,
-        purchaseDate: data.purchaseDate ? (data.purchaseDate as Timestamp).toDate().toISOString() : undefined,
+        purchaseDate: purchaseDate && typeof purchaseDate.toDate === 'function' ? (purchaseDate as Timestamp).toDate().toISOString() : purchaseDate,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
         reservations: reservations || [],
@@ -689,7 +691,7 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
         return {
             id: doc.id,
             ...data,
-            date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
+            date: dateValue,
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
