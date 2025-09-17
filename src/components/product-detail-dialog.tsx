@@ -215,14 +215,6 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                         )}
                         
                         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 pt-4 text-center">
-                            <Card>
-                                <CardHeader className="pb-2">
-                                    <CardDescription>Price</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <p className="text-2xl font-bold">${product.price.toLocaleString('en-US')}</p>
-                                </CardContent>
-                            </Card>
                              <Card>
                                 <CardHeader className="pb-2">
                                     <CardDescription>Stock Físico</CardDescription>
@@ -261,6 +253,14 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-2xl font-bold text-destructive">{product.damagedStock || 0}</p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardDescription>Price</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-2xl font-bold">${product.price.toLocaleString('en-US')}</p>
                                 </CardContent>
                             </Card>
                         </div>
