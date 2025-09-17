@@ -23,6 +23,7 @@ import type { Supplier } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddSupplierForm } from '@/components/add-supplier-form';
 import { useAuth } from '@/hooks/use-auth';
+import { Badge } from '@/components/ui/badge';
 
 interface SuppliersContentProps {
     initialSuppliers: Supplier[];
@@ -78,7 +79,10 @@ export function SuppliersContent({ initialSuppliers }: SuppliersContentProps) {
                 ))
               ) : suppliers.map((supplier) => (
                 <TableRow key={supplier.id}>
-                  <TableCell className="font-medium">{supplier.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <div>{supplier.name}</div>
+                    <Badge variant="secondary" className="mt-1 font-mono">{supplier.id}</Badge>
+                  </TableCell>
                   <TableCell>
                     <div>{supplier.contact.email}</div>
                     <div className="text-sm text-muted-foreground">{supplier.contact.phone}</div>
