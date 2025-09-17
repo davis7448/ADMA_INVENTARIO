@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -535,19 +536,18 @@ export default function LogisticsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
             return;
         }
-    
+
         let productId: string | undefined;
         let finalSku: string | undefined;
         const lowercasedSku = damagedSku.toLowerCase();
-    
-        // Find product or variant by SKU
+
+        // Find product or variant by SKU (using the working logic)
         const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku);
-    
         if (simpleProduct) {
             productId = simpleProduct.id;
-            finalSku = simpleProduct.sku; // For simple products, variant SKU is the product SKU
+            finalSku = simpleProduct.sku;
         } else {
-            const parentProduct = allProductsList.find(p => 
+            const parentProduct = allProductsList.find(p =>
                 p.productType === 'variable' && p.variants?.some(v => v.sku.toLowerCase() === lowercasedSku)
             );
             if (parentProduct) {
@@ -558,7 +558,7 @@ export default function LogisticsPage() {
                 }
             }
         }
-    
+
         if (!productId || !finalSku) {
             toast({ variant: 'destructive', title: 'Error', description: 'SKU del producto no encontrado.' });
             return;
@@ -567,7 +567,7 @@ export default function LogisticsPage() {
         try {
             await registerDamagedProduct(
                 productId,
-                1,
+                1, // Damage is always 1 unit at a time from this UI
                 finalSku,
                 damageCarrier,
                 damageTrackingNumber,
@@ -1116,5 +1116,7 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
 
     
