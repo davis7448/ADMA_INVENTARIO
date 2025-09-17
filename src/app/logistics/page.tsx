@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -41,12 +40,12 @@ import { Textarea } from '@/components/ui/textarea';
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
     DialogFooter,
     DialogClose,
+    DialogDescription
   } from '@/components/ui/dialog';
 import {
     AlertDialog,
@@ -536,17 +535,17 @@ export default function LogisticsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
             return;
         }
-
+    
         let productId: string | undefined;
         let finalSku: string | undefined;
         const lowercasedSku = damagedSku.toLowerCase();
-
+    
         // Find product or variant by SKU
         const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku);
-
+    
         if (simpleProduct) {
             productId = simpleProduct.id;
-            finalSku = simpleProduct.sku;
+            finalSku = simpleProduct.sku; // For simple products, variant SKU is the product SKU
         } else {
             const parentProduct = allProductsList.find(p => 
                 p.productType === 'variable' && p.variants?.some(v => v.sku.toLowerCase() === lowercasedSku)
@@ -559,12 +558,12 @@ export default function LogisticsPage() {
                 }
             }
         }
-
+    
         if (!productId || !finalSku) {
             toast({ variant: 'destructive', title: 'Error', description: 'SKU del producto no encontrado.' });
             return;
         }
-
+    
         try {
             await registerDamagedProduct(
                 productId,
@@ -1117,3 +1116,5 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
