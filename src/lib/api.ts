@@ -134,6 +134,9 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
     delete dataToAdd.cost;
   }
+  if (dataToAdd.priceWholesale === undefined || dataToAdd.priceWholesale === null) {
+    delete dataToAdd.priceWholesale;
+  }
 
   const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
@@ -158,6 +161,8 @@ export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
       
       if (product.createdBy) {
           dataToAdd.createdBy = product.createdBy;
+      } else {
+          delete dataToAdd.createdBy;
       }
 
       // Ensure 'cost' is not undefined before adding
@@ -270,10 +275,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         const productData = productSnap.data() as Product;
         productNameForMovement = productData.name;
         
-        const currentDamagedStock = productData.damagedStock || 0;
-        const newDamagedStock = currentDamagedStock + quantity;
-        
-        let updateData: Record<string, any> = { damagedStock: newDamagedStock };
+        let updateData: Record<string, any> = {};
 
         // Determine product name for movement log and update stock
         if (productData.productType === 'variable') {
@@ -286,10 +288,28 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
+
+            const newVariantStock = (variant.stock || 0) - quantity;
+            if (newVariantStock < 0) {
+                throw new Error(`Cannot register damage for variant ${variant.name}. Stock would become negative.`);
+            }
+            variants[variantIndex].stock = newVariantStock;
+            
+            const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
             
             updateData.variants = variants;
+            updateData.stock = newTotalStock;
 
+        } else {
+            const newStock = (productData.stock || 0) - quantity;
+            if (newStock < 0) {
+                throw new Error(`Cannot register damage for product ${productData.name}. Stock would become negative.`);
+            }
+            updateData.stock = newStock;
         }
+
+        const newDamagedStock = (productData.damagedStock || 0) + quantity;
+        updateData.damagedStock = newDamagedStock;
         
         transaction.update(productRef, updateData);
     });
@@ -580,7 +600,7 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'> & { createdBy?: { id: string; name: string }}) => {
+export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'>) => {
     const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
 
     // 1. Create the new dispatch order document
@@ -1161,11 +1181,18 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
 
         const newReservationRef = doc(reservationsCol);
         const reservationId = `RES-${Date.now()}`;
-        transaction.set(newReservationRef, {
+        
+        const dataToSet: Record<string, any> = {
             ...reservationData,
             reservationId,
             date: Timestamp.now(),
-        });
+        };
+
+        if (!dataToSet.createdBy) {
+            delete dataToSet.createdBy;
+        }
+        
+        transaction.set(newReservationRef, dataToSet);
     });
 };
 
@@ -1458,3 +1485,4 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
     }
 }
     
+
