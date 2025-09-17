@@ -686,7 +686,7 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
         return {
             id: doc.id,
             ...data,
-            date: data.date, // Already a string
+            date: (data.date as Timestamp).toDate().toISOString(),
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -984,8 +984,8 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
       return { 
         id: doc.id, 
         ...data,
-        alertDate: data.alertDate,
-        reservationDate: data.reservationDate,
+        alertDate: (data.alertDate as Timestamp).toDate().toISOString(),
+        reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
       } as StaleReservationAlert;
     });
     return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
