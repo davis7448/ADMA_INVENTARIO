@@ -39,7 +39,8 @@ type ProductToImport = {
 
 const REQUIRED_HEADERS = [
     'name', 'sku', 'description',
-    'categoryId', 'priceDropshipping', 'stock', 'vendorId'
+    'priceDropshipping', 'stock',
+    'categoryId', 'vendorId'
 ];
 
 // Helper to sanitize headers to fix common typos
@@ -47,7 +48,7 @@ const sanitizeHeaders = (products: ProductToImport[]): ProductToImport[] => {
     return products.map(product => {
         const sanitizedProduct: ProductToImport = {};
         for (const key in product) {
-            let newKey = key.trim().toLowerCase();
+            let newKey = key.trim().toLowerCase().replace(/\s+/g, '');
             if (newKey === 'categoryld') { // Common typo 'l' instead of 'i'
                 newKey = 'categoryId';
             } else if (newKey === 'vendorld') { // Common typo 'l' instead of 'i'
@@ -243,3 +244,5 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     </Dialog>
   );
 }
+
+      
