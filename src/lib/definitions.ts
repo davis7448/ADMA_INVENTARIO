@@ -12,7 +12,7 @@ const ProductVariantSchema = z.object({
   sku: z.string().min(1, 'Variant SKU is required.'),
   priceDropshipping: z.coerce.number().min(0, 'Price must be non-negative.'),
   priceWholesale: z.coerce.number().min(0, 'Price must be non-negative.').optional(),
-  stock: z.coerce.number().int().min(0, 'Stock must be non-negative.'),
+  stock: z.coerce.number().int().min(0, 'Stock must be a non-negative.'),
 });
 
 const ProductFormSchemaBase = z.object({
@@ -50,9 +50,9 @@ export const AddProductFormSchema = ProductFormSchemaBase.extend({
     image: z
       .any()
       .refine((file) => file, 'Image is required.')
-      .refine((file) => file.size <= MAX_FILE_SIZE, `Max file size is 2MB.`)
+      .refine((file) => file?.size <= MAX_FILE_SIZE, `Max file size is 2MB.`)
       .refine(
-        (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
+        (file) => ACCEPTED_IMAGE_TYPES.includes(file?.type),
         'Only .jpg, .jpeg, .png and .webp formats are supported.'
       ),
   }).superRefine((data, ctx) => {
@@ -285,3 +285,6 @@ export type ImportProductsFormState = {
     
 
   
+
+
+    
