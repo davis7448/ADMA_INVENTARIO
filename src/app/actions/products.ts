@@ -97,7 +97,25 @@ export async function updateProductAction(
     productId: string,
     formData: FormData
   ): Promise<EditProductFormState> {
+    
     const auth = getAuth(app);
+    // It can take a moment for the auth state to be ready.
+    // We'll wait for it, but with a timeout.
+    await new Promise<void>((resolve) => {
+        const unsubscribe = auth.onAuthStateChanged(user => {
+            if (user) {
+                resolve();
+                unsubscribe();
+            } else {
+                // If there's no user after a short delay, continue and let the check handle it.
+                setTimeout(() => {
+                    resolve();
+                    unsubscribe();
+                }, 500);
+            }
+        });
+    });
+
     const firebaseUser = auth.currentUser;
 
     if (!firebaseUser?.email) {
@@ -118,12 +136,12 @@ export async function updateProductAction(
     
     // Manually parse variants from FormData
     for (const [key, value] of formData.entries()) {
-        const variantMatch = key.match(/variants\[(\d+)\]\.(id|name|sku|price|stock)/);
+        const variantMatch = key.match(/variants\[(\d+)\]\.(id|name|sku|priceDropshipping|priceWholesale|stock)/);
         if (variantMatch) {
             const index = parseInt(variantMatch[1], 10);
             const field = variantMatch[2];
             if (!variants[index]) {
-                variants[index] = { id: '', name: '', sku: '', priceDropshipping: 0, stock: 0 };
+                variants[index] = { id: '', name: '', sku: '', priceDropshipping: 0, priceWholesale: 0, stock: 0 };
             }
             (variants[index] as any)[field] = value;
         } else {
