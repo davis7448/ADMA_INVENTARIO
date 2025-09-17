@@ -250,25 +250,25 @@ export type UpdateProfileFormState = {
 
 // Import Products Schemas
 export const ImportProductSchema = z.object({
-    name: z.string({ required_error: "La columna 'name' es obligatoria." }).min(1),
+    name: z.string({ required_error: "La columna 'name' es obligatoria." }).min(1, "La columna 'name' no puede estar vacía."),
     sku: z.string().optional(),
-    description: z.string({ required_error: "La columna 'description' es obligatoria." }).min(1),
-    imageUrl: z.string({ required_error: "La columna 'imageUrl' es obligatoria." }).url().optional().or(z.literal('')),
+    description: z.string({ required_error: "La columna 'description' es obligatoria." }).min(1, "La columna 'description' no puede estar vacía."),
+    imageUrl: z.string().url("La URL de la imagen no es válida.").or(z.literal('')).optional(),
     imageHint: z.string().optional(),
-    categoryId: z.string({ required_error: "La columna 'categoryId' es obligatoria." }).min(1),
+    categoryId: z.string({ required_error: "La columna 'categoryId' es obligatoria." }).min(1, "La columna 'categoryId' no puede estar vacía."),
     priceDropshipping: z.preprocess(
       (val) => (val === null || String(val).trim() === '' ? undefined : val),
-      z.coerce.number().optional()
+      z.coerce.number({ invalid_type_error: 'El precio debe ser un número.' }).optional()
     ),
     stock: z.preprocess(
       (val) => (val === null || String(val).trim() === '' ? undefined : val),
-      z.coerce.number().int().optional()
+      z.coerce.number({ invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').optional()
     ),
-    vendorId: z.string({ required_error: "La columna 'vendorId' es obligatoria." }).min(1),
+    vendorId: z.string({ required_error: "La columna 'vendorId' es obligatoria." }).min(1, "La columna 'vendorId' no puede estar vacía."),
     productType: z.enum(['simple', 'variable']).default('simple'),
     priceWholesale: z.coerce.number().optional(),
     cost: z.coerce.number().optional(),
-    purchaseDate: z.string().optional(), // String because it comes from Excel
+    purchaseDate: z.string().optional(),
     contentLink: z.string().url().optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
@@ -302,6 +302,8 @@ export type ImportProductsFormState = {
     success: boolean;
     count: number;
 };
+    
+
     
 
     
