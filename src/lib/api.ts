@@ -236,7 +236,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         const currentDamagedStock = productData.damagedStock || 0;
         const newDamagedStock = currentDamagedStock + quantity;
         
-        let updateData: { damagedStock: number, variants?: ProductVariant[], stock?: number } = { damagedStock: newDamagedStock };
+        let updateData: Record<string, any> = { damagedStock: newDamagedStock };
 
         // Also decrement stock from the correct variant or simple product
         if (productData.productType === 'variable') {
@@ -244,7 +244,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
     
             if (variantIndex === -1) {
-                throw new Error(`Variante con SKU ${variantSku} no encontrada.`);
+                throw new Error(`Variante con SKU ${variantSku} no encontrada en el producto ${productData.name}.`);
             }
             
             const variant = variants[variantIndex];
@@ -1424,4 +1424,3 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
     }
 }
     
-

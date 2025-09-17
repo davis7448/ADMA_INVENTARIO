@@ -541,14 +541,16 @@ export default function LogisticsPage() {
         let productId: string | undefined;
         let finalSku: string | undefined;
 
-        // 1. Check for a simple product match
-        const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku);
+        // 1. Check for a simple product match (case-insensitive)
+        const simpleProduct = allProductsList.find(p => 
+            p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku
+        );
 
         if (simpleProduct) {
             productId = simpleProduct.id;
             finalSku = simpleProduct.sku;
         } else {
-            // 2. If not found, check for a variant match across all variable products
+            // 2. If not found, check for a variant match across all variable products (case-insensitive)
             for (const parentProduct of allProductsList) {
                 if (parentProduct.productType === 'variable' && parentProduct.variants) {
                     const variant = parentProduct.variants.find(v => v.sku.toLowerCase() === lowercasedSku);
