@@ -86,7 +86,6 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   
   if (product.productType === 'variable') {
     product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
-    product.priceDropshipping = 0; 
   }
   
   const dataToAdd: Omit<Product, 'id'> & { purchaseDate?: Timestamp } = { ...product } as any;
@@ -107,7 +106,6 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
 
   if (productUpdate.productType === 'variable') {
     updateData.stock = productUpdate.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
-    updateData.priceDropshipping = 0;
   }
 
   if (productUpdate.purchaseDate) {
@@ -688,7 +686,7 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
         return {
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString(),
+            date: data.date, // Already a string
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -986,8 +984,8 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
       return { 
         id: doc.id, 
         ...data,
-        alertDate: (data.alertDate as Timestamp).toDate().toISOString(),
-        reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
+        alertDate: data.alertDate,
+        reservationDate: data.reservationDate,
       } as StaleReservationAlert;
     });
     return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
@@ -1011,7 +1009,13 @@ export const checkForStaleReservations = async (): Promise<void> => {
     const vendedorMap = new Map(vendedores.map(v => [v.id, v.name]));
     const existingAlertReservationIds = new Set(allAlerts.map(a => a.reservationId));
 
-    const movements = allMovements.docs.map(doc => doc.data() as InventoryMovement);
+    const movements = allMovements.docs.map(doc => {
+        const data = doc.data();
+        return {
+            ...data,
+            date: (data.date as Timestamp).toDate().toISOString()
+        } as InventoryMovement;
+    });
 
     for (const reservation of allReservations) {
         const reservationDate = new Date(reservation.date);
