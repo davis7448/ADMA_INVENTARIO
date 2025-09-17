@@ -88,7 +88,7 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     product.priceDropshipping = 0; 
   }
 
-  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0, restockThreshold: 0 });
+  const docRef = await addDoc(productsCol, { ...product, damagedStock: 0, pendingStock: 0 });
   return docRef.id;
 };
 
@@ -100,9 +100,13 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
     productUpdate.priceDropshipping = 0;
   }
 
-  // Ensure restockThreshold is not part of the update
-  const { restockThreshold, ...updateData } = productUpdate as any;
-
+  // The cost field will only be present in formData if the admin user submitted it.
+  // If not, it will be undefined and won't be included in the update, preserving the existing value.
+  const updateData: Partial<Product> = { ...productUpdate };
+  if ('cost' in productUpdate && productUpdate.cost === undefined) {
+    delete updateData.cost;
+  }
+  
   await updateDoc(productRef, updateData);
 };
 
