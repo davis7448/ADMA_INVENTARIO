@@ -65,7 +65,11 @@ export async function addProductAction(
 
   try {
     const { image, ...productData } = validatedFields.data;
-    const imageUrl = await uploadImageAndGetURL(image);
+    let imageUrl: string | null = null;
+    if (image) {
+        imageUrl = await uploadImageAndGetURL(image);
+    }
+
 
     const newProduct: Omit<Product, 'id'> = {
       ...productData,
@@ -73,7 +77,7 @@ export async function addProductAction(
       priceDropshipping: productData.priceDropshipping ?? 0,
       stock: productData.stock ?? 0,
       purchaseDate: productData.purchaseDate?.toISOString(),
-      imageUrl: imageUrl,
+      imageUrl: imageUrl || `https://picsum.photos/seed/${productData.sku || uuidv4()}/600/400`,
       imageHint: 'new product', // This could be improved with AI
     };
     
@@ -141,13 +145,7 @@ export async function updateProductAction(
         cost: rawData.cost ? Number(rawData.cost) : undefined,
         purchaseDate: purchaseDate ? new Date(purchaseDate as string) : undefined,
         stock: rawData.stock ? Number(rawData.stock) : undefined,
-        variants: rawData.variants.map((v: any) => ({
-            ...v,
-            priceDropshipping: Number(v.priceDropshipping),
-            priceWholesale: Number(v.priceWholesale),
-            stock: Number(v.stock),
-            id: v.id || uuidv4()
-        })),
+        variants: rawData.variants,
     });
   
     if (!validatedFields.success) {
@@ -311,5 +309,7 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
 
   
 
+
+    
 
     
