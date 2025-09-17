@@ -121,34 +121,11 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
   const handleSubmit = async () => {
     setIsProcessing(true);
     
-    // Basic validation
     const trackingList = trackingNumbers.split('\n').map(t => t.trim()).filter(t => t);
     if (trackingList.length === 0 && exceptions.length === 0) {
         toast({ variant: 'destructive', title: 'Error', description: 'Debe ingresar al menos un número de guía o registrar una excepción.' });
         setIsProcessing(false);
         return;
-    }
-
-    const allProductsInNewExceptions = exceptions.flatMap(ex => ex.products);
-    const allProductsInExistingExceptions = order.exceptions?.flatMap(ex => ex.products) || [];
-    const allProductsInExceptions = [...allProductsInExistingExceptions, ...allProductsInNewExceptions];
-
-    const productQuantities: Record<string, number> = {};
-
-    for(const p of allProductsInExceptions) {
-      if (p) {
-        const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
-        productQuantities[key] = (productQuantities[key] || 0) + p.quantity;
-      }
-    }
-
-    for (const orderProduct of order.products) {
-      const key = orderProduct.variantId ? `${orderProduct.productId}-${orderProduct.variantId}` : orderProduct.productId;
-      if ((productQuantities[key] || 0) > orderProduct.quantity) {
-        toast({ variant: 'destructive', title: 'Error', description: `La cantidad total de excepción para ${orderProduct.name} excede la cantidad de la orden.` });
-        setIsProcessing(false);
-        return;
-      }
     }
     
     try {

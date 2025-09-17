@@ -280,6 +280,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         const currentDamagedStock = productData.damagedStock || 0;
         updateData.damagedStock = currentDamagedStock + quantity;
         
+        // Find the variant to update its stock
         if (productData.productType === 'variable') {
             const variants = [...(productData.variants || [])];
             const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
@@ -290,6 +291,23 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
+
+            if (variant.stock >= quantity) {
+                variant.stock -= quantity;
+            } else {
+                throw new Error(`Not enough stock for variant ${variant.name} to mark as damaged. Available: ${variant.stock}, Damaged: ${quantity}`);
+            }
+
+            updateData.variants = variants;
+            // Recalculate total product stock
+            updateData.stock = variants.reduce((acc, v) => acc + v.stock, 0);
+
+        } else { // Simple product
+             if (productData.stock >= quantity) {
+                updateData.stock = productData.stock - quantity;
+            } else {
+                throw new Error(`Not enough stock for product ${productData.name} to mark as damaged. Available: ${productData.stock}, Damaged: ${quantity}`);
+            }
         }
         
         transaction.update(productRef, updateData);
@@ -715,67 +733,75 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
     });
 }
 
-export const processDispatch = async (orderId: string, trackingNumbers: string[], exceptions: DispatchException[]) => {
-    const batch = writeBatch(db);
+export const processDispatch = async (orderId: string, trackingNumbers: string[], newExceptions: DispatchException[]) => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
-    const orderSnap = await getDoc(orderRef);
-    if (!orderSnap.exists()) {
-        throw new Error('Order not found');
-    }
-    const orderData = orderSnap.data() as DispatchOrder;
+    await runTransaction(db, async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists()) {
+            throw new Error('Order not found');
+        }
+        const orderData = orderSnap.data() as DispatchOrder;
 
-    const allProductsInOrder = await getProducts();
-    const productMap = new Map(allProductsInOrder.map(p => [p.id, p]));
+        const allProductsInOrder = await getProducts();
+        const productMap = new Map(allProductsInOrder.map(p => [p.id, p]));
 
-    const currentExceptions = orderData.exceptions || [];
-    const newExceptions = [...currentExceptions, ...exceptions];
+        const existingExceptions = orderData.exceptions || [];
+        const allExceptionsForValidation = [...existingExceptions, ...newExceptions];
 
-    // 1. Determine status
-    const status = newExceptions.length > 0 ? 'Parcial' : 'Despachada';
+        const productExceptionQuantities: Record<string, number> = {};
+        for (const ex of allExceptionsForValidation) {
+            for (const p of ex.products) {
+                const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+                productExceptionQuantities[key] = (productExceptionQuantities[key] || 0) + p.quantity;
+            }
+        }
 
-    // 2. Update the dispatch order status, tracking numbers, and exceptions
-    batch.update(orderRef, {
-        status: status,
-        trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
-        exceptions: newExceptions
-    });
+        for (const orderProduct of orderData.products) {
+            const key = orderProduct.variantId ? `${orderProduct.productId}-${orderProduct.variantId}` : orderProduct.productId;
+            if ((productExceptionQuantities[key] || 0) > orderProduct.quantity) {
+                throw new Error(`La cantidad total de excepción para ${orderProduct.name} (${productExceptionQuantities[key]}) excede la cantidad de la orden (${orderProduct.quantity}).`);
+            }
+        }
 
-    // 3. Handle exceptions by moving stock to pending and creating audit alerts
-    for (const ex of exceptions) {
-        for (const exProd of ex.products) {
-            const productRef = doc(db, 'products', exProd.productId);
-            const productData = productMap.get(exProd.productId);
-            
-            if (productData) {
-                // Move stock to pending
-                 await runTransaction(db, async (transaction) => {
+        const finalExceptions = [...existingExceptions, ...newExceptions];
+        const status = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
+
+        transaction.update(orderRef, {
+            status: status,
+            trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
+            exceptions: finalExceptions
+        });
+        
+        for (const ex of newExceptions) {
+            for (const exProd of ex.products) {
+                const productRef = doc(db, 'products', exProd.productId);
+                const productData = productMap.get(exProd.productId);
+                
+                if (productData) {
                     const freshProductSnap = await transaction.get(productRef);
                     if (freshProductSnap.exists()) {
                         const freshProductData = freshProductSnap.data() as Product;
                         const newPendingStock = (freshProductData.pendingStock || 0) + exProd.quantity;
                         transaction.update(productRef, { pendingStock: newPendingStock });
                     }
-                });
 
-                // Create audit alert
-                const alertRef = doc(collection(db, 'auditAlerts'));
-                const newAlert: Omit<AuditAlert, 'id'> = {
-                    date: Timestamp.now(),
-                    productId: exProd.productId,
-                    productName: productData.name,
-                    productSku: exProd.variantSku || productData.sku || 'N/A',
-                    message: `Excepción en despacho: El producto se marcó como no disponible para envío a pesar de tener stock registrado durante el picking.`,
-                    dispatchId: orderData.dispatchId,
-                    exceptionTrackingNumber: ex.trackingNumber,
-                };
-                batch.set(alertRef, newAlert);
+                    const alertRef = doc(collection(db, 'auditAlerts'));
+                    const newAlert: Omit<AuditAlert, 'id'> = {
+                        date: Timestamp.now(),
+                        productId: exProd.productId,
+                        productName: productData.name,
+                        productSku: exProd.variantSku || productData.sku || 'N/A',
+                        message: `Excepción en despacho: El producto se marcó como no disponible para envío a pesar de tener stock registrado durante el picking.`,
+                        dispatchId: orderData.dispatchId,
+                        exceptionTrackingNumber: ex.trackingNumber,
+                    };
+                    transaction.set(alertRef, newAlert);
+                }
             }
         }
-    }
-
-    await batch.commit();
-}
+    });
+};
 
 
 export const cancelPendingDispatchItems = async (orderId: string, cancelledTrackingNumbers: string[], user: { id: string; name: string; } | null) => {
@@ -1169,7 +1195,7 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
             date: Timestamp.now(),
         };
 
-        if (!dataToSet.createdBy) {
+        if (dataToSet.createdBy === undefined) {
             delete dataToSet.createdBy;
         }
         
@@ -1408,7 +1434,17 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
         );
 
         const allAnalyses = await Promise.all(analysisPromises);
-        const triggeredAlerts = allAnalyses.filter(item => item.analysis.alertTriggered);
+        const triggeredAlerts = allAnalyses.filter(item => {
+            const availableStock = item.analysis.availableForSale;
+            const hasSales = item.salesLast7Days.some((s: number) => s > 0);
+            
+            if (!hasSales) {
+                 // Trigger alert if stock is low regardless of sales
+                return availableStock <= 5;
+            }
+            // Original logic for products with sales
+            return item.analysis.alertTriggered;
+        });
 
         const newAlerts: StockAlertItem[] = triggeredAlerts.map(item => ({
             id: item.id,
