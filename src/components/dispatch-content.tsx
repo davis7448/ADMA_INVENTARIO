@@ -47,30 +47,14 @@ interface GroupedPendingProduct {
     }[];
 }
 
-interface DispatchContentProps {
-    initialPendingOrders: DispatchOrder[];
-    initialPartialOrders: DispatchOrder[];
-    initialProducts: Product[];
-    initialPlatforms: Platform[];
-    initialCarriers: Carrier[];
-    initialProductsById: Record<string, Product>;
-}
-
-export function DispatchContent({ 
-    initialPendingOrders,
-    initialPartialOrders,
-    initialProducts,
-    initialPlatforms,
-    initialCarriers,
-    initialProductsById,
-}: DispatchContentProps) {
-  const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>(initialPendingOrders);
-  const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>(initialPartialOrders);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
-  const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
-  const [productsById, setProductsById] = useState<Record<string, Product>>(initialProductsById);
-  const [loading, setLoading] = useState(false);
+export function DispatchContent() {
+  const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>([]);
+  const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [carriers, setCarriers] = useState<Carrier[]>([]);
+  const [productsById, setProductsById] = useState<Record<string, Product>>({});
+  const [loading, setLoading] = useState(true);
 
   // Filter states
   const [filterProductId, setFilterProductId] = useState<string>('');
@@ -102,6 +86,10 @@ export function DispatchContent({
     
     setLoading(false);
   };
+  
+  useEffect(() => {
+    fetchData();
+  }, []);
 
 
   const platformNames = useMemo(() => 
@@ -139,7 +127,7 @@ export function DispatchContent({
     if (!searchQuery) return products;
     return products.filter(p => 
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+        (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
     );
   }, [searchQuery, products]);
 
@@ -436,7 +424,7 @@ export function DispatchContent({
                                     ex.products ? ex.products.map(p => ({
                                     ...p,
                                     name: productsById[p.productId]?.name || 'N/A',
-                                    sku: productsById[p.productId]?.sku || 'N/A',
+                                    sku: (productsById[p.productId]?.productType === 'simple' ? productsById[p.productId]?.sku : productsById[p.productId]?.variants?.find(v => v.id === p.variantId)?.sku) || 'N/A',
                                     })) : []
                                 );
 
