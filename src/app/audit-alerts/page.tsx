@@ -92,7 +92,7 @@ async function AuditAlertsContent() {
 
 export default function AuditAlertsPage() {
     return (
-      <AuthProviderWrapper allowedRoles={['admin']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'plataformas']}>
         <AuditAlertsContent />
       </AuthProviderWrapper>
     );

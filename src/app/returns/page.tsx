@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { getReturnRequests } from '@/lib/api';
 import { WarrantyPolicyDialog } from '@/components/warranty-policy-dialog';
 import type { ReturnRequest } from '@/lib/types';
+import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 
 const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
@@ -27,7 +28,7 @@ const statusStyles: { [key: string]: string } = {
   Rejected: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
 };
 
-export default function GarantiasPage() {
+function GarantiasPageContent() {
   const returnRequests: ReturnRequest[] = getReturnRequests();
   return (
     <div className="space-y-6">
@@ -81,5 +82,13 @@ export default function GarantiasPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function GarantiasPage() {
+  return (
+    <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas']}>
+      <GarantiasPageContent />
+    </AuthProviderWrapper>
   );
 }

@@ -133,7 +133,7 @@ export default function LogisticsPage() {
 
 
     useEffect(() => {
-        if (user && user.role !== 'logistics' && user.role !== 'admin') {
+        if (user?.role === 'commercial') {
           router.push('/');
         }
     }, [user, router]);
@@ -588,7 +588,7 @@ export default function LogisticsPage() {
     };
 
 
-    if (user?.role !== 'logistics' && user?.role !== 'admin') {
+    if (user?.role === 'commercial') {
         return (
             <div className="flex items-center justify-center h-full">
                 <p className="text-muted-foreground">No tienes permiso para ver esta página.</p>

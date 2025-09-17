@@ -1,4 +1,5 @@
 
+
 import { getPendingInventory, getProducts } from '@/lib/api';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { PendingInventoryContent } from '@/components/pending-inventory-content';
@@ -10,7 +11,7 @@ export default async function PendingInventoryPage() {
     ]);
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'logistics']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
         <PendingInventoryContent initialPendingItems={pendingItems} allProducts={products} />
       </AuthProviderWrapper>
     );

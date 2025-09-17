@@ -105,7 +105,7 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
             </CardHeader>
             <CardContent>
                 <div className="grid gap-6">
-                    {loading && isAdmin ? (
+                    {loading && (isAdmin || user?.role === 'plataformas') ? (
                         Array.from({ length: 4 }).map((_, i) => (
                             <div key={i} className="flex items-center justify-between">
                                 <div className="space-y-1">

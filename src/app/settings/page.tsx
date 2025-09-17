@@ -8,7 +8,7 @@ export default async function SettingsPage() {
     const rotationCategories: RotationCategory[] = await getRotationCategories();
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'plataformas']}>
         <SettingsContent initialRotationCategories={rotationCategories} />
       </AuthProviderWrapper>
     );

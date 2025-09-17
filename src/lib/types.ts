@@ -83,7 +83,7 @@ export type ReturnRequest = {
   date: string;
 };
 
-export type UserRole = 'admin' | 'logistics' | 'commercial';
+export type UserRole = 'admin' | 'logistics' | 'commercial' | 'plataformas';
 
 export type User = {
   id: string;

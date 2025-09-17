@@ -8,7 +8,7 @@ export default async function CarriersPage() {
     const carriers: Carrier[] = await getCarriers();
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'plataformas']}>
         <CarriersContent initialCarriers={carriers} />
       </AuthProviderWrapper>
     );

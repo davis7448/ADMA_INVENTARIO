@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useTransition, useMemo } from 'react';
@@ -72,7 +73,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                     <div>
                         <CardTitle>User Management</CardTitle>
                         <CardDescription>
-                            Manage user roles and access. New users should be created directly in the Firebase console.
+                            Gestiona los roles de los usuarios existentes. Los nuevos usuarios se crean desde la consola de Firebase.
                         </CardDescription>
                     </div>
                 </div>
@@ -98,6 +99,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                                 <SelectContent>
                                     <SelectItem value="all">Todos los Roles</SelectItem>
                                     <SelectItem value="admin">Admin</SelectItem>
+                                    <SelectItem value="plataformas">Plataformas</SelectItem>
                                     <SelectItem value="logistics">Logistics</SelectItem>
                                     <SelectItem value="commercial">Commercial</SelectItem>
                                 </SelectContent>
@@ -184,6 +186,7 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="plataformas">Plataformas</SelectItem>
                         <SelectItem value="logistics">Logistics</SelectItem>
                         <SelectItem value="commercial">Commercial</SelectItem>
                     </SelectContent>

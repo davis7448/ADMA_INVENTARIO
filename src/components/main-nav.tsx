@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import Link from 'next/link';
@@ -32,44 +33,44 @@ type NavItem = {
   };
   
   const navItems: NavItem[] = [
-    { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial'] },
-    { href: '/products', label: 'Inventario', roles: ['admin', 'commercial'] },
+    { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial', 'plataformas'] },
+    { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'plataformas'] },
     {
         label: 'Ventas',
-        roles: ['admin', 'commercial'],
+        roles: ['admin', 'commercial', 'plataformas'],
         children: [
-            { href: '/orders', label: 'Órdenes', roles: ['admin', 'commercial'] },
-            { href: '/returns', label: 'Garantías', roles: ['admin', 'commercial'] },
+            { href: '/orders', label: 'Órdenes', roles: ['admin', 'commercial', 'plataformas'] },
+            { href: '/returns', label: 'Garantías', roles: ['admin', 'commercial', 'plataformas'] },
         ],
     },
     {
         label: 'Activos',
-        roles: ['admin'],
+        roles: ['admin', 'plataformas'],
         children: [
-            { href: '/suppliers', label: 'Suppliers', roles: ['admin'] },
-            { href: '/categories', label: 'Categories', roles: ['admin'] },
-            { href: '/carriers', label: 'Carriers', roles: ['admin'] },
-            { href: '/platforms', label: 'Platforms', roles: ['admin'] },
-            { href: '/vendedores', label: 'Vendedores', roles: ['admin'] },
+            { href: '/suppliers', label: 'Suppliers', roles: ['admin', 'plataformas'] },
+            { href: '/categories', label: 'Categories', roles: ['admin', 'plataformas'] },
+            { href: '/carriers', label: 'Carriers', roles: ['admin', 'plataformas'] },
+            { href: '/platforms', label: 'Platforms', roles: ['admin', 'plataformas'] },
+            { href: '/vendedores', label: 'Vendedores', roles: ['admin', 'plataformas'] },
         ],
     },
     {
         label: 'Logística',
-        roles: ['admin', 'logistics'],
+        roles: ['admin', 'logistics', 'plataformas'],
         children: [
-            { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics'] },
-            { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics'] },
-            { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics'] },
+            { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics', 'plataformas'] },
+            { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics', 'plataformas'] },
+            { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics', 'plataformas'] },
         ],
     },
-    { href: '/history', label: 'Historial', roles: ['admin', 'logistics'] },
+    { href: '/history', label: 'Historial', roles: ['admin', 'logistics', 'plataformas'] },
     {
         label: 'Alertas',
-        roles: ['admin', 'logistics', 'commercial'],
+        roles: ['admin', 'logistics', 'commercial', 'plataformas'],
         children: [
-            { href: '/audit-alerts', label: 'Auditoría', roles: ['admin'] },
-            { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin'], badge: 'stale_alerts' },
-            { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'logistics'] },
+            { href: '/audit-alerts', label: 'Auditoría', roles: ['admin', 'plataformas'] },
+            { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin', 'plataformas'], badge: 'stale_alerts' },
+            { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'logistics', 'plataformas'] },
         ]
     }
   ];
@@ -81,7 +82,7 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
 
   useEffect(() => {
     async function fetchAlerts() {
-        if (user?.role === 'admin') {
+        if (user?.role === 'admin' || user?.role === 'plataformas') {
             const alerts = await getStaleReservationAlerts();
             setStaleAlertsCount(alerts.length);
         }

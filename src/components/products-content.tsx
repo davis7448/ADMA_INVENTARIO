@@ -131,7 +131,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         setHasPending(false);
     };
 
-    const canEdit = user?.role === 'admin';
+    const canEdit = user?.role === 'admin' || user?.role === 'plataformas';
 
     const getRotationIcon = (categoryName?: string) => {
         if (!categoryName) return null;
@@ -161,7 +161,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                 'Rotación': p.rotationCategoryName || 'N/A',
                 'Stock Pendiente': p.pendingStock || 0,
                 'Stock Averiado': p.damagedStock || 0,
-                'Costo': canEdit ? p.cost : undefined,
+                'Costo': user?.role === 'admin' ? p.cost : undefined,
                 'Proveedor': supplierNames[p.vendorId] || 'Unknown',
                 'Fecha Compra': p.purchaseDate ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
                 'Link de Contenido': p.contentLink || '',
@@ -191,7 +191,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         });
 
         // If user is not admin, remove the Cost property from all objects
-        if (!canEdit) {
+        if (user?.role !== 'admin') {
             dataToExport.forEach(item => delete (item as any).Costo);
         }
     

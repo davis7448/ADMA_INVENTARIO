@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal } from 'lucide-react';
 import { getOrders } from '@/lib/api';
+import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 
 const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
@@ -34,7 +35,7 @@ const statusStyles: { [key: string]: string } = {
   Cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
 };
 
-export default function OrdersPage() {
+function OrdersPageContent() {
   const orders = getOrders();
   return (
     <div className="space-y-6">
@@ -106,5 +107,13 @@ export default function OrdersPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas']}>
+      <OrdersPageContent />
+    </AuthProviderWrapper>
   );
 }

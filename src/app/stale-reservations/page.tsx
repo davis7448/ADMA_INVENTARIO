@@ -9,7 +9,7 @@ export default async function StaleReservationsPage() {
     const alerts = await getStaleReservationAlerts();
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'plataformas']}>
         <StaleReservationsContent initialAlerts={alerts} />
       </AuthProviderWrapper>
     );

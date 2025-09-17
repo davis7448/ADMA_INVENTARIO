@@ -51,7 +51,7 @@ export default async function ProductsPage() {
 
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'commercial']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas']}>
         <ProductsContent 
           initialProducts={productsWithRotation}
           initialSupplierNames={supplierNames}

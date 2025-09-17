@@ -8,7 +8,7 @@ export default async function PlatformsPage() {
     const platforms: Platform[] = await getPlatforms();
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'plataformas']}>
         <PlatformsContent initialPlatforms={platforms} />
       </AuthProviderWrapper>
     );

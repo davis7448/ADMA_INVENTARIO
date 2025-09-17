@@ -9,7 +9,7 @@ export default async function SuppliersPage() {
     const suppliers: Supplier[] = await getSuppliers();
 
     return (
-        <AuthProviderWrapper allowedRoles={['admin']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'plataformas']}>
             <SuppliersContent initialSuppliers={suppliers} />
         </AuthProviderWrapper>
     )

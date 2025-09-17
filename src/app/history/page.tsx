@@ -46,7 +46,7 @@ async function HistoryPageContent() {
 
 export default function HistoryPage() {
   return (
-    <AuthProviderWrapper allowedRoles={['admin', 'logistics']}>
+    <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
       <HistoryPageContent />
     </AuthProviderWrapper>
   );

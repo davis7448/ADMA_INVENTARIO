@@ -8,7 +8,7 @@ export default async function StockAlertsPage() {
     const result = await getOrGenerateStockAlerts();
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'logistics']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'logistics', 'plataformas']}>
         <StockAlertsContent 
           initialAlerts={result.alerts} 
           error={result.error} 

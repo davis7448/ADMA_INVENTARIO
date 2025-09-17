@@ -4,7 +4,7 @@ import { DispatchContent } from '@/components/dispatch-content';
 
 export default function DispatchPage() {
     return (
-        <AuthProviderWrapper allowedRoles={['admin', 'logistics']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
             <DispatchContent />
         </AuthProviderWrapper>
     )
