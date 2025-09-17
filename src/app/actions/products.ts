@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail, createReservation, addMultipleProducts } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
-import type { Product, ProductVariant } from '@/lib/types';
+import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
 import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema, ImportProductSchema } from '@/lib/definitions';
 import { v4 as uuidv4 } from 'uuid';
@@ -18,24 +18,34 @@ export async function addProductAction(
 ): Promise<AddProductFormState> {
   
   const rawData: Record<string, any> = {};
-  const variants: ProductVariant[] = [];
+  const variantsData: Record<number, Partial<ProductVariant>> = {};
   
-  // Manually parse variants from FormData
   for (const [key, value] of formData.entries()) {
-    const variantMatch = key.match(/variants\[(\d+)\]\.(name|sku|priceDropshipping|priceWholesale|stock)/);
+    const variantMatch = key.match(/variants\[(\d+)\]\.(id|name|sku|priceDropshipping|priceWholesale|stock)/);
     if (variantMatch) {
       const index = parseInt(variantMatch[1], 10);
-      const field = variantMatch[2];
-      if (!variants[index]) {
-        variants[index] = { id: uuidv4(), name: '', sku: '', priceDropshipping: 0, stock: 0 };
+      const field = variantMatch[2] as keyof ProductVariant;
+      
+      if (!variantsData[index]) {
+        variantsData[index] = {};
       }
-      (variants[index] as any)[field] = value;
+      (variantsData[index] as any)[field] = value;
+
     } else {
       rawData[key] = value;
     }
   }
 
-  rawData.variants = variants.filter(Boolean); // Clean up any empty slots
+  const variants: ProductVariant[] = Object.values(variantsData).map(v => ({
+    id: (v.id as string) || uuidv4(),
+    name: (v.name as string) || '',
+    sku: (v.sku as string) || '',
+    priceDropshipping: Number(v.priceDropshipping) || 0,
+    priceWholesale: Number(v.priceWholesale) || 0,
+    stock: Number(v.stock) || 0,
+  }));
+
+  rawData.variants = variants;
 
   const purchaseDate = formData.get('purchaseDate');
 
@@ -100,30 +110,36 @@ export async function updateProductAction(
     formData: FormData
   ): Promise<EditProductFormState> {
     
-    // NOTE: The complex authentication logic was removed from here.
-    // It was causing persistent issues in the Server Action context.
-    // We now rely on client-side logic to show/hide sensitive fields like 'cost'.
-    // A robust production app would use a session-based check with a library like NextAuth.js
-    // or pass an auth token from the client to be verified by the Admin SDK here.
-    
     const rawData: Record<string, any> = {};
-    const variants: ProductVariant[] = [];
+    const variantsData: Record<number, Partial<ProductVariant>> = {};
     
     // Manually parse variants from FormData
     for (const [key, value] of formData.entries()) {
         const variantMatch = key.match(/variants\[(\d+)\]\.(id|name|sku|priceDropshipping|priceWholesale|stock)/);
         if (variantMatch) {
-            const index = parseInt(variantMatch[1], 10);
-            const field = variantMatch[2];
-            if (!variants[index]) {
-                variants[index] = { id: '', name: '', sku: '', priceDropshipping: 0, priceWholesale: 0, stock: 0 };
-            }
-            (variants[index] as any)[field] = value;
+          const index = parseInt(variantMatch[1], 10);
+          const field = variantMatch[2] as keyof ProductVariant;
+          
+          if (!variantsData[index]) {
+            variantsData[index] = {};
+          }
+          (variantsData[index] as any)[field] = value;
+    
         } else {
-            rawData[key] = value;
+          rawData[key] = value;
         }
-    }
-    rawData.variants = variants.filter(Boolean); // Clean up any empty slots
+      }
+
+    const variants: ProductVariant[] = Object.values(variantsData).map(v => ({
+        id: (v.id as string) || uuidv4(),
+        name: (v.name as string) || '',
+        sku: (v.sku as string) || '',
+        priceDropshipping: Number(v.priceDropshipping) || 0,
+        priceWholesale: Number(v.priceWholesale) || 0,
+        stock: Number(v.stock) || 0,
+    }));
+
+    rawData.variants = variants;
     
     const purchaseDate = formData.get('purchaseDate');
 
