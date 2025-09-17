@@ -247,7 +247,8 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
             priceDropshipping: Number(p.priceDropshipping),
             stock: Number(p.stock),
             purchaseDate: p.purchaseDate ? new Date(p.purchaseDate).toISOString() : undefined,
-            imageHint: p.imageHint || 'product',
+            imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
+            imageHint: 'product',
         }));
 
         await addMultipleProducts(productsToAdd);
