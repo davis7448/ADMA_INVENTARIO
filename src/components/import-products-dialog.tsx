@@ -37,9 +37,27 @@ type ProductToImport = {
 };
 
 const REQUIRED_HEADERS = [
-    'name', 'sku', 'description', 'imageUrl', 'imageHint',
+    'name', 'sku', 'description',
     'categoryId', 'priceDropshipping', 'stock', 'vendorId', 'productType'
 ];
+
+// Helper to sanitize headers
+const sanitizeHeaders = (products: ProductToImport[]): ProductToImport[] => {
+    return products.map(product => {
+        const sanitizedProduct: ProductToImport = {};
+        for (const key in product) {
+            let newKey = key.trim();
+            if (newKey.toLowerCase() === 'categoryld') {
+                newKey = 'categoryId';
+            } else if (newKey.toLowerCase() === 'vendorld') {
+                newKey = 'vendorId';
+            }
+            sanitizedProduct[newKey] = product[key];
+        }
+        return sanitizedProduct;
+    });
+};
+
 
 export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogProps) {
   const [open, setOpen] = useState(false);
@@ -68,16 +86,19 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
             const json = XLSX.utils.sheet_to_json(worksheet, { defval: null }) as ProductToImport[];
 
             if (json.length > 0) {
-                const headers = Object.keys(json[0]);
+                const sanitizedJson = sanitizeHeaders(json);
+                const headers = Object.keys(sanitizedJson[0]);
                 const missingHeaders = REQUIRED_HEADERS.filter(h => !headers.includes(h));
                 if (missingHeaders.length > 0) {
-                    setError(`Faltan las siguientes columnas obligatorias en el archivo: ${missingHeaders.join(', ')}.`);
+                    setError(`Faltan las siguientes columnas obligatorias en el archivo: ${missingHeaders.join(', ')}. Revisa que los nombres sean correctos.`);
                     setProducts([]);
                     return;
                 }
+                setProducts(sanitizedJson);
+            } else {
+                 setProducts([]);
             }
-
-            setProducts(json);
+            
             setError(null);
         } catch (err) {
             console.error(err);
