@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -160,7 +159,7 @@ export default function LogisticsPage() {
         const parentId = 'parentId' in item ? item.parentId : item.id;
         const parentProduct = allProductsList.find(p => p.id === parentId);
         
-        if (!parentProduct) {
+        if (!parentProduct && context !== 'averias') {
             toast({ variant: 'destructive', title: 'Error', description: 'Producto padre no encontrado.' });
             return;
         }
@@ -170,7 +169,7 @@ export default function LogisticsPage() {
             variantId: 'productType' in item ? undefined : item.id, // Only variants have variantId
             name: item.name,
             sku: item.sku || '',
-            imageUrl: item.parentImageUrl || ('imageUrl' in item ? item.imageUrl : parentProduct.imageUrl),
+            imageUrl: item.parentImageUrl || ('imageUrl' in item ? item.imageUrl : parentProduct?.imageUrl || ''),
             quantity: 1 // Default quantity
         };
     
@@ -1120,3 +1119,5 @@ export default function LogisticsPage() {
     </>
     );
 }
+
+    
