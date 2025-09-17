@@ -22,7 +22,7 @@ export async function addProductAction(
   
   // Manually parse variants from FormData
   for (const [key, value] of formData.entries()) {
-    const variantMatch = key.match(/variants\[(\d+)\]\.(name|sku|price|stock)/);
+    const variantMatch = key.match(/variants\[(\d+)\]\.(name|sku|priceDropshipping|priceWholesale|stock)/);
     if (variantMatch) {
       const index = parseInt(variantMatch[1], 10);
       const field = variantMatch[2];
@@ -50,7 +50,7 @@ export async function addProductAction(
     variants: rawData.variants.map((v: any) => ({
       ...v,
       priceDropshipping: Number(v.priceDropshipping),
-      priceWholesale: Number(v.priceWholesale),
+      priceWholesale: v.priceWholesale ? Number(v.priceWholesale) : 0,
       stock: Number(v.stock),
     })),
   });
@@ -69,7 +69,7 @@ export async function addProductAction(
 
     const newProduct: Omit<Product, 'id'> = {
       ...productData,
-      productType: 'simple',
+      productType: productData.productType,
       priceDropshipping: productData.priceDropshipping ?? 0,
       stock: productData.stock ?? 0,
       purchaseDate: productData.purchaseDate?.toISOString(),
@@ -295,3 +295,5 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
       
 
     
+
+  
