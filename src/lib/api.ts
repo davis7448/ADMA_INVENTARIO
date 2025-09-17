@@ -266,6 +266,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         transaction.update(productRef, updateData);
     });
 
+    const productData = (await getDoc(productRef)).data() as Product;
     const productToRegisterDamage = productData.productType === 'variable' 
     ? productData.variants?.find(v => v.sku.toLowerCase() === variantSku?.toLowerCase()) 
     : productData;
@@ -565,7 +566,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
     // 1. Create the new dispatch order document
     const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
         dispatchId,
-        date: Timestamp.now() as any, // Will be converted to string later
+        date: Timestamp.now(),
         platformId,
         carrierId,
         products,
@@ -605,8 +606,15 @@ export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
         let formattedDate: string;
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
+        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
+            const d = new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                formattedDate = d.toISOString();
+            } else {
+                formattedDate = new Date().toISOString(); // Fallback
+            }
         } else {
-            formattedDate = dateValue; // Assume it's already a string
+            formattedDate = new Date().toISOString(); // Fallback for other types
         }
         return { 
             id: doc.id,
@@ -626,8 +634,15 @@ export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
         let formattedDate: string;
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
+        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
+            const d = new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                formattedDate = d.toISOString();
+            } else {
+                formattedDate = new Date().toISOString(); // Fallback
+            }
         } else {
-            formattedDate = dateValue; // Assume it's already a string
+            formattedDate = new Date().toISOString(); // Fallback for other types
         }
         return { 
             id: doc.id,
@@ -646,8 +661,15 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
         let formattedDate: string;
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
+        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
+            const d = new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                formattedDate = d.toISOString();
+            } else {
+                formattedDate = new Date().toISOString(); // Fallback
+            }
         } else {
-            formattedDate = dateValue; // Assume it's already a string
+            formattedDate = new Date().toISOString(); // Fallback for other types
         }
         return { 
             id: doc.id,
@@ -703,7 +725,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
                 // Create audit alert
                 const alertRef = doc(collection(db, 'auditAlerts'));
                 const newAlert: Omit<AuditAlert, 'id'> = {
-                    date: Timestamp.now(), // Use Timestamp here
+                    date: Timestamp.now(),
                     productId: exProd.productId,
                     productName: productData.name,
                     productSku: exProd.variantSku || productData.sku || 'N/A',
@@ -793,8 +815,15 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
         let formattedDate: string;
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
+        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
+            const d = new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                formattedDate = d.toISOString();
+            } else {
+                formattedDate = new Date().toISOString(); // Fallback
+            }
         } else {
-            formattedDate = dateValue;
+            formattedDate = new Date().toISOString(); // Fallback for other types
         }
         return {
             id: doc.id,
@@ -1016,8 +1045,15 @@ export const getAllReservations = async (): Promise<Reservation[]> => {
         let formattedDate: string;
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
+        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
+            const d = new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                formattedDate = d.toISOString();
+            } else {
+                formattedDate = new Date().toISOString(); // Fallback
+            }
         } else {
-            formattedDate = dateValue; // Assume it's already a string
+            formattedDate = new Date().toISOString(); // Fallback for other types
         }
         return { 
             id: doc.id, 
@@ -1036,8 +1072,15 @@ export const getReservationsByProductId = async (productId: string): Promise<Res
         let formattedDate: string;
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
+        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
+            const d = new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                formattedDate = d.toISOString();
+            } else {
+                formattedDate = new Date().toISOString(); // Fallback
+            }
         } else {
-            formattedDate = dateValue; // Assume it's already a string
+            formattedDate = new Date().toISOString(); // Fallback for other types
         }
         return { 
             id: doc.id, 
@@ -1114,15 +1157,29 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
       let formattedAlertDate: string;
       if (alertDateValue instanceof Timestamp) {
           formattedAlertDate = alertDateValue.toDate().toISOString();
+      } else if (typeof alertDateValue === 'string' || alertDateValue instanceof Date) {
+        const d = new Date(alertDateValue);
+        if (!isNaN(d.getTime())) {
+            formattedAlertDate = d.toISOString();
+        } else {
+            formattedAlertDate = new Date().toISOString(); // Fallback
+        }
       } else {
-          formattedAlertDate = alertDateValue;
+          formattedAlertDate = new Date().toISOString(); // Fallback for other types
       }
 
       let formattedReservationDate: string;
       if (reservationDateValue instanceof Timestamp) {
         formattedReservationDate = reservationDateValue.toDate().toISOString();
+      } else if (typeof reservationDateValue === 'string' || reservationDateValue instanceof Date) {
+        const d = new Date(reservationDateValue);
+        if (!isNaN(d.getTime())) {
+            formattedReservationDate = d.toISOString();
+        } else {
+            formattedReservationDate = new Date().toISOString(); // Fallback
+        }
       } else {
-        formattedReservationDate = reservationDateValue;
+        formattedReservationDate = new Date().toISOString(); // Fallback for other types
       }
 
       return { 
@@ -1155,9 +1212,17 @@ export const checkForStaleReservations = async (): Promise<void> => {
 
     const movements = allMovements.docs.map(doc => {
         const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+            formattedDate = dateValue.toDate().toISOString();
+        } else {
+            formattedDate = dateValue as string;
+        }
+
         return {
             ...data,
-            date: (data.date as Timestamp).toDate().toISOString()
+            date: formattedDate
         } as InventoryMovement;
     });
 
@@ -1356,3 +1421,4 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
     }
 }
     
+
