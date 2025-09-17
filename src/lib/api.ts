@@ -519,7 +519,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
     // 1. Create the new dispatch order document
     const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
         dispatchId,
-        date: new Date().toISOString(),
+        date: Timestamp.now() as any, // Will be converted to string later
         platformId,
         carrierId,
         products,
@@ -640,7 +640,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
                 // Create audit alert
                 const alertRef = doc(collection(db, 'auditAlerts'));
                 const newAlert: Omit<AuditAlert, 'id'> = {
-                    date: new Date().toISOString(),
+                    date: Timestamp.now() as any, // Will be converted later
                     productId: exProd.productId,
                     productName: productData.name,
                     productSku: exProd.variantSku || productData.sku || 'N/A',
@@ -730,7 +730,7 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
         return {
             id: doc.id,
             ...data,
-            date: dateValue,
+            date: dateValue instanceof Timestamp ? dateValue.toDate().toISOString() : dateValue,
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1028,8 +1028,8 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
       return { 
         id: doc.id, 
         ...data,
-        alertDate: data.alertDate,
-        reservationDate: data.reservationDate,
+        alertDate: (data.alertDate as Timestamp).toDate().toISOString(),
+        reservationDate: (data.reservationDate as Timestamp).toDate().toISOString(),
       } as StaleReservationAlert;
     });
     return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
@@ -1081,7 +1081,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
                 if (productInfo) {
                     const alertRef = doc(collection(db, 'staleReservationAlerts'));
                     const newAlert: Omit<StaleReservationAlert, 'id'> = {
-                        alertDate: new Date().toISOString(),
+                        alertDate: Timestamp.now() as any, // Will be converted later
                         reservationId: reservation.id,
                         reservationDate: reservation.date,
                         productId: reservation.productId,

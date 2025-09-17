@@ -154,7 +154,7 @@ export interface AuditAlert {
     date: string;
     productId: string;
     productName: string;
-    productSku?: string;
+    productSku: string;
     message: string;
     dispatchId: string;
     exceptionTrackingNumber: string;
