@@ -1,8 +1,5 @@
 
 import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
 
 // IMPORTANT: This service account is for demo purposes ONLY.
 // In a real application, you MUST secure this file and your service account key.
