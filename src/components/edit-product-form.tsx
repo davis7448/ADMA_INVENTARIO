@@ -66,7 +66,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
   const [isPending, startTransition] = useTransition();
   const [isImporting, setIsImporting] = useState(false);
   const [importText, setImportText] = useState('');
-  const [imagePreview, setImagePreview] useState<string | null>(product.imageUrl);
+  const [imagePreview, setImagePreview] = useState<string | null>(product.imageUrl);
 
   // Camera state
   const [isCameraOpen, setIsCameraOpen] = useState(false);
