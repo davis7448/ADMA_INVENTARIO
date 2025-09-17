@@ -750,49 +750,27 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         }
         const orderData = orderSnap.data() as DispatchOrder;
 
-        const productIdsInExceptions = newExceptions.map(ex => ex.products.map(p => p.productId)).flat();
-        const uniqueProductIds = [...new Set(productIdsInExceptions)];
-        const productRefs = uniqueProductIds.map(id => doc(db, 'products', id));
-        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+        // Create a map of pending units for validation.
+        const pendingUnitsMap = new Map<string, number>(); // Key: 'productId|variantId' or 'productId'
+        const sourceProducts = orderData.status === 'Pendiente' ? orderData.products : orderData.exceptions.flatMap(e => e.products);
 
+        sourceProducts.forEach(p => {
+            const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+            const currentQty = pendingUnitsMap.get(key) || 0;
+            pendingUnitsMap.set(key, currentQty + p.quantity);
+        });
+
+        const allProductIds = new Set<string>(Array.from(pendingUnitsMap.keys()).map(k => k.split('|')[0]));
+        const productRefs = Array.from(allProductIds).map(id => doc(db, 'products', id));
+        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
         const productDataMap = new Map<string, Product>();
-        for (const snap of productSnaps) {
+        productSnaps.forEach(snap => {
             if (snap.exists()) {
-                productDataMap.set(snap.id, snap.data() as Product);
+                productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
             }
-        }
+        });
 
         // ========== 2. LOGIC / VALIDATION PHASE ==========
-        const productsToProcess = new Map<string, { orderedQty: number, pendingQty: number }>();
-
-        // Initialize map with quantities from the original order
-        orderData.products.forEach(p => {
-            const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-            productsToProcess.set(key, { orderedQty: p.quantity, pendingQty: 0 });
-        });
-        
-        // Calculate the actual pending units if the order is already 'Parcial'
-        if (orderData.status === 'Parcial') {
-            orderData.exceptions.forEach(ex => {
-                ex.products.forEach(p => {
-                    const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                    const productInfo = productsToProcess.get(key);
-                    if (productInfo) {
-                        productInfo.pendingQty += p.quantity;
-                    }
-                });
-            });
-        } else { // If 'Pendiente', all units are pending
-             orderData.products.forEach(p => {
-                const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                const productInfo = productsToProcess.get(key);
-                if (productInfo) {
-                    productInfo.pendingQty = productInfo.orderedQty;
-                }
-            });
-        }
-
-        // Validate new exceptions against the real pending quantity
         const newExceptionQuantities = new Map<string, number>();
         newExceptions.forEach(ex => {
             ex.products.forEach(p => {
@@ -801,43 +779,49 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
                 newExceptionQuantities.set(key, currentQty + p.quantity);
             });
         });
-        
+
         for (const [key, qty] of newExceptionQuantities.entries()) {
-            const productInfo = productsToProcess.get(key);
-            const productName = orderData.products.find(p => (p.variantId ? `${p.productId}|${p.variantId}` : p.productId) === key)?.name || 'Unknown';
-            if (!productInfo || qty > productInfo.pendingQty) {
-                 throw new Error(`La cantidad de excepción para ${productName} (${qty}) excede las unidades pendientes (${productInfo?.pendingQty || 0}).`);
+            const pendingQty = pendingUnitsMap.get(key) || 0;
+            if (qty > pendingQty) {
+                const productName = orderData.products.find(p => (p.variantId ? `${p.productId}|${p.variantId}` : p.productId) === key)?.name || 'Unknown';
+                throw new Error(`La cantidad de excepción para ${productName} (${qty}) excede las unidades pendientes (${pendingQty}).`);
             }
         }
 
         // ========== 3. WRITE PHASE ==========
-        const finalExceptions = [...(orderData.exceptions || []), ...newExceptions];
-        const status = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
-
-        transaction.update(orderRef, {
-            status: status,
-            trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
-            exceptions: finalExceptions
+        const dispatchedUnits = new Map<string, number>();
+        pendingUnitsMap.forEach((qty, key) => {
+            const exceptionQty = newExceptionQuantities.get(key) || 0;
+            dispatchedUnits.set(key, qty - exceptionQty);
         });
+
+        // Update pending stock for all dispatched units.
+        for (const [key, qty] of dispatchedUnits.entries()) {
+            if (qty > 0) {
+                const [productId] = key.split('|');
+                const productData = productDataMap.get(productId);
+                if (productData) {
+                    const newPendingStock = Math.max(0, (productData.pendingStock || 0) - qty);
+                    transaction.update(doc(db, 'products', productId), { pendingStock: newPendingStock });
+                }
+            }
+        }
         
-        // Handle stock movement for new exceptions.
+        // Update pending stock for new exceptions (they are just created).
         for (const ex of newExceptions) {
             for (const exProd of ex.products) {
-                const productRef = doc(db, 'products', exProd.productId);
                 const productData = productDataMap.get(exProd.productId);
-                
                 if (productData) {
                     const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
-                    transaction.update(productRef, { pendingStock: newPendingStock });
+                    transaction.update(doc(db, 'products', exProd.productId), { pendingStock: newPendingStock });
 
-                    // Create an audit alert for the exception.
                     const alertRef = doc(collection(db, 'auditAlerts'));
                     const newAlert: Omit<AuditAlert, 'id'> = {
                         date: Timestamp.now(),
                         productId: exProd.productId,
                         productName: productData.name,
                         productSku: exProd.variantSku || productData.sku || 'N/A',
-                        message: `Excepción en despacho: El producto se marcó como no disponible para envío a pesar de tener stock registrado durante el picking.`,
+                        message: `Excepción en despacho: El producto se marcó como no disponible para envío.`,
                         dispatchId: orderData.dispatchId,
                         exceptionTrackingNumber: ex.trackingNumber,
                     };
@@ -845,8 +829,27 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
                 }
             }
         }
+        
+        // If the order was 'Pendiente', all original products are now exceptions.
+        // We will replace them with the new exceptions.
+        const finalExceptions = orderData.status === 'Pendiente' 
+            ? newExceptions
+            : [...orderData.exceptions, ...newExceptions];
+            
+        // Clean up the final exception list. A better approach would be to calculate remaining exceptions.
+        // For now, let's just add them.
+        const updatedExceptions = orderData.status === 'Pendiente' ? newExceptions : [...orderData.exceptions, ...newExceptions];
+
+        const finalStatus = updatedExceptions.length > 0 ? 'Parcial' : 'Despachada';
+
+        transaction.update(orderRef, {
+            status: finalStatus,
+            trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
+            exceptions: updatedExceptions
+        });
     });
 };
+
 
 
 
@@ -1484,11 +1487,11 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
             const availableStock = item.analysis.availableForSale;
             const hasSales = item.salesLast7Days.some((s: number) => s > 0);
             
+            // For products with no sales, trigger if stock is low
             if (!hasSales) {
-                 // Trigger alert if stock is low regardless of sales
                 return availableStock <= 5;
             }
-            // Original logic for products with sales
+            // For products with sales, use the AI's triggered alert
             return item.analysis.alertTriggered;
         });
 

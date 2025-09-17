@@ -122,11 +122,6 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     setIsProcessing(true);
     
     const trackingList = trackingNumbers.split('\n').map(t => t.trim()).filter(t => t);
-    if (trackingList.length === 0 && exceptions.length === 0) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Debe ingresar al menos un número de guía o registrar una excepción.' });
-        setIsProcessing(false);
-        return;
-    }
     
     try {
         await processDispatch(order.id, trackingList, exceptions);
