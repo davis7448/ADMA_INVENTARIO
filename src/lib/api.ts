@@ -154,9 +154,13 @@ export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
           delete dataToAdd.purchaseDate;
         }
       }
+      
+      if (product.createdBy) {
+          dataToAdd.createdBy = product.createdBy;
+      }
 
       // Ensure 'cost' is not undefined before adding
-      if (dataToAdd.cost === undefined) {
+      if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
         delete dataToAdd.cost;
       }
       
@@ -264,21 +268,43 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         
         const productData = productSnap.data() as Product;
         productNameForMovement = productData.name;
+        
         const currentDamagedStock = productData.damagedStock || 0;
         const newDamagedStock = currentDamagedStock + quantity;
         
         let updateData: Record<string, any> = { damagedStock: newDamagedStock };
 
-        // Determine product name for movement log
+        // Determine product name for movement log and update stock
         if (productData.productType === 'variable') {
-            const variant = productData.variants?.find(v => v.sku.toLowerCase() === variantSku.toLowerCase());
-            if (variant) {
-                productNameForMovement = `${productData.name} (${variant.name})`;
+            const variants = [...(productData.variants || [])];
+            const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
+            
+            if (variantIndex === -1) {
+                throw new Error(`Variant with SKU ${variantSku} not found in product ${productData.name}.`);
             }
+            
+            const variant = variants[variantIndex];
+            productNameForMovement = `${productData.name} (${variant.name})`;
+            
+            const currentVariantStock = variant.stock || 0;
+            if (currentVariantStock < quantity) {
+                throw new Error(`Not enough stock for variant ${variant.name} to mark as damaged. Available: ${currentVariantStock}, Damaged: ${quantity}.`);
+            }
+            
+            variants[variantIndex].stock = currentVariantStock - quantity;
+            const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
+
+            updateData.variants = variants;
+            updateData.stock = newTotalStock;
+
+        } else { // Simple product
+            const currentStock = productData.stock || 0;
+            if (currentStock < quantity) {
+                throw new Error(`Not enough stock for product ${productData.name} to mark as damaged. Available: ${currentStock}, Damaged: ${quantity}.`);
+            }
+            updateData.stock = currentStock - quantity;
         }
         
-        // This transaction now ONLY updates the damagedStock count.
-        // It no longer touches the main `stock` or `variants` stock.
         transaction.update(productRef, updateData);
     });
 
@@ -1446,3 +1472,4 @@ export const getOrGenerateStockAlerts = async (): Promise<GetStockAlertsResult> 
     }
 }
     
+
