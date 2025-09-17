@@ -246,22 +246,30 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
     }
 
     try {
-        const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => ({
-            name: p.name,
-            sku: p.sku,
-            description: p.description,
-            priceDropshipping: p.pricedropshipping,
-            stock: p.stock,
-            categoryId: p.categoryid,
-            vendorId: p.vendorid,
-            productType: 'simple',
-            variants: [],
-            pendingStock: 0,
-            damagedStock: 0,
-            purchaseDate: p.purchasedate ? new Date(p.purchasedate).toISOString() : undefined,
-            imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
-            imageHint: 'product',
-        }));
+        const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => {
+            const product: Omit<Product, 'id'> = {
+                name: p.name,
+                sku: p.sku,
+                description: p.description,
+                priceDropshipping: p.pricedropshipping,
+                priceWholesale: p.pricewholesale ?? 0,
+                cost: p.cost ?? undefined,
+                stock: p.stock,
+                categoryId: p.categoryid,
+                vendorId: p.vendorid,
+                productType: 'simple',
+                variants: [],
+                pendingStock: 0,
+                damagedStock: 0,
+                purchaseDate: p.purchasedate ? new Date(p.purchasedate).toISOString() : undefined,
+                imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
+                imageHint: 'product',
+            };
+            if (product.cost === undefined) {
+                delete product.cost;
+            }
+            return product;
+        });
 
         await addMultipleProducts(productsToAdd);
         revalidatePath('/products');
@@ -285,3 +293,5 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
 
 
       
+
+    

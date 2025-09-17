@@ -43,6 +43,9 @@ const sanitizeHeaders = (products: ProductToImport[]): ProductToImport[] => {
         const sanitizedProduct: ProductToImport = {};
         for (const key in product) {
             let newKey = key.trim().toLowerCase().replace(/\s+/g, '');
+            // Specific corrections
+            if (newKey === 'categoryld') newKey = 'categoryid';
+            if (newKey === 'vendorld') newKey = 'vendorid';
             sanitizedProduct[newKey] = product[key];
         }
         return sanitizedProduct;
@@ -76,7 +79,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
             const json = XLSX.utils.sheet_to_json(worksheet, { defval: null }) as ProductToImport[];
 
             if (json.length > 0) {
-                // Sanitize headers first (convert to lowercase)
+                // Sanitize headers first (convert to lowercase and fix typos)
                 let processedJson = sanitizeHeaders(json);
 
                 // Trim all string values to remove leading/trailing whitespace
@@ -154,7 +157,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
   const handleDownloadTemplate = () => {
     const templateHeaders = [
         'name', 'sku', 'description', 
-        'pricedropshipping', 'stock', 
+        'pricedropshipping', 'pricewholesale', 'cost', 'stock', 
         'categoryid', 'vendorid',
         'purchasedate'
     ];
@@ -250,5 +253,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
   );
 }
       
+
+    
 
     
