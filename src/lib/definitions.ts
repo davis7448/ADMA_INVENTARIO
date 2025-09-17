@@ -260,12 +260,11 @@ export const ImportProductSchema = z.object({
     priceWholesale: z.coerce.number().optional(),
     cost: z.coerce.number().optional(),
     purchaseDate: z.string().optional(),
-    contentLink: z.string().url().optional().or(z.literal('')),
 });
 
 export type ImportProductsFormState = {
     message: string;
-    errors?: Record<string, string[]>;
+    errors?: string; // Change to a single string to hold the formatted error
     success: boolean;
     count: number;
 };
@@ -274,4 +273,5 @@ export type ImportProductsFormState = {
     
 
     
+
 

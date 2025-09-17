@@ -69,6 +69,7 @@ export async function addProductAction(
 
     const newProduct: Omit<Product, 'id'> = {
       ...productData,
+      productType: 'simple',
       priceDropshipping: productData.priceDropshipping ?? 0,
       stock: productData.stock ?? 0,
       purchaseDate: productData.purchaseDate?.toISOString(),
@@ -230,10 +231,15 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
     const validatedProducts = z.array(ImportProductSchema).safeParse(products);
     
     if (!validatedProducts.success) {
-        console.error("Validation errors:", validatedProducts.error.flatten().fieldErrors);
+        const errorMessages = validatedProducts.error.issues.map(issue => {
+            const row = issue.path[0] as number + 2; // +2 to account for 0-based index and header row
+            const field = issue.path[1];
+            return `Fila ${row}, Columna '${field}': ${issue.message}`;
+        });
+        
         return {
-          message: 'La validación de datos falló. Por favor, revisa el archivo.',
-          errors: validatedProducts.error.flatten().fieldErrors as any,
+          message: 'La validación de datos falló. Por favor, revisa los errores.',
+          errors: errorMessages.join(' | '),
           success: false,
           count: 0
         };

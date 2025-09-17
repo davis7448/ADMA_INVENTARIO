@@ -144,7 +144,8 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
             toast({
                 variant: 'destructive',
                 title: 'Error en la Importación',
-                description: result.message,
+                description: result.errors || result.message,
+                duration: 10000,
             });
         }
     });
