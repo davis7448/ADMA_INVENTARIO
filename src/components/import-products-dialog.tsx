@@ -37,10 +37,11 @@ type ProductToImport = {
     [key: string]: any;
 };
 
+
 const REQUIRED_HEADERS = [
     'name', 'sku', 'description',
-    'priceDropshipping', 'stock',
-    'categoryId', 'vendorId'
+    'pricedropshipping', 'stock',
+    'categoryid', 'vendorid'
 ];
 
 // Helper to sanitize headers to fix common typos
@@ -49,13 +50,8 @@ const sanitizeHeaders = (products: ProductToImport[]): ProductToImport[] => {
         const sanitizedProduct: ProductToImport = {};
         for (const key in product) {
             let newKey = key.trim().toLowerCase().replace(/\s+/g, '');
-            if (newKey === 'categoryld') { // Common typo 'l' instead of 'i'
-                newKey = 'categoryId';
-            } else if (newKey === 'vendorld') { // Common typo 'l' instead of 'i'
-                 newKey = 'vendorId';
-            } else if (newKey === 'pricedropshipping') { // Normalize to camelCase
-                newKey = 'priceDropshipping';
-            }
+            if (newKey === 'categoryld') newKey = 'categoryid';
+            if (newKey === 'vendorld') newKey = 'vendorid';
             sanitizedProduct[newKey] = product[key];
         }
         return sanitizedProduct;
@@ -91,8 +87,8 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
 
             if (json.length > 0) {
                 // Sanitize headers first
-                const sanitizedJson = sanitizeHeaders(json);
-                const headers = Object.keys(sanitizedJson[0]).map(h => h.toLowerCase());
+                let processedJson = sanitizeHeaders(json);
+                const headers = Object.keys(processedJson[0]).map(h => h.toLowerCase());
                 const missingHeaders = REQUIRED_HEADERS.filter(h => !headers.includes(h.toLowerCase()));
                 
                 if (missingHeaders.length > 0) {
@@ -100,7 +96,23 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
                     setProducts([]);
                     return;
                 }
-                setProducts(sanitizedJson);
+
+                // Force numeric conversion on client-side
+                processedJson = processedJson.map(row => {
+                    const newRow = { ...row };
+                    const numericFields = ['pricedropshipping', 'pricewholesale', 'cost', 'stock'];
+                    numericFields.forEach(field => {
+                        if (newRow[field] !== null && newRow[field] !== undefined && String(newRow[field]).trim() !== '') {
+                            const parsed = parseFloat(String(newRow[field]));
+                            newRow[field] = isNaN(parsed) ? null : parsed;
+                        } else {
+                            newRow[field] = null;
+                        }
+                    });
+                    return newRow;
+                });
+
+                setProducts(processedJson);
             } else {
                  setProducts([]);
             }
@@ -130,8 +142,8 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     }
 
     startTransition(async () => {
-        const plainProducts = JSON.parse(JSON.stringify(products));
-        const result = await importProductsAction(plainProducts);
+        // The data is already processed, so we can send it directly
+        const result = await importProductsAction(products);
         if (result.success) {
             toast({
                 title: '¡Importación Exitosa!',
@@ -153,7 +165,13 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
   };
   
   const handleDownloadTemplate = () => {
-    const data = [REQUIRED_HEADERS.reduce((acc, h) => ({ ...acc, [h]: ''}), {})];
+    const templateHeaders = [
+        'name', 'sku', 'description', 
+        'pricedropshipping', 'stock', 
+        'categoryid', 'vendorid', 
+        'pricewholesale', 'cost', 'purchasedate'
+    ];
+    const data = [templateHeaders.reduce((acc, h) => ({ ...acc, [h]: ''}), {})];
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Productos");
@@ -244,5 +262,4 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     </Dialog>
   );
 }
-
       
