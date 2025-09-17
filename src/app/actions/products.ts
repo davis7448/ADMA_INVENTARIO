@@ -99,8 +99,8 @@ export async function updateProductAction(
   ): Promise<EditProductFormState> {
     
     const auth = getAuth(app);
-    // This is the most reliable way to get the user in a server action.
-    // We'll wait for it, but with a timeout.
+    // This is a more robust way to get the user in a server action.
+    // We'll wait for the auth state to be ready, but with a timeout.
     const firebaseUser = await new Promise<import('firebase/auth').User | null>((resolve, reject) => {
         const timeout = setTimeout(() => {
             reject(new Error("Authentication timed out."));
@@ -229,5 +229,7 @@ export async function createReservationAction(productId: string, data: CreateRes
         };
     }
 }
+
+    
 
     
