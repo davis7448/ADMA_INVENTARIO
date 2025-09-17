@@ -38,10 +38,25 @@ export const getProducts = async (): Promise<Product[]> => {
   const productList = productSnapshot.docs.map(doc => {
     const data = doc.data();
     const purchaseDate = data.purchaseDate;
+    
+    // Robust date handling for purchaseDate
+    let formattedPurchaseDate: string | undefined = undefined;
+    if (purchaseDate) {
+        if (purchaseDate instanceof Timestamp) {
+            formattedPurchaseDate = purchaseDate.toDate().toISOString();
+        } else if (typeof purchaseDate === 'string' || purchaseDate instanceof Date) {
+            // Attempt to parse if it's a string or already a Date
+            const d = new Date(purchaseDate);
+            if (!isNaN(d.getTime())) {
+                formattedPurchaseDate = d.toISOString();
+            }
+        }
+    }
+
     return { 
         id: doc.id, 
         ...data,
-        purchaseDate: purchaseDate && typeof purchaseDate.toDate === 'function' ? (purchaseDate as Timestamp).toDate().toISOString() : purchaseDate,
+        purchaseDate: formattedPurchaseDate,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
     } as Product
@@ -70,10 +85,24 @@ export const getProductById = async (id: string): Promise<Product | null> => {
     const data = productSnap.data();
     const reservations = await getReservationsByProductId(id);
     const purchaseDate = data.purchaseDate;
+
+    // Robust date handling
+    let formattedPurchaseDate: string | undefined = undefined;
+    if (purchaseDate) {
+        if (purchaseDate instanceof Timestamp) {
+            formattedPurchaseDate = purchaseDate.toDate().toISOString();
+        } else if (typeof purchaseDate === 'string' || purchaseDate instanceof Date) {
+            const d = new Date(purchaseDate);
+            if (!isNaN(d.getTime())) {
+                formattedPurchaseDate = d.toISOString();
+            }
+        }
+    }
+
     return { 
         id: productSnap.id, 
         ...data,
-        purchaseDate: purchaseDate && typeof purchaseDate.toDate === 'function' ? (purchaseDate as Timestamp).toDate().toISOString() : purchaseDate,
+        purchaseDate: formattedPurchaseDate,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
         reservations: reservations || [],
@@ -90,10 +119,15 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
   }
   
-  const dataToAdd: Omit<Product, 'id'> & { purchaseDate?: Timestamp } = { ...product } as any;
+  const dataToAdd: Omit<Product, 'id'> & { purchaseDate?: Timestamp | string } = { ...product } as any;
 
   if (product.purchaseDate) {
-    dataToAdd.purchaseDate = Timestamp.fromDate(new Date(product.purchaseDate));
+    const date = new Date(product.purchaseDate);
+    if (!isNaN(date.getTime())) {
+      dataToAdd.purchaseDate = Timestamp.fromDate(date);
+    } else {
+        delete dataToAdd.purchaseDate; // Or handle invalid date string appropriately
+    }
   }
 
 
@@ -111,7 +145,12 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
   }
 
   if (productUpdate.purchaseDate) {
-    updateData.purchaseDate = Timestamp.fromDate(new Date(productUpdate.purchaseDate));
+    const date = new Date(productUpdate.purchaseDate);
+    if (!isNaN(date.getTime())) {
+      updateData.purchaseDate = Timestamp.fromDate(date);
+    } else {
+        delete updateData.purchaseDate;
+    }
   }
   
   await updateDoc(productRef, updateData);
@@ -1047,7 +1086,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
                         reservationDate: reservation.date,
                         productId: reservation.productId,
                         productName: productInfo.name,
-                        productSku: productInfo.sku,
+                        productSku: productInfo.sku!,
                         vendedorName: vendedorName,
                         quantity: reservation.quantity,
                     };
