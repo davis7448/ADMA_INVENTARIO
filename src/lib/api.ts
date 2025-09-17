@@ -135,6 +135,29 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
   return docRef.id;
 };
 
+export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
+    const batch = writeBatch(db);
+    const productsCol = collection(db, 'products');
+  
+    products.forEach((product) => {
+      const docRef = doc(productsCol);
+      
+      const dataToAdd: Omit<Product, 'id'> & { purchaseDate?: Timestamp | string } = { ...product } as any;
+      if (product.purchaseDate) {
+        const date = new Date(product.purchaseDate);
+        if (!isNaN(date.getTime())) {
+          dataToAdd.purchaseDate = Timestamp.fromDate(date);
+        } else {
+          delete dataToAdd.purchaseDate;
+        }
+      }
+      
+      batch.set(docRef, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
+    });
+  
+    await batch.commit();
+};
+
 export const updateProduct = async (productId: string, productUpdate: Partial<Omit<Product, 'id'>>) => {
   const productRef = doc(db, 'products', productId);
 
@@ -261,12 +284,14 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             updateData.variants = variants;
             updateData.stock = newTotalStock;
 
-        } else if (productData.productType === 'simple') {
+        } else if (productData.productType === 'simple' && productData.sku?.toLowerCase() === variantSku.toLowerCase()) {
             const currentStock = productData.stock || 0;
             if (currentStock < quantity) {
                 throw new Error(`No hay suficiente stock para marcar como averiado en ${productData.name}. Stock actual: ${currentStock}, se requieren: ${quantity}.`);
             }
             updateData.stock = currentStock - quantity;
+        } else {
+            throw new Error(`SKU ${variantSku} no encontrado en el producto simple ${productData.name}.`);
         }
 
         transaction.update(productRef, updateData);

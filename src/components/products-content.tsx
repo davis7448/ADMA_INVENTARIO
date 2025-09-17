@@ -34,7 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getProducts } from '@/lib/api';
 import type { Product, RotationCategory } from '@/lib/types';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
@@ -49,6 +49,7 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import React from 'react';
+import { ImportProductsDialog } from './import-products-dialog';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -209,7 +210,12 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
               <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
               <p className="text-muted-foreground">Browse and manage your product listings.</p>
             </div>
-            {canEdit && <AddProductForm onProductAdded={refreshProducts} />}
+            {canEdit && (
+                <div className="flex gap-2">
+                    <ImportProductsDialog onImportSuccess={refreshProducts} />
+                    <AddProductForm onProductAdded={refreshProducts} />
+                </div>
+            )}
           </div>
 
           <div className="p-4 border rounded-lg bg-muted/50">

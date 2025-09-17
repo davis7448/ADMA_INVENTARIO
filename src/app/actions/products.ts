@@ -2,11 +2,11 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail, createReservation } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail, createReservation, addMultipleProducts } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product, ProductVariant } from '@/lib/types';
-import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues } from '@/lib/definitions';
-import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema } from '@/lib/definitions';
+import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
+import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema, ImportProductSchema } from '@/lib/definitions';
 import { v4 as uuidv4 } from 'uuid';
 import { getAuth } from 'firebase/auth';
 import { app } from '@/lib/firebase';
@@ -220,6 +220,51 @@ export async function createReservationAction(productId: string, data: CreateRes
         return {
             message: errorMessage,
             success: false,
+        };
+    }
+}
+
+export async function importProductsAction(products: unknown[]): Promise<ImportProductsFormState> {
+    
+    const validatedProducts = z.array(ImportProductSchema).safeParse(products);
+    
+    if (!validatedProducts.success) {
+        console.error("Validation errors:", validatedProducts.error.flatten().fieldErrors);
+        return {
+          message: 'La validación de datos falló. Por favor, revisa el archivo.',
+          errors: validatedProducts.error.flatten().fieldErrors as any,
+          success: false,
+          count: 0
+        };
+    }
+
+    try {
+        const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => ({
+            ...p,
+            variants: [],
+            pendingStock: 0,
+            damagedStock: 0,
+            priceDropshipping: Number(p.priceDropshipping),
+            stock: Number(p.stock),
+            purchaseDate: p.purchaseDate ? new Date(p.purchaseDate).toISOString() : undefined,
+        }));
+
+        await addMultipleProducts(productsToAdd);
+        revalidatePath('/products');
+
+        return {
+            message: 'Productos importados exitosamente.',
+            success: true,
+            count: productsToAdd.length
+        };
+
+    } catch(error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+        return {
+            message: errorMessage,
+            success: false,
+            count: 0
         };
     }
 }

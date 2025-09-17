@@ -248,4 +248,28 @@ export type UpdateProfileFormState = {
     success: boolean;
 };
 
+// Import Products Schemas
+export const ImportProductSchema = z.object({
+    name: z.string({ required_error: "La columna 'name' es obligatoria." }).min(1),
+    sku: z.string({ required_error: "La columna 'sku' es obligatoria." }).min(1),
+    description: z.string({ required_error: "La columna 'description' es obligatoria." }).min(1),
+    imageUrl: z.string({ required_error: "La columna 'imageUrl' es obligatoria." }).url(),
+    imageHint: z.string().optional(),
+    categoryId: z.string({ required_error: "La columna 'categoryId' es obligatoria." }).min(1),
+    priceDropshipping: z.coerce.number({ required_error: "La columna 'priceDropshipping' es obligatoria." }),
+    stock: z.coerce.number({ required_error: "La columna 'stock' es obligatoria." }).int(),
+    vendorId: z.string({ required_error: "La columna 'vendorId' es obligatoria." }).min(1),
+    productType: z.enum(['simple', 'variable']).default('simple'),
+    priceWholesale: z.coerce.number().optional(),
+    cost: z.coerce.number().optional(),
+    purchaseDate: z.string().optional(), // String because it comes from Excel
+    contentLink: z.string().url().optional().or(z.literal('')),
+});
+
+export type ImportProductsFormState = {
+    message: string;
+    errors?: Record<string, string[]>;
+    success: boolean;
+    count: number;
+};
     
