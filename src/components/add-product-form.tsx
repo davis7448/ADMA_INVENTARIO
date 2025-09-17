@@ -77,7 +77,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       cost: undefined,
       purchaseDate: undefined,
       stock: undefined,
-      restockThreshold: undefined,
       image: undefined,
       contentLink: '',
       variants: [],
@@ -113,13 +112,13 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
     const lines = importText.trim().split('\n');
     const newVariants = lines.map(line => {
       const parts = line.split(/[\t,]/); // Split by tab or comma
-      const [sku, name, price, stock] = parts;
+      const [sku, name, priceDropshipping, priceWholesale, stock] = parts;
       return {
         id: uuidv4(),
         sku: sku?.trim() || '',
         name: name?.trim() || '',
-        priceDropshipping: parseFloat(price?.trim()) || 0,
-        priceWholesale: parseFloat(price?.trim()) || 0,
+        priceDropshipping: parseFloat(priceDropshipping?.trim()) || 0,
+        priceWholesale: parseFloat(priceWholesale?.trim()) || 0,
         stock: parseInt(stock?.trim(), 10) || 0,
       };
     }).filter(v => v.name && v.sku); // Only add variants that have a name and sku
@@ -523,21 +522,6 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             </FormItem>
                         )}
                     />
-                    {user?.role === 'admin' && (
-                        <FormField
-                            control={form.control}
-                            name="cost"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Costo</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" step="0.01" placeholder="e.g., 45.50" {...field} value={field.value ?? ''} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
@@ -561,19 +545,21 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               </FormItem>
                           )}
                       />
-                      <FormField
-                          control={form.control}
-                          name="restockThreshold"
-                          render={({ field }) => (
-                              <FormItem>
-                                  <FormLabel>Restock Threshold</FormLabel>
-                                  <FormControl>
-                                      <Input type="number" placeholder="e.g., 10" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} />
-                                  </FormControl>
-                                  <FormMessage />
-                              </FormItem>
-                          )}
-                      />
+                      {user?.role === 'admin' && (
+                        <FormField
+                            control={form.control}
+                            name="cost"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Costo</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" step="0.01" placeholder="e.g., 45.50" {...field} value={field.value ?? ''} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                      )}
                       <FormField
                             control={form.control}
                             name="purchaseDate"
@@ -636,15 +622,15 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
             <DialogTitle>Importar Variantes desde Texto</DialogTitle>
             <DialogDescription>
               Pega aquí los datos de tus variantes desde una hoja de cálculo (Excel, Google Sheets). 
-              Usa una línea por variante y asegúrate de que las columnas estén en el orden: SKU, Nombre, Precio, Stock.
+              Usa una línea por variante y asegúrate de que las columnas estén en el orden: SKU, Nombre, Precio Dropshipping, Precio x Mayor, Stock.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea
               placeholder="Ejemplo:
-CAM-01-R,Rojo,25.00,10
-CAM-01-A,Azul,25.00,15
-CAM-01-V,Verde,25.00,12"
+CAM-01-R,Rojo,25.00,20.00,10
+CAM-01-A,Azul,25.00,20.00,15
+CAM-01-V,Verde,25.00,20.00,12"
               rows={10}
               value={importText}
               onChange={(e) => setImportText(e.target.value)}

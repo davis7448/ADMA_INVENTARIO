@@ -26,7 +26,7 @@ export async function addProductAction(
       const index = parseInt(variantMatch[1], 10);
       const field = variantMatch[2];
       if (!variants[index]) {
-        variants[index] = { id: uuidv4(), name: '', sku: '', price: 0, stock: 0 };
+        variants[index] = { id: uuidv4(), name: '', sku: '', priceDropshipping: 0, stock: 0 };
       }
       (variants[index] as any)[field] = value;
     } else {
@@ -41,14 +41,15 @@ export async function addProductAction(
   const validatedFields = AddProductFormSchema.safeParse({
     ...rawData,
     image: formData.get('image'),
-    price: rawData.price ? Number(rawData.price) : undefined,
+    priceDropshipping: rawData.priceDropshipping ? Number(rawData.priceDropshipping) : undefined,
+    priceWholesale: rawData.priceWholesale ? Number(rawData.priceWholesale) : undefined,
     cost: rawData.cost ? Number(rawData.cost) : undefined,
     purchaseDate: purchaseDate ? new Date(purchaseDate as string) : undefined,
     stock: rawData.stock ? Number(rawData.stock) : undefined,
-    restockThreshold: rawData.restockThreshold ? Number(rawData.restockThreshold) : undefined,
     variants: rawData.variants.map((v: any) => ({
       ...v,
-      price: Number(v.price),
+      priceDropshipping: Number(v.priceDropshipping),
+      priceWholesale: Number(v.priceWholesale),
       stock: Number(v.stock),
     })),
   });
@@ -67,9 +68,8 @@ export async function addProductAction(
 
     const newProduct: Omit<Product, 'id'> = {
       ...productData,
-      price: productData.price ?? 0,
+      priceDropshipping: productData.priceDropshipping ?? 0,
       stock: productData.stock ?? 0,
-      restockThreshold: productData.restockThreshold ?? 0,
       purchaseDate: productData.purchaseDate?.toISOString(),
       imageUrl: imageUrl,
       imageHint: 'new product', // This could be improved with AI
@@ -123,7 +123,7 @@ export async function updateProductAction(
             const index = parseInt(variantMatch[1], 10);
             const field = variantMatch[2];
             if (!variants[index]) {
-                variants[index] = { id: '', name: '', sku: '', price: 0, stock: 0 };
+                variants[index] = { id: '', name: '', sku: '', priceDropshipping: 0, stock: 0 };
             }
             (variants[index] as any)[field] = value;
         } else {
@@ -137,14 +137,15 @@ export async function updateProductAction(
     const validatedFields = EditProductFormSchema.safeParse({
         ...rawData,
         image: formData.get('image'),
-        price: rawData.price ? Number(rawData.price) : undefined,
+        priceDropshipping: rawData.priceDropshipping ? Number(rawData.priceDropshipping) : undefined,
+        priceWholesale: rawData.priceWholesale ? Number(rawData.priceWholesale) : undefined,
         cost: rawData.cost ? Number(rawData.cost) : undefined,
         purchaseDate: purchaseDate ? new Date(purchaseDate as string) : undefined,
         stock: rawData.stock ? Number(rawData.stock) : undefined,
-        restockThreshold: rawData.restockThreshold ? Number(rawData.restockThreshold) : undefined,
         variants: rawData.variants.map((v: any) => ({
             ...v,
-            price: Number(v.price),
+            priceDropshipping: Number(v.priceDropshipping),
+            priceWholesale: Number(v.priceWholesale),
             stock: Number(v.stock),
             id: v.id || uuidv4()
         })),
@@ -170,9 +171,8 @@ export async function updateProductAction(
 
         const productUpdate: Partial<Omit<Product, 'id'>> = {
             ...productData,
-            price: productData.price ?? 0,
+            priceDropshipping: productData.priceDropshipping ?? 0,
             stock: productData.stock ?? 0,
-            restockThreshold: productData.restockThreshold ?? 0,
             purchaseDate: productData.purchaseDate?.toISOString(),
         };
 

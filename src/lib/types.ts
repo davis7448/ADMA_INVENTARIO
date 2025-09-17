@@ -24,7 +24,6 @@ export type Product = {
   stock: number;
   pendingStock: number;
   damagedStock: number;
-  restockThreshold: number;
   vendorId: string;
   rotationCategoryName?: string;
   reservations?: Reservation[]; // This will now be populated on the fly

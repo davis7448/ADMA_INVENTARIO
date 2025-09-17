@@ -21,13 +21,13 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 
 async function LowStockList() {
     const allProducts = await getProducts();
-    const lowStockProducts = allProducts.filter(p => p.stock < p.restockThreshold);
+    const lowStockProducts = allProducts.filter(p => p.stock <= 0);
 
     return (
          <Card>
             <CardHeader>
             <CardTitle>Low Stock Items</CardTitle>
-            <CardDescription>These products are below their restock threshold and require attention.</CardDescription>
+            <CardDescription>These products are out of stock and require attention.</CardDescription>
             </CardHeader>
             <CardContent>
             <Table>
@@ -36,7 +36,6 @@ async function LowStockList() {
                     <TableHead>Product</TableHead>
                     <TableHead>Supplier</TableHead>
                     <TableHead className="text-center">Current Stock</TableHead>
-                    <TableHead className="text-center">Threshold</TableHead>
                     <TableHead className="text-center">Status</TableHead>
                 </TableRow>
                 </TableHeader>
@@ -49,16 +48,15 @@ async function LowStockList() {
                                 <TableCell className="font-medium">{product.name}</TableCell>
                                 <TableCell>{supplierName}</TableCell>
                                 <TableCell className="text-center">{product.stock}</TableCell>
-                                <TableCell className="text-center">{product.restockThreshold}</TableCell>
                                 <TableCell className="text-center">
-                                <Badge variant="destructive">Low Stock</Badge>
+                                <Badge variant="destructive">Out of Stock</Badge>
                                 </TableCell>
                             </TableRow>
                         );
                     }))
                 ) : (
                     <TableRow>
-                    <TableCell colSpan={5} className="text-center">All product inventory levels are healthy.</TableCell>
+                    <TableCell colSpan={4} className="text-center">All product inventory levels are healthy.</TableCell>
                     </TableRow>
                 )}
                 </TableBody>

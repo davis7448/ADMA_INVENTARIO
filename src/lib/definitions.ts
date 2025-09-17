@@ -41,10 +41,6 @@ const ProductFormSchemaBase = z.object({
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'Stock must be a number.' }).int('Stock must be a whole number.').min(0, 'Stock must be a non-negative number.').optional()
   ),
-  restockThreshold: z.preprocess(
-    (val) => (String(val).trim() === '' ? undefined : val),
-    z.coerce.number({ invalid_type_error: 'Threshold must be a number.' }).int('Threshold must be a whole number.').min(0, 'Threshold must be a non-negative number.').optional()
-  ),
   contentLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   variants: z.array(ProductVariantSchema).optional(),
 });
