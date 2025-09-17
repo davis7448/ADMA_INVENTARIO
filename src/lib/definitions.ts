@@ -259,7 +259,7 @@ export const ImportProductSchema = z.object({
     stock: z.coerce.number({ required_error: "La columna 'stock' es obligatoria.", invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.'),
     categoryid: z.string({ required_error: "La columna 'categoryid' es obligatoria." }).min(1, "La columna 'categoryid' no puede estar vacía."),
     vendorid: z.string({ required_error: "La columna 'vendorid' es obligatoria." }).min(1, "La columna 'vendorid' no puede estar vacía."),
-    purchasedate: z.date({ invalid_type_error: 'Formato de fecha inválido.'}).nullable().optional(),
+    purchasedate: z.date({ invalid_type_error: 'Formato de fecha inválido. Asegúrese de que esté en formato YYYY-MM-DD.'}).nullable().optional(),
 });
 
 
@@ -283,3 +283,5 @@ export type ImportProductsFormState = {
     
 
     
+
+  

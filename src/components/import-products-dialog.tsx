@@ -71,19 +71,18 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     reader.onload = (e) => {
         try {
             const data = new Uint8Array(e.target?.result as ArrayBuffer);
-            const workbook = XLSX.read(data, { type: 'array' });
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const json = XLSX.utils.sheet_to_json(worksheet, { 
-                defval: null,
-                cellDates: true, // This is crucial to parse Excel dates
+                defval: null
             }) as ProductToImport[];
 
             if (json.length > 0) {
-                // Sanitize headers first (convert to lowercase and fix typos)
+                // Sanitize headers first (convert to lowercase)
                 let processedJson = sanitizeHeaders(json);
 
-                // Trim all string values to remove leading/trailing whitespace
+                // Clean up data: trim strings, parse numbers, handle dates
                 processedJson = processedJson.map(row => {
                     const newRow = { ...row };
                     for (const key in newRow) {
@@ -91,6 +90,17 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
                             newRow[key] = newRow[key].trim();
                         }
                     }
+                    // Explicitly parse numeric fields
+                    const numericFields = ['pricedropshipping', 'pricewholesale', 'cost', 'stock'];
+                    numericFields.forEach(field => {
+                        if (newRow[field] !== null && newRow[field] !== undefined) {
+                            const parsed = parseFloat(newRow[field]);
+                            if (!isNaN(parsed)) {
+                                newRow[field] = parsed;
+                            }
+                        }
+                    });
+                    
                     return newRow;
                 });
                 
@@ -165,12 +175,10 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     const data = [templateHeaders.reduce((acc, h) => ({ ...acc, [h]: ''}), {})];
     const worksheet = XLSX.utils.json_to_sheet(data);
     
-    // Set a date format for the purchasedate column
-    // This is a hint for Excel users how to format the date
-    if(worksheet['J1']) { // 'J' is the 10th column, for purchasedate
+    if(worksheet['J1']) {
         worksheet['J2'] = { t: 'd', v: new Date() };
         worksheet['!cols'] = worksheet['!cols'] || [];
-        worksheet['!cols'][9] = { wch: 12 }; // Set column width
+        worksheet['!cols'][9] = { wch: 12 }; 
     }
     
     const workbook = XLSX.utils.book_new();
@@ -274,3 +282,5 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     
 
     
+
+  
