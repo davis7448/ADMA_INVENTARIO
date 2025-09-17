@@ -24,8 +24,8 @@ export type StockAvailabilityInput = z.infer<typeof StockAvailabilityInputSchema
 
 const StockAvailabilityOutputSchema = z.object({
   availableForSale: z.number().describe('The stock available for new sales/reservations (physical - reserved).'),
-  dailyAverageSales: z.number().describe('The average number of units sold per day over the last 7 days.'),
-  daysOfStockLeft: z.number().describe('The estimated number of days until the available stock runs out, based on average daily sales. Is -1 if sales are 0.'),
+  dailyAverageSales: z.number().describe('The average number of units sold per day over the last 7 days. This can be a floating point number.'),
+  daysOfStockLeft: z.number().describe('The estimated number of days until the available stock runs out, based on average daily sales. Is -1 if sales are 0. This can be a floating point number.'),
   alertTriggered: z.boolean().describe('Whether a low stock alert should be triggered (true if days of stock are less than 3, false otherwise).'),
   alertMessage: z.string().describe('A human-readable message explaining the stock situation and why an alert was or was not triggered.'),
 });
@@ -49,10 +49,10 @@ const prompt = ai.definePrompt({
   - Sales in Last 7 Days: {{{salesLast7Days}}}
   - Number of Days With Sales (in last 7 days): {{{numberOfDaysWithSales}}}
   
-  Your calculations must follow these steps:
+  Your calculations must follow these steps precisely:
   1.  Calculate 'availableForSale': This is 'physicalStock' - 'reservedStock'.
-  2.  Calculate 'dailyAverageSales': This is 'salesLast7Days' / 'numberOfDaysWithSales'. If 'numberOfDaysWithSales' is 0, this should be 0.
-  3.  Calculate 'daysOfStockLeft': This is 'availableForSale' / 'dailyAverageSales'. If 'dailyAverageSales' is 0, this should be -1.
+  2.  Calculate 'dailyAverageSales': This is 'salesLast7Days' divided by 'numberOfDaysWithSales'. If 'numberOfDaysWithSales' is 0, this result must be 0. Perform this calculation with floating-point precision.
+  3.  Calculate 'daysOfStockLeft': This is 'availableForSale' divided by 'dailyAverageSales'. If 'dailyAverageSales' is 0, this result must be -1. Perform this calculation with floating-point precision.
   4.  Determine 'alertTriggered': The alert is triggered if 'daysOfStockLeft' is greater than or equal to 0 AND less than 3.
   5.  Generate 'alertMessage': A concise, human-readable message in Spanish explaining the stock situation. If the alert is triggered, the message should be urgent and explain why the condition was met.
   
