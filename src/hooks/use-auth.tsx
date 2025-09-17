@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const newUser: Omit<User, 'id'> = {
             name: firebaseUser.email.split('@')[0],
             email: firebaseUser.email,
-            role: 'plataformas', // Default role for new sign-ups
+            role: 'commercial', // Default role for new sign-ups
             avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.email}`
           };
           const newUserId = await addUser(newUser);
