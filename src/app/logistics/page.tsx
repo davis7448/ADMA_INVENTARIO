@@ -124,6 +124,8 @@ export default function LogisticsPage() {
     const [damageDescription, setDamageDescription] = useState('');
     const [damageCarrier, setDamageCarrier] = useState('');
     const [damageTrackingNumber, setDamageTrackingNumber] = useState('');
+    const [isDamageConfirmDialogOpen, setIsDamageConfirmDialogOpen] = useState(false);
+    const [productToConfirmForDamage, setProductToConfirmForDamage] = useState<(Product | (ProductVariant & { parentImageUrl?: string })) | null>(null);
 
     // Variant Selection State
     const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
@@ -238,14 +240,17 @@ export default function LogisticsPage() {
     const handleProductSearchSelect = (product: Product) => {
         setIsSearchDialogOpen(false);
         setSearchQuery('');
-
+    
         if (product.productType === 'variable') {
             setProductForVariantSelection(product);
             setIsVariantDialogOpen(true);
         } else {
-             if (searchContext === 'salidas') {
+            if (searchContext === 'salidas') {
                 setProductToConfirm(product);
                 setTimeout(() => setIsConfirmDialogOpen(true), 150);
+            } else if (searchContext === 'averias') {
+                setProductToConfirmForDamage(product);
+                setTimeout(() => setIsDamageConfirmDialogOpen(true), 150);
             } else {
                 addProductOrVariant(product, searchContext);
             }
@@ -255,7 +260,13 @@ export default function LogisticsPage() {
     const handleVariantSelect = (variant: ProductVariant) => {
         setIsVariantDialogOpen(false);
         if (productForVariantSelection) {
-            addProductOrVariant({ ...variant, parentId: productForVariantSelection.id, parentImageUrl: productForVariantSelection.imageUrl }, searchContext);
+            const variantWithContext = { ...variant, parentId: productForVariantSelection.id, parentImageUrl: productForVariantSelection.imageUrl };
+            if (searchContext === 'averias') {
+                setProductToConfirmForDamage(variantWithContext);
+                setTimeout(() => setIsDamageConfirmDialogOpen(true), 150);
+            } else {
+                addProductOrVariant(variantWithContext, searchContext);
+            }
         }
         setProductForVariantSelection(null);
     }
@@ -530,6 +541,14 @@ export default function LogisticsPage() {
     };
 
     // --- AVERÍAS ---
+    const handleConfirmDamageProduct = () => {
+        if (productToConfirmForDamage) {
+            setDamagedSku(productToConfirmForDamage.sku || '');
+        }
+        setIsDamageConfirmDialogOpen(false);
+        setProductToConfirmForDamage(null);
+    };
+
     const handleRegisterDamage = async () => {
         if (!damagedSku || !damageDescription || !damageCarrier || !damageTrackingNumber) {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
@@ -631,6 +650,36 @@ export default function LogisticsPage() {
                 <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setProductToConfirm(null)}>Cancelar</AlertDialogCancel>
                 <AlertDialogAction onClick={handleConfirmAddProduct}>Confirmar</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={isDamageConfirmDialogOpen} onOpenChange={setIsDamageConfirmDialogOpen}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmar Producto para Avería</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Se usará el SKU de este producto en el formulario de avería.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                {productToConfirmForDamage && (
+                    <div className="flex flex-col items-center justify-center gap-4 my-4">
+                        <Image
+                            src={productToConfirmForDamage.parentImageUrl || (productToConfirmForDamage as Product).imageUrl}
+                            alt={productToConfirmForDamage.name}
+                            width={128}
+                            height={128}
+                            className="rounded-md object-cover"
+                        />
+                        <div className="text-center">
+                            <p className="font-semibold">{productToConfirmForDamage.name}</p>
+                            <p className="text-sm text-muted-foreground">SKU: {productToConfirmForDamage.sku}</p>
+                        </div>
+                    </div>
+                )}
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setProductToConfirmForDamage(null)}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleConfirmDamageProduct}>Confirmar</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
