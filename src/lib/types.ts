@@ -106,6 +106,8 @@ export type InventoryMovement = {
   platformId?: string;
   carrierId?: string;
   dispatchId?: string;
+  userId?: string;
+  userName?: string;
 };
 
 export type Carrier = {
@@ -150,6 +152,10 @@ export interface DispatchOrder {
     trackingNumbers: string[];
     exceptions: DispatchException[];
     cancelledExceptions?: DispatchException[];
+    createdBy?: {
+        id: string;
+        name: string;
+    }
 }
 
 export interface AuditAlert {

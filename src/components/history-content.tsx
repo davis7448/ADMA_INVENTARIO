@@ -132,6 +132,7 @@ export function HistoryContent({
             'ID Movimiento': movement.movementId,
             'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
             'Tipo': movement.type,
+            'Usuario': movement.userName || 'Sistema',
             'SKU Producto': productsById[movement.productId]?.sku || 'N/A',
             'Nombre Producto': movement.productName,
             'Plataforma': movement.platformId ? platformNames[movement.platformId] : 'N/A',
@@ -151,6 +152,7 @@ export function HistoryContent({
             order.products.map(product => ({
                 'ID Despacho': order.dispatchId,
                 'Fecha': formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm"),
+                'Usuario': order.createdBy?.name || 'Sistema',
                 'Plataforma': platformNames[order.platformId] || 'N/A',
                 'Transportadora': carrierNames[order.carrierId] || 'N/A',
                 'SKU Producto': product.sku,
@@ -323,8 +325,7 @@ export function HistoryContent({
                             <TableHead>Fecha</TableHead>
                             <TableHead>Producto</TableHead>
                             <TableHead>Tipo</TableHead>
-                            <TableHead>Plataforma</TableHead>
-                            <TableHead>Transportadora</TableHead>
+                            <TableHead>Usuario</TableHead>
                             <TableHead className="text-center">Cantidad</TableHead>
                             <TableHead>Notas</TableHead>
                         </TableRow>
@@ -343,12 +344,7 @@ export function HistoryContent({
                                 {movement.type}
                             </Badge>
                             </TableCell>
-                            <TableCell>
-                                {movement.platformId ? platformNames[movement.platformId] : 'N/A'}
-                            </TableCell>
-                            <TableCell>
-                                {movement.carrierId ? carrierNames[movement.carrierId] : 'N/A'}
-                            </TableCell>
+                            <TableCell>{movement.userName || 'Sistema'}</TableCell>
                             <TableCell className="text-center">{movement.quantity}</TableCell>
                             <TableCell className="text-muted-foreground">{movement.notes}</TableCell>
                         </TableRow>
@@ -392,6 +388,7 @@ export function HistoryContent({
                                             <p className="text-sm text-muted-foreground">
                                                 {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")} - {order.totalItems} items
                                             </p>
+                                            {order.createdBy && <p className="text-xs text-muted-foreground">Creado por: {order.createdBy.name}</p>}
                                         </div>
                                         <div className="text-center px-4">
                                             {getDispatchStatusBadge(order.status)}

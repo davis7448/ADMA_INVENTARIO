@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import { useState } from 'react';
-import type { DispatchOrder } from '@/lib/types';
+import type { DispatchOrder, User } from '@/lib/types';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import { Checkbox } from './ui/checkbox';
 import { cancelPendingDispatchItems } from '@/lib/api';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 
 interface CancelDispatchDialogProps {
   order: DispatchOrder;
@@ -31,6 +33,7 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedGuides, setSelectedGuides] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const allExceptions = order.exceptions || [];
 
@@ -62,7 +65,7 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
 
     setIsProcessing(true);
     try {
-        await cancelPendingDispatchItems(order.id, guidesToCancel);
+        await cancelPendingDispatchItems(order.id, guidesToCancel, user);
         toast({ title: 'Éxito', description: 'Los items pendientes han sido anulados y el stock ha sido restaurado.' });
         onCancelled();
         setOpen(false);

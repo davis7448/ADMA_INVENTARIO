@@ -244,7 +244,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
     });
 };
 
-export const registerDamagedProduct = async (productId: string, quantity: number, variantSku: string, carrierId?: string, trackingNumber?: string, damageDescription?: string) => {
+export const registerDamagedProduct = async (productId: string, quantity: number, variantSku: string, carrierId: string | undefined, trackingNumber: string | undefined, damageDescription: string | undefined, user: { id: string; name: string; } | null) => {
     const productRef = doc(db, 'products', productId);
     let productNameForMovement = '';
     
@@ -305,6 +305,8 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         quantity: quantity,
         notes: `Devolución averiada: ${damageDescription}. Guía: ${trackingNumber}. SKU: ${variantSku}`,
         carrierId: carrierId,
+        userId: user?.id,
+        userName: user?.name
     });
 };
 
@@ -581,7 +583,7 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'>) => {
+export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'>) => {
     const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
 
     // 1. Create the new dispatch order document
@@ -603,6 +605,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         trackingNumbers: [],
         exceptions: [],
         cancelledExceptions: [],
+        createdBy,
     };
     await setDoc(dispatchOrderRef, newDispatchOrder);
 
@@ -618,6 +621,8 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
             platformId,
             carrierId,
             dispatchId,
+            userId: createdBy?.id,
+            userName: createdBy?.name
         });
     }
 
@@ -770,7 +775,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 }
 
 
-export const cancelPendingDispatchItems = async (orderId: string, cancelledTrackingNumbers: string[]) => {
+export const cancelPendingDispatchItems = async (orderId: string, cancelledTrackingNumbers: string[], user: { id: string; name: string; } | null) => {
     const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
@@ -814,6 +819,8 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
                         productName: productData.name || 'Unknown Product',
                         quantity: exProd.quantity,
                         notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}. SKU: ${exProd.variantSku || productData.sku}`,
+                        userId: user?.id,
+                        userName: user?.name
                     });
                 }
             });
