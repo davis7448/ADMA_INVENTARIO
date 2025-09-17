@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from './ui/skeleton';
 import { getProductById, getProductPerformanceData, getVendedores, getPlatforms } from '@/lib/api';
 import type { Product, ProductPerformanceData, Vendedor, Platform, ProductVariant } from '@/lib/types';
 import SalesChart from './sales-chart';
@@ -89,6 +89,11 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
     if (!product?.reservations) return 0;
     return product.reservations.reduce((acc, res) => acc + res.quantity, 0);
   }, [product]);
+
+  const availableStock = useMemo(() => {
+    if (!product) return 0;
+    return product.stock - totalReservedStock;
+  }, [product, totalReservedStock]);
 
   const getChartDataForRange = (dataSet: Record<string, number> = {}, key: 'sales' | 'returns') => {
     const data: any[] = [];
@@ -209,7 +214,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                           </div>
                         )}
                         
-                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-4 text-center">
+                        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 pt-4 text-center">
                             <Card>
                                 <CardHeader className="pb-2">
                                     <CardDescription>Price</CardDescription>
@@ -223,7 +228,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                     <CardDescription>Stock Físico</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-2xl font-bold text-green-600">{product.stock}</p>
+                                    <p className="text-2xl font-bold">{product.stock}</p>
                                 </CardContent>
                             </Card>
                              <Card>
@@ -232,6 +237,14 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-2xl font-bold text-blue-500">{totalReservedStock}</p>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="pb-2">
+                                    <CardDescription>Disponible</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-2xl font-bold text-green-600">{availableStock}</p>
                                 </CardContent>
                             </Card>
                             <Card>
