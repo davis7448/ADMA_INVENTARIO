@@ -50,6 +50,7 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
+import { useRouter } from 'next/navigation';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -64,6 +65,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [categoryNames, setCategoryNames] = useState<Record<string, string>>(initialCategoryNames);
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
+    const router = useRouter();
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -74,10 +76,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [minStock, setMinStock] = useState('');
     const [hasPending, setHasPending] = useState(false);
     
-    const refreshProducts = async () => {
+    const refreshProducts = () => {
         setLoading(true);
-        // This should be refetched from the server page component to get updated rotation
-        window.location.reload();
+        router.refresh();
+        setLoading(false);
     }
 
     const handleToggleRow = (productId: string) => {
