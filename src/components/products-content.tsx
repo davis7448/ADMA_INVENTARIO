@@ -113,9 +113,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending]);
 
     const handleRowClick = (product: Product) => {
-        if (product.productType === 'simple') {
-            setSelectedProductId(product.id);
-        }
+        setSelectedProductId(product.id);
     };
 
     const handleDialogChange = (open: boolean) => {
@@ -304,7 +302,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 filteredProducts.map((product) => (
                                     <React.Fragment key={product.id}>
                                         <TableRow 
-                                            className={cn(product.productType === 'simple' && 'cursor-pointer hover:bg-muted/50')}
+                                            className="cursor-pointer hover:bg-muted/50"
                                             onClick={() => handleRowClick(product)}
                                         >
                                             <TableCell className="w-[80px] hidden sm:table-cell">
