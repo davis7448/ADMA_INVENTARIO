@@ -247,14 +247,20 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
 
     try {
         const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => ({
-            ...p,
+            name: p.name,
+            sku: p.sku,
+            description: p.description,
+            priceDropshipping: p.pricedropshipping,
+            stock: p.stock,
+            categoryId: p.categoryid,
+            vendorId: p.vendorid,
+            priceWholesale: p.pricewholesale,
+            cost: p.cost,
             productType: 'simple',
             variants: [],
             pendingStock: 0,
             damagedStock: 0,
-            priceDropshipping: Number(p.priceDropshipping),
-            stock: Number(p.stock),
-            purchaseDate: p.purchaseDate ? new Date(p.purchaseDate).toISOString() : undefined,
+            purchaseDate: p.purchasedate ? new Date(p.purchasedate).toISOString() : undefined,
             imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
             imageHint: 'product',
         }));

@@ -253,13 +253,13 @@ export const ImportProductSchema = z.object({
     name: z.string({ required_error: "La columna 'name' es obligatoria." }).min(1, "La columna 'name' no puede estar vacía."),
     sku: z.coerce.string({ required_error: "La columna 'sku' es obligatoria." }).min(1, "La columna 'sku' no puede estar vacía."),
     description: z.string({ required_error: "La columna 'description' es obligatoria." }).min(1, "La columna 'description' no puede estar vacía."),
-    priceDropshipping: z.coerce.number({ required_error: "La columna 'priceDropshipping' es obligatoria y debe ser un número.", invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser un número no negativo.'),
+    pricedropshipping: z.coerce.number({ required_error: "La columna 'pricedropshipping' es obligatoria y debe ser un número.", invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser un número no negativo.'),
     stock: z.coerce.number({ required_error: "La columna 'stock' es obligatoria y debe ser un número entero.", invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.'),
-    categoryId: z.string({ required_error: "La columna 'categoryId' es obligatoria." }).min(1, "La columna 'categoryId' no puede estar vacía."),
-    vendorId: z.string({ required_error: "La columna 'vendorId' es obligatoria." }).min(1, "La columna 'vendorId' no puede estar vacía."),
-    priceWholesale: z.coerce.number().optional(),
+    categoryid: z.string({ required_error: "La columna 'categoryid' es obligatoria." }).min(1, "La columna 'categoryid' no puede estar vacía."),
+    vendorid: z.string({ required_error: "La columna 'vendorid' es obligatoria." }).min(1, "La columna 'vendorid' no puede estar vacía."),
+    pricewholesale: z.coerce.number().optional(),
     cost: z.coerce.number().optional(),
-    purchaseDate: z.string().optional(),
+    purchasedate: z.string().optional(),
 });
 
 export type ImportProductsFormState = {
