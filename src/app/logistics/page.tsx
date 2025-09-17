@@ -536,29 +536,31 @@ export default function LogisticsPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos.' });
             return;
         }
-
+    
         let productId: string | undefined;
         let finalSku: string | undefined;
         const lowercasedSku = damagedSku.toLowerCase();
-
-        // Find product or variant by SKU (using the working logic)
+    
+        // 1. Check for a simple product match
         const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku?.toLowerCase() === lowercasedSku);
+    
         if (simpleProduct) {
             productId = simpleProduct.id;
             finalSku = simpleProduct.sku;
         } else {
-            const parentProduct = allProductsList.find(p =>
-                p.productType === 'variable' && p.variants?.some(v => v.sku.toLowerCase() === lowercasedSku)
-            );
-            if (parentProduct) {
-                const variant = parentProduct.variants?.find(v => v.sku.toLowerCase() === lowercasedSku);
-                if (variant) {
-                    productId = parentProduct.id;
-                    finalSku = variant.sku;
+            // 2. If not found, check for a variant match
+            for (const parentProduct of allProductsList) {
+                if (parentProduct.productType === 'variable' && parentProduct.variants) {
+                    const variant = parentProduct.variants.find(v => v.sku.toLowerCase() === lowercasedSku);
+                    if (variant) {
+                        productId = parentProduct.id;
+                        finalSku = variant.sku;
+                        break; 
+                    }
                 }
             }
         }
-
+    
         if (!productId || !finalSku) {
             toast({ variant: 'destructive', title: 'Error', description: 'SKU del producto no encontrado.' });
             return;
