@@ -26,6 +26,7 @@ import {
     TableHeader,
     TableRow,
   } from '@/components/ui/table';
+import { DropdownMenuItem } from './ui/dropdown-menu';
 
 interface ImportProductsDialogProps {
   onImportSuccess: () => void;
@@ -133,10 +134,10 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">
+        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
             <Upload className="mr-2 h-4 w-4" />
-            Importar Productos
-        </Button>
+            Importar desde Excel
+        </DropdownMenuItem>
       </DialogTrigger>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>

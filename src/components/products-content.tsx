@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -49,7 +49,6 @@ import { Switch } from './ui/switch';
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import React from 'react';
 import { ImportProductsDialog } from './import-products-dialog';
 
 interface ProductsContentProps {
@@ -275,12 +274,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <ImportProductsDialog onImportSuccess={refreshProducts}>
-                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                                    <Upload className="mr-2 h-4 w-4" />
-                                    Importar desde Excel
-                                </DropdownMenuItem>
-                            </ImportProductsDialog>
+                            <ImportProductsDialog onImportSuccess={refreshProducts} />
                              <DropdownMenuItem onClick={handleExportExcel}>
                                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                                 Exportar a Excel
