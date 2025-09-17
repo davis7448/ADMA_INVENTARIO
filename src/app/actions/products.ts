@@ -1,4 +1,5 @@
 
+
 "use server";
 
 import { z } from 'zod';
@@ -241,6 +242,7 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
     try {
         const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => ({
             ...p,
+            productType: 'simple',
             variants: [],
             pendingStock: 0,
             damagedStock: 0,

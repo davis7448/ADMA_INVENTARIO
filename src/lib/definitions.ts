@@ -251,48 +251,17 @@ export type UpdateProfileFormState = {
 // Import Products Schemas
 export const ImportProductSchema = z.object({
     name: z.string({ required_error: "La columna 'name' es obligatoria." }).min(1, "La columna 'name' no puede estar vacía."),
-    sku: z.string().optional(),
+    sku: z.string({ required_error: "La columna 'sku' es obligatoria." }).min(1, "La columna 'sku' no puede estar vacía."),
     description: z.string({ required_error: "La columna 'description' es obligatoria." }).min(1, "La columna 'description' no puede estar vacía."),
     categoryId: z.string({ required_error: "La columna 'categoryId' es obligatoria." }).min(1, "La columna 'categoryId' no puede estar vacía."),
-    priceDropshipping: z.preprocess(
-        (val) => (val === null || String(val).trim() === '' ? undefined : val),
-        z.coerce.number({ invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser un número no negativo.').optional()
-    ),
-    stock: z.preprocess(
-        (val) => (val === null || String(val).trim() === '' ? undefined : val),
-        z.coerce.number({ invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.').optional()
-    ),
+    priceDropshipping: z.coerce.number({ required_error: "La columna 'priceDropshipping' es obligatoria y debe ser un número.", invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser un número no negativo.'),
+    stock: z.coerce.number({ required_error: "La columna 'stock' es obligatoria y debe ser un número entero.", invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.'),
     vendorId: z.string({ required_error: "La columna 'vendorId' es obligatoria." }).min(1, "La columna 'vendorId' no puede estar vacía."),
-    productType: z.enum(['simple', 'variable']).default('simple'),
     priceWholesale: z.coerce.number().optional(),
     cost: z.coerce.number().optional(),
     purchaseDate: z.string().optional(),
     contentLink: z.string().url().optional().or(z.literal('')),
-}).superRefine((data, ctx) => {
-    if (data.productType === 'simple') {
-      if (!data.sku || data.sku.trim() === '') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['sku'],
-          message: 'La columna SKU es obligatoria para productos de tipo "simple".',
-        });
-      }
-      if (data.priceDropshipping === undefined || data.priceDropshipping < 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['priceDropshipping'],
-          message: 'El precio es obligatorio y no puede ser negativo para productos de tipo "simple".',
-        });
-      }
-      if (data.stock === undefined || data.stock < 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['stock'],
-          message: 'El stock es un campo numérico entero obligatorio para productos de tipo "simple".',
-        });
-      }
-    }
-  });
+});
 
 export type ImportProductsFormState = {
     message: string;
@@ -305,3 +274,4 @@ export type ImportProductsFormState = {
     
 
     
+
