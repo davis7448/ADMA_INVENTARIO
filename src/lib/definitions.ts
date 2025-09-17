@@ -251,7 +251,7 @@ export type UpdateProfileFormState = {
 // Import Products Schemas
 export const ImportProductSchema = z.object({
     name: z.string({ required_error: "La columna 'name' es obligatoria." }).min(1),
-    sku: z.string({ required_error: "La columna 'sku' es obligatoria." }).min(1),
+    sku: z.string().optional(),
     description: z.string({ required_error: "La columna 'description' es obligatoria." }).min(1),
     imageUrl: z.string({ required_error: "La columna 'imageUrl' es obligatoria." }).url(),
     imageHint: z.string().optional(),
@@ -264,7 +264,15 @@ export const ImportProductSchema = z.object({
     cost: z.coerce.number().optional(),
     purchaseDate: z.string().optional(), // String because it comes from Excel
     contentLink: z.string().url().optional().or(z.literal('')),
-});
+}).superRefine((data, ctx) => {
+    if (data.productType === 'simple' && (!data.sku || data.sku.trim() === '')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sku'],
+        message: 'La columna SKU es obligatoria para productos de tipo "simple".',
+      });
+    }
+  });
 
 export type ImportProductsFormState = {
     message: string;
@@ -272,4 +280,6 @@ export type ImportProductsFormState = {
     success: boolean;
     count: number;
 };
+    
+
     
