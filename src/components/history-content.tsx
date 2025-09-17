@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -19,267 +19,418 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import type { InventoryMovement, Product, DispatchOrder } from '@/lib/types';
+import type { InventoryMovement, Product, DispatchOrder, Platform, Carrier } from '@/lib/types';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Download, FileSpreadsheet } from 'lucide-react';
+import { Download, FileSpreadsheet, Calendar as CalendarIcon, Check, ChevronsUpDown, X } from 'lucide-react';
 import { generatePickingListPDF } from '@/lib/pdf';
-import { formatToTimeZone } from '@/lib/utils';
+import { formatToTimeZone, cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
+import type { DateRange } from 'react-day-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Label } from '@/components/ui/label';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 interface HistoryContentProps {
     initialMovements: InventoryMovement[];
     initialDispatchOrders: DispatchOrder[];
-    productsById: Record<string, Product>;
-    platformNames: Record<string, string>;
-    carrierNames: Record<string, string>;
+    allProducts: Product[];
+    allPlatforms: Platform[];
+    allCarriers: Carrier[];
 }
 
 export function HistoryContent({
     initialMovements,
     initialDispatchOrders,
-    productsById,
-    platformNames,
-    carrierNames,
+    allProducts,
+    allPlatforms,
+    allCarriers
 }: HistoryContentProps) {
 
-  const handleDownloadPdf = (order: DispatchOrder) => {
-    const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
-    generatePickingListPDF(order.dispatchId, productsForPdf, platformNames[order.platformId], carrierNames[order.carrierId], new Date(order.date));
-  };
-  
-  const handleExportMovementsExcel = () => {
-    const flattenedData = initialMovements.map(movement => ({
-        'ID Movimiento': movement.movementId,
-        'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
-        'Tipo': movement.type,
-        'SKU Producto': productsById[movement.productId]?.sku || 'N/A',
-        'Nombre Producto': movement.productName,
-        'Cantidad': movement.quantity,
-        'Notas': movement.notes,
-    }));
+    // Filter states
+    const [filterPlatformId, setFilterPlatformId] = useState<string>('all');
+    const [filterCarrierId, setFilterCarrierId] = useState<string>('all');
+    const [filterProductId, setFilterProductId] = useState<string>('all');
+    const [dateRange, setDateRange] = useState<DateRange | undefined>();
+    const [productComboboxOpen, setProductComboboxOpen] = useState(false);
 
-    const worksheet = XLSX.utils.json_to_sheet(flattenedData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Movimientos");
-    XLSX.writeFile(workbook, `Historial-Movimientos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  };
+    const { filteredMovements, filteredDispatchOrders } = useMemo(() => {
+        let movements = [...initialMovements];
+        let dispatchOrders = [...initialDispatchOrders];
+        
+        const fromDate = dateRange?.from ? startOfDay(dateRange.from) : null;
+        const toDate = dateRange?.to ? endOfDay(dateRange.to) : null;
 
-  const handleExportExcel = () => {
-    const flattenedData = initialDispatchOrders.flatMap(order => 
-        order.products.map(product => ({
-            'ID Despacho': order.dispatchId,
-            'Fecha': formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm"),
-            'Plataforma': platformNames[order.platformId] || 'N/A',
-            'Transportadora': carrierNames[order.carrierId] || 'N/A',
-            'SKU Producto': product.sku,
-            'Nombre Producto': product.name,
-            'Cantidad': product.quantity,
-        }))
+        // Filter by Date Range
+        if (fromDate && toDate) {
+            movements = movements.filter(m => {
+                const moveDate = new Date(m.date);
+                return moveDate >= fromDate && moveDate <= toDate;
+            });
+            dispatchOrders = dispatchOrders.filter(o => {
+                const orderDate = new Date(o.date);
+                return orderDate >= fromDate && orderDate <= toDate;
+            });
+        }
+        
+        // Filter by Product
+        if (filterProductId !== 'all') {
+            movements = movements.filter(m => m.productId === filterProductId);
+            dispatchOrders = dispatchOrders.filter(o => o.products.some(p => p.productId === filterProductId));
+        }
+
+        // Filter by Platform (only affects dispatch orders)
+        if (filterPlatformId !== 'all') {
+            dispatchOrders = dispatchOrders.filter(o => o.platformId === filterPlatformId);
+        }
+
+        // Filter by Carrier (only affects dispatch orders)
+        if (filterCarrierId !== 'all') {
+            dispatchOrders = dispatchOrders.filter(o => o.carrierId === filterCarrierId);
+        }
+        
+        // Sort results
+        movements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        dispatchOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        return { filteredMovements: movements, filteredDispatchOrders: dispatchOrders };
+
+    }, [initialMovements, initialDispatchOrders, filterPlatformId, filterCarrierId, filterProductId, dateRange]);
+
+
+    const productsById = useMemo(() => allProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>), [allProducts]);
+    const platformNames = useMemo(() => allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>), [allPlatforms]);
+    const carrierNames = useMemo(() => allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>), [allCarriers]);
+
+    const handleDownloadPdf = (order: DispatchOrder) => {
+        const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
+        generatePickingListPDF(order.dispatchId, productsForPdf, platformNames[order.platformId], carrierNames[order.carrierId], new Date(order.date));
+    };
+
+    const handleExportMovementsExcel = () => {
+        const flattenedData = filteredMovements.map(movement => ({
+            'ID Movimiento': movement.movementId,
+            'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
+            'Tipo': movement.type,
+            'SKU Producto': productsById[movement.productId]?.sku || 'N/A',
+            'Nombre Producto': movement.productName,
+            'Cantidad': movement.quantity,
+            'Notas': movement.notes,
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(flattenedData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Movimientos");
+        XLSX.writeFile(workbook, `Historial-Movimientos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
+
+    const handleExportExcel = () => {
+        const flattenedData = filteredDispatchOrders.flatMap(order => 
+            order.products.map(product => ({
+                'ID Despacho': order.dispatchId,
+                'Fecha': formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm"),
+                'Plataforma': platformNames[order.platformId] || 'N/A',
+                'Transportadora': carrierNames[order.carrierId] || 'N/A',
+                'SKU Producto': product.sku,
+                'Nombre Producto': product.name,
+                'Cantidad': product.quantity,
+            }))
+        );
+
+        const worksheet = XLSX.utils.json_to_sheet(flattenedData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Despachos");
+        XLSX.writeFile(workbook, `Historial-Despachos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
+
+    const getMovementBadgeClass = (type: 'Entrada' | 'Salida' | 'Averia') => {
+        switch (type) {
+        case 'Entrada':
+            return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
+        case 'Salida':
+            return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
+        case 'Averia':
+            return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300';
+        default:
+            return '';
+        }
+    };
+
+    const getDispatchStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial') => {
+        switch (status) {
+        case 'Pendiente':
+            return <Badge variant="destructive">Pendiente</Badge>;
+        case 'Despachada':
+            return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Despachada</Badge>;
+        case 'Parcial':
+            return <Badge variant="secondary">Parcial</Badge>;
+        default:
+            return <Badge variant="outline">Desconocido</Badge>;
+        }
+    };
+
+    const clearFilters = () => {
+        setFilterPlatformId('all');
+        setFilterCarrierId('all');
+        setFilterProductId('all');
+        setDateRange(undefined);
+    };
+
+    const hasActiveFilters = filterPlatformId !== 'all' || filterCarrierId !== 'all' || filterProductId !== 'all' || dateRange;
+
+    const renderFilters = () => (
+        <div className="mb-6 space-y-4 p-4 border rounded-lg bg-muted/50">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                    <Label>Filtrar por producto</Label>
+                    <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" role="combobox" aria-expanded={productComboboxOpen} className="w-full justify-between">
+                                {filterProductId !== 'all' ? allProducts.find((p) => p.id === filterProductId)?.name : "Todos los productos"}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                            <Command>
+                                <CommandInput placeholder="Buscar producto..." />
+                                <CommandEmpty>No se encontró el producto.</CommandEmpty>
+                                <CommandGroup>
+                                    <CommandItem key="all" value="all" onSelect={() => { setFilterProductId('all'); setProductComboboxOpen(false); }}>
+                                        <Check className={cn("mr-2 h-4 w-4", filterProductId === 'all' ? "opacity-100" : "opacity-0")} />
+                                        Todos los productos
+                                    </CommandItem>
+                                    {allProducts.map((p) => (
+                                        <CommandItem key={p.id} value={p.name} onSelect={() => { setFilterProductId(p.id); setProductComboboxOpen(false); }}>
+                                            <Check className={cn("mr-2 h-4 w-4", filterProductId === p.id ? "opacity-100" : "opacity-0")} />
+                                            {p.name}
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="platform-filter">Plataforma</Label>
+                    <Select value={filterPlatformId} onValueChange={setFilterPlatformId}>
+                        <SelectTrigger id="platform-filter"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas</SelectItem>
+                            {allPlatforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="carrier-filter">Transportadora</Label>
+                    <Select value={filterCarrierId} onValueChange={setFilterCarrierId}>
+                        <SelectTrigger id="carrier-filter"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas</SelectItem>
+                            {allCarriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Rango de fechas</Label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {dateRange?.from ? (dateRange.to ? (<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>) : (format(dateRange.from, "LLL dd, y"))) : (<span>Seleccionar rango</span>)}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} />
+                        </PopoverContent>
+                    </Popover>
+                </div>
+            </div>
+            {hasActiveFilters && (
+                <div className="flex items-center gap-4 mt-4">
+                    <Button variant="ghost" onClick={clearFilters}>
+                        <X className="mr-2 h-4 w-4" />
+                        Limpiar filtros
+                    </Button>
+                </div>
+            )}
+        </div>
     );
 
-    const worksheet = XLSX.utils.json_to_sheet(flattenedData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Despachos");
-    XLSX.writeFile(workbook, `Historial-Despachos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-  };
+    return (
+        <div className="space-y-6">
+        <div>
+            <h1 className="text-3xl font-bold font-headline tracking-tight">Historial de Inventario</h1>
+            <p className="text-muted-foreground">Un registro de todas las transacciones de stock.</p>
+        </div>
 
-  const getMovementBadgeClass = (type: 'Entrada' | 'Salida' | 'Averia') => {
-    switch (type) {
-      case 'Entrada':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
-      case 'Salida':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
-      case 'Averia':
-        return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300';
-      default:
-        return '';
-    }
-  };
+        {renderFilters()}
 
-  const getDispatchStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial') => {
-    switch (status) {
-      case 'Pendiente':
-        return <Badge variant="destructive">Pendiente</Badge>;
-      case 'Despachada':
-        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Despachada</Badge>;
-      case 'Parcial':
-        return <Badge variant="secondary">Parcial</Badge>;
-      default:
-        return <Badge variant="outline">Desconocido</Badge>;
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Historial de Inventario</h1>
-        <p className="text-muted-foreground">Un registro de todas las transacciones de stock.</p>
-      </div>
-
-       <Card>
-        <CardHeader>
-            <div className="flex justify-between items-center">
-                <div>
-                <CardTitle>Movimientos Recientes</CardTitle>
-                <CardDescription>
-                    Mostrando las últimas entradas y salidas de inventario.
-                </CardDescription>
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle>Movimientos Recientes</CardTitle>
+                        <CardDescription>
+                            Mostrando las últimas entradas y salidas de inventario.
+                        </CardDescription>
+                    </div>
+                    <Button variant="outline" onClick={handleExportMovementsExcel}>
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        Exportar a Excel
+                    </Button>
                 </div>
-                <Button variant="outline" onClick={handleExportMovementsExcel}>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    Exportar a Excel
-                </Button>
-            </div>
-        </CardHeader>
-        <CardContent>
-        <Table>
-            <TableHeader>
-            <TableRow>
-                <TableHead>ID Mov.</TableHead>
-                <TableHead>Fecha</TableHead>
-                <TableHead>Producto</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead className="text-center">Cantidad</TableHead>
-                <TableHead>Notas</TableHead>
-            </TableRow>
-            </TableHeader>
-            <TableBody>
-            {initialMovements.length > 0 ? (
-                initialMovements.map((movement) => (
-                <TableRow key={movement.id}>
-                    <TableCell className="font-mono text-xs">{movement.movementId || 'N/A'}</TableCell>
-                    <TableCell className="font-medium">
-                    {formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm")}
-                    </TableCell>
-                    <TableCell>{movement.productName}</TableCell>
-                    <TableCell>
-                    <Badge variant="outline" className={getMovementBadgeClass(movement.type)}>
-                        {movement.type}
-                    </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">{movement.quantity}</TableCell>
-                    <TableCell className="text-muted-foreground">{movement.notes}</TableCell>
-                </TableRow>
-                ))
-            ) : (
-                <TableRow>
-                <TableCell colSpan={6} className="text-center">
-                    No hay movimientos de inventario registrados.
-                </TableCell>
-                </TableRow>
-            )}
-            </TableBody>
-        </Table>
-        </CardContent>
-    </Card>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>ID Mov.</TableHead>
+                            <TableHead>Fecha</TableHead>
+                            <TableHead>Producto</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead className="text-center">Cantidad</TableHead>
+                            <TableHead>Notas</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                    {filteredMovements.length > 0 ? (
+                        filteredMovements.map((movement) => (
+                        <TableRow key={movement.id}>
+                            <TableCell className="font-mono text-xs">{movement.movementId || 'N/A'}</TableCell>
+                            <TableCell className="font-medium">
+                            {formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm")}
+                            </TableCell>
+                            <TableCell>{movement.productName}</TableCell>
+                            <TableCell>
+                            <Badge variant="outline" className={getMovementBadgeClass(movement.type)}>
+                                {movement.type}
+                            </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">{movement.quantity}</TableCell>
+                            <TableCell className="text-muted-foreground">{movement.notes}</TableCell>
+                        </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                        <TableCell colSpan={6} className="text-center h-24">
+                            No se encontraron movimientos para los filtros seleccionados.
+                        </TableCell>
+                        </TableRow>
+                    )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
 
-    <Card>
-        <CardHeader>
-            <div className="flex justify-between items-center">
-                <div>
-                <CardTitle>Órdenes de Despacho Generadas</CardTitle>
-                <CardDescription>
-                    Un historial de todos los picking lists generados.
-                </CardDescription>
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle>Órdenes de Despacho Generadas</CardTitle>
+                        <CardDescription>
+                            Un historial de todos los picking lists generados.
+                        </CardDescription>
+                    </div>
+                    <Button variant="outline" onClick={handleExportExcel}>
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        Exportar a Excel
+                    </Button>
                 </div>
-                <Button variant="outline" onClick={handleExportExcel}>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    Exportar a Excel
-                </Button>
-            </div>
-        </CardHeader>
-        <CardContent>
-            {initialDispatchOrders.length > 0 ? (
-                <Accordion type="single" collapsible className="w-full">
-                    {initialDispatchOrders.map((order) => (
-                        <AccordionItem value={order.id} key={order.id}>
-                            <AccordionTrigger>
-                                <div className="flex justify-between items-center w-full pr-4">
-                                    <div className="text-left">
-                                        <p className="font-semibold">{order.dispatchId}</p>
-                                        <p className="text-sm text-muted-foreground">
-                                            {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")} - {order.totalItems} items
-                                        </p>
-                                    </div>
-                                    <div className="text-center px-4">
-                                        {getDispatchStatusBadge(order.status)}
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-medium">{platformNames[order.platformId]}</p>
-                                        <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
-                                    </div>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                                <div className="p-4 bg-muted/50 rounded-md">
-                                    <h4 className="font-semibold mb-2">Productos de la Orden</h4>
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Producto</TableHead>
-                                                <TableHead>SKU</TableHead>
-                                                <TableHead className="text-right">Cant. Pedida</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {order.products.map((p) => (
-                                                <TableRow key={p.productId}>
-                                                    <TableCell>{p.name}</TableCell>
-                                                    <TableCell>{p.sku}</TableCell>
-                                                    <TableCell className="text-right">{p.quantity}</TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                    {order.exceptions && order.exceptions.length > 0 && (
-                                        <div className="mt-4">
-                                            <h4 className="font-semibold mb-2 text-destructive">Excepciones (No Enviados)</h4>
-                                            {order.exceptions.map((ex, index) => (
-                                                <div key={index} className="mb-3">
-                                                    <p className="text-sm font-semibold">Guía de Excepción: <span className="font-mono bg-destructive/10 px-2 py-1 rounded">{ex.trackingNumber}</span></p>
-                                                    {ex.products && ex.products.length > 0 && (
-                                                        <Table>
-                                                            <TableHeader>
-                                                                <TableRow>
-                                                                    <TableHead>Producto</TableHead>
-                                                                    <TableHead className="text-right">Cant. no enviada</TableHead>
-                                                                </TableRow>
-                                                            </TableHeader>
-                                                            <TableBody>
-                                                                {ex.products.map(p => (
-                                                                    <TableRow key={p.productId}>
-                                                                        <TableCell>{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
-                                                                        <TableCell className="text-right">{p.quantity}</TableCell>
-                                                                    </TableRow>
-                                                                ))}
-                                                            </TableBody>
-                                                        </Table>
-                                                    )}
-                                                </div>
-                                            ))}
+            </CardHeader>
+            <CardContent>
+                {filteredDispatchOrders.length > 0 ? (
+                    <Accordion type="single" collapsible className="w-full">
+                        {filteredDispatchOrders.map((order) => (
+                            <AccordionItem value={order.id} key={order.id}>
+                                <AccordionTrigger>
+                                    <div className="flex justify-between items-center w-full pr-4">
+                                        <div className="text-left">
+                                            <p className="font-semibold">{order.dispatchId}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")} - {order.totalItems} items
+                                            </p>
                                         </div>
-                                    )}
-
-                                    <div className="flex justify-end mt-4">
-                                        <Button variant="outline" size="sm" onClick={() => handleDownloadPdf(order)}>
-                                            <Download className="mr-2 h-4 w-4" />
-                                            Descargar PDF
-                                        </Button>
+                                        <div className="text-center px-4">
+                                            {getDispatchStatusBadge(order.status)}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm font-medium">{platformNames[order.platformId]}</p>
+                                            <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                        </div>
                                     </div>
-                                </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    ))}
-                </Accordion>
-            ) : (
-                <div className="text-center text-muted-foreground py-8">
-                    No se han generado órdenes de despacho.
-                </div>
-            )}
-        </CardContent>
-    </Card>
-    </div>
-  );
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <div className="p-4 bg-muted/50 rounded-md">
+                                        <h4 className="font-semibold mb-2">Productos de la Orden</h4>
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Producto</TableHead>
+                                                    <TableHead>SKU</TableHead>
+                                                    <TableHead className="text-right">Cant. Pedida</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {order.products.map((p) => (
+                                                    <TableRow key={p.productId + (p.variantId || '')}>
+                                                        <TableCell>{p.name}</TableCell>
+                                                        <TableCell>{p.sku}</TableCell>
+                                                        <TableCell className="text-right">{p.quantity}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                        {order.exceptions && order.exceptions.length > 0 && (
+                                            <div className="mt-4">
+                                                <h4 className="font-semibold mb-2 text-destructive">Excepciones (No Enviados)</h4>
+                                                {order.exceptions.map((ex, index) => (
+                                                    <div key={index} className="mb-3">
+                                                        <p className="text-sm font-semibold">Guía de Excepción: <span className="font-mono bg-destructive/10 px-2 py-1 rounded">{ex.trackingNumber}</span></p>
+                                                        {ex.products && ex.products.length > 0 && (
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow>
+                                                                        <TableHead>Producto</TableHead>
+                                                                        <TableHead className="text-right">Cant. no enviada</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {ex.products.map(p => (
+                                                                        <TableRow key={p.productId + (p.variantId || '')}>
+                                                                            <TableCell>{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
+                                                                            <TableCell className="text-right">{p.quantity}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-end mt-4">
+                                            <Button variant="outline" size="sm" onClick={() => handleDownloadPdf(order)}>
+                                                <Download className="mr-2 h-4 w-4" />
+                                                Descargar PDF
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                ) : (
+                    <div className="text-center text-muted-foreground py-8 h-24">
+                        No se encontraron órdenes de despacho para los filtros seleccionados.
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+        </div>
+    );
 }
