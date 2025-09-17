@@ -277,6 +277,9 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         
         const updateData: Record<string, any> = {};
 
+        const currentDamagedStock = productData.damagedStock || 0;
+        updateData.damagedStock = currentDamagedStock + quantity;
+        
         if (productData.productType === 'variable') {
             const variants = [...(productData.variants || [])];
             const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
@@ -287,29 +290,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
-            const currentVariantStock = variant.stock || 0;
-
-            const newVariantStock = currentVariantStock - quantity;
-            if (newVariantStock < 0) {
-                throw new Error(`Cannot register damage for variant ${variant.name}. Stock would become negative.`);
-            }
-            variants[variantIndex].stock = newVariantStock;
-            
-            const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
-            
-            updateData.variants = variants;
-            updateData.stock = newTotalStock;
-        } else {
-            const currentStock = productData.stock || 0;
-            const newStock = currentStock - quantity;
-            if (newStock < 0) {
-                throw new Error(`Cannot register damage for product ${productData.name}. Stock would become negative.`);
-            }
-            updateData.stock = newStock;
         }
-        
-        const newDamagedStock = (productData.damagedStock || 0) + quantity;
-        updateData.damagedStock = newDamagedStock;
         
         transaction.update(productRef, updateData);
     });
@@ -1367,44 +1348,27 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
     // Data is stale or doesn't exist, or regeneration is forced
     try {
-        const [products, allMovements, rotationCategories] = await Promise.all([
+        const [products, allMovements] = await Promise.all([
             getProducts(),
             getInventoryMovements(7), // Only fetch last 7 days of movements
-            getRotationCategories(),
         ]);
 
-        const salesByProductId: Record<string, { sales: number; daysWithSales: Set<string> }> = {};
+        const salesByProductId: Record<string, number[]> = {};
         for (const movement of allMovements) {
             if (movement.type === 'Salida') {
+                const dayIndex = 6 - (new Date().getDay() - new Date(movement.date).getDay() + 7) % 7;
                 if (!salesByProductId[movement.productId]) {
-                    salesByProductId[movement.productId] = { sales: 0, daysWithSales: new Set() };
+                    salesByProductId[movement.productId] = Array(7).fill(0);
                 }
-                salesByProductId[movement.productId].sales += movement.quantity;
-                salesByProductId[movement.productId].daysWithSales.add(format(new Date(movement.date), 'yyyy-MM-dd'));
+                if(dayIndex >= 0 && dayIndex < 7) {
+                    salesByProductId[movement.productId][dayIndex] += movement.quantity;
+                }
             }
         }
         
-        const sortedRotationCategories = [...rotationCategories].sort((a,b) => b.salesThreshold - a.salesThreshold);
-        const getRotationCategoryName = (productId: string): string => {
-            const salesData = salesByProductId[productId];
-            const salesLast7Days = salesData ? salesData.sales : 0;
-            for (const category of sortedRotationCategories) {
-                if (salesLast7Days >= category.salesThreshold) {
-                    return category.name;
-                }
-            }
-            return 'Inactivo';
-        }
-
         const itemsToCheck: any[] = [];
         for (const product of products) {
-            const rotationName = getRotationCategoryName(product.id);
-            if (rotationName === 'Inactivo') continue;
-
-            const salesData = salesByProductId[product.id];
-            const salesLast7Days = salesData ? salesData.sales : 0;
-            const numberOfDaysWithSales = salesData ? salesData.daysWithSales.size : 0;
-
+            const salesLast7Days = salesByProductId[product.id] || Array(7).fill(0);
 
             if (product.productType === 'simple' && product.sku) {
                 const totalReserved = Array.isArray(product.reservations) ? product.reservations.reduce((sum, res) => sum + res.quantity, 0) : 0;
@@ -1413,7 +1377,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                     physicalStock: product.stock,
                     reservedStock: totalReserved,
                     salesLast7Days,
-                    numberOfDaysWithSales,
                     // Pass through data for storage
                     id: product.id, name: product.name, sku: product.sku, imageUrl: product.imageUrl,
                 });
@@ -1428,7 +1391,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                         physicalStock: variant.stock,
                         reservedStock: variantReserved,
                         salesLast7Days, // Use parent's sales for variant check
-                        numberOfDaysWithSales,
                         // Pass through data for storage
                         id: `${product.id}-${variant.id}`, name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
                     });
@@ -1442,7 +1404,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                 physicalStock: item.physicalStock,
                 reservedStock: item.reservedStock,
                 salesLast7Days: item.salesLast7Days,
-                numberOfDaysWithSales: item.numberOfDaysWithSales,
             }).then(analysis => ({...item, analysis}))
         );
 

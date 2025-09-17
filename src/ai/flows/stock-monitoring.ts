@@ -17,17 +17,16 @@ const StockAvailabilityInputSchema = z.object({
   productName: z.string().describe('The name of the product.'),
   physicalStock: z.number().describe('The total physical stock count of the product.'),
   reservedStock: z.number().describe('The stock quantity that is reserved and not available for sale.'),
-  salesLast7Days: z.number().describe('The total number of units sold in the last 7 days.'),
-  numberOfDaysWithSales: z.number().describe('The number of days within the 7-day period that had at least one sale.'),
+  salesLast7Days: z.array(z.number()).describe('An array representing the number of units sold each day for the last 7 days. Example: [10, 0, 5, 0, 8, 12, 3] where the first element is 7 days ago and the last is today.'),
 });
 export type StockAvailabilityInput = z.infer<typeof StockAvailabilityInputSchema>;
 
 const StockAvailabilityOutputSchema = z.object({
   availableForSale: z.number().describe('The stock available for new sales/reservations (physical - reserved).'),
-  dailyAverageSales: z.number().describe('The average number of units sold per day over the last 7 days. This can be a floating point number.'),
+  dailyAverageSales: z.number().describe('The average number of units sold per day, calculated only from days with sales > 0. This can be a floating point number.'),
   daysOfStockLeft: z.number().describe('The estimated number of days until the available stock runs out, based on average daily sales. Is -1 if sales are 0. This can be a floating point number.'),
   alertTriggered: z.boolean().describe('Whether a low stock alert should be triggered (true if days of stock are less than 3, false otherwise).'),
-  alertMessage: z.string().describe('A human-readable message explaining the stock situation and why an alert was or was not triggered.'),
+  alertMessage: z.string().describe('A human-readable message in Spanish explaining the stock situation and why an alert was or was not triggered.'),
 });
 export type StockAvailabilityOutput = z.infer<typeof StockAvailabilityOutputSchema>;
 
@@ -46,12 +45,17 @@ const prompt = ai.definePrompt({
   - Product Name: {{{productName}}}
   - Physical Stock: {{{physicalStock}}}
   - Reserved Stock: {{{reservedStock}}}
-  - Sales in Last 7 Days: {{{salesLast7Days}}}
-  - Number of Days With Sales (in last 7 days): {{{numberOfDaysWithSales}}}
+  - Sales in Last 7 Days (as a daily list): {{{json salesLast7Days}}}
   
   Your calculations must follow these steps precisely:
   1.  Calculate 'availableForSale': This is 'physicalStock' - 'reservedStock'.
-  2.  Calculate 'dailyAverageSales': This is 'salesLast7Days' divided by 'numberOfDaysWithSales'. If 'numberOfDaysWithSales' is 0, this result must be 0. Perform this calculation with floating-point precision.
+  2.  Calculate 'dailyAverageSales': 
+      a. From the 'salesLast7Days' array, identify only the days where sales were greater than 0.
+      b. Sum the sales of those days.
+      c. Count how many days had sales greater than 0.
+      d. The 'dailyAverageSales' is the result of (sum of sales) / (count of days with sales).
+      e. If there are no days with sales, 'dailyAverageSales' must be 0.
+      f. Perform this calculation with floating-point precision.
   3.  Calculate 'daysOfStockLeft': This is 'availableForSale' divided by 'dailyAverageSales'. If 'dailyAverageSales' is 0, this result must be -1. Perform this calculation with floating-point precision.
   4.  Determine 'alertTriggered': The alert is triggered if 'daysOfStockLeft' is greater than or equal to 0 AND less than 3.
   5.  Generate 'alertMessage': A concise, human-readable message in Spanish explaining the stock situation. If the alert is triggered, the message should be urgent and explain why the condition was met.
