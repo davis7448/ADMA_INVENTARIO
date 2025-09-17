@@ -753,31 +753,50 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         const allProductsInOrder = await getProducts();
         const productMap = new Map(allProductsInOrder.map(p => [p.id, p]));
 
-        // Calculate quantities of products in existing exceptions.
-        const existingExceptionQuantities: Record<string, number> = {};
-        for (const ex of orderData.exceptions || []) {
-            for (const p of ex.products) {
-                const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
-                existingExceptionQuantities[key] = (existingExceptionQuantities[key] || 0) + p.quantity;
-            }
-        }
+        const productsBeingProcessed = new Map<string, { ordered: number, pending: number }>();
 
-        // Calculate quantities of products in the new exceptions being added.
-        const newExceptionQuantities: Record<string, number> = {};
+        // Initialize with quantities from the original order
+        orderData.products.forEach(p => {
+            const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+            productsBeingProcessed.set(key, { ordered: p.quantity, pending: 0 });
+        });
+
+        // If the order is already partial, calculate the actual pending units
+        if (orderData.status === 'Parcial') {
+            orderData.exceptions.forEach(ex => {
+                ex.products.forEach(p => {
+                    const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+                    const productInfo = productsBeingProcessed.get(key);
+                    if (productInfo) {
+                        productInfo.pending += p.quantity;
+                    }
+                });
+            });
+        } else { // If 'Pendiente', all units are pending
+             orderData.products.forEach(p => {
+                const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+                const productInfo = productsBeingProcessed.get(key);
+                if (productInfo) {
+                    productInfo.pending = productInfo.ordered;
+                }
+            });
+        }
+        
+        // Validate new exceptions against the real pending quantity
+        const newExceptionQuantities = new Map<string, number>();
         for (const ex of newExceptions) {
             for (const p of ex.products) {
-                const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
-                newExceptionQuantities[key] = (newExceptionQuantities[key] || 0) + p.quantity;
+                const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+                const currentQty = newExceptionQuantities.get(key) || 0;
+                newExceptionQuantities.set(key, currentQty + p.quantity);
             }
         }
-
-        // Validate that the total exceptions (new + existing) do not exceed the order quantity for any product.
-        for (const orderProduct of orderData.products) {
-            const key = orderProduct.variantId ? `${orderProduct.productId}-${orderProduct.variantId}` : orderProduct.productId;
-            const totalExceptionQty = (existingExceptionQuantities[key] || 0) + (newExceptionQuantities[key] || 0);
-            
-            if (totalExceptionQty > orderProduct.quantity) {
-                throw new Error(`La cantidad total de excepción para producto ${orderProduct.name} (${totalExceptionQty}) excede la cantidad de la orden (${orderProduct.quantity}).`);
+        
+        for (const [key, qty] of newExceptionQuantities.entries()) {
+            const productInfo = productsBeingProcessed.get(key);
+            const productName = orderData.products.find(p => (p.variantId ? `${p.productId}|${p.variantId}` : p.productId) === key)?.name || 'Unknown';
+            if (!productInfo || qty > productInfo.pending) {
+                 throw new Error(`La cantidad de excepción para ${productName} (${qty}) excede las unidades pendientes (${productInfo?.pending || 0}).`);
             }
         }
 
@@ -1516,3 +1535,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 }
     
 
+
+
+    
