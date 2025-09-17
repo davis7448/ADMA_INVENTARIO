@@ -102,7 +102,11 @@ export async function updateProductAction(
     // This is the most reliable way to get the user in a server action.
     // We'll wait for it, but with a timeout.
     const firebaseUser = await new Promise<import('firebase/auth').User | null>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error("Authentication timed out."));
+        }, 5000); // 5 second timeout
         const unsubscribe = auth.onAuthStateChanged(user => {
+            clearTimeout(timeout);
             unsubscribe();
             resolve(user);
         }, reject);
@@ -110,19 +114,6 @@ export async function updateProductAction(
 
     if (!firebaseUser?.email) {
         return { message: 'Authentication required. Please log in.', success: false };
-    }
-
-    const appUser = await findUserByEmail(firebaseUser.email);
-    if (!appUser) {
-        return { message: 'User profile not found in the database.', success: false };
-    }
-
-    // Now we can reliably check the role.
-    if (appUser.role !== 'admin') {
-        // Silently remove cost field if user is not admin
-        if (formData.has('cost')) {
-          formData.delete('cost');
-        }
     }
     
     const rawData: Record<string, any> = {};
@@ -238,3 +229,5 @@ export async function createReservationAction(productId: string, data: CreateRes
         };
     }
 }
+
+    

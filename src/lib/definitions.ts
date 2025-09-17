@@ -47,18 +47,15 @@ const ProductFormSchemaBase = z.object({
 
 
 export const AddProductFormSchema = ProductFormSchemaBase.extend({
-  image: z
-    .any()
-    .refine((file): file is File => file instanceof File && file.size > 0, 'Image is required.')
-    .refine(
-        (file): file is File => file instanceof File && file.size <= MAX_FILE_SIZE,
-        `Max file size is 2MB.`
-    )
-    .refine(
-        (file): file is File => file instanceof File && ACCEPTED_IMAGE_TYPES.includes(file.type),
-        "Only .jpg, .jpeg, .png and .webp formats are supported."
-    ),
-}).superRefine((data, ctx) => {
+    image: z
+      .any()
+      .refine((file) => file, 'Image is required.')
+      .refine((file) => file.size <= MAX_FILE_SIZE, `Max file size is 2MB.`)
+      .refine(
+        (file) => ACCEPTED_IMAGE_TYPES.includes(file.type),
+        'Only .jpg, .jpeg, .png and .webp formats are supported.'
+      ),
+  }).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
         if (!data.sku || data.sku.length === 0) {
             ctx.addIssue({
@@ -87,18 +84,18 @@ export type AddProductFormState = {
 };
 
 export const EditProductFormSchema = ProductFormSchemaBase.extend({
-  image: z
-    .any()
-    .optional()
-    .refine(
-        (file) => !file || (file instanceof File && file.size <= MAX_FILE_SIZE),
+    image: z
+      .any()
+      .optional()
+      .refine(
+        (file) => !file || file.size <= MAX_FILE_SIZE,
         `Max file size is 2MB.`
-    )
-    .refine(
-        (file) => !file || (file instanceof File && ACCEPTED_IMAGE_TYPES.includes(file.type)),
-        "Only .jpg, .jpeg, .png and .webp formats are supported."
-    ),
-}).superRefine((data, ctx) => {
+      )
+      .refine(
+        (file) => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
+        'Only .jpg, .jpeg, .png and .webp formats are supported.'
+      ),
+  }).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
         if (!data.sku || data.sku.length === 0) {
             ctx.addIssue({
@@ -250,3 +247,5 @@ export type UpdateProfileFormState = {
     errors?: z.ZodError<UpdateProfileFormValues>['formErrors']['fieldErrors'];
     success: boolean;
 };
+
+    
