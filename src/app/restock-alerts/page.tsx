@@ -42,7 +42,8 @@ async function LowStockList() {
                 <TableBody>
                 {lowStockProducts.length > 0 ? (
                     await Promise.all(lowStockProducts.map(async (product) => {
-                        const supplierName = (await getSupplierById(product.vendorId))?.name || 'Unknown';
+                        const supplier = await getSupplierById(product.vendorId);
+                        const supplierName = supplier ? supplier.name : 'Unknown';
                         return (
                             <TableRow key={product.id}>
                                 <TableCell className="font-medium">{product.name}</TableCell>

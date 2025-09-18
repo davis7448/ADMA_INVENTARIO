@@ -124,7 +124,7 @@ export function HistoryContent({
 
     const handleDownloadPdf = (order: DispatchOrder) => {
         const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));
-        generatePickingListPDF(order.dispatchId, productsForPdf, platformNames[order.platformId], carrierNames[order.carrierId], new Date(order.date));
+        generatePickingListPDF(order.dispatchId, productsForPdf, platformNames[order.platformId] || 'N/A', carrierNames[order.carrierId] || 'N/A', new Date(order.date));
     };
 
     const handleExportMovementsExcel = () => {
@@ -398,8 +398,8 @@ export function HistoryContent({
                                             {getDispatchStatusBadge(order.status)}
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-sm font-medium">{platformNames[order.platformId]}</p>
-                                            <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                            <p className="text-sm font-medium">{platformNames[order.platformId] || 'N/A'}</p>
+                                            <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId] || 'N/A'}</p>
                                         </div>
                                     </div>
                                 </AccordionTrigger>
