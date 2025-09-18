@@ -29,6 +29,7 @@ import {
   } from '@/components/ui/table';
 import { DropdownMenuItem } from './ui/dropdown-menu';
 import { format } from 'date-fns';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ImportProductsDialogProps {
   onImportSuccess: () => void;
@@ -57,6 +58,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
   const [products, setProducts] = useState<ProductToImport[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -144,7 +146,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     }
 
     startTransition(async () => {
-        const result = await importProductsAction(products);
+        const result = await importProductsAction(products, user);
         if (result.success) {
             toast({
                 title: '¡Importación Exitosa!',

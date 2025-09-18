@@ -8,8 +8,6 @@ import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
 import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema, ImportProductSchema } from '@/lib/definitions';
 import { v4 as uuidv4 } from 'uuid';
-import { getAuth } from 'firebase/auth';
-import { app } from '@/lib/firebase';
 
 
 export async function addProductAction(
@@ -202,7 +200,11 @@ export async function updateProductAction(
     }
 }
 
-export async function createReservationAction(productId: string, data: CreateReservationFormValues): Promise<CreateReservationFormState> {
+export async function createReservationAction(
+    productId: string,
+    data: CreateReservationFormValues,
+    user: User | null
+): Promise<CreateReservationFormState> {
     const validatedFields = CreateReservationFormSchema.safeParse(data);
 
     if (!validatedFields.success) {
@@ -214,12 +216,10 @@ export async function createReservationAction(productId: string, data: CreateRes
     }
 
     try {
-        const auth = getAuth(app);
-        const user = auth.currentUser;
         await createReservation({ 
             productId, 
             ...validatedFields.data, 
-            createdBy: user ? { id: user.uid, name: user.displayName || user.email! } : undefined 
+            createdBy: user ? { id: user.id, name: user.name } : undefined 
         });
         revalidatePath('/products');
         revalidatePath('/stale-reservations'); // Revalidate alerts page too
@@ -238,7 +238,10 @@ export async function createReservationAction(productId: string, data: CreateRes
     }
 }
 
-export async function importProductsAction(products: unknown[]): Promise<ImportProductsFormState> {
+export async function importProductsAction(
+    products: unknown[],
+    user: User | null
+): Promise<ImportProductsFormState> {
     
     const validatedProducts = z.array(ImportProductSchema).safeParse(products);
     
@@ -258,8 +261,6 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
     }
 
     try {
-        const auth = getAuth(app);
-        const user = auth.currentUser;
         const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => {
             const product: Partial<Omit<Product, 'id'>> = {
                 name: p.name,
@@ -280,7 +281,7 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
                 imageHint: 'product',
             };
             if (user) {
-              product.createdBy = { id: user.uid, name: user.displayName || user.email! };
+              product.createdBy = { id: user.id, name: user.name };
             }
             if (product.cost === undefined || product.cost === null) {
                 delete product.cost;

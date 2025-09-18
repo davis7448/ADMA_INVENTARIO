@@ -58,6 +58,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useAuth } from '@/hooks/use-auth';
 
 interface ProductReservationDialogProps {
   product: Product;
@@ -71,6 +72,7 @@ interface ProductReservationDialogProps {
 export function ProductReservationDialog({ product, vendedores, platforms, open, onOpenChange, onSuccess }: ProductReservationDialogProps) {
   const [isProcessing, startTransition] = useTransition();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>();
 
   const form = useForm<CreateReservationFormValues>({
@@ -152,7 +154,7 @@ export function ProductReservationDialog({ product, vendedores, platforms, open,
     }
 
     startTransition(async () => {
-      const result = await createReservationAction(product.id, values);
+      const result = await createReservationAction(product.id, values, user);
 
       if (result.success) {
         toast({
