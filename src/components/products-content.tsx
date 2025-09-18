@@ -402,14 +402,26 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </TableCell>
-                                            <TableCell onClick={(e) => canAudit && e.stopPropagation()}>
+                                            <TableCell>
                                                 <div className="flex items-center gap-2">
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <span>
-                                                            {product.lastAuditedAt ? (
-                                                                <Check className="h-5 w-5 text-green-500" />
-                                                            ) : canAudit ? (
+                                                    {product.lastAuditedAt ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span className="relative flex items-center" onClick={(e) => e.stopPropagation()}>
+                                                                    <Check className="h-5 w-5 text-green-500" />
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <div className="p-2 space-y-2 text-center">
+                                                                    <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
+                                                                    {canAudit && <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>Auditar de Nuevo</Button>}
+                                                                </div>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    ) : (
+                                                        canAudit ? (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
                                                                 <Button 
                                                                     variant="ghost" 
                                                                     size="icon" 
@@ -419,26 +431,14 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                                 >
                                                                     <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
                                                                 </Button>
-                                                            ) : (
-                                                                <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
-                                                            )}
-                                                            </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                        {product.lastAuditedAt ? (
-                                                            <div className="p-2 space-y-2">
-                                                                <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
-                                                                <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>
-                                                                    Auditar de Nuevo
-                                                                </Button>
-                                                            </div>
-                                                        ) : canAudit ? (
-                                                            <p>Marcar como auditado</p>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent><p>Marcar como auditado</p></TooltipContent>
+                                                        </Tooltip>
                                                         ) : (
-                                                            <p>Pendiente de auditoría</p>
-                                                        )}
-                                                        </TooltipContent>
-                                                    </Tooltip>
+                                                            <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
+                                                        )
+                                                    )}
+
                                                     {product.lastAuditedAt && canAudit && (
                                                         <AlertDialog>
                                                             <AlertDialogTrigger asChild>
