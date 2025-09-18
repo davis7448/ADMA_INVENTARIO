@@ -2,7 +2,7 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail, createReservation, addMultipleProducts, auditProductStock } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL, createReservation, addMultipleProducts, auditProductStock, clearProductAudit } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
@@ -316,6 +316,26 @@ export async function auditProductStockAction(productId: string, auditedBy: stri
 
         return {
             message: 'Stock auditado con éxito.',
+            success: true,
+        };
+
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        return {
+            message: errorMessage,
+            success: false,
+        };
+    }
+}
+
+export async function clearProductAuditAction(productId: string): Promise<{ success: boolean, message: string }> {
+    try {
+        await clearProductAudit(productId);
+        revalidatePath('/products');
+
+        return {
+            message: 'Auditoría eliminada con éxito.',
             success: true,
         };
 

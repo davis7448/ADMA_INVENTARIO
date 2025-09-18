@@ -33,10 +33,20 @@ import {
     TooltipProvider,
     TooltipTrigger,
   } from "@/components/ui/tooltip"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { getProducts } from '@/lib/api';
 import type { Product, RotationCategory } from '@/lib/types';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
@@ -52,7 +62,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
 import { useRouter } from 'next/navigation';
-import { auditProductStockAction } from '@/app/actions/products';
+import { auditProductStockAction, clearProductAuditAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import { formatToTimeZone } from '@/lib/utils';
 
@@ -98,6 +108,26 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         if (!user) return;
         startAuditTransition(async () => {
             const result = await auditProductStockAction(productId, user.name);
+            if (result.success) {
+                toast({
+                    title: '¡Éxito!',
+                    description: result.message,
+                });
+                refreshProducts();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: result.message,
+                });
+            }
+        });
+    };
+
+    const handleClearAudit = (e: React.MouseEvent, productId: string) => {
+        e.stopPropagation();
+        startAuditTransition(async () => {
+            const result = await clearProductAuditAction(productId);
             if (result.success) {
                 toast({
                     title: '¡Éxito!',
@@ -393,7 +423,31 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                     </TooltipTrigger>
                                                     <TooltipContent>
                                                         {product.lastAuditedAt ? (
-                                                          <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
+                                                            <div className="p-2 space-y-2">
+                                                                <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
+                                                                <div className="flex gap-2">
+                                                                    <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>
+                                                                        Auditar de Nuevo
+                                                                    </Button>
+                                                                    <AlertDialog>
+                                                                        <AlertDialogTrigger asChild>
+                                                                            <Button variant="destructive" size="icon" onClick={(e) => e.stopPropagation()}><Trash2 className="h-4 w-4" /></Button>
+                                                                        </AlertDialogTrigger>
+                                                                        <AlertDialogContent>
+                                                                            <AlertDialogHeader>
+                                                                                <AlertDialogTitle>¿Limpiar Auditoría?</AlertDialogTitle>
+                                                                                <AlertDialogDescription>
+                                                                                    Esta acción marcará el producto como no auditado. Deberá ser verificado de nuevo.
+                                                                                </AlertDialogDescription>
+                                                                            </AlertDialogHeader>
+                                                                            <AlertDialogFooter>
+                                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                                <AlertDialogAction onClick={(e) => handleClearAudit(e, product.id)}>Limpiar</AlertDialogAction>
+                                                                            </AlertDialogFooter>
+                                                                        </AlertDialogContent>
+                                                                    </AlertDialog>
+                                                                </div>
+                                                            </div>
                                                         ) : canAudit ? (
                                                             <p>Marcar como auditado</p>
                                                         ) : (
