@@ -55,15 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   useEffect(() => {
-    if (loading) return; // Don't do anything while loading
+    if (loading) return; 
 
-    // If we don't have a user and are not on the login page, redirect to login
-    if (!user && pathname !== '/login') {
+    const isLoginPage = pathname === '/login';
+
+    if (!user && !isLoginPage) {
       router.push('/login');
-    }
-    // If we have a user and are on the login page, redirect to home
-    if (user && pathname === '/login') {
-        router.push('/');
+    } else if (user && isLoginPage) {
+      router.push('/');
     }
   }, [user, loading, pathname, router]);
 
@@ -71,9 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
         await signInWithEmailAndPassword(auth, email, password);
-        // After successful sign-in, onAuthStateChanged will fire.
-        // We force a redirect here to ensure navigation happens.
-        router.push('/');
         return true;
     } catch (error) {
         console.error("Login failed:", error);
@@ -95,17 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             <div>Loading...</div>
         </div>
     );
-  }
-  
-  if (!user && pathname !== '/login') {
-     // Don't render children if not logged in and not on login page
-     // This prevents brief flashes of content before redirecting.
-    return null;
-  }
-  
-  // If user is logged in and on the login page, don't render children until redirect happens
-  if (user && pathname === '/login') {
-    return null;
   }
 
   return (
