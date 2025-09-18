@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, getInventoryMovementsByDate, createDispatchOrder, registerDamagedProduct } from '@/lib/api';
+import { getProducts, updateProductStock, addInventoryMovement, getCarriers, getPlatforms, createDispatchOrder, registerDamagedProduct } from '@/lib/api';
 import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -309,29 +309,10 @@ export default function LogisticsPage() {
             });
             return;
         }
-        
-        const today = new Date();
-        const movementsToday = await getInventoryMovementsByDate(today);
-        const dispatchMovementsToday = movementsToday.filter(m => m.type === 'Salida' && m.notes.includes('Dispatch ID:'));
-        
-        const existingDispatchIds = dispatchMovementsToday.map(m => {
-            const match = m.notes.match(/Dispatch ID: (.*?)\./);
-            return match ? match[1] : '';
-        });
 
-        let nextId = 1;
-        if (existingDispatchIds.length > 0) {
-            const maxId = Math.max(...existingDispatchIds.map(id => parseInt(id.split(' - ')[0], 10) || 0));
-            nextId = maxId + 1;
-        }
-        
-        const consecutiveId = nextId.toString().padStart(3, '0');
         const platformName = platforms.find(p => p.id === platform)?.name || 'N/A';
         const carrierName = carriers.find(c => c.id === carrier)?.name || 'N/A';
-        const formattedDate = formatToTimeZone(today, 'dd/MM/yy');
-
-        const dispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
-
+        
         const productsForDispatch: DispatchOrderProduct[] = dispatchedProducts.map(p => ({
             productId: p.productId,
             variantId: p.variantId,
@@ -341,10 +322,11 @@ export default function LogisticsPage() {
         }));
 
         try {
-            await createDispatchOrder({
-                dispatchId,
+            const { dispatchId } = await createDispatchOrder({
                 platformId: platform,
+                platformName: platformName,
                 carrierId: carrier,
+                carrierName: carrierName,
                 products: productsForDispatch,
                 createdBy: user ? { id: user.id, name: user.name } : undefined,
             });
@@ -1155,3 +1137,4 @@ export default function LogisticsPage() {
 
     
 
+    

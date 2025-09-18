@@ -605,36 +605,57 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions'>) => {
-    const dispatchOrderRef = doc(collection(db, 'dispatchOrders'));
+export const createDispatchOrder = async ({ platformId, platformName, carrierId, carrierName, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'> & { platformName: string, carrierName: string }): Promise<{ id: string, dispatchId: string }> => {
+    
+    const today = new Date();
+    const dateKey = format(today, 'yyyy-MM-dd');
+    const counterRef = doc(db, 'counters', `dispatch_${dateKey}`);
 
-    // 1. Create the new dispatch order document
-    const cleanProducts = products.map(p => {
-        const product: any = {...p};
-        if (product.variantId === undefined) delete product.variantId;
-        if (product.variantSku === undefined) delete product.variantSku;
-        return product;
+    const newDispatchOrderRef = doc(collection(db, 'dispatchOrders'));
+
+    // Use a transaction to atomically get and increment the counter for today
+    const dispatchId = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        let nextId = 1;
+        if (counterDoc.exists()) {
+            nextId = counterDoc.data().currentId + 1;
+        }
+        transaction.set(counterRef, { currentId: nextId }, { merge: true });
+
+        const consecutiveId = nextId.toString().padStart(3, '0');
+        const formattedDate = formatToTimeZone(today, 'dd/MM/yy');
+        const newDispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
+
+        const cleanProducts = products.map(p => {
+            const product: any = {...p};
+            if (product.variantId === undefined) delete product.variantId;
+            if (product.variantSku === undefined) delete product.variantSku;
+            return product;
+        });
+    
+        const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
+            dispatchId: newDispatchId,
+            date: Timestamp.now(),
+            platformId,
+            carrierId,
+            products: cleanProducts,
+            totalItems: products.reduce((acc, p) => acc + p.quantity, 0),
+            status: 'Pendiente',
+            trackingNumbers: [],
+            exceptions: [],
+            cancelledExceptions: [],
+            createdBy,
+        };
+    
+        const dataToSet: Record<string, any> = { ...newDispatchOrder };
+        if (!dataToSet.createdBy) {
+          delete dataToSet.createdBy;
+        }
+        transaction.set(newDispatchOrderRef, dataToSet);
+        
+        return newDispatchId;
     });
 
-    const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
-        dispatchId,
-        date: Timestamp.now(),
-        platformId,
-        carrierId,
-        products: cleanProducts,
-        totalItems: products.reduce((acc, p) => acc + p.quantity, 0),
-        status: 'Pendiente',
-        trackingNumbers: [],
-        exceptions: [],
-        cancelledExceptions: [],
-        createdBy,
-    };
-
-    const dataToSet: Record<string, any> = { ...newDispatchOrder };
-    if (!dataToSet.createdBy) {
-      delete dataToSet.createdBy;
-    }
-    await setDoc(dispatchOrderRef, dataToSet);
 
     // 2. Create inventory movements and update stock for each product
     for (const product of products) {
@@ -653,7 +674,7 @@ export const createDispatchOrder = async ({ dispatchId, platformId, carrierId, p
         });
     }
 
-    return dispatchOrderRef.id;
+    return { id: newDispatchOrderRef.id, dispatchId };
 };
 
 
@@ -1522,5 +1543,8 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
+    
+
 
     

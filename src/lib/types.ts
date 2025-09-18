@@ -257,3 +257,5 @@ export interface GetStockAlertsResult {
     error?: string;
     lastGenerated?: string;
 }
+
+    
