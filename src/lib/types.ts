@@ -33,7 +33,9 @@ export type Product = {
   createdBy?: {
     id: string;
     name: string;
-  }
+  };
+  lastAuditedAt?: string;
+  lastAuditedBy?: string;
 };
 
 export type Reservation = {

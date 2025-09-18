@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useTransition } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -33,9 +33,9 @@ import {
     TooltipTrigger,
   } from "@/components/ui/tooltip"
 import { Button } from '@/components/ui/button';
-import { getProducts } from '@/lib/api';
+import { getProducts, auditProductStock } from '@/lib/api';
 import type { Product, RotationCategory } from '@/lib/types';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
@@ -51,6 +51,9 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
 import { useRouter } from 'next/navigation';
+import { auditProductStockAction } from '@/app/actions/products';
+import { useToast } from '@/hooks/use-toast';
+import { formatToTimeZone } from '@/lib/utils';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -66,6 +69,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
     const router = useRouter();
+    const { toast } = useToast();
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
@@ -84,6 +88,28 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
 
     const handleToggleRow = (productId: string) => {
         setExpandedRow(prev => (prev === productId ? null : productId));
+    };
+
+    const [isAuditing, startAuditTransition] = useTransition();
+
+    const handleAuditStock = (e: React.MouseEvent, productId: string) => {
+        e.stopPropagation();
+        startAuditTransition(async () => {
+            const result = await auditProductStockAction(productId);
+            if (result.success) {
+                toast({
+                    title: '¡Éxito!',
+                    description: result.message,
+                });
+                refreshProducts();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: result.message,
+                });
+            }
+        });
     };
 
     const filteredProducts = useMemo(() => {
@@ -134,6 +160,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     };
 
     const canEdit = user?.role === 'admin' || user?.role === 'plataformas';
+    const canAudit = user?.role === 'admin' || user?.role === 'logistics';
 
     const getRotationIcon = (categoryName?: string) => {
         if (!categoryName) return null;
@@ -293,6 +320,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <TableHead className="w-[80px] hidden sm:table-cell" />
                                 <TableHead>Name</TableHead>
                                 <TableHead>Rotación</TableHead>
+                                <TableHead>Auditoría</TableHead>
                                 <TableHead>SKU</TableHead>
                                 <TableHead>Category</TableHead>
                                 <TableHead>Stock</TableHead>
@@ -308,7 +336,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <>
                                 {Array.from({ length: 5 }).map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={canEdit ? 11 : 10}>
+                                        <TableCell colSpan={canEdit ? 12 : 11}>
                                             <Skeleton className="h-16 w-full" />
                                         </TableCell>
                                     </TableRow>
@@ -341,6 +369,37 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                     </TooltipContent>
                                                 </Tooltip>
                                             </TableCell>
+                                            <TableCell onClick={(e) => canAudit && e.stopPropagation()}>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <div>
+                                                            {product.lastAuditedAt ? (
+                                                                <Check className="h-5 w-5 text-green-500" />
+                                                            ) : canAudit ? (
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    onClick={(e) => handleAuditStock(e, product.id)}
+                                                                    disabled={isAuditing}
+                                                                >
+                                                                    <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-primary" />
+                                                                </Button>
+                                                            ) : (
+                                                                <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
+                                                            )}
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        {product.lastAuditedAt ? (
+                                                          <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
+                                                        ) : canAudit ? (
+                                                            <p>Marcar como auditado</p>
+                                                        ) : (
+                                                            <p>Pendiente de auditoría</p>
+                                                        )}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TableCell>
                                             <TableCell>{product.sku}</TableCell>
                                             <TableCell>
                                                 <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
@@ -348,7 +407,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                             <TableCell>{product.stock}</TableCell>
                                             <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
                                             <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
-                                            <TableCell>${Math.round(product.priceDropshipping).toFixed(0)}</TableCell>
+                                            <TableCell>
+                                                {product.productType === 'simple' ? `$${product.priceDropshipping.toFixed(0)}` : '--'}
+                                            </TableCell>
                                             {canEdit && (
                                                 <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
                                                     <DropdownMenu>
@@ -385,7 +446,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                         </TableRow>
                                         {product.productType === 'variable' && expandedRow === product.id && (
                                             <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                                <TableCell colSpan={canEdit ? 11 : 10}>
+                                                <TableCell colSpan={canEdit ? 12 : 11}>
                                                     <div className="p-4">
                                                         <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
                                                         <Table>
@@ -416,7 +477,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={canEdit ? 11 : 10} className="text-center h-24">
+                                    <TableCell colSpan={canEdit ? 12 : 11} className="text-center h-24">
                                         No se encontraron productos con los filtros actuales.
                                     </TableCell>
                                 </TableRow>

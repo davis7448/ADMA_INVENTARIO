@@ -2,7 +2,7 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail, createReservation, addMultipleProducts } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL, findUserByEmail, createReservation, addMultipleProducts, auditProductStock } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
@@ -304,6 +304,38 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
             message: errorMessage,
             success: false,
             count: 0
+        };
+    }
+}
+
+export async function auditProductStockAction(productId: string): Promise<{ success: boolean, message: string }> {
+    try {
+        const auth = getAuth(app);
+        const user = auth.currentUser;
+
+        if (!user) {
+            return { success: false, message: "Authentication required." };
+        }
+        
+        const appUser = await findUserByEmail(user.email!);
+        if (!appUser || !['admin', 'logistics'].includes(appUser.role)) {
+            return { success: false, message: "Permission denied." };
+        }
+
+        await auditProductStock(productId, appUser.name);
+        revalidatePath('/products');
+
+        return {
+            message: 'Stock auditado con éxito.',
+            success: true,
+        };
+
+    } catch (error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        return {
+            message: errorMessage,
+            success: false,
         };
     }
 }
