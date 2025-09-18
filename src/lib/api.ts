@@ -37,15 +37,13 @@ export const getProducts = async (): Promise<Product[]> => {
   const productSnapshot = await getDocs(productsCol);
   const productList = productSnapshot.docs.map(doc => {
     const data = doc.data();
-    const purchaseDate = data.purchaseDate;
     
-    // Robust date handling for purchaseDate
+    const purchaseDate = data.purchaseDate;
     let formattedPurchaseDate: string | undefined = undefined;
     if (purchaseDate) {
         if (purchaseDate instanceof Timestamp) {
             formattedPurchaseDate = purchaseDate.toDate().toISOString();
         } else if (typeof purchaseDate === 'string' || purchaseDate instanceof Date) {
-            // Attempt to parse if it's a string or already a Date
             const d = new Date(purchaseDate);
             if (!isNaN(d.getTime())) {
                 formattedPurchaseDate = d.toISOString();
@@ -53,10 +51,25 @@ export const getProducts = async (): Promise<Product[]> => {
         }
     }
 
+    const lastAuditedAt = data.lastAuditedAt;
+    let formattedLastAuditedAt: string | undefined = undefined;
+    if (lastAuditedAt) {
+      if (lastAuditedAt instanceof Timestamp) {
+        formattedLastAuditedAt = lastAuditedAt.toDate().toISOString();
+      } else if (typeof lastAuditedAt === 'string' || lastAuditedAt instanceof Date) {
+        const d = new Date(lastAuditedAt);
+        if (!isNaN(d.getTime())) {
+          formattedLastAuditedAt = d.toISOString();
+        }
+      }
+    }
+
+
     return { 
         id: doc.id, 
         ...data,
         purchaseDate: formattedPurchaseDate,
+        lastAuditedAt: formattedLastAuditedAt,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
     } as Product
@@ -1561,5 +1574,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
