@@ -405,22 +405,20 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                             <TableCell onClick={(e) => canAudit && e.stopPropagation()}>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
-                                                        <div>
-                                                            {product.lastAuditedAt ? (
-                                                                <Check className="h-5 w-5 text-green-500" />
-                                                            ) : canAudit ? (
-                                                                <Button 
-                                                                    variant="ghost" 
-                                                                    size="icon" 
-                                                                    onClick={(e) => handleAuditStock(e, product.id)}
-                                                                    disabled={isAuditing}
-                                                                >
-                                                                    <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
-                                                                </Button>
-                                                            ) : (
-                                                                <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
-                                                            )}
-                                                        </div>
+                                                        {product.lastAuditedAt ? (
+                                                            <Check className="h-5 w-5 text-green-500" />
+                                                        ) : canAudit ? (
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                onClick={(e) => handleAuditStock(e, product.id)}
+                                                                disabled={isAuditing}
+                                                            >
+                                                                <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
+                                                            </Button>
+                                                        ) : (
+                                                            <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
+                                                        )}
                                                     </TooltipTrigger>
                                                     <TooltipContent>
                                                         {product.lastAuditedAt ? (
