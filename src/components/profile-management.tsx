@@ -68,6 +68,10 @@ export function ProfileManagement() {
   };
 
   const onSubmit = (values: UpdateProfileFormValues) => {
+    if (!user) {
+        toast({ title: 'Error', description: 'You must be logged in.', variant: 'destructive' });
+        return;
+    }
     const formData = new FormData();
     formData.append('name', values.name);
     if (values.phone) {
@@ -78,7 +82,7 @@ export function ProfileManagement() {
     }
 
     startTransition(async () => {
-      const result = await updateUserAction(formData);
+      const result = await updateUserAction(user.id, formData);
       if (result.success) {
         toast({ title: '¡Éxito!', description: result.message });
         setPreviewImage(null); // Clear preview after successful upload

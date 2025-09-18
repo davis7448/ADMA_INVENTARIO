@@ -10,7 +10,6 @@ import { findUserByEmail, addUser, updateUserProfile, updateUserRoleInDb, sendPa
 import type { CreateUserFormState, CreateUserFormValues, UpdateProfileFormValues, UpdateProfileFormState } from '@/lib/definitions';
 import { CreateUserFormSchema, UpdateProfileFormSchema } from '@/lib/definitions';
 import type { User, UserRole } from '@/lib/types';
-import { getAuth as getClientAuth } from 'firebase/auth';
 import { app as clientApp } from '@/lib/firebase';
 
 // Helper to check if the caller is an admin
@@ -96,18 +95,8 @@ export async function resetUserPasswordAction(email: string): Promise<{ success:
     }
 }
 
-export async function updateUserAction(formData: FormData): Promise<UpdateProfileFormState> {
+export async function updateUserAction(userId: string, formData: FormData): Promise<UpdateProfileFormState> {
     
-    const auth = getClientAuth(clientApp);
-    const firebaseUser = auth.currentUser;
-    if (!firebaseUser?.email) {
-        return { message: 'Authentication required.', success: false };
-    }
-    const appUser = await findUserByEmail(firebaseUser.email);
-    if (!appUser) {
-        return { message: 'User profile not found.', success: false };
-    }
-
     const validatedFields = UpdateProfileFormSchema.safeParse({
         name: formData.get('name'),
         phone: formData.get('phone'),
@@ -139,7 +128,7 @@ export async function updateUserAction(formData: FormData): Promise<UpdateProfil
             profileUpdate.avatarUrl = avatarUrl;
         }
 
-        await updateUserProfile(appUser.id, profileUpdate);
+        await updateUserProfile(userId, profileUpdate);
 
         revalidatePath('/settings');
         revalidatePath('/'); // To update header avatar
