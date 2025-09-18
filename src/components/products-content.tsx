@@ -33,7 +33,7 @@ import {
     TooltipTrigger,
   } from "@/components/ui/tooltip"
 import { Button } from '@/components/ui/button';
-import { getProducts, auditProductStock } from '@/lib/api';
+import { getProducts } from '@/lib/api';
 import type { Product, RotationCategory } from '@/lib/types';
 import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -94,8 +94,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
 
     const handleAuditStock = (e: React.MouseEvent, productId: string) => {
         e.stopPropagation();
+        if (!user) return;
         startAuditTransition(async () => {
-            const result = await auditProductStockAction(productId);
+            const result = await auditProductStockAction(productId, user.name);
             if (result.success) {
                 toast({
                     title: '¡Éxito!',

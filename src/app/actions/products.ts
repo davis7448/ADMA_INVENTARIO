@@ -308,21 +308,9 @@ export async function importProductsAction(products: unknown[]): Promise<ImportP
     }
 }
 
-export async function auditProductStockAction(productId: string): Promise<{ success: boolean, message: string }> {
+export async function auditProductStockAction(productId: string, auditedBy: string): Promise<{ success: boolean, message: string }> {
     try {
-        const auth = getAuth(app);
-        const user = auth.currentUser;
-
-        if (!user) {
-            return { success: false, message: "Authentication required." };
-        }
-        
-        const appUser = await findUserByEmail(user.email!);
-        if (!appUser || !['admin', 'logistics'].includes(appUser.role)) {
-            return { success: false, message: "Permission denied." };
-        }
-
-        await auditProductStock(productId, appUser.name);
+        await auditProductStock(productId, auditedBy);
         revalidatePath('/products');
 
         return {
