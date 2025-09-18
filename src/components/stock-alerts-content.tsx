@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import type { StockAlertItem } from '@/lib/types';
 import {
   Card,
@@ -26,6 +26,8 @@ import { formatToTimeZone } from '@/lib/utils';
 import { Button } from './ui/button';
 import { regenerateStockAlertsAction } from '@/app/actions/stock-alerts';
 import { useToast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
 
 interface StockAlertsContentProps {
@@ -35,10 +37,11 @@ interface StockAlertsContentProps {
 }
 
 export function StockAlertsContent({ initialAlerts, error, lastGenerated }: StockAlertsContentProps) {
-  const [alerts] = useState<StockAlertItem[]>(initialAlerts);
+  const [alerts, setAlerts] = useState<StockAlertItem[]>(initialAlerts);
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const [hideNoSales, setHideNoSales] = useState(false);
 
   const handleRegenerate = () => {
     startTransition(async () => {
@@ -48,6 +51,7 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
                 title: "¡Éxito!",
                 description: result.message,
             });
+            // This will cause a page refresh and get new initial props
         } else {
             toast({
                 title: "Error",
@@ -57,6 +61,13 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
         }
     });
   }
+
+  const filteredAlerts = useMemo(() => {
+    if (hideNoSales) {
+        return alerts.filter(alert => alert.dailyAverageSales > 0);
+    }
+    return alerts;
+  }, [alerts, hideNoSales]);
 
   return (
     <div className="space-y-6">
@@ -79,11 +90,12 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle>Productos en Riesgo</CardTitle>
             <CardDescription>
               Estos productos podrían quedarse sin stock para nuevas reservas si no se toman acciones. 
+              <br className="hidden sm:inline" />
               La alerta se activa si el stock disponible es menor a 3 días de ventas promedio.
             </CardDescription>
               {lastGenerated && (
@@ -98,6 +110,10 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
             </Button>
         </CardHeader>
         <CardContent>
+            <div className="flex items-center space-x-2 mb-4 p-4 border rounded-lg bg-muted/50">
+                <Switch id="hide-no-sales" checked={hideNoSales} onCheckedChange={setHideNoSales} />
+                <Label htmlFor="hide-no-sales">Ocultar productos sin ventas</Label>
+            </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -116,8 +132,8 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
                         <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                     </TableRow>
                 ))
-              ) : alerts.length > 0 ? (
-                alerts.map((item) => (
+              ) : filteredAlerts.length > 0 ? (
+                filteredAlerts.map((item) => (
                   <TableRow key={item.id} className="hover:bg-destructive/5">
                     <TableCell>
                         <div className="flex items-center gap-4">
@@ -143,7 +159,7 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center h-24">
-                    {!error ? "¡No hay alertas de stock! El inventario disponible parece saludable." : "No hay datos de alertas disponibles."}
+                    {!error ? "¡No hay alertas de stock para los filtros seleccionados!" : "No hay datos de alertas disponibles."}
                   </TableCell>
                 </TableRow>
               )}
