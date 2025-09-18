@@ -131,7 +131,25 @@ export default function DashboardPage() {
     const pendingAndPartialInPeriod = ordersInPeriod.filter(
         order => order.status === 'Pendiente' || order.status === 'Parcial'
     );
-    const totalPendingOrders = pendingAndPartialInPeriod.length;
+    
+    // Calculate total pending units in exceptions
+    let totalPendingUnits = 0;
+    const pendingUnitsByDay: Record<string, number> = {};
+    pendingAndPartialInPeriod.forEach(order => {
+        const day = format(new Date(order.date), 'yyyy-MM-dd');
+        let unitsInOrder = 0;
+        if (order.status === 'Pendiente') {
+            // For a 'Pendiente' order, all items are considered pending
+            unitsInOrder = order.totalItems;
+        } else if (order.status === 'Parcial' && order.exceptions) {
+            // For a 'Parcial' order, only count items in exceptions
+            unitsInOrder = order.exceptions.reduce((sum, ex) => 
+                sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
+        }
+        totalPendingUnits += unitsInOrder;
+        pendingUnitsByDay[day] = (pendingUnitsByDay[day] || 0) + unitsInOrder;
+    });
+
 
     const returnMovementsInPeriod = allMovements.filter(m => {
         if (!m.date) return false;
@@ -166,13 +184,6 @@ export default function DashboardPage() {
         return acc;
     }, {} as Record<string, number>);
 
-    const pendingByDay: Record<string, number> = pendingAndPartialInPeriod.reduce((acc, order) => {
-        const day = format(new Date(order.date), 'yyyy-MM-dd');
-        acc[day] = (acc[day] || 0) + 1;
-        return acc;
-    }, {});
-
-
     const chartData = [];
     const pendingChartData = [];
     const returnsChartData = [];
@@ -186,7 +197,7 @@ export default function DashboardPage() {
         });
         pendingChartData.push({
             date: dayKey,
-            orders: pendingByDay[dayKey] || 0,
+            orders: pendingUnitsByDay[dayKey] || 0,
         });
         returnsChartData.push({
             date: dayKey,
@@ -314,7 +325,7 @@ export default function DashboardPage() {
 
     return {
       totalItemsDispatched,
-      totalPendingOrders,
+      totalPendingUnits,
       totalReturns,
       returnsChartData,
       pendingChartData,
@@ -484,12 +495,12 @@ export default function DashboardPage() {
             </Card>
             <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Despachos Pendientes/Parciales</CardTitle>
+                <CardTitle className="text-sm font-medium">Unidades Pendientes (Excepción)</CardTitle>
                 <PackageX className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold">{filteredData.totalPendingOrders}</div>
-                <p className="text-xs text-muted-foreground">Órdenes en espera de procesamiento en el período.</p>
+                <div className="text-2xl font-bold">{filteredData.totalPendingUnits}</div>
+                <p className="text-xs text-muted-foreground">Unidades en espera de procesamiento.</p>
                  <div className="h-32 mt-4">
                     <DashboardPendingChart data={filteredData.pendingChartData} />
                 </div>
