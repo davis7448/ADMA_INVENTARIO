@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -7,8 +6,6 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
 } from '@/components/ui/chart';
 
 type CategoryChartProps = {
@@ -48,7 +45,7 @@ export default function DashboardCategoryChart({ data }: CategoryChartProps) {
             cursor={false}
             content={
               <ChartTooltipContent
-                formatter={(value) => `${value} (${((Number(value) / totalValue) * 100).toFixed(1)}%)`}
+                formatter={(value, name) => `${name}: ${value} (${((Number(value) / totalValue) * 100).toFixed(1)}%)`}
                 hideLabel
               />
             }
@@ -59,15 +56,12 @@ export default function DashboardCategoryChart({ data }: CategoryChartProps) {
             nameKey="name"
             innerRadius="50%"
             strokeWidth={2}
+            legendType="none" // Hide the default legend
           >
             {data.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={chartConfig[entry.name]?.color} />
             ))}
           </Pie>
-           <ChartLegend
-            content={<ChartLegendContent nameKey="name" className="text-xs" />}
-            className="-translate-y-2 flex-wrap gap-2 [&>*]:basis-1/3 [&>*]:justify-center"
-          />
         </PieChart>
       </ResponsiveContainer>
     </ChartContainer>
