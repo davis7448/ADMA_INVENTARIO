@@ -12,13 +12,6 @@ import { CreateUserFormSchema, UpdateProfileFormSchema } from '@/lib/definitions
 import type { User, UserRole } from '@/lib/types';
 import { app as clientApp } from '@/lib/firebase';
 
-// Helper to check if the caller is an admin
-async function isAdmin(email: string | undefined): Promise<boolean> {
-    if (!email) return false;
-    const user = await findUserByEmail(email);
-    return user?.role === 'admin';
-}
-
 export async function createUserAction(
   data: CreateUserFormValues
 ): Promise<CreateUserFormState> {
