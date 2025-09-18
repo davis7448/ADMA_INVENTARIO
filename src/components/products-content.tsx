@@ -403,57 +403,64 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                 </Tooltip>
                                             </TableCell>
                                             <TableCell onClick={(e) => canAudit && e.stopPropagation()}>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        {product.lastAuditedAt ? (
-                                                            <Check className="h-5 w-5 text-green-500" />
-                                                        ) : canAudit ? (
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                onClick={(e) => handleAuditStock(e, product.id)}
-                                                                disabled={isAuditing}
-                                                            >
-                                                                <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
-                                                            </Button>
-                                                        ) : (
-                                                            <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
-                                                        )}
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
+                                                <div className="flex items-center gap-2">
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span>
+                                                            {product.lastAuditedAt ? (
+                                                                <Check className="h-5 w-5 text-green-500" />
+                                                            ) : canAudit ? (
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-8 w-8"
+                                                                    onClick={(e) => handleAuditStock(e, product.id)}
+                                                                    disabled={isAuditing}
+                                                                >
+                                                                    <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
+                                                                </Button>
+                                                            ) : (
+                                                                <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
+                                                            )}
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
                                                         {product.lastAuditedAt ? (
                                                             <div className="p-2 space-y-2">
                                                                 <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
-                                                                <div className="flex gap-2">
-                                                                    <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>
-                                                                        Auditar de Nuevo
-                                                                    </Button>
-                                                                    <AlertDialog>
-                                                                        <AlertDialogTrigger asChild>
-                                                                            <Button variant="destructive" size="icon" onClick={(e) => e.stopPropagation()}><Trash2 className="h-4 w-4" /></Button>
-                                                                        </AlertDialogTrigger>
-                                                                        <AlertDialogContent>
-                                                                            <AlertDialogHeader>
-                                                                                <AlertDialogTitle>¿Limpiar Auditoría?</AlertDialogTitle>
-                                                                                <AlertDialogDescription>
-                                                                                    Esta acción marcará el producto como no auditado. Deberá ser verificado de nuevo.
-                                                                                </AlertDialogDescription>
-                                                                            </AlertDialogHeader>
-                                                                            <AlertDialogFooter>
-                                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                                <AlertDialogAction onClick={(e) => handleClearAudit(e, product.id)}>Limpiar</AlertDialogAction>
-                                                                            </AlertDialogFooter>
-                                                                        </AlertDialogContent>
-                                                                    </AlertDialog>
-                                                                </div>
+                                                                <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>
+                                                                    Auditar de Nuevo
+                                                                </Button>
                                                             </div>
                                                         ) : canAudit ? (
                                                             <p>Marcar como auditado</p>
                                                         ) : (
                                                             <p>Pendiente de auditoría</p>
                                                         )}
-                                                    </TooltipContent>
-                                                </Tooltip>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                    {product.lastAuditedAt && canAudit && (
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+                                                                    <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>¿Limpiar Auditoría?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        Esta acción marcará el producto como no auditado. Deberá ser verificado de nuevo.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                    <AlertDialogAction onClick={(e) => handleClearAudit(e, product.id)}>Limpiar</AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell>{product.sku}</TableCell>
                                             <TableCell>
