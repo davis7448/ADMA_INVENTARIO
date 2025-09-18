@@ -383,7 +383,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                                     onClick={(e) => handleAuditStock(e, product.id)}
                                                                     disabled={isAuditing}
                                                                 >
-                                                                    <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-primary" />
+                                                                    <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
                                                                 </Button>
                                                             ) : (
                                                                 <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
