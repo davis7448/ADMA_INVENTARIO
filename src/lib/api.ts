@@ -764,69 +764,32 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         });
 
         // ========== 2. LOGIC / VALIDATION PHASE ==========
+        
+        const existingExceptions = new Map(orderData.exceptions.map(ex => [ex.trackingNumber, ex]));
+        const processedExceptionGuides = new Set<string>();
 
-        // Map existing exceptions by their tracking number for quick lookup
-        const existingExceptionMap = new Map<string, DispatchException>();
-        if(orderData.status === 'Parcial' && orderData.exceptions){
-            orderData.exceptions.forEach(ex => existingExceptionMap.set(ex.trackingNumber, ex));
-        }
-        
-        const dispatchedProductsFromExceptions = new Map<string, number>(); // product-key -> quantity
-        const remainingExceptions = new Map(existingExceptionMap);
-        
-        // Identify which dispatched tracking numbers correspond to existing exceptions
+        // For each tracking number we are dispatching now, check if it resolves an existing exception.
         for (const tn of trackingNumbers) {
-            if (remainingExceptions.has(tn)) {
-                const ex = remainingExceptions.get(tn)!;
-                ex.products.forEach(p => {
-                    const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                    const currentQty = dispatchedProductsFromExceptions.get(key) || 0;
-                    dispatchedProductsFromExceptions.set(key, currentQty + p.quantity);
-                });
-                remainingExceptions.delete(tn); // This exception is now processed
-            }
-        }
-        
-        // Get total pending units map from the original order or remaining exceptions
-        const unitsToProcessMap = new Map<string, number>();
-        const sourceProducts = orderData.status === 'Pendiente' ? orderData.products : (orderData.exceptions || []).flatMap(e => e.products);
-        sourceProducts.forEach(p => {
-            const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-            const currentQty = unitsToProcessMap.get(key) || 0;
-            unitsToProcessMap.set(key, currentQty + p.quantity);
-        });
-
-        const newExceptionQuantities = new Map<string, number>();
-        newExceptions.forEach(ex => {
-            ex.products.forEach(p => {
-                const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                const currentQty = newExceptionQuantities.get(key) || 0;
-                newExceptionQuantities.set(key, currentQty + p.quantity);
-            });
-        });
-
-        // Validate that new exceptions don't exceed available pending units
-        for (const [key, qty] of newExceptionQuantities.entries()) {
-            const pendingQty = unitsToProcessMap.get(key) || 0;
-            if (qty > pendingQty) {
-                const productName = productDataMap.get(key.split('|')[0])?.name || 'Unknown';
-                throw new Error(`La cantidad de excepción para ${productName} (${qty}) excede las unidades pendientes (${pendingQty}).`);
+            if (existingExceptions.has(tn)) {
+                processedExceptionGuides.add(tn);
             }
         }
 
         // ========== 3. WRITE PHASE ==========
         
-        // Update pending stock for items that were in exception but are now dispatched
-        for (const [key, qty] of dispatchedProductsFromExceptions.entries()) {
-             const [productId] = key.split('|');
-             const productData = productDataMap.get(productId);
-             if(productData){
-                const newPendingStock = Math.max(0, (productData.pendingStock || 0) - qty);
-                transaction.update(doc(db, 'products', productId), { pendingStock: newPendingStock });
-             }
+        // Handle stock reduction for exceptions that are now being dispatched.
+        for (const guide of Array.from(processedExceptionGuides)) {
+            const exception = existingExceptions.get(guide)!;
+            for (const p of exception.products) {
+                const productData = productDataMap.get(p.productId);
+                if (productData) {
+                    const newPendingStock = Math.max(0, (productData.pendingStock || 0) - p.quantity);
+                    transaction.update(doc(db, 'products', p.productId), { pendingStock: newPendingStock });
+                }
+            }
         }
-
-        // Update pending stock for newly created exceptions and create audit alerts
+        
+        // Handle new exceptions: move stock to pending and create audit alerts.
         for (const ex of newExceptions) {
             for (const exProd of ex.products) {
                 const productData = productDataMap.get(exProd.productId);
@@ -849,7 +812,8 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             }
         }
 
-        const finalExceptions = [...Array.from(remainingExceptions.values()), ...newExceptions];
+        const finalRemainingExceptions = orderData.exceptions.filter(ex => !processedExceptionGuides.has(ex.trackingNumber));
+        const finalExceptions = [...finalRemainingExceptions, ...newExceptions];
         const finalStatus = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
 
         transaction.update(orderRef, {
@@ -980,7 +944,7 @@ export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => 
                                 id: `${order.id}-${exception.trackingNumber}-${exProduct.productId}-${exProduct.variantId || 'simple'}`,
                                 productId: exProduct.productId,
                                 productName: productInfo.name,
-                                productSku: productInfo.sku || '',
+                                productSku: productInfo.sku || 'N/A',
                                 productImageUrl: productInfo.imageUrl,
                                 quantity: exProduct.quantity,
                                 dispatchId: order.dispatchId,
