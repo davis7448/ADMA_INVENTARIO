@@ -332,6 +332,14 @@ export const registerDamagedProduct = async (productId: string, quantity: number
     });
 };
 
+export const auditProductStock = async (productId: string, auditedBy: string): Promise<void> => {
+    const productRef = doc(db, "products", productId);
+    await updateDoc(productRef, {
+      lastAuditedAt: Timestamp.now(),
+      lastAuditedBy: auditedBy,
+    });
+};
+
 
 // Supplier Functions
 export const getSuppliers = async (): Promise<Supplier[]> => {
@@ -1553,4 +1561,5 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
