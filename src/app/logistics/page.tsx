@@ -58,7 +58,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { generatePickingListPDF } from '@/lib/pdf';
+import { generatePickingListAction } from '@/app/actions/pdf';
 import { formatToTimeZone, cn } from '@/lib/utils';
 
 
@@ -322,11 +322,9 @@ export default function LogisticsPage() {
         }));
 
         try {
-            const { dispatchId } = await createDispatchOrder({
+            const { dispatchId, date } = await createDispatchOrder({
                 platformId: platform,
-                platformName: platformName,
                 carrierId: carrier,
-                carrierName: carrierName,
                 products: productsForDispatch,
                 createdBy: user ? { id: user.id, name: user.name } : undefined,
             });
@@ -335,9 +333,28 @@ export default function LogisticsPage() {
                 sku: p.sku,
                 name: p.name,
                 dispatchQuantity: p.quantity,
-            }))
+            }));
             
-            generatePickingListPDF(dispatchId, pdfProducts, platformName, carrierName);
+            const pdfResult = await generatePickingListAction(dispatchId, pdfProducts, platformName, carrierName, date);
+            if (pdfResult.success && pdfResult.pdfData) {
+                const byteCharacters = atob(pdfResult.pdfData);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], {type: 'application/pdf'});
+                const link = document.createElement('a');
+                link.href = window.URL.createObjectURL(blob);
+                link.download = `picking-list-${dispatchId.replace(/\s/g, '-')}.pdf`;
+                link.click();
+            } else {
+                 toast({
+                    variant: 'destructive',
+                    title: 'Error al Generar PDF',
+                    description: pdfResult.message || "No se pudo generar el PDF del picking list.",
+                });
+            }
     
             toast({
                 title: "Salida Creada y PDF Generado",
@@ -1130,11 +1147,3 @@ export default function LogisticsPage() {
     </>
     );
 }
-
-    
-
-    
-
-    
-
-    

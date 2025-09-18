@@ -402,7 +402,7 @@ export const getCategoriesByIds = async (ids: string[]): Promise<Record<string, 
 // Carrier Functions
 export const getCarriers = async (): Promise<Carrier[]> => {
     const carriersCol = collection(db, 'carriers');
-    const carrierSnapshot = await getDocs(carriersCol);
+    const carrierSnapshot = await getDocs(carrierCol);
     const carrierList = carrierSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Carrier));
     return carrierList;
 };
@@ -605,13 +605,18 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ platformId, platformName, carrierId, carrierName, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'> & { platformName: string, carrierName: string }): Promise<{ id: string, dispatchId: string }> => {
-    
+export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'>): Promise<{ id: string, dispatchId: string, date: string }> => {
+    const allPlatforms = await getPlatforms();
+    const allCarriers = await getCarriers();
+    const platformName = allPlatforms.find(p => p.id === platformId)?.name || 'N/A';
+    const carrierName = allCarriers.find(c => c.id === carrierId)?.name || 'N/A';
+
     const today = new Date();
     const dateKey = format(today, 'yyyy-MM-dd');
     const counterRef = doc(db, 'counters', `dispatch_${dateKey}`);
 
     const newDispatchOrderRef = doc(collection(db, 'dispatchOrders'));
+    const orderDate = Timestamp.now();
 
     // Use a transaction to atomically get and increment the counter for today
     const dispatchId = await runTransaction(db, async (transaction) => {
@@ -623,7 +628,7 @@ export const createDispatchOrder = async ({ platformId, platformName, carrierId,
         transaction.set(counterRef, { currentId: nextId }, { merge: true });
 
         const consecutiveId = nextId.toString().padStart(3, '0');
-        const formattedDate = formatToTimeZone(today, 'dd/MM/yy');
+        const formattedDate = format(today, 'dd/MM/yy');
         const newDispatchId = `${consecutiveId} - ${platformName} - ${carrierName} - ${formattedDate}`;
 
         const cleanProducts = products.map(p => {
@@ -635,7 +640,7 @@ export const createDispatchOrder = async ({ platformId, platformName, carrierId,
     
         const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
             dispatchId: newDispatchId,
-            date: Timestamp.now(),
+            date: orderDate.toDate().toISOString(),
             platformId,
             carrierId,
             products: cleanProducts,
@@ -647,7 +652,7 @@ export const createDispatchOrder = async ({ platformId, platformName, carrierId,
             createdBy,
         };
     
-        const dataToSet: Record<string, any> = { ...newDispatchOrder };
+        const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate };
         if (!dataToSet.createdBy) {
           delete dataToSet.createdBy;
         }
@@ -674,7 +679,7 @@ export const createDispatchOrder = async ({ platformId, platformName, carrierId,
         });
     }
 
-    return { id: newDispatchOrderRef.id, dispatchId };
+    return { id: newDispatchOrderRef.id, dispatchId, date: orderDate.toDate().toISOString() };
 };
 
 

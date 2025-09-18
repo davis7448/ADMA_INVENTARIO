@@ -13,16 +13,17 @@ export const generatePickingListPDF = (
     products: PdfProduct[], 
     platformName: string, 
     carrierName: string,
-    date: Date = new Date()
-) => {
+    date: Date | string
+): string => {
     const doc = new jsPDF();
+    const dispatchDate = typeof date === 'string' ? new Date(date) : date;
     
     doc.setFontSize(20);
     doc.text("Picking List", 105, 20, { align: 'center' });
 
     doc.setFontSize(12);
     doc.text(`Dispatch ID: ${dispatchId}`, 15, 35);
-    doc.text(`Date: ${formatToTimeZone(date, 'dd/MM/yyyy HH:mm')}`, 15, 42);
+    doc.text(`Date: ${formatToTimeZone(dispatchDate, 'dd/MM/yyyy HH:mm')}`, 15, 42);
     doc.text(`Platform: ${platformName}`, 15, 49);
     doc.text(`Carrier: ${carrierName}`, 15, 56);
 
@@ -44,6 +45,6 @@ export const generatePickingListPDF = (
         body: tableRows,
         startY: 65,
     });
-
-    doc.save(`picking-list-${dispatchId.replace(/\s/g, '-')}.pdf`);
+    
+    return doc.output('datauristring', { filename: `picking-list-${dispatchId.replace(/\s/g, '-')}.pdf` }).split(',')[1];
 };
