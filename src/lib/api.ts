@@ -402,7 +402,7 @@ export const getCategoriesByIds = async (ids: string[]): Promise<Record<string, 
 // Carrier Functions
 export const getCarriers = async (): Promise<Carrier[]> => {
     const carriersCol = collection(db, 'carriers');
-    const carrierSnapshot = await getDocs(carrierCol);
+    const carrierSnapshot = await getDocs(carriersCol);
     const carrierList = carrierSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Carrier));
     return carrierList;
 };
@@ -1553,3 +1553,4 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
