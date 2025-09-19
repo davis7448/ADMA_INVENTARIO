@@ -632,25 +632,33 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: LogisticItem[], user: User | null): Promise<void> => {
+export const registerInventoryEntry = async (items: LogisticItem[], user: User | null, entryReason: string, supplierId?: string): Promise<void> => {
     const batch = writeBatch(db);
 
+    let reasonText = "Entrada de mercancía";
+    if (entryReason === 'reception') {
+        if (supplierId) {
+            const supplier = await getSupplierById(supplierId);
+            reasonText = `Recepción del proveedor: ${supplier?.name || 'Desconocido'}`;
+        } else {
+            reasonText = 'Recepción de Proveedor (no especificado)';
+        }
+    } else if (entryReason === 'adjustment') {
+        reasonText = 'Ajuste de inventario manual';
+    } else if (entryReason === 'return') {
+        reasonText = 'Devolución de cliente';
+    }
+
     for (const item of items) {
-        // 1. Update Product Stock
-        const productRef = doc(db, 'products', item.productId);
-        // Note: updateProductStock handles transactions internally, so we don't batch it.
-        // It's a trade-off. For true atomicity, we'd need to refactor updateProductStock
-        // to accept a transaction object. For now, this is simpler.
         await updateProductStock(item.productId, item.quantity, 'add', item.sku);
 
-        // 2. Create Inventory Movement
         const movementRef = doc(collection(db, 'inventoryMovements'));
         const movementData: Omit<InventoryMovement, 'id' | 'movementId' | 'date'> = {
             type: 'Entrada',
             productId: item.productId,
             productName: item.name,
             quantity: item.quantity,
-            notes: 'Entrada de mercancía registrada desde panel de logística.',
+            notes: reasonText,
             userId: user?.id,
             userName: user?.name
         };
@@ -663,7 +671,6 @@ export const registerInventoryEntry = async (items: LogisticItem[], user: User |
         batch.set(movementRef, dataToSet);
     }
 
-    // We only commit the movement creations here. Stock updates were separate.
     await batch.commit();
 };
     
@@ -1618,6 +1625,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 

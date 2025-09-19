@@ -7,16 +7,19 @@ import { revalidatePath } from 'next/cache';
 
 export async function registerInventoryEntryAction(
     items: LogisticItem[], 
-    user: User | null
+    user: User | null,
+    entryReason: string,
+    supplierId?: string,
 ): Promise<{ success: boolean; message: string, count: number }> {
     if (!items || items.length === 0) {
         return { success: false, message: "No hay items para registrar.", count: 0 };
     }
 
     try {
-        await registerInventoryEntry(items, user);
+        await registerInventoryEntry(items, user, entryReason, supplierId);
         revalidatePath('/logistics');
         revalidatePath('/products');
+        revalidatePath('/history');
 
         return {
             success: true,

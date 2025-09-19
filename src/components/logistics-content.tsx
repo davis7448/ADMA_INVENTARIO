@@ -30,8 +30,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createDispatchOrder } from '@/lib/api';
-import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant, LogisticItem } from '@/lib/types';
+import { createDispatchOrder, getSuppliers } from '@/lib/api';
+import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant, LogisticItem, Supplier } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -65,6 +65,18 @@ import { registerInventoryEntryAction } from '@/app/actions/inventory';
 
 type SearchContext = 'salidas' | 'entradas' | 'averias' | 'devoluciones';
 
+interface LogisticsContentProps {
+    initialProducts: Product[];
+    initialCarriers: Carrier[];
+    initialPlatforms: Platform[];
+}
+
+const entryReasons = [
+    { value: 'reception', label: 'Recepción de Proveedor' },
+    { value: 'adjustment', label: 'Ajuste de Inventario' },
+    { value: 'return', label: 'Devolución General' }
+];
+
 
 export function LogisticsContent({ initialProducts, initialCarriers, initialPlatforms }: LogisticsContentProps) {
     const { user } = useAuth();
@@ -73,6 +85,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     const [allProductsList, setAllProductsList] = useState<Product[]>(initialProducts);
     const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
     const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
 
     // Salidas State
@@ -90,6 +103,8 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     const [receivedProducts, setReceivedProducts] = useState<LogisticItem[]>([]);
     const entryBarcodeRef = useRef<HTMLInputElement>(null);
     const [isEntryPending, startEntryTransition] = useTransition();
+    const [entryReason, setEntryReason] = useState('reception');
+    const [entrySupplier, setEntrySupplier] = useState('');
     
     // Devoluciones State
     const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
@@ -109,6 +124,10 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     // Variant Selection State
     const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
     const [productForVariantSelection, setProductForVariantSelection] = useState<Product | null>(null);
+
+    useEffect(() => {
+        getSuppliers().then(setSuppliers);
+    }, []);
 
     // --- GENERIC PRODUCT/VARIANT ADDITION ---
 
@@ -375,15 +394,21 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             toast({ variant: 'destructive', title: 'Error', description: 'No hay productos para registrar.' });
             return;
         }
+        if (entryReason === 'reception' && !entrySupplier) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Por favor, selecciona un proveedor.' });
+            return;
+        }
 
         startEntryTransition(async () => {
-            const result = await registerInventoryEntryAction(receivedProducts, user);
+            const result = await registerInventoryEntryAction(receivedProducts, user, entryReason, entrySupplier);
             if (result.success) {
                 toast({
                     title: '¡Éxito!',
                     description: `Se registraron ${result.count} entradas de productos.`,
                 });
                 setReceivedProducts([]);
+                setEntryReason('reception');
+                setEntrySupplier('');
                 router.refresh();
             } else {
                 toast({
@@ -817,7 +842,35 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                             <CardTitle>Registrar Entrada de Mercancía</CardTitle>
                             <CardDescription>Añade productos al inventario al recibirlos del proveedor.</CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
+                        <CardContent className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <Label htmlFor="entry-reason">Concepto de Ingreso</Label>
+                                    <Select value={entryReason} onValueChange={setEntryReason}>
+                                        <SelectTrigger id="entry-reason">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {entryReasons.map(reason => (
+                                                <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                {entryReason === 'reception' && (
+                                    <div>
+                                        <Label htmlFor="entry-supplier">Proveedor</Label>
+                                        <Select value={entrySupplier} onValueChange={setEntrySupplier}>
+                                            <SelectTrigger id="entry-supplier">
+                                            <SelectValue placeholder="Seleccionar un proveedor" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </div>
                             <div>
                                 <Label htmlFor="barcode-entrada">Escanear o Buscar Producto</Label>
                                 <div className="flex gap-2">
