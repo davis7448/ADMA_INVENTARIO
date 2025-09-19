@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useTransition } from 'react';
@@ -10,6 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from '@/components/ui/card';
 import {
   Table,
@@ -46,7 +46,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getProducts } from '@/lib/api';
 import type { Product, RotationCategory } from '@/lib/types';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2 } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
@@ -93,6 +93,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [hasPending, setHasPending] = useState(false);
     const [hasReservations, setHasReservations] = useState(false);
     const [onlyAudited, setOnlyAudited] = useState(false);
+
+    // Pagination states
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
     
     const refreshProducts = () => {
         setLoading(true);
@@ -148,6 +152,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     };
 
     const filteredProducts = useMemo(() => {
+        setCurrentPage(1); // Reset page on filter change
         return products.filter(product => {
             const lowercasedQuery = searchQuery.toLowerCase();
             // Text search
@@ -181,6 +186,19 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch;
         });
     }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending, hasReservations, onlyAudited]);
+    
+    // Paginated data
+    const paginatedProducts = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredProducts.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredProducts, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+
+    const handleItemsPerPageChange = (value: number) => {
+        setItemsPerPage(value);
+        setCurrentPage(1);
+    }
 
     const handleRowClick = (product: Product) => {
         setSelectedProductId(product.id);
@@ -370,7 +388,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                 <div className="flex justify-between items-center">
                     <div>
                         <CardTitle>Todos los Productos</CardTitle>
-                        <CardDescription>Una lista de todos los productos en tu catálogo. ({filteredProducts.length} de {products.length} mostrados)</CardDescription>
+                        <CardDescription>Una lista de todos los productos en tu catálogo.</CardDescription>
                     </div>
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -422,8 +440,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                     </TableRow>
                                 ))}
                                 </>
-                            ) : filteredProducts.length > 0 ? (
-                                filteredProducts.map((product) => (
+                            ) : paginatedProducts.length > 0 ? (
+                                paginatedProducts.map((product) => (
                                     <React.Fragment key={product.id}>
                                         <TableRow 
                                             className="cursor-pointer hover:bg-muted/50"
@@ -600,6 +618,16 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                     </Table>
                 </div>
             </CardContent>
+            <CardFooter>
+                 <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    itemsPerPage={itemsPerPage}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                    totalItems={filteredProducts.length}
+                />
+            </CardFooter>
           </Card>
         </div>
         {selectedProductId && (
@@ -613,3 +641,62 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         </TooltipProvider>
     )
 }
+
+interface PaginationControlsProps {
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+    itemsPerPage: number;
+    onItemsPerPageChange: (value: number) => void;
+    totalItems: number;
+}
+
+function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalItems }: PaginationControlsProps) {
+    if (totalPages <= 1 && totalItems <= itemsPerPage) return null;
+    
+    return (
+        <div className="flex items-center justify-end space-x-6 lg:space-x-8 w-full">
+            <div className="flex items-center space-x-2">
+                <p className="text-sm font-medium">Filas por página</p>
+                <Select
+                    value={`${itemsPerPage}`}
+                    onValueChange={(value) => onItemsPerPageChange(Number(value))}
+                >
+                    <SelectTrigger className="h-8 w-[70px]">
+                        <SelectValue placeholder={itemsPerPage} />
+                    </SelectTrigger>
+                    <SelectContent side="top">
+                        {[10, 20, 50, 100].map((pageSize) => (
+                        <SelectItem key={pageSize} value={`${pageSize}`}>
+                            {pageSize}
+                        </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+                Página {currentPage} de {totalPages > 0 ? totalPages : 1}
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    onClick={() => onPageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                >
+                    <span className="sr-only">Ir a la página anterior</span>
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    onClick={() => onPageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                >
+                    <span className="sr-only">Ir a la página siguiente</span>
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+            </div>
+        </div>
+    );
+};
