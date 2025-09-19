@@ -384,237 +384,237 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
 
 
           <Card>
-            <CardHeader className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
-                <div>
-                    <CardTitle>Todos los Productos</CardTitle>
-                    <CardDescription>Una lista de todos los productos en tu catálogo.</CardDescription>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <div className="space-y-1.5">
+                        <CardTitle>Todos los Productos</CardTitle>
+                        <CardDescription>Una lista de todos los productos en tu catálogo.</CardDescription>
+                    </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                <Settings className="mr-2 h-4 w-4" />
+                                Opciones
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={!canEdit}>
+                                <ImportProductsDialog onImportSuccess={refreshProducts} />
+                            </DropdownMenuItem>
+                                <DropdownMenuItem onClick={handleExportExcel}>
+                                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                Exportar a Excel
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline">
-                            <Settings className="mr-2 h-4 w-4" />
-                            Opciones
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={!canEdit}>
-                            <ImportProductsDialog onImportSuccess={refreshProducts} />
-                        </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleExportExcel}>
-                            <FileSpreadsheet className="mr-2 h-4 w-4" />
-                            Exportar a Excel
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
             </CardHeader>
             <CardContent>
-                <div className="border rounded-md">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[80px] hidden sm:table-cell" />
-                                <TableHead>Nombre</TableHead>
-                                <TableHead>Rotación</TableHead>
-                                <TableHead>Auditoría</TableHead>
-                                <TableHead>SKU</TableHead>
-                                <TableHead>Categoría</TableHead>
-                                <TableHead>Stock</TableHead>
-                                <TableHead>Disponible</TableHead>
-                                <TableHead>Pendiente</TableHead>
-                                <TableHead>Averiado</TableHead>
-                                <TableHead>Precio</TableHead>
-                                <TableHead className="w-[50px]"><span className="sr-only">Acciones</span></TableHead>
-                                <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expandir</span></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
-                                <>
-                                {Array.from({ length: 5 }).map((_, i) => (
-                                    <TableRow key={i}>
-                                        <TableCell colSpan={13}>
-                                            <Skeleton className="h-16 w-full" />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                                </>
-                            ) : paginatedProducts.length > 0 ? (
-                                paginatedProducts.map((product) => (
-                                    <React.Fragment key={product.id}>
-                                        <TableRow 
-                                            className="cursor-pointer hover:bg-muted/50"
-                                            onClick={() => handleRowClick(product)}
-                                        >
-                                            <TableCell className="w-[80px] hidden sm:table-cell">
-                                                <Image
-                                                    alt={product.name}
-                                                    className="aspect-square rounded-md object-cover"
-                                                    height="64"
-                                                    src={product.imageUrl}
-                                                    width="64"
-                                                />
-                                            </TableCell>
-                                            <TableCell className="font-medium">{product.name}</TableCell>
-                                            <TableCell>
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        {getRotationIcon(product.rotationCategoryName)}
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{product.rotationCategoryName}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    {product.lastAuditedAt ? (
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <span className="relative flex items-center" onClick={(e) => e.stopPropagation()}>
-                                                                    <Check className="h-5 w-5 text-green-500" />
-                                                                </span>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <div className="p-2 space-y-2 text-center">
-                                                                    <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
-                                                                    {canAudit && <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>Auditar de Nuevo</Button>}
-                                                                </div>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    ) : (
-                                                        canAudit ? (
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button 
-                                                                    variant="ghost" 
-                                                                    size="icon" 
-                                                                    className="h-8 w-8"
-                                                                    onClick={(e) => handleAuditStock(e, product.id)}
-                                                                    disabled={isAuditing}
-                                                                >
-                                                                    <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
-                                                                </Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent><p>Marcar como auditado</p></TooltipContent>
-                                                        </Tooltip>
-                                                        ) : (
-                                                            <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
-                                                        )
-                                                    )}
-
-                                                    {product.lastAuditedAt && user?.role === 'admin' && (
-                                                        <AlertDialog>
-                                                            <AlertDialogTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
-                                                                    <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                                                                </Button>
-                                                            </AlertDialogTrigger>
-                                                            <AlertDialogContent>
-                                                                <AlertDialogHeader>
-                                                                    <AlertDialogTitle>¿Limpiar Auditoría?</AlertDialogTitle>
-                                                                    <AlertDialogDescription>
-                                                                        Esta acción marcará el producto como no auditado. Deberá ser verificado de nuevo.
-                                                                    </AlertDialogDescription>
-                                                                </AlertDialogHeader>
-                                                                <AlertDialogFooter>
-                                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                    <AlertDialogAction onClick={(e) => handleClearAudit(e, product.id)}>Limpiar</AlertDialogAction>
-                                                                </AlertDialogFooter>
-                                                            </AlertDialogContent>
-                                                        </AlertDialog>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>{product.sku}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">{categoryNames[product.categoryId] || 'Desconocida'}</Badge>
-                                            </TableCell>
-                                            <TableCell>{product.stock}</TableCell>
-                                            <TableCell className="font-semibold text-green-600">
-                                                {calculateAvailableStock(product)}
-                                            </TableCell>
-                                            <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
-                                            <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
-                                            <TableCell>
-                                                {(product.productType === 'simple' && product.priceDropshipping) ? `$${product.priceDropshipping.toFixed(0)}` : '--'}
-                                            </TableCell>
-                                            <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button aria-haspopup="true" size="icon" variant="ghost" disabled={!canEdit}>
-                                                            <MoreHorizontal className="h-4 w-4" />
-                                                            <span className="sr-only">Menú de acciones</span>
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                                        <EditProductForm product={product} onProductUpdated={refreshProducts}>
-                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Editar</DropdownMenuItem>
-                                                        </EditProductForm>
-                                                        <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                            <TableCell className="w-[50px] pr-4 text-right">
-                                                {product.productType === 'variable' && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          handleToggleRow(product.id);
-                                                        }}
-                                                      >
-                                                        <ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform duration-200", expandedRow === product.id && "rotate-180")} />
-                                                      </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                        {product.productType === 'variable' && expandedRow === product.id && (
-                                            <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                                <TableCell colSpan={13}>
-                                                    <div className="p-4">
-                                                        <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
-                                                        <Table>
-                                                            <TableHeader>
-                                                                <TableRow className="hover:bg-transparent">
-                                                                    <TableHead>Nombre</TableHead>
-                                                                    <TableHead>SKU</TableHead>
-                                                                    <TableHead>Precio</TableHead>
-                                                                    <TableHead>Stock Físico</TableHead>
-                                                                    <TableHead>Stock Disponible</TableHead>
-                                                                </TableRow>
-                                                            </TableHeader>
-                                                            <TableBody>
-                                                            {product.variants?.map((variant) => (
-                                                                <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
-                                                                    <TableCell>{variant.name}</TableCell>
-                                                                    <TableCell>{variant.sku}</TableCell>
-                                                                    <TableCell>${variant.priceDropshipping.toFixed(0)}</TableCell>
-                                                                    <TableCell>{variant.stock}</TableCell>
-                                                                    <TableCell className="font-semibold text-green-600">
-                                                                        {calculateAvailableStock(product, variant.id)}
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                            </TableBody>
-                                                        </Table>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </React.Fragment>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={13} className="text-center h-24">
-                                        No se encontraron productos con los filtros actuales.
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[80px] hidden sm:table-cell" />
+                            <TableHead>Nombre</TableHead>
+                            <TableHead>Rotación</TableHead>
+                            <TableHead>Auditoría</TableHead>
+                            <TableHead>SKU</TableHead>
+                            <TableHead>Categoría</TableHead>
+                            <TableHead>Stock</TableHead>
+                            <TableHead>Disponible</TableHead>
+                            <TableHead>Pendiente</TableHead>
+                            <TableHead>Averiado</TableHead>
+                            <TableHead>Precio</TableHead>
+                            <TableHead className="w-[50px]"><span className="sr-only">Acciones</span></TableHead>
+                            <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expandir</span></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            <>
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <TableRow key={i}>
+                                    <TableCell colSpan={13}>
+                                        <Skeleton className="h-16 w-full" />
                                     </TableCell>
                                 </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
+                            ))}
+                            </>
+                        ) : paginatedProducts.length > 0 ? (
+                            paginatedProducts.map((product) => (
+                                <React.Fragment key={product.id}>
+                                    <TableRow 
+                                        className="cursor-pointer hover:bg-muted/50"
+                                        onClick={() => handleRowClick(product)}
+                                    >
+                                        <TableCell className="w-[80px] hidden sm:table-cell">
+                                            <Image
+                                                alt={product.name}
+                                                className="aspect-square rounded-md object-cover"
+                                                height="64"
+                                                src={product.imageUrl}
+                                                width="64"
+                                            />
+                                        </TableCell>
+                                        <TableCell className="font-medium">{product.name}</TableCell>
+                                        <TableCell>
+                                            <Tooltip>
+                                                <TooltipTrigger>
+                                                    {getRotationIcon(product.rotationCategoryName)}
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>{product.rotationCategoryName}</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                {product.lastAuditedAt ? (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="relative flex items-center" onClick={(e) => e.stopPropagation()}>
+                                                                <Check className="h-5 w-5 text-green-500" />
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <div className="p-2 space-y-2 text-center">
+                                                                <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
+                                                                {canAudit && <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>Auditar de Nuevo</Button>}
+                                                            </div>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                ) : (
+                                                    canAudit ? (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                className="h-8 w-8"
+                                                                onClick={(e) => handleAuditStock(e, product.id)}
+                                                                disabled={isAuditing}
+                                                            >
+                                                                <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent><p>Marcar como auditado</p></TooltipContent>
+                                                    </Tooltip>
+                                                    ) : (
+                                                        <ShieldCheck className="h-5 w-5 text-muted-foreground/30" />
+                                                    )
+                                                )}
+
+                                                {product.lastAuditedAt && user?.role === 'admin' && (
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
+                                                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>¿Limpiar Auditoría?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Esta acción marcará el producto como no auditado. Deberá ser verificado de nuevo.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={(e) => handleClearAudit(e, product.id)}>Limpiar</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{product.sku}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">{categoryNames[product.categoryId] || 'Desconocida'}</Badge>
+                                        </TableCell>
+                                        <TableCell>{product.stock}</TableCell>
+                                        <TableCell className="font-semibold text-green-600">
+                                            {calculateAvailableStock(product)}
+                                        </TableCell>
+                                        <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
+                                        <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
+                                        <TableCell>
+                                            {(product.productType === 'simple' && product.priceDropshipping) ? `$${product.priceDropshipping.toFixed(0)}` : '--'}
+                                        </TableCell>
+                                        <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button aria-haspopup="true" size="icon" variant="ghost" disabled={!canEdit}>
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                        <span className="sr-only">Menú de acciones</span>
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                                    <EditProductForm product={product} onProductUpdated={refreshProducts}>
+                                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Editar</DropdownMenuItem>
+                                                    </EditProductForm>
+                                                    <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                        <TableCell className="w-[50px] pr-4 text-right">
+                                            {product.productType === 'variable' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleToggleRow(product.id);
+                                                    }}
+                                                  >
+                                                    <ChevronDown className={cn("h-5 w-5 shrink-0 transition-transform duration-200", expandedRow === product.id && "rotate-180")} />
+                                                  </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                    {product.productType === 'variable' && expandedRow === product.id && (
+                                        <TableRow className="bg-muted/20 hover:bg-muted/30">
+                                            <TableCell colSpan={13}>
+                                                <div className="p-4">
+                                                    <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow className="hover:bg-transparent">
+                                                                <TableHead>Nombre</TableHead>
+                                                                <TableHead>SKU</TableHead>
+                                                                <TableHead>Precio</TableHead>
+                                                                <TableHead>Stock Físico</TableHead>
+                                                                <TableHead>Stock Disponible</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                        {product.variants?.map((variant) => (
+                                                            <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
+                                                                <TableCell>{variant.name}</TableCell>
+                                                                <TableCell>{variant.sku}</TableCell>
+                                                                <TableCell>${variant.priceDropshipping.toFixed(0)}</TableCell>
+                                                                <TableCell>{variant.stock}</TableCell>
+                                                                <TableCell className="font-semibold text-green-600">
+                                                                    {calculateAvailableStock(product, variant.id)}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </React.Fragment>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={13} className="text-center h-24">
+                                    No se encontraron productos con los filtros actuales.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
             </CardContent>
             <CardFooter>
                  <PaginationControls
