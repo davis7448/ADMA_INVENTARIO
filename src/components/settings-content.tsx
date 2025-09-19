@@ -35,18 +35,19 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
     const { toast } = useToast();
 
     const fetchData = async () => {
-        setLoading(true);
-        const fetchedUsers = await getUsers();
-        setUsers(fetchedUsers);
-        setLoading(false);
+        // setLoading(true);
+        // const fetchedUsers = await getUsers();
+        // setUsers(fetchedUsers);
+        // setLoading(false);
     }
 
     useEffect(() => {
         if (user?.role === 'admin') {
-            fetchData();
+            // fetchData();
         } else {
-            setLoading(false);
+            // setLoading(false);
         }
+        setLoading(false); // Assume loading is done for now
     }, [user]);
 
     const handleThresholdChange = (id: string, value: string) => {
@@ -92,7 +93,7 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
           <ProfileManagement />
 
           {isAdmin && (
-            <UserManagement initialUsers={users} onUsersUpdate={fetchData} loading={loading} />
+            <UserManagement initialUsers={users} onUsersUpdate={() => {}} loading={loading} />
           )}
 
           <Card>

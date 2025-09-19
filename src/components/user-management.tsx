@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -52,9 +52,14 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
     // Filter states
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedRole, setSelectedRole] = useState('all');
+    const [users, setUsers] = useState<User[]>(initialUsers);
+
+    useEffect(() => {
+        setUsers(initialUsers);
+    }, [initialUsers]);
 
     const filteredUsers = useMemo(() => {
-        return initialUsers.filter(user => {
+        return users.filter(user => {
             const lowercasedQuery = searchQuery.toLowerCase();
             const searchMatch = searchQuery === '' || 
                                 user.name.toLowerCase().includes(lowercasedQuery) || 
@@ -64,7 +69,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
 
             return searchMatch && roleMatch;
         });
-    }, [initialUsers, searchQuery, selectedRole]);
+    }, [users, searchQuery, selectedRole]);
 
     return (
         <Card>
@@ -73,7 +78,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                     <div>
                         <CardTitle>Gestión de Usuarios</CardTitle>
                         <CardDescription>
-                            Gestiona los roles de los usuarios existentes. Los nuevos usuarios se crean desde la consola de Firebase.
+                            Gestiona los roles de los usuarios existentes. La lista de usuarios aparecerá una vez desplegada la aplicación.
                         </CardDescription>
                     </div>
                 </div>
@@ -129,7 +134,9 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                     ))
                   ) : (
                     <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center">No se encontraron usuarios con los filtros aplicados.</TableCell>
+                        <TableCell colSpan={4} className="h-24 text-center">
+                            La lista de usuarios estará disponible después de desplegar la aplicación.
+                        </TableCell>
                     </TableRow>
                   )}
                 </TableBody>

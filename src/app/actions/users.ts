@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { getAuth } from 'firebase-admin/auth';
-import { app as adminApp } from '@/lib/firebase-admin';
+// import { app as adminApp } from '@/lib/firebase-admin'; // Temporarily disabled
 import { revalidatePath } from 'next/cache';
 import { findUserByEmail, addUser, updateUserProfile, updateUserRoleInDb, sendPasswordReset, uploadImageAndGetURL } from '@/lib/api';
 import type { CreateUserFormState, CreateUserFormValues, UpdateProfileFormValues, UpdateProfileFormState } from '@/lib/definitions';
@@ -33,13 +33,15 @@ export async function createUserAction(
   const { name, email, password, role } = validatedFields.data;
 
   try {
-    const auth = getAuth(adminApp);
-    // Create user in Firebase Auth
-    await auth.createUser({
-      email,
-      password,
-      displayName: name,
-    });
+    // const auth = getAuth(adminApp);
+    // // Create user in Firebase Auth
+    // await auth.createUser({
+    //   email,
+    //   password,
+    //   displayName: name,
+    // });
+    throw new Error("La creación de usuarios está deshabilitada en el entorno de prototipado. Por favor, despliega la aplicación.");
+
 
     // Create user profile in Firestore
     await addUser({
