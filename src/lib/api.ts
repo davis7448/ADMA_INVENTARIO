@@ -929,49 +929,33 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
             throw new Error("No se encontraron excepciones para cancelar con las guías proporcionadas.");
         }
 
-        const productUpdates = new Map<string, { pendingStockChange: number }>();
-        const movementsToAdd: any[] = [];
-
         for (const ex of exceptionsToCancel) {
             for (const exProd of ex.products) {
-                const update = productUpdates.get(exProd.productId) || { pendingStockChange: 0 };
-                update.pendingStockChange -= exProd.quantity;
-                productUpdates.set(exProd.productId, update);
+                const productRef = doc(db, 'products', exProd.productId);
+                const productSnap = await transaction.get(productRef);
 
-                const productSnap = await transaction.get(doc(db, 'products', exProd.productId));
-                const productName = productSnap.exists() ? (productSnap.data() as Product).name : 'Producto Desconocido';
-                
-                movementsToAdd.push({
-                    type: 'Entrada',
-                    productId: exProd.productId,
-                    productName: productName,
-                    quantity: exProd.quantity,
-                    notes: `Anulación de guía pendiente por falta de stock: ${ex.trackingNumber}. Despacho: ${orderData.dispatchId}. SKU: ${exProd.variantSku || productSnap.data()?.sku || 'N/A'}`,
-                    userId: user?.id,
-                    userName: user?.name,
-                    date: Timestamp.now(),
-                });
-            }
-        }
-        
-        // Apply product updates
-        for (const [productId, update] of productUpdates.entries()) {
-            const productRef = doc(db, 'products', productId);
-            const productSnap = await transaction.get(productRef);
-            if (productSnap.exists()) {
-                const currentPendingStock = productSnap.data().pendingStock || 0;
-                const newPendingStock = Math.max(0, currentPendingStock + update.pendingStockChange);
-                transaction.update(productRef, { pendingStock: newPendingStock });
+                if (productSnap.exists()) {
+                    const currentPendingStock = productSnap.data().pendingStock || 0;
+                    const newPendingStock = Math.max(0, currentPendingStock - exProd.quantity);
+                    transaction.update(productRef, { pendingStock: newPendingStock });
+
+                    const movementRef = doc(collection(db, 'inventoryMovements'));
+                    const productName = productSnap.data().name || 'Producto Desconocido';
+                    const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
+                        type: 'Averia',
+                        productId: exProd.productId,
+                        productName: productName,
+                        quantity: exProd.quantity,
+                        notes: `Anulación de guía pendiente por falta de stock: ${ex.trackingNumber}. Despacho: ${orderData.dispatchId}. SKU: ${exProd.variantSku || productSnap.data()?.sku || 'N/A'}`,
+                        userId: user?.id,
+                        userName: user?.name,
+                        date: Timestamp.now(),
+                    };
+                    transaction.set(movementRef, movementData);
+                }
             }
         }
 
-        // Add inventory movements
-        for (const movement of movementsToAdd) {
-            const movementRef = doc(collection(db, 'inventoryMovements'));
-            transaction.set(movementRef, movement);
-        }
-
-        // Update the dispatch order
         const remainingExceptions = orderData.exceptions.filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
         const newStatus = remainingExceptions.length === 0 && orderData.status === 'Parcial' ? 'Despachada' : orderData.status;
         const currentCancelled = orderData.cancelledExceptions || [];
@@ -1649,6 +1633,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 
