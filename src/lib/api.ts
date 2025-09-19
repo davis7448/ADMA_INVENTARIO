@@ -1090,6 +1090,18 @@ export const getEntryReasons = async (): Promise<EntryReason[]> => {
     return reasonList;
 };
 
+export const addEntryReason = async (reason: Pick<EntryReason, 'label' | 'value'>): Promise<string> => {
+    const entryReasonsCol = collection(db, 'entryReasons');
+    const snapshot = await getDocs(entryReasonsCol);
+    const existingIds = snapshot.docs.map(doc => parseInt(doc.id.replace('reason-', ''), 10));
+    const nextIdNumber = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+    const newId = `reason-${nextIdNumber}`;
+  
+    const docRef = doc(entryReasonsCol, newId);
+    await setDoc(docRef, reason);
+    return newId;
+};
+
 export const updateEntryReasons = async (reasons: EntryReason[]): Promise<void> => {
     const batch = writeBatch(db);
     reasons.forEach(reason => {
@@ -1633,6 +1645,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 
