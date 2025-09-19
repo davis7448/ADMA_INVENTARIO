@@ -91,6 +91,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [selectedRotation, setSelectedRotation] = useState('all');
     const [minStock, setMinStock] = useState('');
     const [hasPending, setHasPending] = useState(false);
+    const [hasReservations, setHasReservations] = useState(false);
     
     const refreshProducts = () => {
         setLoading(true);
@@ -170,9 +171,12 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             // Has pending filter
             const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
 
-            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch;
+            // Has reservations filter
+            const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
+
+            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch;
         });
-    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending]);
+    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending, hasReservations]);
 
     const handleRowClick = (product: Product) => {
         setSelectedProductId(product.id);
@@ -190,6 +194,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         setSelectedRotation('all');
         setMinStock('');
         setHasPending(false);
+        setHasReservations(false);
     };
 
     const canEdit = user?.role === 'admin' || user?.role === 'plataformas';
@@ -336,9 +341,15 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                     <Input id="min-stock" type="number" placeholder="Ej: 10" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
                 </div>
             </div>
-             <div className="flex items-center space-x-2 pt-4">
-                <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
-                <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
+             <div className="flex items-center gap-6 pt-4">
+                <div className="flex items-center space-x-2">
+                    <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
+                    <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Switch id="reserved-stock" checked={hasReservations} onCheckedChange={setHasReservations} />
+                    <Label htmlFor="reserved-stock">Mostrar solo con stock reservado</Label>
+                </div>
             </div>
           </div>
 
