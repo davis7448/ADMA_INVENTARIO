@@ -259,3 +259,13 @@ export interface GetStockAlertsResult {
     error?: string;
     lastGenerated?: string;
 }
+
+// Represents a product or variant in one of the logistics lists
+export interface LogisticItem {
+    productId: string; // Always the parent product ID
+    variantId?: string; // The variant's own ID
+    name: string; // Can be product or variant name
+    sku: string;
+    imageUrl: string;
+    quantity: number;
+}

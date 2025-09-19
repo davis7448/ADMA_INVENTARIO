@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useTransition } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -30,7 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createDispatchOrder } from '@/lib/api';
-import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant } from '@/lib/types';
+import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant, LogisticItem } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -59,23 +60,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { generatePickingListAction } from '@/app/actions/pdf';
 import { cn } from '@/lib/utils';
-
-
-interface LogisticsContentProps {
-    initialProducts: Product[];
-    initialCarriers: Carrier[];
-    initialPlatforms: Platform[];
-}
-
-// Represents a product or variant in one of the logistics lists
-interface LogisticItem {
-    productId: string; // Always the parent product ID
-    variantId?: string; // The variant's own ID
-    name: string; // Can be product or variant name
-    sku: string;
-    imageUrl: string;
-    quantity: number;
-}
+import { registerInventoryEntryAction } from '@/app/actions/inventory';
 
 
 type SearchContext = 'salidas' | 'entradas' | 'averias' | 'devoluciones';
@@ -104,6 +89,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     // Entradas State
     const [receivedProducts, setReceivedProducts] = useState<LogisticItem[]>([]);
     const entryBarcodeRef = useRef<HTMLInputElement>(null);
+    const [isEntryPending, startEntryTransition] = useTransition();
     
     // Devoluciones State
     const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
@@ -385,15 +371,28 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     };
 
     const handleRegisterEntry = async () => {
-        // This function will need to be converted to a server action call
-        // For now, it's just a placeholder
         if (receivedProducts.length === 0) {
             toast({ variant: 'destructive', title: 'Error', description: 'No hay productos para registrar.' });
             return;
         }
 
-        toast({ title: 'Entrada Registrada (Simulado)', description: 'La funcionalidad de registro de entrada aún no está implementada.' });
-        setReceivedProducts([]);
+        startEntryTransition(async () => {
+            const result = await registerInventoryEntryAction(receivedProducts, user);
+            if (result.success) {
+                toast({
+                    title: '¡Éxito!',
+                    description: `Se registraron ${result.count} entradas de productos.`,
+                });
+                setReceivedProducts([]);
+                router.refresh();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Error al Registrar Entrada',
+                    description: result.message,
+                });
+            }
+        });
     };
 
     // --- DEVOLUCIONES ---
@@ -893,7 +892,9 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                             </Card>
                         </CardContent>
                         <CardFooter>
-                            <Button onClick={handleRegisterEntry}>Registrar Entrada</Button>
+                            <Button onClick={handleRegisterEntry} disabled={isEntryPending}>
+                                {isEntryPending ? 'Registrando...' : 'Registrar Entrada'}
+                            </Button>
                         </CardFooter>
                     </Card>
                 </TabsContent>

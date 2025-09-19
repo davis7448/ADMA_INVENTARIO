@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, se
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant, GetStockAlertsResult, StockAlertItem } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant, GetStockAlertsResult, StockAlertItem, LogisticItem } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -630,6 +630,41 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
     console.error("Transaction failed: ", e);
     throw new Error("Failed to add inventory movement.");
   }
+};
+
+export const registerInventoryEntry = async (items: LogisticItem[], user: User | null): Promise<void> => {
+    const batch = writeBatch(db);
+
+    for (const item of items) {
+        // 1. Update Product Stock
+        const productRef = doc(db, 'products', item.productId);
+        // Note: updateProductStock handles transactions internally, so we don't batch it.
+        // It's a trade-off. For true atomicity, we'd need to refactor updateProductStock
+        // to accept a transaction object. For now, this is simpler.
+        await updateProductStock(item.productId, item.quantity, 'add', item.sku);
+
+        // 2. Create Inventory Movement
+        const movementRef = doc(collection(db, 'inventoryMovements'));
+        const movementData: Omit<InventoryMovement, 'id' | 'movementId' | 'date'> = {
+            type: 'Entrada',
+            productId: item.productId,
+            productName: item.name,
+            quantity: item.quantity,
+            notes: 'Entrada de mercancía registrada desde panel de logística.',
+            userId: user?.id,
+            userName: user?.name
+        };
+        const dataToSet: Record<string, any> = {
+            ...movementData,
+            date: Timestamp.now(),
+          };
+          Object.keys(dataToSet).forEach(key => dataToSet[key] === undefined && delete dataToSet[key]);
+      
+        batch.set(movementRef, dataToSet);
+    }
+
+    // We only commit the movement creations here. Stock updates were separate.
+    await batch.commit();
 };
     
 // Dispatch Order Functions
@@ -1583,6 +1618,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 
