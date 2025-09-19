@@ -9,6 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter
 } from '@/components/ui/card';
 import {
   Table,
@@ -43,6 +44,8 @@ interface HistoryContentProps {
     allCarriers: Carrier[];
 }
 
+const ITEMS_PER_PAGE = 20;
+
 export function HistoryContent({
     initialMovements,
     initialDispatchOrders,
@@ -58,6 +61,10 @@ export function HistoryContent({
     const [filterMovementType, setFilterMovementType] = useState<string>('all');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
     const [productComboboxOpen, setProductComboboxOpen] = useState(false);
+
+    // Pagination states
+    const [movementsPage, setMovementsPage] = useState(1);
+    const [ordersPage, setOrdersPage] = useState(1);
 
     const { filteredMovements, filteredDispatchOrders } = useMemo(() => {
         let movements = [...initialMovements];
@@ -113,9 +120,27 @@ export function HistoryContent({
         movements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         dispatchOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+        // Reset pages on filter change
+        setMovementsPage(1);
+        setOrdersPage(1);
+
         return { filteredMovements: movements, filteredDispatchOrders: dispatchOrders };
 
     }, [initialMovements, initialDispatchOrders, filterPlatformId, filterCarrierId, filterProductId, filterMovementType, dateRange]);
+
+    // Paginated data
+    const paginatedMovements = useMemo(() => {
+        const startIndex = (movementsPage - 1) * ITEMS_PER_PAGE;
+        return filteredMovements.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    }, [filteredMovements, movementsPage]);
+
+    const paginatedDispatchOrders = useMemo(() => {
+        const startIndex = (ordersPage - 1) * ITEMS_PER_PAGE;
+        return filteredDispatchOrders.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    }, [filteredDispatchOrders, ordersPage]);
+    
+    const totalMovementPages = Math.ceil(filteredMovements.length / ITEMS_PER_PAGE);
+    const totalOrderPages = Math.ceil(filteredDispatchOrders.length / ITEMS_PER_PAGE);
 
 
     const productsById = useMemo(() => allProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>), [allProducts]);
@@ -295,6 +320,40 @@ export function HistoryContent({
             )}
         </div>
     );
+    
+    interface PaginationControlsProps {
+        currentPage: number;
+        totalPages: number;
+        onPageChange: (page: number) => void;
+    }
+    
+    const PaginationControls = ({ currentPage, totalPages, onPageChange }: PaginationControlsProps) => {
+        if (totalPages <= 1) return null;
+        
+        return (
+            <div className="flex items-center justify-end space-x-2 py-4">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                >
+                    Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                    Página {currentPage} de {totalPages}
+                </span>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                >
+                    Siguiente
+                </Button>
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -336,8 +395,8 @@ export function HistoryContent({
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                    {filteredMovements.length > 0 ? (
-                        filteredMovements.map((movement) => (
+                    {paginatedMovements.length > 0 ? (
+                        paginatedMovements.map((movement) => (
                         <TableRow key={movement.id}>
                             <TableCell className="font-mono text-xs">{movement.movementId || 'N/A'}</TableCell>
                             <TableCell className="font-medium">
@@ -366,6 +425,13 @@ export function HistoryContent({
                     </TableBody>
                 </Table>
             </CardContent>
+             <CardFooter>
+                <PaginationControls 
+                    currentPage={movementsPage} 
+                    totalPages={totalMovementPages}
+                    onPageChange={setMovementsPage} 
+                />
+            </CardFooter>
         </Card>
 
         <Card>
@@ -384,9 +450,9 @@ export function HistoryContent({
                 </div>
             </CardHeader>
             <CardContent>
-                {filteredDispatchOrders.length > 0 ? (
+                {paginatedDispatchOrders.length > 0 ? (
                     <Accordion type="single" collapsible className="w-full">
-                        {filteredDispatchOrders.map((order) => (
+                        {paginatedDispatchOrders.map((order) => (
                             <AccordionItem value={order.id} key={order.id}>
                                 <AccordionTrigger>
                                     <div className="flex justify-between items-center w-full pr-4">
@@ -473,6 +539,13 @@ export function HistoryContent({
                     </div>
                 )}
             </CardContent>
+            <CardFooter>
+                 <PaginationControls 
+                    currentPage={ordersPage} 
+                    totalPages={totalOrderPages}
+                    onPageChange={setOrdersPage} 
+                />
+            </CardFooter>
         </Card>
         </div>
     );
