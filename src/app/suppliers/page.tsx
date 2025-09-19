@@ -5,7 +5,7 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { SuppliersContent } from '@/components/suppliers-content';
 
 
-export default async function SuppliersPage() {
+export default function SuppliersPage() {
     const suppliers: Supplier[] = await getSuppliers();
 
     return (

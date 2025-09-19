@@ -45,21 +45,21 @@ export function CarriersContent({ initialCarriers }: CarriersContentProps) {
         <div className="space-y-6">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold font-headline tracking-tight">Carriers</h1>
-              <p className="text-muted-foreground">Manage your shipping carriers.</p>
+              <h1 className="text-3xl font-bold font-headline tracking-tight">Transportadoras</h1>
+              <p className="text-muted-foreground">Gestiona tus transportadoras de envío.</p>
             </div>
             {canEdit && <AddCarrierForm onCarrierAdded={refreshCarriers} />}
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>All Carriers</CardTitle>
-              <CardDescription>A list of all available shipping carriers.</CardDescription>
+              <CardTitle>Todas las Transportadoras</CardTitle>
+              <CardDescription>Una lista de todas las transportadoras de envío disponibles.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
+                    <TableHead>Nombre</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

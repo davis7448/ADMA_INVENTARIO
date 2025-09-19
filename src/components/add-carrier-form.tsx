@@ -29,7 +29,7 @@ import { addCarrier } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 const AddCarrierFormSchema = z.object({
-  name: z.string().min(1, 'Carrier name is required.'),
+  name: z.string().min(1, 'El nombre de la transportadora es requerido.'),
 });
 
 type AddCarrierFormValues = z.infer<typeof AddCarrierFormSchema>;
@@ -55,15 +55,15 @@ export function AddCarrierForm({ onCarrierAdded }: AddCarrierFormProps) {
       try {
         await addCarrier(values);
         toast({
-          title: 'Success!',
-          description: "Carrier added successfully.",
+          title: '¡Éxito!',
+          description: "Transportadora añadida con éxito.",
         });
         setOpen(false); 
         onCarrierAdded();
       } catch (error) {
         toast({
           title: 'Error',
-          description: 'Something went wrong.',
+          description: 'Algo salió mal.',
           variant: 'destructive',
         });
       }
@@ -79,13 +79,13 @@ export function AddCarrierForm({ onCarrierAdded }: AddCarrierFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Add Carrier</Button>
+        <Button>Añadir Transportadora</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New Carrier</DialogTitle>
+          <DialogTitle>Añadir Nueva Transportadora</DialogTitle>
           <DialogDescription>
-            Enter the name for the new carrier.
+            Introduce el nombre de la nueva transportadora.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -95,9 +95,9 @@ export function AddCarrierForm({ onCarrierAdded }: AddCarrierFormProps) {
                     name="name"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Carrier Name</FormLabel>
+                            <FormLabel>Nombre de la Transportadora</FormLabel>
                             <FormControl>
-                                <Input placeholder="e.g., DHL" {...field} />
+                                <Input placeholder="e.g., Servientrega" {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -106,11 +106,11 @@ export function AddCarrierForm({ onCarrierAdded }: AddCarrierFormProps) {
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button type="button" variant="secondary">
-                            Cancel
+                            Cancelar
                         </Button>
                     </DialogClose>
                     <Button type="submit" disabled={isPending}>
-                        {isPending ? 'Adding Carrier...' : 'Add Carrier'}
+                        {isPending ? 'Añadiendo...' : 'Añadir Transportadora'}
                     </Button>
                 </DialogFooter>
             </form>

@@ -15,7 +15,7 @@ export async function addSupplierAction(
 
   if (!validatedFields.success) {
     return {
-      message: 'Validation failed. Please check your inputs.',
+      message: 'La validación falló. Por favor, revisa tus entradas.',
       errors: validatedFields.error.flatten().fieldErrors,
       success: false,
     };
@@ -31,13 +31,13 @@ export async function addSupplierAction(
     revalidatePath('/suppliers');
 
     return {
-      message: `Supplier added successfully. New Supplier ID: ${newSupplierId}`,
+      message: `Proveedor añadido con éxito. Nuevo ID de Proveedor: ${newSupplierId}`,
       success: true,
     };
   } catch (error) {
     console.error(error);
     return {
-      message: 'An unexpected error occurred. Please try again.',
+      message: 'Ocurrió un error inesperado. Por favor, inténtalo de nuevo.',
       success: false,
     };
   }

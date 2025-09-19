@@ -47,24 +47,24 @@ export function SuppliersContent({ initialSuppliers }: SuppliersContentProps) {
     <div className="space-y-6">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold font-headline tracking-tight">Suppliers</h1>
-          <p className="text-muted-foreground">Manage your relationships with suppliers.</p>
+          <h1 className="text-3xl font-bold font-headline tracking-tight">Proveedores</h1>
+          <p className="text-muted-foreground">Gestiona tus relaciones con los proveedores.</p>
         </div>
         {canEdit && <AddSupplierForm onSupplierAdded={refreshSuppliers} />}
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Supplier Directory</CardTitle>
-          <CardDescription>A list of all your suppliers.</CardDescription>
+          <CardTitle>Directorio de Proveedores</CardTitle>
+          <CardDescription>Una lista de todos tus proveedores.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Supplier</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead>Policies</TableHead>
+                <TableHead>Proveedor</TableHead>
+                <TableHead>Contacto</TableHead>
+                <TableHead>Productos</TableHead>
+                <TableHead>Políticas</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -90,8 +90,8 @@ export function SuppliersContent({ initialSuppliers }: SuppliersContentProps) {
                   <TableCell>{supplier.productCount || 0}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                       <Button variant="link" className="p-0 h-auto">Shipping</Button>
-                       <Button variant="link" className="p-0 h-auto">Returns</Button>
+                       <Button variant="link" className="p-0 h-auto">Envío</Button>
+                       <Button variant="link" className="p-0 h-auto">Devoluciones</Button>
                     </div>
                   </TableCell>
                 </TableRow>

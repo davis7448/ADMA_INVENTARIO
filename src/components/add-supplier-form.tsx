@@ -57,7 +57,7 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
       const result = await addSupplierAction(values);
       if (result.success) {
         toast({
-          title: 'Success!',
+          title: '¡Éxito!',
           description: result.message,
         });
         setOpen(false); 
@@ -65,7 +65,7 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
       } else {
         toast({
           title: 'Error',
-          description: result.message || 'Something went wrong.',
+          description: result.message || 'Algo salió mal.',
           variant: 'destructive',
         });
       }
@@ -81,13 +81,13 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Add Supplier</Button>
+        <Button>Añadir Proveedor</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[625px]">
         <DialogHeader>
-          <DialogTitle>Add New Supplier</DialogTitle>
+          <DialogTitle>Añadir Nuevo Proveedor</DialogTitle>
           <DialogDescription>
-            Enter the details of the new supplier below.
+            Introduce los detalles del nuevo proveedor.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -97,9 +97,9 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
                     name="name"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Supplier Name</FormLabel>
+                            <FormLabel>Nombre del Proveedor</FormLabel>
                             <FormControl>
-                                <Input placeholder="e.g., Global Tech Supplies" {...field} />
+                                <Input placeholder="e.g., Suministros Tecnológicos Globales" {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -111,9 +111,9 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
                         name="contact.email"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Contact Email</FormLabel>
+                                <FormLabel>Email de Contacto</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="e.g., contact@globaltech.com" {...field} />
+                                    <Input placeholder="e.g., contacto@proveedor.com" {...field} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -124,9 +124,9 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
                         name="contact.phone"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Contact Phone</FormLabel>
+                                <FormLabel>Teléfono de Contacto</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="e.g., +1 234 567 890" {...field} />
+                                    <Input placeholder="e.g., +57 300 123 4567" {...field} />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
@@ -138,9 +138,9 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
                     name="shippingPolicy"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Shipping Policy</FormLabel>
+                            <FormLabel>Política de Envío</FormLabel>
                             <FormControl>
-                                <Textarea placeholder="Describe the shipping policy..." {...field} />
+                                <Textarea placeholder="Describe la política de envío..." {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -151,9 +151,9 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
                     name="returnPolicy"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Return Policy</FormLabel>
+                            <FormLabel>Política de Devolución</FormLabel>
                             <FormControl>
-                                <Textarea placeholder="Describe the return policy..." {...field} />
+                                <Textarea placeholder="Describe la política de devolución..." {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -162,11 +162,11 @@ export function AddSupplierForm({ onSupplierAdded }: AddSupplierFormProps) {
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button type="button" variant="secondary">
-                            Cancel
+                            Cancelar
                         </Button>
                     </DialogClose>
                     <Button type="submit" disabled={isPending}>
-                        {isPending ? 'Adding Supplier...' : 'Add Supplier'}
+                        {isPending ? 'Añadiendo...' : 'Añadir Proveedor'}
                     </Button>
                 </DialogFooter>
             </form>

@@ -71,7 +71,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <div>
-                        <CardTitle>User Management</CardTitle>
+                        <CardTitle>Gestión de Usuarios</CardTitle>
                         <CardDescription>
                             Gestiona los roles de los usuarios existentes. Los nuevos usuarios se crean desde la consola de Firebase.
                         </CardDescription>
@@ -82,7 +82,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                 <div className="p-4 mb-4 border rounded-lg bg-muted/50">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <Label htmlFor="user-search">Buscar por nombre o email</Label>
+                            <Label htmlFor="user-search">Buscar por nombre o correo</Label>
                             <Input
                                 id="user-search"
                                 placeholder="Escribe para buscar..."
@@ -100,8 +100,8 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                                     <SelectItem value="all">Todos los Roles</SelectItem>
                                     <SelectItem value="admin">Admin</SelectItem>
                                     <SelectItem value="plataformas">Plataformas</SelectItem>
-                                    <SelectItem value="logistics">Logistics</SelectItem>
-                                    <SelectItem value="commercial">Commercial</SelectItem>
+                                    <SelectItem value="logistics">Logística</SelectItem>
+                                    <SelectItem value="commercial">Comercial</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -110,10 +110,10 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Usuario</TableHead>
+                    <TableHead>Correo Electrónico</TableHead>
+                    <TableHead>Rol</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -148,7 +148,7 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
         startRoleTransition(async () => {
             const result = await updateUserRoleAction(user.id, newRole);
             if (result.success) {
-                toast({ title: 'Success!', description: result.message });
+                toast({ title: '¡Éxito!', description: result.message });
                 onUsersUpdate();
             } else {
                 toast({ title: 'Error', description: result.message, variant: 'destructive' });
@@ -160,7 +160,7 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
         startResetTransition(async () => {
             const result = await resetUserPasswordAction(user.email);
             if (result.success) {
-                toast({ title: 'Success!', description: result.message });
+                toast({ title: '¡Éxito!', description: result.message });
             } else {
                 toast({ title: 'Error', description: result.message, variant: 'destructive' });
             }
@@ -187,8 +187,8 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
                     <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="plataformas">Plataformas</SelectItem>
-                        <SelectItem value="logistics">Logistics</SelectItem>
-                        <SelectItem value="commercial">Commercial</SelectItem>
+                        <SelectItem value="logistics">Logística</SelectItem>
+                        <SelectItem value="commercial">Comercial</SelectItem>
                     </SelectContent>
                 </Select>
             </TableCell>
@@ -200,9 +200,9 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                         <DropdownMenuItem onSelect={handlePasswordReset} disabled={isResetPending}>
-                            {isResetPending ? "Sending..." : "Reset Password"}
+                            {isResetPending ? "Enviando..." : "Restablecer Contraseña"}
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

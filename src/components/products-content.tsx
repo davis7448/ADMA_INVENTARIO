@@ -42,7 +42,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { getProducts } from '@/lib/api';
@@ -66,6 +65,7 @@ import { useRouter } from 'next/navigation';
 import { auditProductStockAction, clearProductAuditAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import { formatToTimeZone } from '@/lib/utils';
+import { AlertDialogTrigger } from './ui/alert-dialog';
 
 interface ProductsContentProps {
     initialProducts: Product[];
@@ -219,12 +219,12 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const handleExportExcel = () => {
         const dataToExport = filteredProducts.flatMap(p => {
             const baseData = {
-                'Categoría': categoryNames[p.categoryId] || 'Unknown',
+                'Categoría': categoryNames[p.categoryId] || 'Desconocida',
                 'Rotación': p.rotationCategoryName || 'N/A',
                 'Stock Pendiente': p.pendingStock || 0,
                 'Stock Averiado': p.damagedStock || 0,
                 'Costo': user?.role === 'admin' ? p.cost : undefined,
-                'Proveedor': supplierNames[p.vendorId] || 'Unknown',
+                'Proveedor': supplierNames[p.vendorId] || 'Desconocido',
                 'Fecha Compra': p.purchaseDate ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
                 'Link de Contenido': p.contentLink || '',
             };
@@ -269,8 +269,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         <div className="space-y-6">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold font-headline tracking-tight">Product Catalog</h1>
-              <p className="text-muted-foreground">Browse and manage your product listings.</p>
+              <h1 className="text-3xl font-bold font-headline tracking-tight">Catálogo de Productos</h1>
+              <p className="text-muted-foreground">Navega y gestiona tus listados de productos.</p>
             </div>
             {canEdit && <AddProductForm onProductAdded={refreshProducts} />}
           </div>
@@ -325,8 +325,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <div>
-                        <CardTitle>All Products</CardTitle>
-                        <CardDescription>A list of all products in your catalog. ({filteredProducts.length} de {products.length} mostrados)</CardDescription>
+                        <CardTitle>Todos los Productos</CardTitle>
+                        <CardDescription>Una lista de todos los productos en tu catálogo. ({filteredProducts.length} de {products.length} mostrados)</CardDescription>
                     </div>
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -351,17 +351,17 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                         <TableHeader>
                             <TableRow>
                                 <TableHead className="w-[80px] hidden sm:table-cell" />
-                                <TableHead>Name</TableHead>
+                                <TableHead>Nombre</TableHead>
                                 <TableHead>Rotación</TableHead>
                                 <TableHead>Auditoría</TableHead>
                                 <TableHead>SKU</TableHead>
-                                <TableHead>Category</TableHead>
+                                <TableHead>Categoría</TableHead>
                                 <TableHead>Stock</TableHead>
                                 <TableHead>Pendiente</TableHead>
                                 <TableHead>Averiado</TableHead>
-                                <TableHead>Price</TableHead>
-                                {canEdit && <TableHead className="w-[50px]"><span className="sr-only">Actions</span></TableHead>}
-                                <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expand</span></TableHead>
+                                <TableHead>Precio</TableHead>
+                                {canEdit && <TableHead className="w-[50px]"><span className="sr-only">Acciones</span></TableHead>}
+                                <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expandir</span></TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -464,7 +464,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                             </TableCell>
                                             <TableCell>{product.sku}</TableCell>
                                             <TableCell>
-                                                <Badge variant="outline">{categoryNames[product.categoryId] || 'Unknown'}</Badge>
+                                                <Badge variant="outline">{categoryNames[product.categoryId] || 'Desconocida'}</Badge>
                                             </TableCell>
                                             <TableCell>{product.stock}</TableCell>
                                             <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
@@ -478,15 +478,15 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                         <DropdownMenuTrigger asChild>
                                                             <Button aria-haspopup="true" size="icon" variant="ghost">
                                                                 <MoreHorizontal className="h-4 w-4" />
-                                                                <span className="sr-only">Toggle menu</span>
+                                                                <span className="sr-only">Menú de acciones</span>
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                            <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                                                             <EditProductForm product={product} onProductUpdated={refreshProducts}>
-                                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Edit</DropdownMenuItem>
+                                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Editar</DropdownMenuItem>
                                                             </EditProductForm>
-                                                            <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </TableCell>

@@ -28,10 +28,10 @@ import { AlertCircle, CheckCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
 const RestockAlertFormSchema = z.object({
-  productName: z.string().min(1, "Product name is required."),
-  vendorName: z.string().min(1, "Vendor name is required."),
-  currentInventory: z.coerce.number().min(0, "Inventory must be a non-negative number."),
-  restockThreshold: z.coerce.number().min(0, "Threshold must be a non-negative number."),
+  productName: z.string().min(1, "El nombre del producto es requerido."),
+  vendorName: z.string().min(1, "El nombre del proveedor es requerido."),
+  currentInventory: z.coerce.number().min(0, "El inventario debe ser un número no negativo."),
+  restockThreshold: z.coerce.number().min(0, "El umbral debe ser un número no negativo."),
 });
 
 type FormValues = z.infer<typeof RestockAlertFormSchema>;
@@ -40,7 +40,7 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" disabled={pending}>
-      {pending ? "Generating..." : "Generate Alert"}
+      {pending ? "Generando..." : "Generar Alerta"}
     </Button>
   );
 }
@@ -75,9 +75,9 @@ export default function RestockForm() {
       <Form {...form}>
         <form action={formAction}>
           <CardHeader>
-            <CardTitle className="font-headline">Restock Alert Tool</CardTitle>
+            <CardTitle className="font-headline">Herramienta de Alerta de Reabastecimiento</CardTitle>
             <CardDescription>
-              Manually check if a product needs restocking using AI.
+              Verifica manualmente si un producto necesita ser reabastecido usando IA.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -87,9 +87,9 @@ export default function RestockForm() {
                 name="productName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Product Name</FormLabel>
+                    <FormLabel>Nombre del Producto</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Ergo-Wireless Mouse" {...field} />
+                      <Input placeholder="e.g., Ratón Inalámbrico Ergonómico" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -100,9 +100,9 @@ export default function RestockForm() {
                 name="vendorName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vendor Name</FormLabel>
+                    <FormLabel>Nombre del Proveedor</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Global Tech Supplies" {...field} />
+                      <Input placeholder="e.g., Suministros Tecnológicos Globales" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -115,7 +115,7 @@ export default function RestockForm() {
                 name="currentInventory"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Current Inventory</FormLabel>
+                    <FormLabel>Inventario Actual</FormLabel>
                     <FormControl>
                       <Input type="number" {...field} />
                     </FormControl>
@@ -128,7 +128,7 @@ export default function RestockForm() {
                 name="restockThreshold"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Restock Threshold</FormLabel>
+                    <FormLabel>Umbral de Reabastecimiento</FormLabel>
                     <FormControl>
                       <Input type="number" {...field} />
                     </FormControl>
@@ -144,7 +144,7 @@ export default function RestockForm() {
                 ) : (
                   <CheckCircle className="h-4 w-4" />
                 )}
-                <AlertTitle>{state.result.restockNeeded ? "Restock Required" : "Inventory OK"}</AlertTitle>
+                <AlertTitle>{state.result.restockNeeded ? "Reabastecimiento Requerido" : "Inventario OK"}</AlertTitle>
                 <AlertDescription>
                   {state.result.alertMessage}
                 </AlertDescription>

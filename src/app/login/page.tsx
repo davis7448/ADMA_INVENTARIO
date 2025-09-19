@@ -24,7 +24,7 @@ export default function LoginPage() {
     setError(null);
     const success = await login(email, password);
     if (!success) {
-      setError('Invalid credentials. Please try again.');
+      setError('Credenciales inválidas. Por favor, inténtalo de nuevo.');
     }
     setLoading(false);
   };
@@ -37,24 +37,24 @@ export default function LoginPage() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle className="font-headline">Login</CardTitle>
-            <CardDescription>Enter your email and password to access your account.</CardDescription>
+            <CardTitle className="font-headline">Iniciar Sesión</CardTitle>
+            <CardDescription>Ingresa tu correo y contraseña para acceder a tu cuenta.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Correo Electrónico</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@example.com"
+                  placeholder="admin@ejemplo.com"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">Contraseña</Label>
                 <Input
                   id="password"
                   type="password"
@@ -71,7 +71,7 @@ export default function LoginPage() {
                 </Alert>
               )}
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Logging in...' : 'Login'}
+                {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </Button>
             </form>
           </CardContent>

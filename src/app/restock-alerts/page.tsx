@@ -26,38 +26,38 @@ async function LowStockList() {
     return (
          <Card>
             <CardHeader>
-            <CardTitle>Low Stock Items</CardTitle>
-            <CardDescription>These products are out of stock and require attention.</CardDescription>
+            <CardTitle>Productos con Poco Stock</CardTitle>
+            <CardDescription>Estos productos están agotados y requieren atención.</CardDescription>
             </CardHeader>
             <CardContent>
             <Table>
                 <TableHeader>
                 <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead className="text-center">Current Stock</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Proveedor</TableHead>
+                    <TableHead className="text-center">Stock Actual</TableHead>
+                    <TableHead className="text-center">Estado</TableHead>
                 </TableRow>
                 </TableHeader>
                 <TableBody>
                 {lowStockProducts.length > 0 ? (
                     await Promise.all(lowStockProducts.map(async (product) => {
                         const supplier = await getSupplierById(product.vendorId);
-                        const supplierName = supplier ? supplier.name : 'Unknown';
+                        const supplierName = supplier ? supplier.name : 'Desconocido';
                         return (
                             <TableRow key={product.id}>
                                 <TableCell className="font-medium">{product.name}</TableCell>
                                 <TableCell>{supplierName}</TableCell>
                                 <TableCell className="text-center">{product.stock}</TableCell>
                                 <TableCell className="text-center">
-                                <Badge variant="destructive">Out of Stock</Badge>
+                                <Badge variant="destructive">Agotado</Badge>
                                 </TableCell>
                             </TableRow>
                         );
                     }))
                 ) : (
                     <TableRow>
-                    <TableCell colSpan={4} className="text-center">All product inventory levels are healthy.</TableCell>
+                    <TableCell colSpan={4} className="text-center">Todos los niveles de inventario de productos son saludables.</TableCell>
                     </TableRow>
                 )}
                 </TableBody>
@@ -71,8 +71,8 @@ function RestockAlertsPageContent() {
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-bold font-headline tracking-tight">Restock Alerts</h1>
-                <p className="text-muted-foreground">Monitor inventory levels and generate restock alerts.</p>
+                <h1 className="text-3xl font-bold font-headline tracking-tight">Alertas de Reabastecimiento</h1>
+                <p className="text-muted-foreground">Monitorea los niveles de inventario y genera alertas de reabastecimiento.</p>
             </div>
             <RestockForm />
             <LowStockList />

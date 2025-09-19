@@ -29,7 +29,7 @@ import { addPlatform } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 const AddPlatformFormSchema = z.object({
-  name: z.string().min(1, 'Platform name is required.'),
+  name: z.string().min(1, 'El nombre de la plataforma es requerido.'),
 });
 
 type AddPlatformFormValues = z.infer<typeof AddPlatformFormSchema>;
@@ -55,15 +55,15 @@ export function AddPlatformForm({ onPlatformAdded }: AddPlatformFormProps) {
       try {
         await addPlatform(values);
         toast({
-          title: 'Success!',
-          description: "Platform added successfully.",
+          title: '¡Éxito!',
+          description: "Plataforma añadida con éxito.",
         });
         setOpen(false); 
         onPlatformAdded();
       } catch (error) {
         toast({
           title: 'Error',
-          description: 'Something went wrong.',
+          description: 'Algo salió mal.',
           variant: 'destructive',
         });
       }
@@ -79,13 +79,13 @@ export function AddPlatformForm({ onPlatformAdded }: AddPlatformFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Add Platform</Button>
+        <Button>Añadir Plataforma</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New Platform</DialogTitle>
+          <DialogTitle>Añadir Nueva Plataforma</DialogTitle>
           <DialogDescription>
-            Enter the name for the new platform.
+            Introduce el nombre de la nueva plataforma de ventas.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -95,7 +95,7 @@ export function AddPlatformForm({ onPlatformAdded }: AddPlatformFormProps) {
                     name="name"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Platform Name</FormLabel>
+                            <FormLabel>Nombre de la Plataforma</FormLabel>
                             <FormControl>
                                 <Input placeholder="e.g., Mercado Libre" {...field} />
                             </FormControl>
@@ -106,11 +106,11 @@ export function AddPlatformForm({ onPlatformAdded }: AddPlatformFormProps) {
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button type="button" variant="secondary">
-                            Cancel
+                            Cancelar
                         </Button>
                     </DialogClose>
                     <Button type="submit" disabled={isPending}>
-                        {isPending ? 'Adding Platform...' : 'Add Platform'}
+                        {isPending ? 'Añadiendo...' : 'Añadir Plataforma'}
                     </Button>
                 </DialogFooter>
             </form>

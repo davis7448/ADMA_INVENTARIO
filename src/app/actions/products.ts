@@ -55,7 +55,7 @@ export async function addProductAction(
   
   if (!validatedFields.success) {
     return {
-      message: 'Validation failed. Please check your inputs.',
+      message: 'La validación falló. Por favor, revisa tus entradas.',
       errors: validatedFields.error.flatten().fieldErrors,
       success: false,
     };
@@ -77,7 +77,7 @@ export async function addProductAction(
       stock: productData.stock ?? 0,
       purchaseDate: productData.purchaseDate?.toISOString(),
       imageUrl: imageUrl || `https://picsum.photos/seed/${productData.sku || uuidv4()}/600/400`,
-      imageHint: 'new product', // This could be improved with AI
+      imageHint: 'nuevo producto', // This could be improved with AI
     };
     
     const newProductId = await addProduct(newProduct);
@@ -85,12 +85,12 @@ export async function addProductAction(
     revalidatePath('/products');
 
     return {
-      message: `Product added successfully. New Product ID: ${newProductId}`,
+      message: `Producto añadido con éxito. Nuevo ID de Producto: ${newProductId}`,
       success: true,
     };
   } catch (error) {
     console.error(error);
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
     return {
       message: errorMessage,
       success: false,
@@ -149,7 +149,7 @@ export async function updateProductAction(
   
     if (!validatedFields.success) {
         return {
-            message: 'Validation failed. Please check your inputs.',
+            message: 'La validación falló. Por favor, revisa tus entradas.',
             errors: validatedFields.error.flatten().fieldErrors,
             success: false,
         };
@@ -187,12 +187,12 @@ export async function updateProductAction(
         revalidatePath('/products');
 
         return {
-            message: 'Product updated successfully.',
+            message: 'Producto actualizado con éxito.',
             success: true,
         };
     } catch (error) {
         console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
         return {
             message: errorMessage,
             success: false,
@@ -209,7 +209,7 @@ export async function createReservationAction(
 
     if (!validatedFields.success) {
         return {
-          message: 'Validation failed. Please check your inputs.',
+          message: 'La validación falló. Por favor, revisa tus entradas.',
           errors: validatedFields.error.flatten().fieldErrors,
           success: false,
         };
@@ -230,7 +230,7 @@ export async function createReservationAction(
 
     } catch (error) {
         console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
         return {
             message: errorMessage,
             success: false,
@@ -278,7 +278,7 @@ export async function importProductsAction(
                 damagedStock: 0,
                 purchaseDate: p.purchasedate ? new Date(p.purchasedate).toISOString() : undefined,
                 imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
-                imageHint: 'product',
+                imageHint: 'producto',
             };
             if (user) {
               product.createdBy = { id: user.id, name: user.name };
@@ -321,7 +321,7 @@ export async function auditProductStockAction(productId: string, auditedBy: stri
 
     } catch (error) {
         console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
         return {
             message: errorMessage,
             success: false,
@@ -341,20 +341,10 @@ export async function clearProductAuditAction(productId: string): Promise<{ succ
 
     } catch (error) {
         console.error(error);
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
         return {
             message: errorMessage,
             success: false,
         };
     }
 }
-      
-
-    
-
-  
-
-
-    
-
-    

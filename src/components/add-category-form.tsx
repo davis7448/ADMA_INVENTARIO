@@ -52,7 +52,7 @@ export function AddCategoryForm({ onCategoryAdded }: AddCategoryFormProps) {
       const result = await addCategoryAction(values);
       if (result.success) {
         toast({
-          title: 'Success!',
+          title: '¡Éxito!',
           description: result.message,
         });
         setOpen(false); 
@@ -60,7 +60,7 @@ export function AddCategoryForm({ onCategoryAdded }: AddCategoryFormProps) {
       } else {
         toast({
           title: 'Error',
-          description: result.message || 'Something went wrong.',
+          description: result.message || 'Algo salió mal.',
           variant: 'destructive',
         });
         if (result.errors) {
@@ -86,13 +86,13 @@ export function AddCategoryForm({ onCategoryAdded }: AddCategoryFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Add Category</Button>
+        <Button>Añadir Categoría</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New Category</DialogTitle>
+          <DialogTitle>Añadir Nueva Categoría</DialogTitle>
           <DialogDescription>
-            Enter the details for the new category.
+            Introduce los detalles de la nueva categoría.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -102,9 +102,9 @@ export function AddCategoryForm({ onCategoryAdded }: AddCategoryFormProps) {
                     name="name"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Category Name</FormLabel>
+                            <FormLabel>Nombre de la Categoría</FormLabel>
                             <FormControl>
-                                <Input placeholder="e.g., Electronics" {...field} />
+                                <Input placeholder="e.g., Electrónica" {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -115,9 +115,9 @@ export function AddCategoryForm({ onCategoryAdded }: AddCategoryFormProps) {
                     name="description"
                     render={({ field }) => (
                         <FormItem>
-                            <FormLabel>Description</FormLabel>
+                            <FormLabel>Descripción</FormLabel>
                             <FormControl>
-                                <Textarea placeholder="e.g., Gadgets and devices" {...field} />
+                                <Textarea placeholder="e.g., Gadgets y dispositivos" {...field} />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -126,11 +126,11 @@ export function AddCategoryForm({ onCategoryAdded }: AddCategoryFormProps) {
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button type="button" variant="secondary">
-                            Cancel
+                            Cancelar
                         </Button>
                     </DialogClose>
                     <Button type="submit" disabled={isPending}>
-                        {isPending ? 'Adding Category...' : 'Add Category'}
+                        {isPending ? 'Añadiendo...' : 'Añadir Categoría'}
                     </Button>
                 </DialogFooter>
             </form>

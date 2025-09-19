@@ -40,25 +40,25 @@ function OrdersPageContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Orders</h1>
-        <p className="text-muted-foreground">Track and manage customer orders.</p>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Órdenes</h1>
+        <p className="text-muted-foreground">Rastrea y gestiona las órdenes de los clientes.</p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>All Orders</CardTitle>
-          <CardDescription>A list of all orders from your customers.</CardDescription>
+          <CardTitle>Todas las Órdenes</CardTitle>
+          <CardDescription>Una lista de todas las órdenes de tus clientes.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Order ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>ID de Orden</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">Acciones</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -85,11 +85,11 @@ function OrdersPageContent() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem>View Order</DropdownMenuItem>
-                          <DropdownMenuItem>Track Shipment</DropdownMenuItem>
+                          <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                          <DropdownMenuItem>Ver Orden</DropdownMenuItem>
+                          <DropdownMenuItem>Rastrear Envío</DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-destructive">Cancel Order</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive">Cancelar Orden</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -98,7 +98,7 @@ function OrdersPageContent() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center">
-                    No orders found.
+                    No se encontraron órdenes.
                   </TableCell>
                 </TableRow>
               )}

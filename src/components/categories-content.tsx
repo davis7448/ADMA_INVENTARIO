@@ -46,22 +46,22 @@ export function CategoriesContent({ initialCategories }: CategoriesContentProps)
         <div className="space-y-6">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold font-headline tracking-tight">Categories</h1>
-              <p className="text-muted-foreground">Manage your product categories.</p>
+              <h1 className="text-3xl font-bold font-headline tracking-tight">Categorías</h1>
+              <p className="text-muted-foreground">Gestiona las categorías de tus productos.</p>
             </div>
             {canEdit && <AddCategoryForm onCategoryAdded={refreshCategories} />}
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>All Categories</CardTitle>
-              <CardDescription>A list of all product categories.</CardDescription>
+              <CardTitle>Todas las Categorías</CardTitle>
+              <CardDescription>Una lista de todas las categorías de productos.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Descripción</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

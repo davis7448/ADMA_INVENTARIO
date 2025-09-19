@@ -69,7 +69,7 @@ export function ProfileManagement() {
 
   const onSubmit = (values: UpdateProfileFormValues) => {
     if (!user) {
-        toast({ title: 'Error', description: 'You must be logged in.', variant: 'destructive' });
+        toast({ title: 'Error', description: 'Debes iniciar sesión.', variant: 'destructive' });
         return;
     }
     const formData = new FormData();
@@ -189,7 +189,7 @@ export function ProfileManagement() {
                   )}
                 />
                  <div>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel>Correo Electrónico</FormLabel>
                     <Input value={user.email} disabled />
                 </div>
               </div>

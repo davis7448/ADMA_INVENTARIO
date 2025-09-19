@@ -45,21 +45,21 @@ export function PlatformsContent({ initialPlatforms }: PlatformsContentProps) {
         <div className="space-y-6">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold font-headline tracking-tight">Platforms</h1>
-              <p className="text-muted-foreground">Manage your sales platforms.</p>
+              <h1 className="text-3xl font-bold font-headline tracking-tight">Plataformas</h1>
+              <p className="text-muted-foreground">Gestiona tus plataformas de venta.</p>
             </div>
             {canEdit && <AddPlatformForm onPlatformAdded={refreshPlatforms} />}
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>All Platforms</CardTitle>
-              <CardDescription>A list of all available sales platforms.</CardDescription>
+              <CardTitle>Todas las Plataformas</CardTitle>
+              <CardDescription>Una lista de todas las plataformas de venta disponibles.</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
+                    <TableHead>Nombre</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

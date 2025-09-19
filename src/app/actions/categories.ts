@@ -14,7 +14,7 @@ export async function addCategoryAction(
 
   if (!validatedFields.success) {
     return {
-      message: 'Validation failed. Please check your inputs.',
+      message: 'La validación falló. Por favor, revisa tus entradas.',
       errors: validatedFields.error.flatten().fieldErrors,
       success: false,
     };
@@ -25,13 +25,13 @@ export async function addCategoryAction(
     revalidatePath('/categories');
 
     return {
-      message: `Category added successfully. New Category ID: ${newCategoryId}`,
+      message: `Categoría añadida con éxito. Nuevo ID de Categoría: ${newCategoryId}`,
       success: true,
     };
   } catch (error) {
     console.error(error);
     return {
-      message: 'An unexpected error occurred. Please try again.',
+      message: 'Ocurrió un error inesperado. Por favor, inténtalo de nuevo.',
       success: false,
     };
   }

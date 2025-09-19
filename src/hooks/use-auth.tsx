@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (!appUser) {
           // If no user profile exists in Firestore, create one
-          console.log(`No profile found for ${firebaseUser.email}, creating one...`);
+          console.log(`No se encontró perfil para ${firebaseUser.email}, creando uno...`);
           const newUser: Omit<User, 'id'> = {
             name: firebaseUser.email.split('@')[0],
             email: firebaseUser.email,
@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
           const newUserId = await addUser(newUser);
           appUser = { id: newUserId, ...newUser };
-          console.log(`Profile created with ID: ${newUserId}`);
+          console.log(`Perfil creado con ID: ${newUserId}`);
         }
 
         setUser(appUser);
@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signInWithEmailAndPassword(auth, email, password);
         return true;
     } catch (error) {
-        console.error("Login failed:", error);
+        console.error("Falló el inicio de sesión:", error);
         return false;
     }
   };
@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (loading) {
     return (
         <div className="flex h-screen items-center justify-center">
-            <div>Loading...</div>
+            <div>Cargando...</div>
         </div>
     );
   }
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth debe ser usado dentro de un AuthProvider');
   }
   return context;
 }

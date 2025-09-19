@@ -79,7 +79,7 @@ export type Order = {
   customerName: string;
   customerEmail: string;
   date: string;
-  status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+  status: 'Pendiente' | 'Procesando' | 'Enviado' | 'Entregado' | 'Cancelado';
   total: number;
 };
 
@@ -89,7 +89,7 @@ export type ReturnRequest = {
   customerName: 'Jane Smith',
   productName: string;
   reason: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'Pendiente' | 'Aprobado' | 'Rechazado';
   date: string;
 };
 
@@ -259,5 +259,3 @@ export interface GetStockAlertsResult {
     error?: string;
     lastGenerated?: string;
 }
-
-    

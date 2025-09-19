@@ -24,7 +24,7 @@ export async function createUserAction(
 
   if (!validatedFields.success) {
     return {
-      message: 'Validation failed. Please check your inputs.',
+      message: 'La validación falló. Por favor, revisa tus entradas.',
       errors: validatedFields.error.flatten().fieldErrors,
       success: false,
     };
@@ -51,14 +51,14 @@ export async function createUserAction(
     
     revalidatePath('/settings');
     return {
-      message: 'User created successfully.',
+      message: 'Usuario creado con éxito.',
       success: true,
     };
   } catch (error: any) {
     console.error("Error creating user:", error);
-    let errorMessage = 'An unexpected error occurred.';
+    let errorMessage = 'Ocurrió un error inesperado.';
     if (error.code === 'auth/email-already-exists') {
-        errorMessage = 'A user with this email already exists in Firebase Authentication.';
+        errorMessage = 'Ya existe un usuario con este correo electrónico en Firebase Authentication.';
     }
     return {
       message: errorMessage,
@@ -71,20 +71,20 @@ export async function updateUserRoleAction(userId: string, role: UserRole): Prom
     try {
         await updateUserRoleInDb(userId, role);
         revalidatePath('/settings');
-        return { success: true, message: 'User role updated successfully.' };
+        return { success: true, message: 'Rol de usuario actualizado con éxito.' };
     } catch (error) {
         console.error("Error updating user role:", error);
-        return { success: false, message: 'Failed to update user role.' };
+        return { success: false, message: 'No se pudo actualizar el rol del usuario.' };
     }
 }
 
 export async function resetUserPasswordAction(email: string): Promise<{ success: boolean, message: string }> {
     try {
         await sendPasswordReset(email);
-        return { success: true, message: 'Password reset email sent successfully.' };
+        return { success: true, message: 'Correo de restablecimiento de contraseña enviado con éxito.' };
     } catch (error) {
         console.error("Error sending password reset email:", error);
-        return { success: false, message: 'Failed to send password reset email.' };
+        return { success: false, message: 'No se pudo enviar el correo de restablecimiento de contraseña.' };
     }
 }
 
@@ -98,7 +98,7 @@ export async function updateUserAction(userId: string, formData: FormData): Prom
 
     if (!validatedFields.success) {
         return {
-            message: 'Validation failed. Please check your inputs.',
+            message: 'La validación falló. Por favor, revisa tus entradas.',
             errors: validatedFields.error.flatten().fieldErrors,
             success: false,
         };
@@ -127,13 +127,13 @@ export async function updateUserAction(userId: string, formData: FormData): Prom
         revalidatePath('/'); // To update header avatar
 
         return {
-            message: 'Profile updated successfully.',
+            message: 'Perfil actualizado con éxito.',
             success: true,
         };
 
     } catch(error) {
         console.error("Error updating profile:", error);
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
         return {
             message: errorMessage,
             success: false,

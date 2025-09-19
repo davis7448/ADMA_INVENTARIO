@@ -8,40 +8,40 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/web
 
 const ProductVariantSchema = z.object({
   id: z.string(),
-  name: z.string().min(1, 'Variant name is required.'),
-  sku: z.string().min(1, 'Variant SKU is required.'),
-  priceDropshipping: z.coerce.number().min(0, 'Price must be non-negative.'),
-  priceWholesale: z.coerce.number().min(0, 'Price must be non-negative.').optional(),
-  stock: z.coerce.number().int().min(0, 'Stock must be a non-negative.'),
+  name: z.string().min(1, 'El nombre de la variante es requerido.'),
+  sku: z.string().min(1, 'El SKU de la variante es requerido.'),
+  priceDropshipping: z.coerce.number().min(0, 'El precio debe ser no negativo.'),
+  priceWholesale: z.coerce.number().min(0, 'El precio debe ser no negativo.').optional(),
+  stock: z.coerce.number().int().min(0, 'El stock debe ser un número entero no negativo.'),
 });
 
 const ProductFormSchemaBase = z.object({
-  name: z.string().min(1, 'Product name is required.'),
+  name: z.string().min(1, 'El nombre del producto es requerido.'),
   sku: z.string().optional(),
-  description: z.string().min(1, 'Description is required.'),
+  description: z.string().min(1, 'La descripción es requerida.'),
   productType: z.enum(['simple', 'variable'], {
-    required_error: "You need to select a product type.",
+    required_error: "Debes seleccionar un tipo de producto.",
   }),
-  categoryId: z.string().min(1, 'Category is required.'),
-  vendorId: z.string().min(1, 'Supplier is required.'),
+  categoryId: z.string().min(1, 'La categoría es requerida.'),
+  vendorId: z.string().min(1, 'El proveedor es requerido.'),
   priceDropshipping: z.preprocess(
     (val) => (String(val).trim() === '' ? undefined : val),
-    z.coerce.number({ invalid_type_error: 'Price must be a number.' }).min(0, 'Price must be a non-negative number.').optional()
+    z.coerce.number({ invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser un número no negativo.').optional()
   ),
   priceWholesale: z.preprocess(
     (val) => (String(val).trim() === '' ? undefined : val),
-    z.coerce.number({ invalid_type_error: 'Price must be a number.' }).min(0, 'Price must be non-negative.').optional()
+    z.coerce.number({ invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser no negativo.').optional()
   ),
   cost: z.preprocess(
     (val) => (String(val).trim() === '' ? undefined : val),
-    z.coerce.number({ invalid_type_error: 'Cost must be a number.' }).min(0, 'Cost must be non-negative.').optional()
+    z.coerce.number({ invalid_type_error: 'El costo debe ser un número.' }).min(0, 'El costo debe ser no negativo.').optional()
   ),
   purchaseDate: z.date().optional(),
   stock: z.preprocess(
     (val) => (String(val).trim() === '' ? undefined : val),
-    z.coerce.number({ invalid_type_error: 'Stock must be a number.' }).int('Stock must be a whole number.').min(0, 'Stock must be a non-negative number.').optional()
+    z.coerce.number({ invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.').optional()
   ),
-  contentLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
+  contentLink: z.string().url({ message: "Por favor, introduce una URL válida." }).optional().or(z.literal('')),
   variants: z.array(ProductVariantSchema).optional(),
 });
 
@@ -49,18 +49,18 @@ const ProductFormSchemaBase = z.object({
 export const AddProductFormSchema = ProductFormSchemaBase.extend({
     image: z
       .any()
-      .refine((file) => file, 'Image is required.')
-      .refine((file) => file?.size <= MAX_FILE_SIZE, `Max file size is 2MB.`)
+      .refine((file) => file, 'La imagen es requerida.')
+      .refine((file) => file?.size <= MAX_FILE_SIZE, `El tamaño máximo del archivo es de 2MB.`)
       .refine(
         (file) => ACCEPTED_IMAGE_TYPES.includes(file?.type),
-        'Only .jpg, .jpeg, .png and .webp formats are supported.'
+        'Solo se admiten los formatos .jpg, .jpeg, .png y .webp.'
       ),
   }).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
         if (!data.sku || data.sku.length === 0) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: 'SKU is required for simple products.',
+                message: 'El SKU es requerido para productos simples.',
                 path: ['sku'],
             });
         }
@@ -68,7 +68,7 @@ export const AddProductFormSchema = ProductFormSchemaBase.extend({
       if (!data.variants || data.variants.length === 0) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Variable products must have at least one variant.',
+            message: 'Los productos variables deben tener al menos una variante.',
             path: ['variants'],
         });
       }
@@ -89,18 +89,18 @@ export const EditProductFormSchema = ProductFormSchemaBase.extend({
       .optional()
       .refine(
         (file) => !file || file.size <= MAX_FILE_SIZE,
-        `Max file size is 2MB.`
+        `El tamaño máximo del archivo es de 2MB.`
       )
       .refine(
         (file) => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
-        'Only .jpg, .jpeg, .png and .webp formats are supported.'
+        'Solo se admiten los formatos .jpg, .jpeg, .png y .webp.'
       ),
   }).superRefine((data, ctx) => {
     if (data.productType === 'simple') {
         if (!data.sku || data.sku.length === 0) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: 'SKU is required for simple products.',
+                message: 'El SKU es requerido para productos simples.',
                 path: ['sku'],
             });
         }
@@ -108,7 +108,7 @@ export const EditProductFormSchema = ProductFormSchemaBase.extend({
         if (!data.variants || data.variants.length === 0) {
           ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message: 'Variable products must have at least one variant.',
+              message: 'Los productos variables deben tener al menos una variante.',
               path: ['variants'],
           });
         }
@@ -122,13 +122,13 @@ export type EditProductFormState = Omit<AddProductFormState, 'errors'> & {
 };
 
 export const AddSupplierFormSchema = z.object({
-  name: z.string().min(1, 'Supplier name is required.'),
+  name: z.string().min(1, 'El nombre del proveedor es requerido.'),
   contact: z.object({
-    email: z.string().email('Invalid email address.'),
-    phone: z.string().min(1, 'Phone number is required.'),
+    email: z.string().email('Dirección de correo electrónico inválida.'),
+    phone: z.string().min(1, 'El número de teléfono es requerido.'),
   }),
-  shippingPolicy: z.string().min(1, 'Shipping policy is required.'),
-  returnPolicy: z.string().min(1, 'Return policy is required.'),
+  shippingPolicy: z.string().min(1, 'La política de envío es requerida.'),
+  returnPolicy: z.string().min(1, 'La política de devolución es requerida.'),
 });
 
 export type AddSupplierFormValues = z.infer<typeof AddSupplierFormSchema>;
@@ -150,8 +150,8 @@ export type AddSupplierFormState = {
 
 
 export const AddCategoryFormSchema = z.object({
-    name: z.string().min(1, 'Category name is required.'),
-    description: z.string().min(1, 'Description is required.'),
+    name: z.string().min(1, 'El nombre de la categoría es requerido.'),
+    description: z.string().min(1, 'La descripción es requerida.'),
 });
 
 export type AddCategoryFormValues = z.infer<typeof AddCategoryFormSchema>;
@@ -218,11 +218,11 @@ export type CreateReservationFormState = {
 
 // User Management Schemas
 export const CreateUserFormSchema = z.object({
-    name: z.string().min(1, 'Name is required.'),
-    email: z.string().email('Invalid email address.'),
-    password: z.string().min(6, 'Password must be at least 6 characters.'),
+    name: z.string().min(1, 'El nombre es requerido.'),
+    email: z.string().email('Dirección de correo electrónico inválida.'),
+    password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres.'),
     role: z.enum(['admin', 'logistics', 'commercial', 'plataformas'], {
-        required_error: 'Role is required.',
+        required_error: 'El rol es requerido.',
     }),
 });
 
@@ -235,7 +235,7 @@ export type CreateUserFormState = {
 };
 
 export const UpdateProfileFormSchema = z.object({
-    name: z.string().min(1, 'Name is required.'),
+    name: z.string().min(1, 'El nombre es requerido.'),
     phone: z.string().optional(),
     avatar: z.any().optional(),
 });
@@ -269,22 +269,3 @@ export type ImportProductsFormState = {
     success: boolean;
     count: number;
 };
-    
-
-    
-
-    
-
-
-
-
-      
-
-    
-
-    
-
-  
-
-
-    

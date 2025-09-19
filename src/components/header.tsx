@@ -45,7 +45,7 @@ export default function AppHeader() {
                     <MainNav isMobile />
                     <div className="mt-auto">
                         <SheetClose asChild>
-                            <Button variant="outline" className="w-full" onClick={logout}>Logout</Button>
+                            <Button variant="outline" className="w-full" onClick={logout}>Cerrar Sesión</Button>
                         </SheetClose>
                     </div>
                 </div>
@@ -65,7 +65,7 @@ export default function AppHeader() {
       <div className="flex items-center gap-4 ml-auto">
         <Button variant="ghost" size="icon" className="rounded-full">
             <Bell className="h-4 w-4" />
-            <span className="sr-only">Toggle notifications</span>
+            <span className="sr-only">Ver notificaciones</span>
         </Button>
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -74,18 +74,18 @@ export default function AppHeader() {
                 <AvatarImage src={user.avatarUrl} alt={user.name} />
                 <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                 </Avatar>
-                <span className="sr-only">Toggle user menu</span>
+                <span className="sr-only">Menú de usuario</span>
             </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account ({user.role})</DropdownMenuLabel>
+            <DropdownMenuLabel>Mi Cuenta ({user.role})</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <Link href="/settings">
-              <DropdownMenuItem>Settings</DropdownMenuItem>
+              <DropdownMenuItem>Configuración</DropdownMenuItem>
             </Link>
-            <DropdownMenuItem>Support</DropdownMenuItem>
+            <DropdownMenuItem>Soporte</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout}>Logout</DropdownMenuItem>
+            <DropdownMenuItem onClick={logout}>Cerrar Sesión</DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
       </div>
