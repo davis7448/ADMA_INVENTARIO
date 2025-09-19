@@ -4,7 +4,8 @@
 
 import { z } from 'zod';
 import { getAuth } from 'firebase-admin/auth';
-// import { app as adminApp } from '@/lib/firebase-admin'; // Temporarily disabled
+// We are re-importing the app here to ensure environment variables are loaded before initialization.
+import { app as adminApp } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
 import { findUserByEmail, addUser, updateUserProfile, updateUserRoleInDb, sendPasswordReset, uploadImageAndGetURL } from '@/lib/api';
 import type { CreateUserFormState, CreateUserFormValues, UpdateProfileFormValues, UpdateProfileFormState } from '@/lib/definitions';
@@ -33,14 +34,13 @@ export async function createUserAction(
   const { name, email, password, role } = validatedFields.data;
 
   try {
-    // const auth = getAuth(adminApp);
-    // // Create user in Firebase Auth
-    // await auth.createUser({
-    //   email,
-    //   password,
-    //   displayName: name,
-    // });
-    throw new Error("La creación de usuarios está deshabilitada en el entorno de prototipado. Por favor, despliega la aplicación.");
+    const auth = getAuth(adminApp);
+    // Create user in Firebase Auth
+    await auth.createUser({
+      email,
+      password,
+      displayName: name,
+    });
 
 
     // Create user profile in Firestore
@@ -59,7 +59,9 @@ export async function createUserAction(
   } catch (error: any) {
     console.error("Error creating user:", error);
     let errorMessage = 'Ocurrió un error inesperado.';
-    if (error.code === 'auth/email-already-exists') {
+    if (error.message.includes('FIREBASE_PRIVATE_KEY')) {
+        errorMessage = "La creación de usuarios está deshabilitada en el entorno de prototipado. Por favor, despliega la aplicación y configura los secretos del servidor.";
+    } else if (error.code === 'auth/email-already-exists') {
         errorMessage = 'Ya existe un usuario con este correo electrónico en Firebase Authentication.';
     }
     return {

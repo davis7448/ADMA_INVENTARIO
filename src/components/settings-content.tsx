@@ -24,17 +24,18 @@ import { ProfileManagement } from './profile-management';
 
 interface SettingsContentProps {
     initialRotationCategories: RotationCategory[];
+    initialUsers: User[];
 }
 
-export function SettingsContent({ initialRotationCategories }: SettingsContentProps) {
+export function SettingsContent({ initialRotationCategories, initialUsers }: SettingsContentProps) {
     const [rotationCategories, setRotationCategories] = useState<RotationCategory[]>(initialRotationCategories);
-    const [users, setUsers] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [users, setUsers] = useState<User[]>(initialUsers);
+    const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const { user } = useAuth();
     const { toast } = useToast();
 
-    const fetchData = async () => {
+    const refreshUsers = async () => {
         setLoading(true);
         try {
             const fetchedUsers = await getUsers();
@@ -44,14 +45,11 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
         }
         setLoading(false);
     }
-
+    
     useEffect(() => {
-        if (user?.role === 'admin') {
-            fetchData();
-        } else {
-            setLoading(false);
-        }
-    }, [user]);
+        setUsers(initialUsers);
+    }, [initialUsers]);
+
 
     const handleThresholdChange = (id: string, value: string) => {
         const numericValue = value === '' ? 0 : parseInt(value, 10);
@@ -96,7 +94,7 @@ export function SettingsContent({ initialRotationCategories }: SettingsContentPr
           <ProfileManagement />
 
           {isAdmin && (
-            <UserManagement initialUsers={users} onUsersUpdate={fetchData} loading={loading} />
+            <UserManagement initialUsers={users} onUsersUpdate={refreshUsers} loading={loading} />
           )}
 
           <Card>

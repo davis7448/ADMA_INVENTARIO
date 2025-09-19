@@ -41,6 +41,7 @@ import { updateUserRoleAction, resetUserPasswordAction } from '@/app/actions/use
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { CreateUserDialog } from './create-user-dialog';
 
 interface UserManagementProps {
     initialUsers: User[];
@@ -81,6 +82,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                             Gestiona los roles de los usuarios existentes. La lista de usuarios aparecerá una vez desplegada la aplicación.
                         </CardDescription>
                     </div>
+                    <CreateUserDialog onUserCreated={onUsersUpdate} />
                 </div>
             </CardHeader>
             <CardContent>
