@@ -216,7 +216,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
     await runTransaction(db, async (transaction) => {
         const productSnap = await transaction.get(productRef);
         if (!productSnap.exists()) {
-            throw new Error(`Product with ID ${productId} does not exist!`);
+            throw new Error(`Producto con ID ${productId} no existe.`);
         }
       
         const productData = productSnap.data() as Product;
@@ -282,7 +282,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
     await runTransaction(db, async (transaction) => {
         const productSnap = await transaction.get(productRef);
         if (!productSnap.exists()) {
-            throw new Error(`Product with ID ${productId} does not exist!`);
+            throw new Error(`Producto con ID ${productId} no existe.`);
         }
         
         const productData = productSnap.data() as Product;
@@ -299,7 +299,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
             
             if (variantIndex === -1) {
-                throw new Error(`Variant with SKU ${variantSku} not found in product ${productData.name}.`);
+                throw new Error(`Variante con SKU ${variantSku} no encontrada en el producto ${productData.name}.`);
             }
             
             const variant = variants[variantIndex];
@@ -313,7 +313,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
                 // For now, let's assume this is an error condition.
                 // Or maybe it should pull from pending stock first?
                 // For now, simple validation.
-                throw new Error(`Not enough stock for variant ${variant.name} to mark as damaged. Available: ${variant.stock}, Damaged: ${quantity}`);
+                throw new Error(`No hay suficiente stock para la variante ${variant.name} para marcar como averiado. Disponible: ${variant.stock}, Averiado: ${quantity}`);
             }
 
             updateData.variants = variants;
@@ -325,7 +325,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
              if (productData.stock >= quantity) {
                 updateData.stock = productData.stock - quantity;
             } else {
-                throw new Error(`Not enough stock for product ${productData.name} to mark as damaged. Available: ${productData.stock}, Damaged: ${quantity}`);
+                throw new Error(`No hay suficiente stock para el producto ${productData.name} para marcar como averiado. Disponible: ${productData.stock}, Averiado: ${quantity}`);
             }
         }
         
@@ -483,7 +483,7 @@ export const addUser = async (user: Omit<User, 'id'>): Promise<string> => {
     const q = query(usersCol, where("email", "==", user.email));
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
-        throw new Error("A user with this email already exists.");
+        throw new Error("Ya existe un usuario con este correo electrónico.");
     }
     const docRef = await addDoc(usersCol, user);
     return docRef.id;
@@ -801,7 +801,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
         // ========== 1. READ PHASE ==========
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
-            throw new Error('Order not found');
+            throw new Error('No se encontró la órden');
         }
         const orderData = orderSnap.data() as DispatchOrder;
 
@@ -888,7 +888,7 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
 
     const orderSnap = await getDoc(orderRef);
     if (!orderSnap.exists()) {
-        throw new Error("Dispatch order not found.");
+        throw new Error("No se encontró la órden de despacho.");
     }
     const orderData = orderSnap.data() as DispatchOrder;
 
@@ -896,7 +896,7 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
     const remainingExceptions = orderData.exceptions.filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
 
     if (exceptionsToCancel.length === 0) {
-        throw new Error("No matching exceptions found to cancel.");
+        throw new Error("No se encontraron excepciones para cancelar.");
     }
 
     // 1. Move stock from pending back to main inventory and create inventory movements
@@ -1059,7 +1059,7 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     ]);
 
     if (!product) {
-        throw new Error("Product not found");
+        throw new Error("Producto no encontrado");
     }
 
     const carrierMap = new Map(carriers.map(c => [c.id, c.name]));
@@ -1418,7 +1418,7 @@ export const resolveStaleReservationAlert = async (alertId: string): Promise<voi
     const alertSnap = await getDoc(alertRef);
 
     if (!alertSnap.exists()) {
-        throw new Error("Alert not found.");
+        throw new Error("No se encontró la alerta.");
     }
 
     const alertData = alertSnap.data() as StaleReservationAlert;
@@ -1477,12 +1477,13 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
             if (product.productType === 'simple' && product.sku) {
                 const totalReserved = Array.isArray(product.reservations) ? product.reservations.reduce((sum, res) => sum + res.quantity, 0) : 0;
                 itemsToCheck.push({
+                    id: product.id,
                     productName: product.name,
                     physicalStock: product.stock,
                     reservedStock: totalReserved,
                     salesLast7Days,
                     // Pass through data for storage
-                    id: product.id, name: product.name, sku: product.sku, imageUrl: product.imageUrl,
+                    name: product.name, sku: product.sku, imageUrl: product.imageUrl,
                 });
             } else if (product.productType === 'variable' && product.variants) {
                 for (const variant of product.variants) {
@@ -1491,50 +1492,50 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                         .reduce((sum, res) => sum + res.quantity, 0);
 
                     itemsToCheck.push({
+                        id: `${product.id}-${variant.id}`,
                         productName: `${product.name} - ${variant.name}`,
                         physicalStock: variant.stock,
                         reservedStock: variantReserved,
                         salesLast7Days, // Use parent's sales for variant check
                         // Pass through data for storage
-                        id: `${product.id}-${variant.id}`, name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
+                        name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
                     });
                 }
             }
         }
 
-        const analysisPromises = itemsToCheck.map(item => 
-            checkStockAvailability({
-                productName: item.productName,
-                physicalStock: item.physicalStock,
-                reservedStock: item.reservedStock,
-                salesLast7Days: item.salesLast7Days,
-            }).then(analysis => ({...item, analysis}))
-        );
+        const analysisResult = await checkStockAvailability({ products: itemsToCheck });
+        
+        const analysisMap = new Map(analysisResult.analyses.map(a => [a.id, a]));
 
-        const allAnalyses = await Promise.all(analysisPromises);
-        const triggeredAlerts = allAnalyses.filter(item => {
-            const availableStock = item.analysis.availableForSale;
+        const triggeredAlerts = itemsToCheck.filter(item => {
+            const analysis = analysisMap.get(item.id);
+            if (!analysis) return false;
+
             const hasSales = item.salesLast7Days.some((s: number) => s > 0);
             
             // For products with no sales, trigger if stock is low
             if (!hasSales) {
-                return availableStock <= 5;
+                return analysis.availableForSale <= 5 && analysis.availableForSale > 0;
             }
             // For products with sales, use the AI's triggered alert
-            return item.analysis.alertTriggered;
+            return analysis.alertTriggered;
         });
 
-        const newAlerts: StockAlertItem[] = triggeredAlerts.map(item => ({
-            id: item.id,
-            name: item.name,
-            sku: item.sku,
-            imageUrl: item.imageUrl,
-            physicalStock: item.physicalStock,
-            reservedStock: item.reservedStock,
-            availableForSale: item.analysis.availableForSale,
-            dailyAverageSales: item.analysis.dailyAverageSales,
-            alertMessage: item.analysis.alertMessage,
-        }));
+        const newAlerts: StockAlertItem[] = triggeredAlerts.map(item => {
+            const analysis = analysisMap.get(item.id)!;
+            return {
+                id: item.id,
+                name: item.name,
+                sku: item.sku,
+                imageUrl: item.imageUrl,
+                physicalStock: item.physicalStock,
+                reservedStock: item.reservedStock,
+                availableForSale: analysis.availableForSale,
+                dailyAverageSales: analysis.dailyAverageSales,
+                alertMessage: analysis.alertMessage,
+            };
+        });
         
         // Cache new alerts in Firestore
         const batch = writeBatch(db);
@@ -1565,11 +1566,11 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
             const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
             return {
                 alerts,
-                error: e.message || "An unknown error occurred during AI analysis.",
+                error: e.message || "Ocurrió un error desconocido durante el análisis de IA.",
                 lastGenerated: (metadataSnap.data().lastGenerated as Timestamp).toDate().toISOString()
             };
         }
-        return { alerts: [], error: e.message || "An unknown error occurred during AI analysis." };
+        return { alerts: [], error: e.message || "Ocurrió un error desconocido durante el análisis de IA." };
     }
 }
     
@@ -1582,6 +1583,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 

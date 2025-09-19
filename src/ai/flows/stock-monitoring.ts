@@ -5,49 +5,60 @@
  * @fileOverview Monitors product stock levels against sales velocity to predict potential shortages.
  *
  * - checkStockAvailability - A function that checks if a product's available stock is sufficient based on its recent sales.
- * - StockAvailabilityInput - The input type for the checkStockAvailability function.
- * - StockAvailabilityOutput - The return type for the checkStockAvailability function.
+ * - StockMonitoringInput - The input type for the checkStockAvailability function.
+ * - StockMonitoringOutput - The return type for the checkStockAvailability function.
  */
 
 import {ai} from '@/ai/genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'genkit';
 
-const StockAvailabilityInputSchema = z.object({
+// Defines a single product for input
+const ProductInfoSchema = z.object({
+  id: z.string().describe('A unique identifier for the product or variant.'),
   productName: z.string().describe('The name of the product.'),
   physicalStock: z.number().describe('The total physical stock count of the product.'),
   reservedStock: z.number().describe('The stock quantity that is reserved and not available for sale.'),
   salesLast7Days: z.array(z.number()).describe('An array representing the number of units sold each day for the last 7 days. Example: [10, 0, 5, 0, 8, 12, 3] where the first element is 7 days ago and the last is today.'),
 });
-export type StockAvailabilityInput = z.infer<typeof StockAvailabilityInputSchema>;
 
-const StockAvailabilityOutputSchema = z.object({
+// The main input schema is an object containing an array of products
+const StockMonitoringInputSchema = z.object({
+    products: z.array(ProductInfoSchema)
+});
+export type StockMonitoringInput = z.infer<typeof StockMonitoringInputSchema>;
+
+
+// Defines the analysis result for a single product
+const ProductAnalysisSchema = z.object({
+  id: z.string().describe('The unique identifier for the product or variant, passed from the input.'),
   availableForSale: z.number().describe('The stock available for new sales/reservations (physical - reserved).'),
   dailyAverageSales: z.number().describe('The average number of units sold per day, calculated only from days with sales > 0. This can be a floating point number.'),
   daysOfStockLeft: z.number().describe('The estimated number of days until the available stock runs out, based on average daily sales. Is -1 if sales are 0. This can be a floating point number.'),
   alertTriggered: z.boolean().describe('Whether a low stock alert should be triggered (true if days of stock are less than 3, false otherwise).'),
   alertMessage: z.string().describe('A human-readable message in Spanish explaining the stock situation and why an alert was or was not triggered.'),
 });
-export type StockAvailabilityOutput = z.infer<typeof StockAvailabilityOutputSchema>;
 
-export async function checkStockAvailability(input: StockAvailabilityInput): Promise<StockAvailabilityOutput> {
+// The main output schema is an object containing an array of analyses
+const StockMonitoringOutputSchema = z.object({
+    analyses: z.array(ProductAnalysisSchema)
+});
+export type StockMonitoringOutput = z.infer<typeof StockMonitoringOutputSchema>;
+
+
+export async function checkStockAvailability(input: StockMonitoringInput): Promise<StockMonitoringOutput> {
   return stockAvailabilityFlow(input);
 }
 
 const prompt = ai.definePrompt({
   name: 'stockAvailabilityPrompt',
   model: googleAI.model('gemini-1.5-pro'),
-  input: {schema: StockAvailabilityInputSchema},
-  output: {schema: StockAvailabilityOutputSchema},
-  prompt: `You are an expert inventory analyst. Your task is to determine if a product is at risk of running out of stock available for new reservations.
+  input: {schema: StockMonitoringInputSchema},
+  output: {schema: StockMonitoringOutputSchema},
+  prompt: `You are an expert inventory analyst. Your task is to determine if multiple products are at risk of running out of stock available for new reservations.
 
-  You will be given the following information:
-  - Product Name: {{{productName}}}
-  - Physical Stock: {{{physicalStock}}}
-  - Reserved Stock: {{{reservedStock}}}
-  - Sales in Last 7 Days (as a daily list): {{{json salesLast7Days}}}
+  You will be given an array of products. For EACH product in the array, you must perform the following calculations:
   
-  Your calculations must follow these steps precisely:
   1.  Calculate 'availableForSale': This is 'physicalStock' - 'reservedStock'.
   2.  Calculate 'dailyAverageSales': 
       a. From the 'salesLast7Days' array, identify only the days where sales were greater than 0.
@@ -60,17 +71,24 @@ const prompt = ai.definePrompt({
   4.  Determine 'alertTriggered': The alert is triggered if 'daysOfStockLeft' is greater than or equal to 0 AND less than 3.
   5.  Generate 'alertMessage': A concise, human-readable message in Spanish explaining the stock situation. If the alert is triggered, the message should be urgent and explain why the condition was met.
   
-  Execute these calculations and populate all the fields in the output schema.
+  Execute these calculations for every product provided in the input and return an array of analysis results. Ensure the 'id' of each analysis result matches the 'id' of the corresponding input product.
+  
+  Input Products:
+  {{{json products}}}
   `,
 });
 
 const stockAvailabilityFlow = ai.defineFlow(
   {
     name: 'stockAvailabilityFlow',
-    inputSchema: StockAvailabilityInputSchema,
-    outputSchema: StockAvailabilityOutputSchema,
+    inputSchema: StockMonitoringInputSchema,
+    outputSchema: StockMonitoringOutputSchema,
   },
   async input => {
+    // If there are no products, return an empty analysis to avoid calling the model.
+    if (input.products.length === 0) {
+        return { analyses: [] };
+    }
     const {output} = await prompt(input);
     return output!;
   }

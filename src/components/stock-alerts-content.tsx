@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useTransition, useMemo } from 'react';
@@ -122,7 +123,7 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
                 <TableHead className="text-center">Stock Físico</TableHead>
                 <TableHead className="text-center">Reservado</TableHead>
                 <TableHead className="text-center">Disponible</TableHead>
-                <TableHead className="text-center">Venta Diaria</TableHead>
+                <TableHead className="text-center">Venta Diaria Promedio</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
