@@ -29,6 +29,7 @@ import { regenerateStockAlertsAction } from '@/app/actions/stock-alerts';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/hooks/use-auth';
 
 
 interface StockAlertsContentProps {
@@ -42,7 +43,10 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [hideNoSales, setHideNoSales] = useState(false);
+
+  const canForceRegenerate = user?.role === 'admin' || user?.role === 'plataformas';
 
   const handleRegenerate = () => {
     startTransition(async () => {
@@ -105,10 +109,12 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
                   </div>
               )}
           </div>
-           <Button onClick={handleRegenerate} disabled={isPending} variant="outline">
+           {canForceRegenerate && (
+            <Button onClick={handleRegenerate} disabled={isPending} variant="outline">
                 <RefreshCw className={`mr-2 h-4 w-4 ${isPending ? 'animate-spin' : ''}`} />
                 {isPending ? 'Verificando...' : 'Forzar Verificación'}
             </Button>
+           )}
         </CardHeader>
         <CardContent>
             <div className="flex items-center space-x-2 mb-4 p-4 border rounded-lg bg-muted/50">
