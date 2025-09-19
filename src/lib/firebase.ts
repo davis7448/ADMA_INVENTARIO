@@ -3,12 +3,13 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 export const firebaseConfig = {
-  "projectId": "studio-9748962172-82b35",
-  "appId": "1:607501701912:web:753a676ca0723828e4c46d",
-  "storageBucket": "studio-9748962172-82b35.firebasestorage.app",
-  "apiKey": "AIzaSyAFrZ4jvO5fIF9koe0cMUUwO1r_b5fdBRk",
-  "authDomain": "studio-9748962172-82b35.firebaseapp.com",
-  "messagingSenderId": "607501701912"
+  apiKey: "AIzaSyAFrZ4jvO5fIF9koe0cMUUwO1r_b5fdBRk",
+  authDomain: "studio-9748962172-82b35.firebaseapp.com",
+  databaseURL: "https://studio-9748962172-82b35-default-rtdb.firebaseio.com",
+  projectId: "studio-9748962172-82b35",
+  storageBucket: "studio-9748962172-82b35.firebasestorage.app",
+  messagingSenderId: "607501701912",
+  appId: "1:607501701912:web:753a676ca0723828e4c46d"
 };
 
 // Initialize Firebase
