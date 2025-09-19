@@ -913,71 +913,75 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     });
 };
 
-
-
-
 export const cancelPendingDispatchItems = async (orderId: string, cancelledTrackingNumbers: string[], user: { id: string; name: string; } | null) => {
-    const batch = writeBatch(db);
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
-    const orderSnap = await getDoc(orderRef);
-    if (!orderSnap.exists()) {
-        throw new Error("No se encontró la órden de despacho.");
-    }
-    const orderData = orderSnap.data() as DispatchOrder;
-
-    const exceptionsToCancel = orderData.exceptions.filter(ex => cancelledTrackingNumbers.includes(ex.trackingNumber));
-    const remainingExceptions = orderData.exceptions.filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
-
-    if (exceptionsToCancel.length === 0) {
-        throw new Error("No se encontraron excepciones para cancelar.");
-    }
-
-    // 1. Move stock from pending back to main inventory and create inventory movements
-    for (const ex of exceptionsToCancel) {
-        for (const exProd of ex.products) {
-            const productRef = doc(db, 'products', exProd.productId);
-            
-            await runTransaction(db, async (transaction) => {
-                const productSnap = await transaction.get(productRef);
-
-                if (productSnap.exists()) {
-                    const productData = productSnap.data() as Product;
-                    // Decrease pending stock, increase main stock
-                    const newPendingStock = (productData.pendingStock || 0) - exProd.quantity;
-
-                    transaction.update(productRef, { 
-                        pendingStock: newPendingStock < 0 ? 0 : newPendingStock
-                    });
-
-                    // Update variant stock if applicable
-                    await updateProductStock(exProd.productId, exProd.quantity, 'add', exProd.variantSku);
-
-                    // Create "Entrada" movement for the cancellation
-                    await addInventoryMovement({
-                        type: 'Entrada',
-                        productId: exProd.productId,
-                        productName: productData.name || 'Unknown Product',
-                        quantity: exProd.quantity,
-                        notes: `Anulación de guía pendiente: ${ex.trackingNumber} del despacho ${orderData.dispatchId}. SKU: ${exProd.variantSku || productData.sku}`,
-                        userId: user?.id,
-                        userName: user?.name
-                    });
-                }
-            });
+    // Use a transaction to ensure atomicity
+    await runTransaction(db, async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists()) {
+            throw new Error("No se encontró la órden de despacho.");
         }
-    }
+        const orderData = orderSnap.data() as DispatchOrder;
 
-    // 2. Update the dispatch order
-    const newStatus = remainingExceptions.length === 0 ? 'Despachada' : 'Parcial';
-    const currentCancelled = orderData.cancelledExceptions || [];
-    batch.update(orderRef, {
-        exceptions: remainingExceptions,
-        status: newStatus,
-        cancelledExceptions: [...currentCancelled, ...exceptionsToCancel],
+        const exceptionsToCancel = orderData.exceptions.filter(ex => cancelledTrackingNumbers.includes(ex.trackingNumber));
+        if (exceptionsToCancel.length === 0) {
+            throw new Error("No se encontraron excepciones para cancelar con las guías proporcionadas.");
+        }
+
+        const productUpdates = new Map<string, { pendingStockChange: number }>();
+        const movementsToAdd: any[] = [];
+
+        for (const ex of exceptionsToCancel) {
+            for (const exProd of ex.products) {
+                const update = productUpdates.get(exProd.productId) || { pendingStockChange: 0 };
+                update.pendingStockChange -= exProd.quantity;
+                productUpdates.set(exProd.productId, update);
+
+                const productSnap = await transaction.get(doc(db, 'products', exProd.productId));
+                const productName = productSnap.exists() ? (productSnap.data() as Product).name : 'Producto Desconocido';
+                
+                movementsToAdd.push({
+                    type: 'Entrada',
+                    productId: exProd.productId,
+                    productName: productName,
+                    quantity: exProd.quantity,
+                    notes: `Anulación de guía pendiente por falta de stock: ${ex.trackingNumber}. Despacho: ${orderData.dispatchId}. SKU: ${exProd.variantSku || productSnap.data()?.sku || 'N/A'}`,
+                    userId: user?.id,
+                    userName: user?.name,
+                    date: Timestamp.now(),
+                });
+            }
+        }
+        
+        // Apply product updates
+        for (const [productId, update] of productUpdates.entries()) {
+            const productRef = doc(db, 'products', productId);
+            const productSnap = await transaction.get(productRef);
+            if (productSnap.exists()) {
+                const currentPendingStock = productSnap.data().pendingStock || 0;
+                const newPendingStock = Math.max(0, currentPendingStock + update.pendingStockChange);
+                transaction.update(productRef, { pendingStock: newPendingStock });
+            }
+        }
+
+        // Add inventory movements
+        for (const movement of movementsToAdd) {
+            const movementRef = doc(collection(db, 'inventoryMovements'));
+            transaction.set(movementRef, movement);
+        }
+
+        // Update the dispatch order
+        const remainingExceptions = orderData.exceptions.filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
+        const newStatus = remainingExceptions.length === 0 && orderData.status === 'Parcial' ? 'Despachada' : orderData.status;
+        const currentCancelled = orderData.cancelledExceptions || [];
+
+        transaction.update(orderRef, {
+            exceptions: remainingExceptions,
+            status: newStatus,
+            cancelledExceptions: [...currentCancelled, ...exceptionsToCancel],
+        });
     });
-
-    await batch.commit();
 };
 
 
@@ -1645,6 +1649,8 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
+
 
 
 
