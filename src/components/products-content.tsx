@@ -520,7 +520,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                             <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
                                             <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
                                             <TableCell>
-                                                {product.productType === 'simple' ? `$${product.priceDropshipping.toFixed(0)}` : '--'}
+                                                {(product.productType === 'simple' && product.priceDropshipping) ? `$${product.priceDropshipping.toFixed(0)}` : '--'}
                                             </TableCell>
                                             <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
                                                 <DropdownMenu>
