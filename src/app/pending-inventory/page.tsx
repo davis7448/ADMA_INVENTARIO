@@ -11,7 +11,7 @@ export default async function PendingInventoryPage() {
     ]);
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
+      <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas', 'commercial']}>
         <PendingInventoryContent initialPendingItems={pendingItems} allProducts={products} />
       </AuthProviderWrapper>
     );

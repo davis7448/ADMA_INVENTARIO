@@ -56,11 +56,11 @@ type NavItem = {
     },
     {
         label: 'Logística',
-        roles: ['admin', 'logistics', 'plataformas'],
+        roles: ['admin', 'logistics', 'plataformas', 'commercial'],
         children: [
             { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics', 'plataformas'] },
             { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics', 'plataformas'] },
-            { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics', 'plataformas'] },
+            { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics', 'plataformas', 'commercial'] },
         ],
     },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics', 'plataformas'] },
