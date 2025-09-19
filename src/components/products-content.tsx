@@ -384,30 +384,28 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
 
 
           <Card>
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <div>
-                        <CardTitle>Todos los Productos</CardTitle>
-                        <CardDescription>Una lista de todos los productos en tu catálogo.</CardDescription>
-                    </div>
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                <Settings className="mr-2 h-4 w-4" />
-                                Opciones
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={!canEdit}>
-                               <ImportProductsDialog onImportSuccess={refreshProducts} />
-                            </DropdownMenuItem>
-                             <DropdownMenuItem onClick={handleExportExcel}>
-                                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                                Exportar a Excel
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+            <CardHeader className="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                <div>
+                    <CardTitle>Todos los Productos</CardTitle>
+                    <CardDescription>Una lista de todos los productos en tu catálogo.</CardDescription>
                 </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                            <Settings className="mr-2 h-4 w-4" />
+                            Opciones
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={!canEdit}>
+                            <ImportProductsDialog onImportSuccess={refreshProducts} />
+                        </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportExcel}>
+                            <FileSpreadsheet className="mr-2 h-4 w-4" />
+                            Exportar a Excel
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </CardHeader>
             <CardContent>
                 <div className="border rounded-md">
