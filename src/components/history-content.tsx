@@ -44,8 +44,6 @@ interface HistoryContentProps {
     allCarriers: Carrier[];
 }
 
-const ITEMS_PER_PAGE = 20;
-
 export function HistoryContent({
     initialMovements,
     initialDispatchOrders,
@@ -65,6 +63,7 @@ export function HistoryContent({
     // Pagination states
     const [movementsPage, setMovementsPage] = useState(1);
     const [ordersPage, setOrdersPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
 
     const { filteredMovements, filteredDispatchOrders } = useMemo(() => {
         let movements = [...initialMovements];
@@ -130,17 +129,23 @@ export function HistoryContent({
 
     // Paginated data
     const paginatedMovements = useMemo(() => {
-        const startIndex = (movementsPage - 1) * ITEMS_PER_PAGE;
-        return filteredMovements.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-    }, [filteredMovements, movementsPage]);
+        const startIndex = (movementsPage - 1) * itemsPerPage;
+        return filteredMovements.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredMovements, movementsPage, itemsPerPage]);
 
     const paginatedDispatchOrders = useMemo(() => {
-        const startIndex = (ordersPage - 1) * ITEMS_PER_PAGE;
-        return filteredDispatchOrders.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-    }, [filteredDispatchOrders, ordersPage]);
+        const startIndex = (ordersPage - 1) * itemsPerPage;
+        return filteredDispatchOrders.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredDispatchOrders, ordersPage, itemsPerPage]);
     
-    const totalMovementPages = Math.ceil(filteredMovements.length / ITEMS_PER_PAGE);
-    const totalOrderPages = Math.ceil(filteredDispatchOrders.length / ITEMS_PER_PAGE);
+    const totalMovementPages = Math.ceil(filteredMovements.length / itemsPerPage);
+    const totalOrderPages = Math.ceil(filteredDispatchOrders.length / itemsPerPage);
+
+    const handleItemsPerPageChange = (value: number) => {
+        setItemsPerPage(value);
+        setMovementsPage(1);
+        setOrdersPage(1);
+    }
 
 
     const productsById = useMemo(() => allProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>), [allProducts]);
@@ -325,32 +330,80 @@ export function HistoryContent({
         currentPage: number;
         totalPages: number;
         onPageChange: (page: number) => void;
+        itemsPerPage: number;
+        onItemsPerPageChange: (value: number) => void;
+        totalItems: number;
     }
     
-    const PaginationControls = ({ currentPage, totalPages, onPageChange }: PaginationControlsProps) => {
-        if (totalPages <= 1) return null;
+    const PaginationControls = ({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalItems }: PaginationControlsProps) => {
+        if (totalPages <= 1 && totalItems <= itemsPerPage) return null;
         
         return (
-            <div className="flex items-center justify-end space-x-2 py-4">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onPageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                >
-                    Anterior
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                    Página {currentPage} de {totalPages}
-                </span>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onPageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                >
-                    Siguiente
-                </Button>
+            <div className="flex items-center justify-between space-x-2 py-4">
+                 <div className="text-sm text-muted-foreground">
+                    Total de {totalItems} registros.
+                </div>
+                <div className="flex items-center space-x-6 lg:space-x-8">
+                    <div className="flex items-center space-x-2">
+                        <p className="text-sm font-medium">Filas por página</p>
+                        <Select
+                            value={`${itemsPerPage}`}
+                            onValueChange={(value) => onItemsPerPageChange(Number(value))}
+                        >
+                            <SelectTrigger className="h-8 w-[70px]">
+                                <SelectValue placeholder={itemsPerPage} />
+                            </SelectTrigger>
+                            <SelectContent side="top">
+                                {[10, 20, 50, 100].map((pageSize) => (
+                                <SelectItem key={pageSize} value={`${pageSize}`}>
+                                    {pageSize}
+                                </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="flex w-[180px] items-center justify-center text-sm font-medium gap-2">
+                        <span>Página</span>
+                        <Select
+                             value={`${currentPage}`}
+                             onValueChange={(value) => onPageChange(Number(value))}
+                             disabled={totalPages === 0}
+                        >
+                            <SelectTrigger className="h-8">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                    <SelectItem key={page} value={`${page}`}>
+                                        {page} de {totalPages}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                   
+                    <div className="flex items-center space-x-2">
+                        <Button
+                            variant="outline"
+                            className="h-8 w-8 p-0"
+                            onClick={() => onPageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                        >
+                            <span className="sr-only">Ir a la página anterior</span>
+                            <ChevronsUpDown className="h-4 w-4 rotate-90" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="h-8 w-8 p-0"
+                            onClick={() => onPageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                        >
+                            <span className="sr-only">Ir a la página siguiente</span>
+                            <ChevronsUpDown className="h-4 w-4 -rotate-90" />
+                        </Button>
+                    </div>
+                </div>
             </div>
         );
     };
@@ -430,6 +483,9 @@ export function HistoryContent({
                     currentPage={movementsPage} 
                     totalPages={totalMovementPages}
                     onPageChange={setMovementsPage} 
+                    itemsPerPage={itemsPerPage}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                    totalItems={filteredMovements.length}
                 />
             </CardFooter>
         </Card>
@@ -544,9 +600,14 @@ export function HistoryContent({
                     currentPage={ordersPage} 
                     totalPages={totalOrderPages}
                     onPageChange={setOrdersPage} 
+                    itemsPerPage={itemsPerPage}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                    totalItems={filteredDispatchOrders.length}
                 />
             </CardFooter>
         </Card>
         </div>
     );
 }
+
+    
