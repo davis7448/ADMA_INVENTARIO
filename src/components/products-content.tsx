@@ -263,6 +263,28 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         XLSX.writeFile(workbook, `Productos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
       };
 
+      const calculateAvailableStock = (product: Product, variantId?: string) => {
+        const totalReserved = product.reservations?.reduce((sum, res) => {
+            if (variantId) {
+                // If checking a variant, only count reservations for that variant
+                return res.variantId === variantId ? sum + res.quantity : sum;
+            }
+            if (product.productType === 'simple') {
+                // If simple product, count all reservations
+                return sum + res.quantity;
+            }
+            // For a variable product's total, sum all its variant reservations
+            return sum + res.quantity;
+        }, 0) || 0;
+        
+        let physicalStock = product.stock;
+        if (variantId && product.variants) {
+            physicalStock = product.variants.find(v => v.id === variantId)?.stock || 0;
+        }
+
+        return physicalStock - totalReserved;
+    };
+
 
     return (
         <TooltipProvider>
@@ -357,6 +379,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <TableHead>SKU</TableHead>
                                 <TableHead>Categoría</TableHead>
                                 <TableHead>Stock</TableHead>
+                                <TableHead>Disponible</TableHead>
                                 <TableHead>Pendiente</TableHead>
                                 <TableHead>Averiado</TableHead>
                                 <TableHead>Precio</TableHead>
@@ -369,7 +392,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <>
                                 {Array.from({ length: 5 }).map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={canEdit ? 12 : 11}>
+                                        <TableCell colSpan={canEdit ? 13 : 12}>
                                             <Skeleton className="h-16 w-full" />
                                         </TableCell>
                                     </TableRow>
@@ -467,6 +490,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                 <Badge variant="outline">{categoryNames[product.categoryId] || 'Desconocida'}</Badge>
                                             </TableCell>
                                             <TableCell>{product.stock}</TableCell>
+                                            <TableCell className="font-semibold text-green-600">
+                                                {calculateAvailableStock(product)}
+                                            </TableCell>
                                             <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
                                             <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
                                             <TableCell>
@@ -508,7 +534,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                         </TableRow>
                                         {product.productType === 'variable' && expandedRow === product.id && (
                                             <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                                <TableCell colSpan={canEdit ? 12 : 11}>
+                                                <TableCell colSpan={canEdit ? 13 : 12}>
                                                     <div className="p-4">
                                                         <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
                                                         <Table>
@@ -517,7 +543,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                                     <TableHead>Nombre</TableHead>
                                                                     <TableHead>SKU</TableHead>
                                                                     <TableHead>Precio</TableHead>
-                                                                    <TableHead>Stock</TableHead>
+                                                                    <TableHead>Stock Físico</TableHead>
+                                                                    <TableHead>Stock Disponible</TableHead>
                                                                 </TableRow>
                                                             </TableHeader>
                                                             <TableBody>
@@ -527,6 +554,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                                     <TableCell>{variant.sku}</TableCell>
                                                                     <TableCell>${variant.priceDropshipping.toFixed(0)}</TableCell>
                                                                     <TableCell>{variant.stock}</TableCell>
+                                                                    <TableCell className="font-semibold text-green-600">
+                                                                        {calculateAvailableStock(product, variant.id)}
+                                                                    </TableCell>
                                                                 </TableRow>
                                                             ))}
                                                             </TableBody>
@@ -539,7 +569,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={canEdit ? 12 : 11} className="text-center h-24">
+                                    <TableCell colSpan={canEdit ? 13 : 12} className="text-center h-24">
                                         No se encontraron productos con los filtros actuales.
                                     </TableCell>
                                 </TableRow>
