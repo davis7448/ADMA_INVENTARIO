@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createDispatchOrder, getSuppliers, getEntryReasons } from '@/lib/api';
+import { createDispatchOrder, getSuppliers, getEntryReasons, registerDamagedProduct } from '@/lib/api';
 import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant, LogisticItem, Supplier, EntryReason } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -113,6 +113,8 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     const [damageCarrier, setDamageCarrier] = useState('');
     const [damageTrackingNumber, setDamageTrackingNumber] = useState('');
     const [isDamageConfirmDialogOpen, setIsDamageConfirmDialogOpen] = useState(false);
+    const [isDamageProcessing, startDamageTransition] = useTransition();
+
 
     // Variant Selection State
     const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
@@ -129,7 +131,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
         item: (Product | ProductVariant) & { parentId?: string, parentImageUrl?: string },
         context: SearchContext
     ) => {
-        const parentId = 'parentId' in item ? item.parentId : item.id;
+        const parentId = 'parentId' in item ? item.parentId! : item.id;
         const parentProduct = allProductsList.find(p => p.id === parentId);
         
         if (!parentProduct && context !== 'averias') {
@@ -513,12 +515,30 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             toast({ variant: 'destructive', title: 'Error', description: 'Por favor completa todos los campos, incluido el producto.' });
             return;
         }
-    
-        toast({ title: 'Avería Registrada (Simulado)', description: `Se ha registrado una avería para el SKU ${damagedProduct.sku}.` });
-        setDamagedProduct(null);
-        setDamageDescription('');
-        setDamageCarrier('');
-        setDamageTrackingNumber('');
+
+        startDamageTransition(async () => {
+            try {
+                const parentId = damagedProduct.parentId || (damagedProduct as Product).id;
+                await registerDamagedProduct(
+                    parentId,
+                    1, // For now, we handle one damaged product at a time from this UI
+                    damagedProduct.sku!,
+                    damageCarrier,
+                    damageTrackingNumber,
+                    damageDescription,
+                    user
+                );
+                toast({ title: 'Avería Registrada', description: `Se ha registrado una avería para el SKU ${damagedProduct.sku}. El stock ha sido actualizado.` });
+                setDamagedProduct(null);
+                setDamageDescription('');
+                setDamageCarrier('');
+                setDamageTrackingNumber('');
+                router.refresh();
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado';
+                toast({ variant: 'destructive', title: 'Error al Registrar Avería', description: errorMessage });
+            }
+        });
     };
 
     const canManageEntries = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
@@ -1090,7 +1110,9 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                                     </div>
                                 </CardContent>
                                 <CardFooter>
-                                    <Button variant="destructive" onClick={handleRegisterDamage}>Registrar Avería</Button>
+                                    <Button variant="destructive" onClick={handleRegisterDamage} disabled={isDamageProcessing}>
+                                        {isDamageProcessing ? 'Registrando...' : 'Registrar Avería'}
+                                    </Button>
                                 </CardFooter>
                             </Card>
                         </TabsContent>
