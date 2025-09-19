@@ -304,7 +304,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
               <h1 className="text-3xl font-bold font-headline tracking-tight">Catálogo de Productos</h1>
               <p className="text-muted-foreground">Navega y gestiona tus listados de productos.</p>
             </div>
-            {canEdit && <AddProductForm onProductAdded={refreshProducts} />}
+            <div className={cn(!canEdit && "opacity-50 pointer-events-none")}>
+                <AddProductForm onProductAdded={refreshProducts} />
+            </div>
           </div>
 
           <div className="p-4 border rounded-lg bg-muted/50">
@@ -378,7 +380,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <ImportProductsDialog onImportSuccess={refreshProducts} />
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={!canEdit}>
+                               <ImportProductsDialog onImportSuccess={refreshProducts} />
+                            </DropdownMenuItem>
                              <DropdownMenuItem onClick={handleExportExcel}>
                                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                                 Exportar a Excel
@@ -403,7 +407,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <TableHead>Pendiente</TableHead>
                                 <TableHead>Averiado</TableHead>
                                 <TableHead>Precio</TableHead>
-                                {canEdit && <TableHead className="w-[50px]"><span className="sr-only">Acciones</span></TableHead>}
+                                <TableHead className="w-[50px]"><span className="sr-only">Acciones</span></TableHead>
                                 <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expandir</span></TableHead>
                             </TableRow>
                         </TableHeader>
@@ -412,7 +416,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 <>
                                 {Array.from({ length: 5 }).map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={canEdit ? 13 : 12}>
+                                        <TableCell colSpan={13}>
                                             <Skeleton className="h-16 w-full" />
                                         </TableCell>
                                     </TableRow>
@@ -518,25 +522,23 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                             <TableCell>
                                                 {product.productType === 'simple' ? `$${product.priceDropshipping.toFixed(0)}` : '--'}
                                             </TableCell>
-                                            {canEdit && (
-                                                <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button aria-haspopup="true" size="icon" variant="ghost">
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                                <span className="sr-only">Menú de acciones</span>
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                                            <EditProductForm product={product} onProductUpdated={refreshProducts}>
-                                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Editar</DropdownMenuItem>
-                                                            </EditProductForm>
-                                                            <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            )}
+                                            <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button aria-haspopup="true" size="icon" variant="ghost" disabled={!canEdit}>
+                                                            <MoreHorizontal className="h-4 w-4" />
+                                                            <span className="sr-only">Menú de acciones</span>
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                                                        <EditProductForm product={product} onProductUpdated={refreshProducts}>
+                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Editar</DropdownMenuItem>
+                                                        </EditProductForm>
+                                                        <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
                                             <TableCell className="w-[50px] pr-4 text-right">
                                                 {product.productType === 'variable' && (
                                                     <Button
@@ -554,7 +556,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                         </TableRow>
                                         {product.productType === 'variable' && expandedRow === product.id && (
                                             <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                                <TableCell colSpan={canEdit ? 13 : 12}>
+                                                <TableCell colSpan={13}>
                                                     <div className="p-4">
                                                         <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
                                                         <Table>
@@ -589,7 +591,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={canEdit ? 13 : 12} className="text-center h-24">
+                                    <TableCell colSpan={13} className="text-center h-24">
                                         No se encontraron productos con los filtros actuales.
                                     </TableCell>
                                 </TableRow>
