@@ -23,7 +23,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased h-full bg-background flex flex-col">
         <AuthProvider>
-            <div className="flex flex-col flex-1 h-full">
+            <div className="flex flex-col flex-1">
               <AppHeader />
                 <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
                   {children}
