@@ -92,6 +92,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [minStock, setMinStock] = useState('');
     const [hasPending, setHasPending] = useState(false);
     const [hasReservations, setHasReservations] = useState(false);
+    const [onlyAudited, setOnlyAudited] = useState(false);
     
     const refreshProducts = () => {
         setLoading(true);
@@ -173,10 +174,13 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
 
             // Has reservations filter
             const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
+            
+            // Audited filter
+            const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
 
-            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch;
+            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch;
         });
-    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending, hasReservations]);
+    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending, hasReservations, onlyAudited]);
 
     const handleRowClick = (product: Product) => {
         setSelectedProductId(product.id);
@@ -195,6 +199,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         setMinStock('');
         setHasPending(false);
         setHasReservations(false);
+        setOnlyAudited(false);
     };
 
     const canEdit = user?.role === 'admin' || user?.role === 'plataformas';
@@ -349,6 +354,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                 <div className="flex items-center space-x-2">
                     <Switch id="reserved-stock" checked={hasReservations} onCheckedChange={setHasReservations} />
                     <Label htmlFor="reserved-stock">Mostrar solo con stock reservado</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Switch id="audited-filter" checked={onlyAudited} onCheckedChange={setOnlyAudited} />
+                    <Label htmlFor="audited-filter">Mostrar solo auditados</Label>
                 </div>
             </div>
           </div>
