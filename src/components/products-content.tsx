@@ -486,7 +486,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                                         )
                                                     )}
 
-                                                    {product.lastAuditedAt && canAudit && (
+                                                    {product.lastAuditedAt && user?.role === 'admin' && (
                                                         <AlertDialog>
                                                             <AlertDialogTrigger asChild>
                                                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
