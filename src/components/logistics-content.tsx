@@ -61,6 +61,7 @@ import {
 import { generatePickingListAction } from '@/app/actions/pdf';
 import { cn } from '@/lib/utils';
 import { registerInventoryEntryAction } from '@/app/actions/inventory';
+import { ENTRY_REASONS } from '@/lib/config';
 
 
 type SearchContext = 'salidas' | 'entradas' | 'averias' | 'devoluciones';
@@ -70,13 +71,6 @@ interface LogisticsContentProps {
     initialCarriers: Carrier[];
     initialPlatforms: Platform[];
 }
-
-const entryReasons = [
-    { value: 'reception', label: 'Recepción de Proveedor' },
-    { value: 'adjustment', label: 'Ajuste de Inventario' },
-    { value: 'return', label: 'Devolución General' }
-];
-
 
 export function LogisticsContent({ initialProducts, initialCarriers, initialPlatforms }: LogisticsContentProps) {
     const { user } = useAuth();
@@ -851,7 +845,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {entryReasons.map(reason => (
+                                            {ENTRY_REASONS.map(reason => (
                                                 <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>
                                             ))}
                                         </SelectContent>
