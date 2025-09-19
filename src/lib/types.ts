@@ -269,3 +269,9 @@ export interface LogisticItem {
     imageUrl: string;
     quantity: number;
 }
+
+export type EntryReason = {
+    id: string;
+    value: string;
+    label: string;
+};

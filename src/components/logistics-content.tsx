@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useRef, useEffect, useMemo, useTransition } from 'react';
@@ -30,8 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createDispatchOrder, getSuppliers } from '@/lib/api';
-import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant, LogisticItem, Supplier } from '@/lib/types';
+import { createDispatchOrder, getSuppliers, getEntryReasons } from '@/lib/api';
+import type { Product, Carrier, Platform, DispatchOrderProduct, ProductVariant, LogisticItem, Supplier, EntryReason } from '@/lib/types';
 import { Barcode, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -61,7 +60,6 @@ import {
 import { generatePickingListAction } from '@/app/actions/pdf';
 import { cn } from '@/lib/utils';
 import { registerInventoryEntryAction } from '@/app/actions/inventory';
-import { ENTRY_REASONS } from '@/lib/config';
 
 
 type SearchContext = 'salidas' | 'entradas' | 'averias' | 'devoluciones';
@@ -80,6 +78,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
     const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [entryReasons, setEntryReasons] = useState<EntryReason[]>([]);
 
 
     // Salidas State
@@ -121,6 +120,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
 
     useEffect(() => {
         getSuppliers().then(setSuppliers);
+        getEntryReasons().then(setEntryReasons);
     }, []);
 
     // --- GENERIC PRODUCT/VARIANT ADDITION ---
@@ -393,8 +393,10 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             return;
         }
 
+        const reasonLabel = entryReasons.find(r => r.value === entryReason)?.label || "Entrada";
+
         startEntryTransition(async () => {
-            const result = await registerInventoryEntryAction(receivedProducts, user, entryReason, entrySupplier);
+            const result = await registerInventoryEntryAction(receivedProducts, user, reasonLabel, entrySupplier);
             if (result.success) {
                 toast({
                     title: '¡Éxito!',
@@ -519,6 +521,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
         setDamageTrackingNumber('');
     };
 
+    const canManageEntries = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
     
     return (
     <>
@@ -711,9 +714,9 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             </div>
 
             <Tabs defaultValue="salidas" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className={cn("grid w-full", canManageEntries ? "grid-cols-3" : "grid-cols-2")}>
                     <TabsTrigger value="salidas">Salidas</TabsTrigger>
-                    <TabsTrigger value="entradas">Entradas</TabsTrigger>
+                    {canManageEntries && <TabsTrigger value="entradas">Entradas</TabsTrigger>}
                     <TabsTrigger value="devoluciones">Devoluciones</TabsTrigger>
                 </TabsList>
 
@@ -830,121 +833,123 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="entradas">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Registrar Entrada de Mercancía</CardTitle>
-                            <CardDescription>Añade productos al inventario al recibirlos del proveedor.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <Label htmlFor="entry-reason">Concepto de Ingreso</Label>
-                                    <Select value={entryReason} onValueChange={setEntryReason}>
-                                        <SelectTrigger id="entry-reason">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {ENTRY_REASONS.map(reason => (
-                                                <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                {entryReason === 'reception' && (
+                {canManageEntries && (
+                    <TabsContent value="entradas">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Registrar Entrada de Mercancía</CardTitle>
+                                <CardDescription>Añade productos al inventario al recibirlos del proveedor.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <Label htmlFor="entry-supplier">Proveedor</Label>
-                                        <Select value={entrySupplier} onValueChange={setEntrySupplier}>
-                                            <SelectTrigger id="entry-supplier">
-                                            <SelectValue placeholder="Seleccionar un proveedor" />
+                                        <Label htmlFor="entry-reason">Concepto de Ingreso</Label>
+                                        <Select value={entryReason} onValueChange={setEntryReason}>
+                                            <SelectTrigger id="entry-reason">
+                                                <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                {entryReasons.map(reason => (
+                                                    <SelectItem key={reason.value} value={reason.value}>{reason.label}</SelectItem>
+                                                ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                )}
-                            </div>
-                            <div>
-                                <Label htmlFor="barcode-entrada">Escanear o Buscar Producto</Label>
-                                <div className="flex gap-2">
-                                    <div className="relative flex-grow">
-                                        <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                        <Input 
-                                            id="barcode-entrada"
-                                            ref={entryBarcodeRef}
-                                            placeholder="Escanear SKU para agregar producto" 
-                                            className="pl-8"
-                                            onKeyDown={handleEntryBarcodeScan}
-                                        />
-                                    </div>
-                                    <Button variant="outline" size="icon" onClick={() => openSearchDialog('entradas')}>
-                                        <Search className="h-4 w-4" />
-                                        <span className="sr-only">Buscar Producto</span>
-                                    </Button>
+                                    {entryReason === 'reception' && (
+                                        <div>
+                                            <Label htmlFor="entry-supplier">Proveedor</Label>
+                                            <Select value={entrySupplier} onValueChange={setEntrySupplier}>
+                                                <SelectTrigger id="entry-supplier">
+                                                <SelectValue placeholder="Seleccionar un proveedor" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
-                             <Card>
-                                <CardHeader><CardTitle>Productos Recibidos</CardTitle></CardHeader>
-                                <CardContent>
-                                     <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-[80px]">Imagen</TableHead>
-                                                <TableHead>Producto</TableHead>
-                                                <TableHead>SKU</TableHead>
-                                                <TableHead className="text-center w-[150px]">Cantidad</TableHead>
-                                                <TableHead className="text-right">Acciones</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {receivedProducts.length > 0 ? (
-                                                receivedProducts.map(product => (
-                                                    <TableRow key={product.sku}>
-                                                        <TableCell>
-                                                            <Image
-                                                                src={product.imageUrl}
-                                                                alt={product.name}
-                                                                width={64}
-                                                                height={64}
-                                                                className="rounded-md object-cover"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="font-medium">{product.name}</TableCell>
-                                                        <TableCell>{product.sku}</TableCell>
-                                                        <TableCell>
-                                                            <Input 
-                                                                type="number"
-                                                                className="w-24 text-center mx-auto"
-                                                                value={product.quantity}
-                                                                onChange={(e) => handleReceivedQuantityChange(product.sku, parseInt(e.target.value, 10))}
-                                                                min="0"
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveReceivedProduct(product.sku)}>
-                                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            ) : (
+                                <div>
+                                    <Label htmlFor="barcode-entrada">Escanear o Buscar Producto</Label>
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-grow">
+                                            <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                            <Input 
+                                                id="barcode-entrada"
+                                                ref={entryBarcodeRef}
+                                                placeholder="Escanear SKU para agregar producto" 
+                                                className="pl-8"
+                                                onKeyDown={handleEntryBarcodeScan}
+                                            />
+                                        </div>
+                                        <Button variant="outline" size="icon" onClick={() => openSearchDialog('entradas')}>
+                                            <Search className="h-4 w-4" />
+                                            <span className="sr-only">Buscar Producto</span>
+                                        </Button>
+                                    </div>
+                                </div>
+                                <Card>
+                                    <CardHeader><CardTitle>Productos Recibidos</CardTitle></CardHeader>
+                                    <CardContent>
+                                        <Table>
+                                            <TableHeader>
                                                 <TableRow>
-                                                    <TableCell colSpan={5} className="text-center">Escanea o busca un producto para comenzar.</TableCell>
+                                                    <TableHead className="w-[80px]">Imagen</TableHead>
+                                                    <TableHead>Producto</TableHead>
+                                                    <TableHead>SKU</TableHead>
+                                                    <TableHead className="text-center w-[150px]">Cantidad</TableHead>
+                                                    <TableHead className="text-right">Acciones</TableHead>
                                                 </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </CardContent>
-                            </Card>
-                        </CardContent>
-                        <CardFooter>
-                            <Button onClick={handleRegisterEntry} disabled={isEntryPending}>
-                                {isEntryPending ? 'Registrando...' : 'Registrar Entrada'}
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                </TabsContent>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {receivedProducts.length > 0 ? (
+                                                    receivedProducts.map(product => (
+                                                        <TableRow key={product.sku}>
+                                                            <TableCell>
+                                                                <Image
+                                                                    src={product.imageUrl}
+                                                                    alt={product.name}
+                                                                    width={64}
+                                                                    height={64}
+                                                                    className="rounded-md object-cover"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="font-medium">{product.name}</TableCell>
+                                                            <TableCell>{product.sku}</TableCell>
+                                                            <TableCell>
+                                                                <Input 
+                                                                    type="number"
+                                                                    className="w-24 text-center mx-auto"
+                                                                    value={product.quantity}
+                                                                    onChange={(e) => handleReceivedQuantityChange(product.sku, parseInt(e.target.value, 10))}
+                                                                    min="0"
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Button variant="ghost" size="icon" onClick={() => handleRemoveReceivedProduct(product.sku)}>
+                                                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="text-center">Escanea o busca un producto para comenzar.</TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+                            </CardContent>
+                            <CardFooter>
+                                <Button onClick={handleRegisterEntry} disabled={isEntryPending}>
+                                    {isEntryPending ? 'Registrando...' : 'Registrar Entrada'}
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </TabsContent>
+                )}
 
                 <TabsContent value="devoluciones">
                     <Tabs defaultValue="general" className="w-full">

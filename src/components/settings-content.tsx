@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -15,19 +14,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { getRotationCategories, updateRotationCategories, getUsers } from '@/lib/api';
-import type { RotationCategory, User } from '@/lib/types';
+import type { RotationCategory, User, EntryReason } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UserManagement } from './user-management';
 import { ProfileManagement } from './profile-management';
+import { EntryReasonsManagement } from './entry-reasons-management';
 
 interface SettingsContentProps {
     initialRotationCategories: RotationCategory[];
     initialUsers: User[];
+    initialEntryReasons: EntryReason[];
 }
 
-export function SettingsContent({ initialRotationCategories, initialUsers }: SettingsContentProps) {
+export function SettingsContent({ initialRotationCategories, initialUsers, initialEntryReasons }: SettingsContentProps) {
     const [rotationCategories, setRotationCategories] = useState<RotationCategory[]>(initialRotationCategories);
     const [users, setUsers] = useState<User[]>(initialUsers);
     const [loading, setLoading] = useState(false);
@@ -81,6 +82,7 @@ export function SettingsContent({ initialRotationCategories, initialUsers }: Set
     }
 
     const isAdmin = user?.role === 'admin';
+    const canManageSettings = user?.role === 'admin' || user?.role === 'plataformas';
 
     return (
         <div className="space-y-6">
@@ -95,6 +97,10 @@ export function SettingsContent({ initialRotationCategories, initialUsers }: Set
 
           {isAdmin && (
             <UserManagement initialUsers={users} onUsersUpdate={refreshUsers} loading={loading} />
+          )}
+          
+          {canManageSettings && (
+             <EntryReasonsManagement initialEntryReasons={initialEntryReasons} />
           )}
 
           <Card>
@@ -131,7 +137,7 @@ export function SettingsContent({ initialRotationCategories, initialUsers }: Set
                                         value={category.salesThreshold}
                                         onChange={(e) => handleThresholdChange(category.id, e.target.value)}
                                         className="w-28 text-right"
-                                        disabled={!isAdmin || isSaving}
+                                        disabled={!canManageSettings || isSaving}
                                         min="0"
                                     />
                                     <span className="text-sm text-muted-foreground">unidades</span>
@@ -141,7 +147,7 @@ export function SettingsContent({ initialRotationCategories, initialUsers }: Set
                     )}
                 </div>
             </CardContent>
-            {isAdmin && (
+            {canManageSettings && (
                  <CardFooter className="border-t px-6 py-4">
                     <Button onClick={handleSaveChanges} disabled={isSaving}>
                         {isSaving ? 'Guardando...' : 'Guardar Cambios'}

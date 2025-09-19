@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, se
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, ProductVariant, GetStockAlertsResult, StockAlertItem, LogisticItem } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -632,21 +632,13 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: LogisticItem[], user: User | null, entryReason: string, supplierId?: string): Promise<void> => {
+export const registerInventoryEntry = async (items: LogisticItem[], user: User | null, entryReasonLabel: string, supplierId?: string): Promise<void> => {
     const batch = writeBatch(db);
 
-    let reasonText = "Entrada de mercancía";
-    if (entryReason === 'reception') {
-        if (supplierId) {
-            const supplier = await getSupplierById(supplierId);
-            reasonText = `Recepción del proveedor: ${supplier?.name || 'Desconocido'}`;
-        } else {
-            reasonText = 'Recepción de Proveedor (no especificado)';
-        }
-    } else if (entryReason === 'adjustment') {
-        reasonText = 'Ajuste de inventario manual';
-    } else if (entryReason === 'return') {
-        reasonText = 'Devolución de cliente';
+    let reasonText = entryReasonLabel;
+    if (supplierId) {
+        const supplier = await getSupplierById(supplierId);
+        reasonText = `${reasonText}: ${supplier?.name || 'Desconocido'}`;
     }
 
     for (const item of items) {
@@ -1090,6 +1082,22 @@ export const updateRotationCategories = async (categories: RotationCategory[]): 
     });
     await batch.commit();
 };
+
+export const getEntryReasons = async (): Promise<EntryReason[]> => {
+    const entryReasonsCol = collection(db, 'entryReasons');
+    const snapshot = await getDocs(entryReasonsCol);
+    const reasonList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EntryReason));
+    return reasonList;
+};
+
+export const updateEntryReasons = async (reasons: EntryReason[]): Promise<void> => {
+    const batch = writeBatch(db);
+    reasons.forEach(reason => {
+        const docRef = doc(db, 'entryReasons', reason.id);
+        batch.update(docRef, { label: reason.label });
+    });
+    await batch.commit();
+}
 
 export const getProductPerformanceData = async (productId: string): Promise<ProductPerformanceData> => {
     const [product, dispatchOrders, movements, carriers, platforms] = await Promise.all([
@@ -1625,6 +1633,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 

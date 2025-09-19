@@ -1,0 +1,18 @@
+
+[
+    {
+        "id": "reason-1",
+        "value": "reception",
+        "label": "Recepción de Proveedor"
+    },
+    {
+        "id": "reason-2",
+        "value": "adjustment",
+        "label": "Ajuste de Inventario"
+    },
+    {
+        "id": "reason-3",
+        "value": "return",
+        "label": "Devolución General"
+    }
+]

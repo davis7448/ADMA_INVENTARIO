@@ -18,6 +18,7 @@ import categories from './seed-data/categories.json';
 import users from './seed-data/users.json';
 import inventoryMovements from './seed-data/inventory-movements.json';
 import rotationCategories from './seed-data/rotation-categories.json';
+import entryReasons from './seed-data/entry-reasons.json';
 
 // Initialize Firebase Admin SDK
 const app: App = getApps().length
@@ -58,7 +59,7 @@ async function seedInventoryMovements() {
         batch.set(docRef, { ...movement, date, movementId: currentId++ });
     });
 
-    batch.set(counterRef, { currentId: currentId -1 });
+    batch.set(counterRef, { currentId: currentId - 1 });
 
     await batch.commit();
     console.log(`Seeded ${inventoryMovements.length} new documents into inventoryMovements.`);
@@ -75,6 +76,7 @@ async function main() {
     await seedCollection('suppliers', suppliers);
     await seedCollection('categories', categories);
     await seedCollection('rotationCategories', rotationCategories as any);
+    await seedCollection('entryReasons', entryReasons as any);
     await seedInventoryMovements();
     
     console.log('\nDatabase seeded successfully!');
