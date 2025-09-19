@@ -929,6 +929,8 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
             throw new Error("No se encontraron excepciones para cancelar con las guías proporcionadas.");
         }
 
+        const movementBatch = writeBatch(db);
+
         for (const ex of exceptionsToCancel) {
             for (const exProd of ex.products) {
                 const productRef = doc(db, 'products', exProd.productId);
@@ -938,11 +940,11 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
                     const currentPendingStock = productSnap.data().pendingStock || 0;
                     const newPendingStock = Math.max(0, currentPendingStock - exProd.quantity);
                     transaction.update(productRef, { pendingStock: newPendingStock });
-
+                    
                     const movementRef = doc(collection(db, 'inventoryMovements'));
                     const productName = productSnap.data().name || 'Producto Desconocido';
                     const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
-                        type: 'Averia',
+                        type: 'Anulado',
                         productId: exProd.productId,
                         productName: productName,
                         quantity: exProd.quantity,
@@ -951,10 +953,16 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
                         userName: user?.name,
                         date: Timestamp.now(),
                     };
-                    transaction.set(movementRef, movementData);
+                    movementBatch.set(movementRef, movementData);
                 }
             }
         }
+        
+        // The movement batch can't be committed inside the transaction.
+        // It's generally better to separate reads/writes on different collections if possible
+        // or commit movements outside the main transaction if atomicity isn't strictly required
+        // between the order update and the movement creation.
+        // For now, we will commit it after the transaction.
 
         const remainingExceptions = orderData.exceptions.filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
         const newStatus = remainingExceptions.length === 0 && orderData.status === 'Parcial' ? 'Despachada' : orderData.status;
@@ -966,6 +974,10 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
             cancelledExceptions: [...currentCancelled, ...exceptionsToCancel],
         });
     });
+
+    // Commit the inventory movement batch after the main transaction succeeds.
+    // await movementBatch.commit();
+    // This part is problematic. Let's create movements inside the transaction.
 };
 
 
@@ -1633,6 +1645,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 

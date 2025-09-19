@@ -167,7 +167,7 @@ export function HistoryContent({
         XLSX.writeFile(workbook, `Historial-Despachos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
-    const getMovementBadgeClass = (type: 'Entrada' | 'Salida' | 'Averia') => {
+    const getMovementBadgeClass = (type: 'Entrada' | 'Salida' | 'Averia' | 'Anulado') => {
         switch (type) {
         case 'Entrada':
             return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
@@ -175,6 +175,8 @@ export function HistoryContent({
             return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
         case 'Averia':
             return 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300';
+        case 'Anulado':
+            return 'bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-300';
         default:
             return '';
         }
@@ -264,6 +266,7 @@ export function HistoryContent({
                             <SelectItem value="Entrada">Entrada</SelectItem>
                             <SelectItem value="Salida">Salida</SelectItem>
                             <SelectItem value="Averia">Averia</SelectItem>
+                            <SelectItem value="Anulado">Anulado</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
