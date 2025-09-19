@@ -40,6 +40,7 @@ import { LinkIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Label } from './ui/label';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ProductDetailDialogProps {
   productId: string;
@@ -49,6 +50,7 @@ interface ProductDetailDialogProps {
 }
 
 export function ProductDetailDialog({ productId, open, onOpenChange, onProductUpdate }: ProductDetailDialogProps) {
+  const { user } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [performanceData, setPerformanceData] = useState<ProductPerformanceData | null>(null);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
@@ -56,6 +58,8 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   const [loading, setLoading] = useState(true);
   const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string>('total');
+
+  const canManageReservations = user?.role === 'admin' || user?.role === 'plataformas';
 
   const refreshData = async () => {
     if (productId && open) {
@@ -259,9 +263,11 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                     </div>
                   </div>
                 </CardContent>
-                <DialogFooter className="p-4 border-t">
-                    <Button onClick={() => setIsReservationDialogOpen(true)}>Gestionar Reservas</Button>
-                </DialogFooter>
+                {canManageReservations && (
+                  <DialogFooter className="p-4 border-t">
+                      <Button onClick={() => setIsReservationDialogOpen(true)}>Gestionar Reservas</Button>
+                  </DialogFooter>
+                )}
               </Card>
 
               {product.productType === 'variable' && product.variants && product.variants.length > 0 && (
