@@ -33,6 +33,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+
+interface AnnulmentItem {
+    selected: boolean;
+    quantity: number;
+    maxQuantity: number;
+    name: string;
+    sku: string;
+}
 
 function CancellationsContent() {
     const { user } = useAuth();
@@ -47,8 +56,7 @@ function CancellationsContent() {
     // State for the cancellation dialog
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
     const [orderToCancel, setOrderToCancel] = useState<DispatchOrder | null>(null);
-    const [productsToCancel, setProductsToCancel] = useState<Record<string, { selected: boolean, quantity: number }>>({});
-    const [allProducts, setAllProducts] = useState<Product[]>([]);
+    const [itemsToAnnul, setItemsToAnnul] = useState<Record<string, AnnulmentItem>>({});
     const [guideToCancelInDialog, setGuideToCancelInDialog] = useState<string>('');
     const [requestToUpdate, setRequestToUpdate] = useState<CancellationRequest | null>(null);
     
@@ -56,12 +64,8 @@ function CancellationsContent() {
 
     const fetchRequests = async () => {
         setLoading(true);
-        const [fetchedRequests, fetchedProducts] = await Promise.all([
-            getCancellationRequests(),
-            getProducts()
-        ]);
+        const fetchedRequests = await getCancellationRequests();
         setRequests(fetchedRequests);
-        setAllProducts(fetchedProducts);
         setLoading(false);
     }
 
@@ -114,7 +118,6 @@ function CancellationsContent() {
         setRequestToUpdate(request);
         const allOrders = await getDispatchOrders();
         
-        // Find the dispatch order that contains this tracking number (either as dispatched or exception)
         const targetOrder = allOrders.find(order => 
             order.trackingNumbers?.includes(request.trackingNumber) || 
             order.exceptions?.some(ex => ex.trackingNumber === request.trackingNumber)
@@ -132,41 +135,44 @@ function CancellationsContent() {
         setGuideToCancelInDialog(request.trackingNumber);
         setOrderToCancel(targetOrder);
 
-        const initialProductSelection = targetOrder.products.reduce((acc, p) => {
-            const productInfo = allProducts.find(ap => ap.id === p.productId);
-            const variantInfo = productInfo?.variants?.find(v => v.id === p.variantId);
-            acc[p.sku] = { selected: false, quantity: p.quantity, name: variantInfo ? `${p.name} - ${variantInfo.name}` : p.name };
+        const initialItemsToAnnul = targetOrder.products.reduce((acc, p) => {
+            const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+            acc[key] = {
+                selected: false,
+                quantity: p.quantity,
+                maxQuantity: p.quantity,
+                name: p.name,
+                sku: p.sku
+            };
             return acc;
-        }, {} as any);
-
-        setProductsToCancel(initialProductSelection);
+        }, {} as Record<string, AnnulmentItem>);
+        
+        setItemsToAnnul(initialItemsToAnnul);
         setIsCancelDialogOpen(true);
     };
 
     const handleConfirmCancellation = () => {
         if (!orderToCancel || !user || !requestToUpdate) return;
-
-        const itemsToCancel = Object.entries(productsToCancel)
-            .filter(([, val]) => val.selected)
-            .map(([sku]) => {
-                const productInOrder = orderToCancel.products.find(p => p.sku === sku);
-                if (!productInOrder) return null;
+    
+        const itemsToCancelForApi = Object.entries(itemsToAnnul)
+            .filter(([, val]) => val.selected && val.quantity > 0)
+            .map(([key, val]) => {
+                const ids = key.split('|');
                 return {
-                    productId: productInOrder.productId,
-                    variantId: productInOrder.variantId,
-                    quantity: productInOrder.quantity, // For now, cancel all quantity of the item
-                }
-            })
-            .filter(Boolean) as { productId: string; variantId?: string; quantity: number }[];
+                    productId: ids[0],
+                    variantId: ids.length > 1 ? ids[1] : undefined,
+                    quantity: val.quantity,
+                };
+            });
         
-        if (itemsToCancel.length === 0) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto para anular.' });
+        if (itemsToCancelForApi.length === 0) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto e indicar una cantidad mayor a 0.' });
             return;
         }
 
         startUpdatingTransition(async () => {
             try {
-                await cancelPendingDispatchItems(orderToCancel.id, itemsToCancel, user, guideToCancelInDialog);
+                await cancelPendingDispatchItems(orderToCancel.id, itemsToCancelForApi, user, guideToCancelInDialog);
                 await updateCancellationRequestStatus(requestToUpdate.id, 'completed', user);
 
                 toast({
@@ -198,6 +204,15 @@ function CancellationsContent() {
         });
     }
 
+    const handleAnnulmentQuantityChange = (key: string, newQuantity: number) => {
+        const item = itemsToAnnul[key];
+        if (item && newQuantity >= 0 && newQuantity <= item.maxQuantity) {
+            setItemsToAnnul(prev => ({
+                ...prev,
+                [key]: { ...item, quantity: newQuantity }
+            }));
+        }
+      }
 
     const getStatusBadge = (status: 'pending' | 'completed' | 'rejected') => {
         switch (status) {
@@ -220,23 +235,33 @@ function CancellationsContent() {
                     <DialogTitle>Confirmar Anulación de Guía</DialogTitle>
                     <DialogDescription>
                         La guía <span className="font-mono font-semibold">{guideToCancelInDialog}</span> está en la orden de despacho <span className="font-semibold">{orderToCancel?.dispatchId}</span>. 
-                        Selecciona los productos de esta orden que corresponden a la guía que deseas anular. El stock será restaurado.
+                        Selecciona los productos y cantidades a anular. El stock será restaurado.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="py-4 space-y-2 max-h-60 overflow-y-auto">
-                    {Object.entries(productsToCancel).map(([sku, { selected, name }]) => (
-                         <div key={sku} className="flex items-center space-x-2">
+                <div className="py-4 space-y-3 max-h-60 overflow-y-auto">
+                    {Object.entries(itemsToAnnul).map(([key, item]) => (
+                         <div key={key} className="flex items-center space-x-3 p-2 border rounded-md">
                             <Checkbox
-                                id={sku}
-                                checked={selected}
-                                onCheckedChange={(checked) => setProductsToCancel(prev => ({
+                                id={key}
+                                checked={item.selected || false}
+                                onCheckedChange={(checked) => setItemsToAnnul(prev => ({
                                     ...prev,
-                                    [sku]: { ...prev[sku], selected: !!checked }
+                                    [key]: { ...prev[key], selected: !!checked }
                                 }))}
                             />
-                            <Label htmlFor={sku} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                {name} ({sku})
+                            <Label htmlFor={key} className="text-sm font-medium flex-1">
+                                {item.name} ({item.sku})
                             </Label>
+                            <Input 
+                                type="number"
+                                className="w-24 h-8"
+                                value={item.quantity}
+                                onChange={(e) => handleAnnulmentQuantityChange(key, parseInt(e.target.value, 10) || 0)}
+                                max={item.maxQuantity}
+                                min="0"
+                                disabled={!item.selected}
+                            />
+                            <span className="text-sm text-muted-foreground">/ {item.maxQuantity}</span>
                         </div>
                     ))}
                 </div>
