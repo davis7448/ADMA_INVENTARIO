@@ -23,7 +23,7 @@ import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventor
 import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform, ProductVariant } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
-import { subDays, format, startOfDay, endOfDay, eachDayOfInterval } from 'date-fns';
+import { subDays, format, eachDayOfInterval } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn, formatToTimeZone } from '@/lib/utils';
@@ -746,6 +746,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 
 
 
