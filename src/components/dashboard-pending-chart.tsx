@@ -48,7 +48,13 @@ export default function DashboardPendingChart({ data }: DashboardPendingChartPro
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            tickFormatter={(value) => formatToTimeZone(new Date(value), 'dd MMM', { locale: es })}
+            tickFormatter={(value) => {
+              const dateParts = value.split('-');
+              if (dateParts.length === 3) {
+                return dateParts[2]; // Devuelve solo el día
+              }
+              return value;
+            }}
           />
           <YAxis
             stroke="#888888"
