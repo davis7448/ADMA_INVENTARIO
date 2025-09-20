@@ -77,18 +77,24 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4 pt-2">
-                    {Object.entries(carriers).map(([carrierName, platforms]) => (
-                      <div key={carrierName} className="border-l-2 pl-4">
-                        <h4 className="font-medium">{carrierName}</h4>
-                        <ul className="list-disc list-inside text-muted-foreground mt-2">
-                          {Object.entries(platforms).map(([platformName, count]) => (
-                            <li key={platformName}>
-                              {platformName}: <span className="font-semibold text-foreground">{count}</span> guías
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
+                    {Object.entries(carriers).map(([carrierName, platforms]) => {
+                      const totalForCarrier = Object.values(platforms).reduce((sum, count) => sum + count, 0);
+                      return (
+                        <div key={carrierName} className="border-l-2 pl-4">
+                          <div className="flex justify-between items-center">
+                            <h4 className="font-medium">{carrierName}</h4>
+                            <Badge variant="outline">{totalForCarrier} Guías</Badge>
+                          </div>
+                          <ul className="list-disc list-inside text-muted-foreground mt-2">
+                            {Object.entries(platforms).map(([platformName, count]) => (
+                              <li key={platformName}>
+                                {platformName}: <span className="font-semibold text-foreground">{count}</span> guías
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
                   </div>
                 </AccordionContent>
               </AccordionItem>
