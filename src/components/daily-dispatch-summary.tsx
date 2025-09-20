@@ -70,7 +70,7 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
                 <AccordionTrigger>
                   <div className="flex justify-between items-center w-full">
                     <span className="font-semibold text-lg capitalize">
-                      {formatToTimeZone(new Date(day), 'eeee, dd MMM yyyy', { locale: es })}
+                      {formatToTimeZone(new Date(`${day}T00:00:00`), 'eeee, dd MMM yyyy', { locale: es })}
                     </span>
                     <Badge variant="secondary">{totalGuidesForDay} Guías</Badge>
                   </div>
