@@ -210,7 +210,7 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
   await updateDoc(productRef, updateData);
 };
 
-export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract', variantSku?: string) => {
+export const updateProductStock = async (productId: string, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
     const productRef = doc(db, 'products', productId);
 
     await runTransaction(db, async (transaction) => {
@@ -221,11 +221,17 @@ export const updateProductStock = async (productId: string, quantity: number, op
       
         const productData = productSnap.data() as Product;
       
+        // For 'subtract-pending', we only care about the parent product's pendingStock
+        if (operation === 'subtract-pending') {
+            const currentPendingStock = productData.pendingStock || 0;
+            const newPendingStock = Math.max(0, currentPendingStock - quantity);
+            transaction.update(productRef, { pendingStock: newPendingStock });
+            return; // End transaction here for this specific operation
+        }
+
         // If product is variable, handle variant logic
         if (productData.productType === 'variable') {
             if (!variantSku) {
-                // If no SKU is provided for a variable product, we can't determine which variant to update.
-                // Depending on business logic, you might want to throw an error or handle it differently.
                 throw new Error(`Debe proporcionar un SKU de variante para actualizar el stock de un producto variable como ${productData.name}.`);
             }
             
@@ -242,7 +248,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
     
             if (operation === 'add') {
                 newVariantStock = currentVariantStock + quantity;
-            } else {
+            } else { // 'subtract'
                 if (currentVariantStock < quantity) {
                     throw new Error(`No hay suficiente stock para la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
                 }
@@ -251,7 +257,6 @@ export const updateProductStock = async (productId: string, quantity: number, op
           
             variants[variantIndex].stock = newVariantStock;
           
-            // The total stock of the parent product is the sum of its variants' stock
             const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
           
             transaction.update(productRef, { 
@@ -264,7 +269,7 @@ export const updateProductStock = async (productId: string, quantity: number, op
             let newStock;
             if (operation === 'add') {
                 newStock = currentStock + quantity;
-            } else {
+            } else { // 'subtract'
                 if (currentStock < quantity) {
                     throw new Error(`No hay suficiente stock para ${productData.name}. Stock actual: ${currentStock}, se requieren: ${quantity}.`);
                 }
@@ -928,41 +933,70 @@ export const cancelPendingDispatchItems = async (
         }
 
         const updatedProducts: DispatchOrderProduct[] = [...orderData.products];
+        const updatedExceptions: DispatchException[] = [...(orderData.exceptions || [])];
+
         let productsWereCancelled = false;
 
+        // Check if the cancellation corresponds to an existing exception
+        const exceptionIndex = updatedExceptions.findIndex(ex => ex.trackingNumber === cancellationGuide);
+        const isFromException = exceptionIndex !== -1;
+
         for (const itemToCancel of productsToCancel) {
-            const productIndex = updatedProducts.findIndex(p => 
-                p.productId === itemToCancel.productId && 
-                (p.variantId || undefined) === (itemToCancel.variantId || undefined)
-            );
+            const productRef = doc(db, 'products', itemToCancel.productId);
+            const productSnap = await transaction.get(productRef);
+            if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
+
+            productsWereCancelled = true;
             
-            if (productIndex !== -1) {
-                productsWereCancelled = true;
-                const productInOrder = updatedProducts[productIndex];
-                
-                // Restore stock by calling the existing utility function
-                await updateProductStock(productInOrder.productId, itemToCancel.quantity, 'add', productInOrder.sku);
-                
-                // Log the "Anulado" movement
-                const movementRef = doc(collection(db, 'inventoryMovements'));
-                const movementData: Omit<InventoryMovement, 'id'> = {
-                    movementId: nextMovementId++,
-                    type: 'Anulado',
-                    productId: productInOrder.productId,
-                    productName: productInOrder.name,
-                    quantity: itemToCancel.quantity,
-                    notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}. Stock restaurado.`,
-                    userId: user?.id,
-                    userName: user?.name,
-                    date: Timestamp.now(),
-                };
-                transaction.set(movementRef, movementData);
-                
-                // Update or remove the product from the dispatch order's product list
-                if (productInOrder.quantity > itemToCancel.quantity) {
-                    updatedProducts[productIndex] = { ...productInOrder, quantity: productInOrder.quantity - itemToCancel.quantity };
-                } else {
-                    updatedProducts.splice(productIndex, 1);
+            // Restore stock based on whether it was an exception or a regular dispatched item
+            if (isFromException) {
+                // If it's an exception, it was in pending stock, so we just reduce pending stock
+                await updateProductStock(itemToCancel.productId, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantId ? productSnap.data().variants.find((v:any) => v.id === itemToCancel.variantId).sku : productSnap.data().sku);
+            } else {
+                // If it wasn't an exception, it was in physical stock, so we add it back
+                await updateProductStock(itemToCancel.productId, itemToCancel.quantity, 'add', itemToCancel.variantId ? productSnap.data().variants.find((v:any) => v.id === itemToCancel.variantId).sku : productSnap.data().sku);
+            }
+            
+            // Log the "Anulado" movement
+            const movementRef = doc(collection(db, 'inventoryMovements'));
+            const movementData: Omit<InventoryMovement, 'id'> = {
+                movementId: nextMovementId++,
+                type: 'Anulado',
+                productId: itemToCancel.productId,
+                productName: productSnap.data().name,
+                quantity: itemToCancel.quantity,
+                notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
+                userId: user?.id,
+                userName: user?.name,
+                date: Timestamp.now(),
+            };
+            transaction.set(movementRef, movementData);
+            
+             // Update or remove the product from the dispatch order's product list
+             const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
+             if (productInOrderIndex !== -1) {
+                 const productInOrder = updatedProducts[productInOrderIndex];
+                 if (productInOrder.quantity > itemToCancel.quantity) {
+                    updatedProducts[productInOrderIndex] = { ...productInOrder, quantity: productInOrder.quantity - itemToCancel.quantity };
+                 } else {
+                    updatedProducts.splice(productInOrderIndex, 1);
+                 }
+             }
+
+             // If cancelling from exception, remove it from the exception list
+             if (isFromException) {
+                const exception = updatedExceptions[exceptionIndex];
+                const productInExIndex = exception.products.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
+                if (productInExIndex !== -1) {
+                    if (exception.products[productInExIndex].quantity > itemToCancel.quantity) {
+                        exception.products[productInExIndex].quantity -= itemToCancel.quantity;
+                    } else {
+                        exception.products.splice(productInExIndex, 1);
+                    }
+                }
+                // If exception has no more products, remove it
+                if (exception.products.length === 0) {
+                    updatedExceptions.splice(exceptionIndex, 1);
                 }
             }
         }
@@ -976,6 +1010,7 @@ export const cancelPendingDispatchItems = async (
         const updatePayload: Record<string, any> = {
             products: updatedProducts,
             totalItems: newTotalItems,
+            exceptions: updatedExceptions,
         };
 
         if (newTotalItems === 0) {
@@ -1700,6 +1735,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 
