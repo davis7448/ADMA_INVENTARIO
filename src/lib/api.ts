@@ -1609,16 +1609,16 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     for (const tn of trackingNumbers) {
         if (dispatchedGuides.has(tn)) {
             alreadyDispatched.push(tn);
-        } else {
-            const newRequest: Omit<CancellationRequest, 'id'> = {
-                trackingNumber: tn,
-                requestedBy: { id: user.id, name: user.name },
-                requestDate: Timestamp.now(),
-                status: 'pending',
-            };
-            const docRef = doc(requestsCol);
-            batch.set(docRef, newRequest);
         }
+        // Always create the request, even if already dispatched.
+        const newRequest: Omit<CancellationRequest, 'id'> = {
+            trackingNumber: tn,
+            requestedBy: { id: user.id, name: user.name },
+            requestDate: Timestamp.now(),
+            status: 'pending',
+        };
+        const docRef = doc(requestsCol);
+        batch.set(docRef, newRequest);
     }
 
     await batch.commit();
@@ -1686,6 +1686,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 
