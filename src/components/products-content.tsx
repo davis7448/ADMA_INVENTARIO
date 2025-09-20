@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useTransition } from 'react';
+import React, { useState, useMemo, useTransition, useEffect } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -44,8 +44,8 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
-import { getProducts } from '@/lib/api';
-import type { Product, RotationCategory } from '@/lib/types';
+import { getProducts, getVendedores } from '@/lib/api';
+import type { Product, RotationCategory, Vendedor } from '@/lib/types';
 import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
@@ -78,6 +78,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [supplierNames, setSupplierNames] = useState<Record<string, string>>(initialSupplierNames);
     const [categoryNames, setCategoryNames] = useState<Record<string, string>>(initialCategoryNames);
+    const [vendedores, setVendedores] = useState<Vendedor[]>([]);
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
     const router = useRouter();
@@ -89,6 +90,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedRotation, setSelectedRotation] = useState('all');
+    const [selectedVendedor, setSelectedVendedor] = useState('all');
     const [minStock, setMinStock] = useState('');
     const [hasPending, setHasPending] = useState(false);
     const [hasReservations, setHasReservations] = useState(false);
@@ -98,6 +100,10 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
     
+    useEffect(() => {
+        getVendedores().then(setVendedores);
+    }, []);
+
     const refreshProducts = () => {
         setLoading(true);
         router.refresh();
@@ -183,9 +189,12 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
             // Audited filter
             const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
 
-            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch;
+            // Vendedor filter
+            const vendedorMatch = selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
+
+            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch && vendedorMatch;
         });
-    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending, hasReservations, onlyAudited]);
+    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending, hasReservations, onlyAudited, selectedVendedor]);
     
     // Paginated data
     const paginatedProducts = useMemo(() => {
@@ -214,6 +223,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         setSearchQuery('');
         setSelectedCategory('all');
         setSelectedRotation('all');
+        setSelectedVendedor('all');
         setMinStock('');
         setHasPending(false);
         setHasReservations(false);
@@ -332,7 +342,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                 <h3 className="font-semibold text-lg">Filtros</h3>
                 <Button variant="ghost" onClick={clearFilters}>Limpiar Filtros</Button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div className="space-y-2">
                     <Label htmlFor="search">Buscar producto</Label>
                     <Input id="search" placeholder="Nombre o SKU..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -357,6 +367,18 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                             <SelectItem value="all">Toda la Rotación</SelectItem>
                             {allRotationCategories.map(cat => (
                                 <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="vendedor">Vendedor con Reservas</Label>
+                    <Select value={selectedVendedor} onValueChange={setSelectedVendedor}>
+                        <SelectTrigger id="vendedor"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos los Vendedores</SelectItem>
+                            {vendedores.map(v => (
+                                <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
