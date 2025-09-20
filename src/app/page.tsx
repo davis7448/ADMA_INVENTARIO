@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -115,7 +116,7 @@ export default function DashboardPage() {
     let ordersInPeriod = allOrders.filter(order => {
         if (!order.date) return false;
         
-        const orderDateKey = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
+        const orderDateKey = formatToTimeZone(order.date, 'yyyy-MM-dd');
 
         const dateMatch = (!fromDateKey || orderDateKey >= fromDateKey) && (!toDateKey || orderDateKey <= toDateKey);
         if (!dateMatch) return false;
@@ -143,7 +144,7 @@ export default function DashboardPage() {
     let totalPendingUnits = 0;
     const pendingUnitsByDay: Record<string, number> = {};
     pendingAndPartialInPeriod.forEach(order => {
-        const day = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
+        const day = formatToTimeZone(order.date, 'yyyy-MM-dd');
         let unitsInOrder = 0;
         if (order.status === 'Pendiente') {
             // For a 'Pendiente' order, all items are considered pending
@@ -187,7 +188,7 @@ export default function DashboardPage() {
     }, {} as Record<string, number>);
 
     const ordersByDay = ordersInPeriod.reduce((acc, order) => {
-        const day = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
+        const day = formatToTimeZone(order.date, 'yyyy-MM-dd');
         acc[day] = (acc[day] || 0) + order.totalItems; // Aggregate by items now
         return acc;
     }, {} as Record<string, number>);
@@ -312,7 +313,7 @@ export default function DashboardPage() {
         totalProductsShipped += order.totalItems;
 
         // New Daily Dispatch Summary logic
-        const day = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
+        const day = formatToTimeZone(order.date, 'yyyy-MM-dd');
         const guideCount = order.trackingNumbers?.length || 0;
 
         if (guideCount > 0) {
@@ -745,4 +746,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 

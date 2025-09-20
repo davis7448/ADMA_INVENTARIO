@@ -153,7 +153,7 @@ export interface DispatchException {
 export interface DispatchOrder {
     id: string; // Firestore document ID
     dispatchId: string; // Human-readable ID
-    date: string;
+    date: Date;
     totalItems: number;
     platformId: string;
     carrierId: string;

@@ -668,7 +668,7 @@ export const registerInventoryEntry = async (items: LogisticItem[], user: User |
     
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'>): Promise<{ id: string, dispatchId: string, date: string }> => {
+export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'>): Promise<{ id: string, dispatchId: string, date: Date }> => {
     const allPlatforms = await getPlatforms();
     const allCarriers = await getCarriers();
     const platformName = allPlatforms.find(p => p.id === platformId)?.name || 'N/A';
@@ -703,7 +703,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
     
         const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
             dispatchId: newDispatchId,
-            date: orderDate, // Keep as Timestamp object
+            date: orderDate.toDate(),
             platformId,
             carrierId,
             products: cleanProducts,
@@ -715,7 +715,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             createdBy,
         };
     
-        const dataToSet: Record<string, any> = { ...newDispatchOrder };
+        const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; // Save as Timestamp
         if (!dataToSet.createdBy) {
           delete dataToSet.createdBy;
         }
@@ -742,24 +742,24 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
         });
     }
 
-    return { id: newDispatchOrderRef.id, dispatchId, date: orderDate.toDate().toISOString() };
+    return { id: newDispatchOrderRef.id, dispatchId, date: orderDate.toDate() };
 };
 
 
-const parseFirestoreDate = (dateValue: any): string => {
+const parseFirestoreDate = (dateValue: any): Date => {
     if (dateValue instanceof Timestamp) {
-      return dateValue.toDate().toISOString();
+      return dateValue.toDate();
     } else if (typeof dateValue === 'string') {
-      // Attempt to parse ISO string
       const d = new Date(dateValue);
       if (!isNaN(d.getTime())) {
-        return d.toISOString();
+        return d;
       }
     } else if (dateValue instanceof Date) {
-        return dateValue.toISOString();
+        return dateValue;
     }
-    // Fallback for unexpected formats
-    return new Date().toISOString();
+    // Fallback for unexpected formats, though this should be rare.
+    console.warn("Unexpected date format from Firestore, using current date as fallback:", dateValue);
+    return new Date();
   };
 
 export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
@@ -828,7 +828,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 
         // ========== 2. LOGIC / VALIDATION PHASE ==========
         
-        const existingExceptions = new Map(orderData.exceptions.map(ex => [ex.trackingNumber, ex]));
+        const existingExceptions = new Map((orderData.exceptions || []).map(ex => [ex.trackingNumber, ex]));
         const processedExceptionGuides = new Set<string>();
 
         // For each tracking number we are dispatching now, check if it resolves an existing exception.
@@ -875,7 +875,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             }
         }
 
-        const finalRemainingExceptions = orderData.exceptions.filter(ex => !processedExceptionGuides.has(ex.trackingNumber));
+        const finalRemainingExceptions = (orderData.exceptions || []).filter(ex => !processedExceptionGuides.has(ex.trackingNumber));
         const finalExceptions = [...finalRemainingExceptions, ...newExceptions];
         const finalStatus = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
 
@@ -898,12 +898,10 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
         }
         const orderData = orderSnap.data() as DispatchOrder;
 
-        const exceptionsToCancel = orderData.exceptions.filter(ex => cancelledTrackingNumbers.includes(ex.trackingNumber));
+        const exceptionsToCancel = (orderData.exceptions || []).filter(ex => cancelledTrackingNumbers.includes(ex.trackingNumber));
         if (exceptionsToCancel.length === 0) {
             throw new Error("No se encontraron excepciones para cancelar con las guías proporcionadas.");
         }
-
-        const movementBatch = writeBatch(db);
 
         for (const ex of exceptionsToCancel) {
             for (const exProd of ex.products) {
@@ -927,18 +925,12 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
                         userName: user?.name,
                         date: Timestamp.now(),
                     };
-                    movementBatch.set(movementRef, movementData);
+                    transaction.set(movementRef, movementData);
                 }
             }
         }
         
-        // The movement batch can't be committed inside the transaction.
-        // It's generally better to separate reads/writes on different collections if possible
-        // or commit movements outside the main transaction if atomicity isn't strictly required
-        // between the order update and the movement creation.
-        // For now, we will commit it after the transaction.
-
-        const remainingExceptions = orderData.exceptions.filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
+        const remainingExceptions = (orderData.exceptions || []).filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
         const newStatus = remainingExceptions.length === 0 && orderData.status === 'Parcial' ? 'Despachada' : orderData.status;
         const currentCancelled = orderData.cancelledExceptions || [];
 
@@ -948,10 +940,6 @@ export const cancelPendingDispatchItems = async (orderId: string, cancelledTrack
             cancelledExceptions: [...currentCancelled, ...exceptionsToCancel],
         });
     });
-
-    // Commit the inventory movement batch after the main transaction succeeds.
-    // await movementBatch.commit();
-    // This part is problematic. Let's create movements inside the transaction.
 };
 
 
@@ -964,7 +952,7 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
         return {
             id: doc.id,
             ...data,
-            date: parseFirestoreDate(data.date),
+            date: parseFirestoreDate(data.date).toISOString(),
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -998,7 +986,7 @@ export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => 
                                 quantity: exProduct.quantity,
                                 dispatchId: order.dispatchId,
                                 trackingNumber: exception.trackingNumber,
-                                date: order.date,
+                                date: order.date.toISOString(),
                             };
 
                             if (exProduct.variantId && productInfo.variants) {
@@ -1115,7 +1103,7 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
             if (p.productId === productId) {
                 const carrierName = carrierMap.get(order.carrierId) || 'Unknown Carrier';
                 const platformName = platformMap.get(order.platformId) || 'Unknown Platform';
-                const day = format(startOfDay(new Date(order.date)), 'yyyy-MM-dd');
+                const day = format(startOfDay(order.date), 'yyyy-MM-dd');
                 const qty = p.quantity;
 
                 // Aggregate total data
@@ -1208,7 +1196,7 @@ export const getAllReservations = async (): Promise<Reservation[]> => {
         return { 
             id: doc.id, 
             ...data,
-            date: parseFirestoreDate(data.date),
+            date: parseFirestoreDate(data.date).toISOString(),
         } as Reservation;
     });
 }
@@ -1221,7 +1209,7 @@ export const getReservationsByProductId = async (productId: string): Promise<Res
         return { 
             id: doc.id, 
             ...data,
-            date: parseFirestoreDate(data.date),
+            date: parseFirestoreDate(data.date).toISOString(),
         } as Reservation;
     });
 };
@@ -1297,8 +1285,8 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
       return { 
         id: doc.id, 
         ...data,
-        alertDate: parseFirestoreDate(data.alertDate),
-        reservationDate: parseFirestoreDate(data.reservationDate),
+        alertDate: parseFirestoreDate(data.alertDate).toISOString(),
+        reservationDate: parseFirestoreDate(data.reservationDate).toISOString(),
       } as StaleReservationAlert;
     });
     return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
@@ -1326,7 +1314,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
         const data = doc.data();
         return {
             ...data,
-            date: parseFirestoreDate(data.date)
+            date: parseFirestoreDate(data.date).toISOString()
         } as InventoryMovement;
     });
 
@@ -1538,6 +1526,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 
