@@ -2,8 +2,8 @@
 
 "use client";
 
-import { useState } from 'react';
-import type { DispatchOrder, Product, DispatchException, DispatchExceptionProduct } from '@/lib/types';
+import { useState, useEffect } from 'react';
+import type { DispatchOrder, Product, DispatchException, CancellationRequest, User } from '@/lib/types';
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
+  DialogClose
 } from '@/components/ui/dialog';
 import {
     Card,
@@ -24,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { processDispatch } from '@/lib/api';
+import { processDispatch, getCancellationRequests, cancelPendingDispatchItems } from '@/lib/api';
 import {
     Table,
     TableBody,
@@ -49,6 +50,8 @@ import {
     AccordionTrigger,
   } from "@/components/ui/accordion";
 import { CancelDispatchDialog } from './cancel-dispatch-dialog';
+import { Checkbox } from './ui/checkbox';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ProcessDispatchDialogProps {
   order: DispatchOrder;
@@ -57,13 +60,26 @@ interface ProcessDispatchDialogProps {
   onDispatchProcessed: () => void;
 }
 
+interface AnnulmentDialogState {
+    isOpen: boolean;
+    guide: string;
+    request: CancellationRequest | null;
+}
+
 export function ProcessDispatchDialog({ order, productsById, children, onDispatchProcessed }: ProcessDispatchDialogProps) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [trackingNumbers, setTrackingNumbers] = useState('');
   const [exceptions, setExceptions] = useState<DispatchException[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
   const [newExceptionTracking, setNewExceptionTracking] = useState('');
+  
+  // State for the new inline annulment flow
+  const [annulmentDialog, setAnnulmentDialog] = useState<AnnulmentDialogState>({ isOpen: false, guide: '', request: null });
+  const [itemsToAnnul, setItemsToAnnul] = useState<Record<string, { selected: boolean, quantity: number }>>({});
+  const [isAnnulling, setIsAnnulling] = useState(false);
+
 
   const handleAddExceptionGroup = () => {
     if (!newExceptionTracking.trim()) {
@@ -132,9 +148,79 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
         setExceptions([]);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
-        toast({ variant: 'destructive', title: 'Error al procesar', description: errorMessage });
+        
+        // Check if it's our specific cancellation error
+        const cancellationMatch = errorMessage.match(/La guía (.*) tiene una solicitud de anulación pendiente/);
+        if (cancellationMatch) {
+            const blockedGuide = cancellationMatch[1];
+            const cancellationRequests = await getCancellationRequests();
+            const relevantRequest = cancellationRequests.find(r => r.trackingNumber === blockedGuide && r.status === 'pending');
+            
+            if (relevantRequest) {
+                // Initialize items to annul with all products in the current order
+                const initialItems = order.products.reduce((acc, p) => {
+                    const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+                    acc[key] = { selected: false, quantity: p.quantity };
+                    return acc;
+                }, {} as Record<string, { selected: boolean; quantity: number }>);
+                
+                setItemsToAnnul(initialItems);
+                setAnnulmentDialog({ isOpen: true, guide: blockedGuide, request: relevantRequest });
+            } else {
+                 toast({ variant: 'destructive', title: 'Error al procesar', description: errorMessage });
+            }
+        } else {
+            toast({ variant: 'destructive', title: 'Error al procesar', description: errorMessage });
+        }
     } finally {
         setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmAnnulment = async () => {
+    if (!annulmentDialog.request) return;
+
+    const itemsToCancelForApi = Object.entries(itemsToAnnul)
+        .filter(([, val]) => val.selected)
+        .map(([key]) => {
+            const [productId, variantId] = key.split('-');
+            const productInOrder = order.products.find(p => p.productId === productId && (p.variantId || 'undefined') === (variantId || 'undefined'));
+            if (!productInOrder) return null;
+
+            return {
+                productId: productInOrder.productId,
+                variantId: productIn-order.variantId,
+                quantity: productInOrder.quantity,
+            };
+        })
+        .filter(Boolean) as { productId: string; variantId?: string; quantity: number }[];
+
+    if (itemsToCancelForApi.length === 0) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto para anular.' });
+        return;
+    }
+    
+    setIsAnnulling(true);
+    try {
+        await cancelPendingDispatchItems(order.id, itemsToCancelForApi, user, annulmentDialog.guide);
+        toast({
+            title: '¡Anulación Exitosa!',
+            description: `Se anularon los productos seleccionados y se restauró el stock. La guía ${annulmentDialog.guide} ha sido removida del despacho.`
+        });
+        
+        // Remove the blocked guide from the textarea
+        setTrackingNumbers(prev => prev.split('\n').filter(tn => tn.trim() !== annulmentDialog.guide).join('\n'));
+
+        // Close all dialogs and refresh the main page data
+        setAnnulmentDialog({ isOpen: false, guide: '', request: null });
+        setOpen(false);
+        onDispatchProcessed();
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+        toast({ variant: 'destructive', title: 'Error al Anular', description: errorMessage });
+    } finally {
+        setIsAnnulling(false);
     }
   };
 
@@ -164,6 +250,45 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
   }
 
   return (
+    <>
+    <Dialog open={annulmentDialog.isOpen} onOpenChange={(open) => !open && setAnnulmentDialog({isOpen: false, guide: '', request: null})}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Anulación Requerida</DialogTitle>
+                <DialogDescription>
+                    La guía <span className="font-mono font-semibold">{annulmentDialog.guide}</span> tiene una solicitud de anulación.
+                    Selecciona los productos de esta orden de despacho que corresponden a la guía que deseas anular. El stock será restaurado.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-2 max-h-60 overflow-y-auto">
+                {order.products.map(p => {
+                     const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+                     return (
+                        <div key={key} className="flex items-center space-x-2">
+                            <Checkbox
+                                id={key}
+                                checked={itemsToAnnul[key]?.selected || false}
+                                onCheckedChange={(checked) => setItemsToAnnul(prev => ({
+                                    ...prev,
+                                    [key]: { ...prev[key], selected: !!checked }
+                                }))}
+                            />
+                            <Label htmlFor={key} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                {p.name} ({p.sku}) - Cant: {p.quantity}
+                            </Label>
+                        </div>
+                    )
+                })}
+            </div>
+            <DialogFooter>
+                <Button variant="secondary" onClick={() => setAnnulmentDialog({ isOpen: false, guide: '', request: null })}>Cancelar</Button>
+                <Button onClick={handleConfirmAnnulment} disabled={isAnnulling}>
+                    {isAnnulling ? 'Anulando...' : 'Confirmar Anulación'}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-4xl">
@@ -331,7 +456,6 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
-
-    
