@@ -309,10 +309,10 @@ export default function DashboardPage() {
             if (!dailyDispatchSummaryData[day]) {
                 dailyDispatchSummaryData[day] = {};
             }
-            if (!dailyDispatchSummaryData[day][platformName]) {
-                dailyDispatchSummaryData[day][platformName] = {};
+            if (!dailyDispatchSummaryData[day][carrierName]) {
+                dailyDispatchSummaryData[day][carrierName] = {};
             }
-            dailyDispatchSummaryData[day][platformName][carrierName] = (dailyDispatchSummaryData[day][platformName][carrierName] || 0) + guideCount;
+            dailyDispatchSummaryData[day][carrierName][platformName] = (dailyDispatchSummaryData[day][carrierName][platformName] || 0) + guideCount;
         }
     });
 

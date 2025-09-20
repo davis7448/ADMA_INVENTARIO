@@ -31,7 +31,7 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
         <CardHeader>
           <CardTitle>Resumen Diario de Guías Despachadas</CardTitle>
           <CardDescription>
-            Recuento de guías enviadas por día, plataforma y transportadora.
+            Recuento de guías enviadas por día, transportadora y plataforma.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -48,18 +48,18 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
       <CardHeader>
         <CardTitle>Resumen Diario de Guías Despachadas</CardTitle>
         <CardDescription>
-          Recuento de guías enviadas por día, plataforma y transportadora.
+          Recuento de guías enviadas por día, transportadora y plataforma.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Accordion type="multiple" className="w-full space-y-2">
           {sortedDays.map((day) => {
-            const platforms = data[day];
-            const totalGuidesForDay = Object.values(platforms).reduce(
-              (dayTotal, carriers) =>
+            const carriers = data[day];
+            const totalGuidesForDay = Object.values(carriers).reduce(
+              (dayTotal, platforms) =>
                 dayTotal +
-                Object.values(carriers).reduce(
-                  (platformTotal, count) => platformTotal + count,
+                Object.values(platforms).reduce(
+                  (carrierTotal, count) => carrierTotal + count,
                   0
                 ),
               0
@@ -77,13 +77,13 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4 pt-2">
-                    {Object.entries(platforms).map(([platformName, carriers]) => (
-                      <div key={platformName} className="border-l-2 pl-4">
-                        <h4 className="font-medium">{platformName}</h4>
+                    {Object.entries(carriers).map(([carrierName, platforms]) => (
+                      <div key={carrierName} className="border-l-2 pl-4">
+                        <h4 className="font-medium">{carrierName}</h4>
                         <ul className="list-disc list-inside text-muted-foreground mt-2">
-                          {Object.entries(carriers).map(([carrierName, count]) => (
-                            <li key={carrierName}>
-                              {carrierName}: <span className="font-semibold text-foreground">{count}</span> guías
+                          {Object.entries(platforms).map(([platformName, count]) => (
+                            <li key={platformName}>
+                              {platformName}: <span className="font-semibold text-foreground">{count}</span> guías
                             </li>
                           ))}
                         </ul>
