@@ -212,7 +212,7 @@ export function HistoryContent({
         }
     };
 
-    const getDispatchStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial') => {
+    const getDispatchStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial' | 'Anulada') => {
         switch (status) {
         case 'Pendiente':
             return <Badge variant="destructive">Pendiente</Badge>;
@@ -220,6 +220,8 @@ export function HistoryContent({
             return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Despachada</Badge>;
         case 'Parcial':
             return <Badge variant="secondary">Parcial</Badge>;
+        case 'Anulada':
+            return <Badge variant="outline" className="bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-300">Anulada</Badge>;
         default:
             return <Badge variant="outline">Desconocido</Badge>;
         }

@@ -158,7 +158,7 @@ export interface DispatchOrder {
     platformId: string;
     carrierId: string;
     products: DispatchOrderProduct[];
-    status: 'Pendiente' | 'Despachada' | 'Parcial';
+    status: 'Pendiente' | 'Despachada' | 'Parcial' | 'Anulada';
     trackingNumbers: string[];
     exceptions: DispatchException[];
     cancelledExceptions?: DispatchException[];
