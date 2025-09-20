@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, se
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, CancellationRequest } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -805,6 +805,17 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
 export const processDispatch = async (orderId: string, trackingNumbers: string[], newExceptions: DispatchException[]) => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
+    // Check for cancellation requests before processing
+    const cancellationRequestsCol = collection(db, 'cancellationRequests');
+    const cancellationQuery = query(cancellationRequestsCol, where('trackingNumber', 'in', trackingNumbers), where('status', '==', 'pending'));
+    const cancellationSnapshot = await getDocs(cancellationQuery);
+
+    if (!cancellationSnapshot.empty) {
+        const cancelledGuide = cancellationSnapshot.docs[0].data().trackingNumber;
+        throw new Error(`La guía ${cancelledGuide} tiene una solicitud de anulación pendiente y no puede ser despachada.`);
+    }
+
+
     await runTransaction(db, async (transaction) => {
         // ========== 1. READ PHASE ==========
         const orderSnap = await transaction.get(orderRef);
@@ -1516,6 +1527,61 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
         return { alerts: [], error: e.message || "Ocurrió un error desconocido durante el análisis de IA." };
     }
 }
+
+// Cancellation Request Functions
+export const createCancellationRequests = async (trackingNumbers: string[], user: User): Promise<{ alreadyDispatched: string[] }> => {
+    const batch = writeBatch(db);
+    const requestsCol = collection(db, 'cancellationRequests');
+    const dispatchOrdersCol = collection(db, 'dispatchOrders');
+    
+    const alreadyDispatched: string[] = [];
+
+    // Check for already dispatched guides
+    const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', trackingNumbers));
+    const dispatchedSnapshot = await getDocs(dispatchedQuery);
+
+    const dispatchedGuides = new Set<string>();
+    dispatchedSnapshot.forEach(doc => {
+        const order = doc.data() as DispatchOrder;
+        order.trackingNumbers.forEach(tn => {
+            if (trackingNumbers.includes(tn)) {
+                dispatchedGuides.add(tn);
+            }
+        });
+    });
+
+    for (const tn of trackingNumbers) {
+        if (dispatchedGuides.has(tn)) {
+            alreadyDispatched.push(tn);
+        } else {
+            const newRequest: Omit<CancellationRequest, 'id'> = {
+                trackingNumber: tn,
+                requestedBy: { id: user.id, name: user.name },
+                requestDate: Timestamp.now(),
+                status: 'pending',
+            };
+            const docRef = doc(requestsCol);
+            batch.set(docRef, newRequest);
+        }
+    }
+
+    await batch.commit();
+    return { alreadyDispatched };
+};
+
+export const getCancellationRequests = async (): Promise<CancellationRequest[]> => {
+    const requestsCol = collection(db, 'cancellationRequests');
+    const snapshot = await getDocs(requestsCol);
+    const requestList = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...data,
+            requestDate: (data.requestDate as Timestamp).toDate().toISOString(),
+        } as CancellationRequest;
+    });
+    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+};
     
 
 
@@ -1526,6 +1592,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 

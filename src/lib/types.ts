@@ -275,3 +275,14 @@ export type EntryReason = {
     value: string;
     label: string;
 };
+
+export type CancellationRequest = {
+    id: string;
+    trackingNumber: string;
+    requestedBy: {
+        id: string;
+        name: string;
+    };
+    requestDate: string;
+    status: 'pending' | 'completed' | 'rejected';
+};
