@@ -198,26 +198,27 @@ export default function DashboardPage() {
     const returnsChartData = [];
     
     if (dateRange?.from && dateRange?.to) {
-      const dayIntervals = eachDayOfInterval({
-        start: dateRange.from,
-        end: dateRange.to
-      });
-
-      for (const day of dayIntervals) {
-        const dayKey = formatToTimeZone(day, 'yyyy-MM-dd');
-        chartData.push({
-          date: dayKey,
-          orders: ordersByDay[dayKey] || 0,
+        const dayIntervals = eachDayOfInterval({
+            start: dateRange.from,
+            end: dateRange.to
         });
-        pendingChartData.push({
-          date: dayKey,
-          orders: pendingUnitsByDay[dayKey] || 0,
-        });
-        returnsChartData.push({
-          date: dayKey,
-          returns: returnsByDay[dayKey] || 0,
-        });
-      }
+    
+        for (const day of dayIntervals) {
+            // Ensure the day key for lookup is in the correct timezone
+            const dayKey = formatToTimeZone(day, 'yyyy-MM-dd');
+            chartData.push({
+                date: dayKey,
+                orders: ordersByDay[dayKey] || 0,
+            });
+            pendingChartData.push({
+                date: dayKey,
+                orders: pendingUnitsByDay[dayKey] || 0,
+            });
+            returnsChartData.push({
+                date: dayKey,
+                returns: returnsByDay[dayKey] || 0,
+            });
+        }
     }
     
     const productInfoMap = allProducts.reduce((acc, product) => {
@@ -746,6 +747,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 
 
 
