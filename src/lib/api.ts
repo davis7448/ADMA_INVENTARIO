@@ -945,16 +945,19 @@ export const cancelPendingDispatchItems = async (
             const productRef = doc(db, 'products', itemToCancel.productId);
             const productSnap = await transaction.get(productRef);
             if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
+            const productData = productSnap.data();
 
             productsWereCancelled = true;
             
             // Restore stock based on whether it was an exception or a regular dispatched item
             if (isFromException) {
                 // If it's an exception, it was in pending stock, so we just reduce pending stock
-                await updateProductStock(itemToCancel.productId, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantId ? productSnap.data().variants.find((v:any) => v.id === itemToCancel.variantId).sku : productSnap.data().sku);
+                const currentPendingStock = productData.pendingStock || 0;
+                transaction.update(productRef, { pendingStock: Math.max(0, currentPendingStock - itemToCancel.quantity) });
             } else {
                 // If it wasn't an exception, it was in physical stock, so we add it back
-                await updateProductStock(itemToCancel.productId, itemToCancel.quantity, 'add', itemToCancel.variantId ? productSnap.data().variants.find((v:any) => v.id === itemToCancel.variantId).sku : productSnap.data().sku);
+                const variantSku = itemToCancel.variantId ? productData.variants?.find((v:any) => v.id === itemToCancel.variantId)?.sku : productData.sku;
+                await updateProductStock(itemToCancel.productId, itemToCancel.quantity, 'add', variantSku);
             }
             
             // Log the "Anulado" movement
@@ -1013,9 +1016,17 @@ export const cancelPendingDispatchItems = async (
             exceptions: updatedExceptions,
         };
 
+        // Re-evaluate the status of the order
         if (newTotalItems === 0) {
             updatePayload.status = 'Anulada';
+        } else if (updatedExceptions.length === 0) {
+            // If there are no more exceptions, the order is fully dispatched
+            updatePayload.status = 'Despachada';
+        } else {
+            // Otherwise it remains partial
+            updatePayload.status = 'Parcial';
         }
+
 
         transaction.update(orderRef, updatePayload);
         transaction.set(counterRef, { currentId: nextMovementId - 1 }, { merge: true });
@@ -1362,6 +1373,9 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
 };
 
 export const deleteReservation = async (reservationId: string) => {
+    if (!reservationId) {
+        throw new Error("Se requiere ID de la reserva.");
+    }
     const reservationRef = doc(db, 'reservations', reservationId);
     await deleteDoc(reservationRef);
 };
@@ -1455,13 +1469,9 @@ export const resolveStaleReservationAlert = async (alertId: string): Promise<voi
     }
 
     const alertData = alertSnap.data() as StaleReservationAlert;
-    const reservationRef = doc(db, 'reservations', alertData.reservationId);
-
-    const batch = writeBatch(db);
-batch.delete(reservationRef);
-    batch.delete(alertRef);
     
-    await batch.commit();
+    await deleteReservation(alertData.reservationId);
+    await deleteDoc(alertRef);
 };
 
 // Stock Alert Functions
@@ -1730,6 +1740,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 
