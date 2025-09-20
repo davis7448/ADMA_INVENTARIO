@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
@@ -23,7 +22,7 @@ import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventor
 import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform, ProductVariant } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
-import { subDays, format, startOfDay, endOfDay } from 'date-fns';
+import { subDays, format, startOfDay, endOfDay, eachDayOfInterval } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn, formatToTimeZone } from '@/lib/utils';
@@ -100,8 +99,11 @@ export default function DashboardPage() {
   const hasActiveFilters = filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0;
 
   const filteredData = useMemo(() => {
-    const fromDate = dateRange?.from ? startOfDay(dateRange.from) : new Date(0);
-    const toDate = dateRange?.to ? endOfDay(dateRange.to) : new Date();
+    const fromDate = dateRange?.from ? startOfDay(dateRange.from) : undefined;
+    const toDate = dateRange?.to ? endOfDay(dateRange.to) : undefined;
+
+    const fromDateKey = fromDate ? formatToTimeZone(fromDate, 'yyyy-MM-dd') : null;
+    const toDateKey = toDate ? formatToTimeZone(toDate, 'yyyy-MM-dd') : null;
 
     const productIdsInCategory = filterCategories.length > 0 
         ? allProducts.filter(p => filterCategories.includes(p.categoryId)).map(p => p.id)
@@ -112,11 +114,12 @@ export default function DashboardPage() {
 
     let ordersInPeriod = allOrders.filter(order => {
         if (!order.date) return false;
-        const orderDate = new Date(order.date);
-        if (isNaN(orderDate.getTime())) return false;
-
-        const dateMatch = orderDate >= fromDate && orderDate <= toDate;
         
+        const orderDateKey = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
+
+        const dateMatch = (!fromDateKey || orderDateKey >= fromDateKey) && (!toDateKey || orderDateKey <= toDateKey);
+        if (!dateMatch) return false;
+
         const platformMatch = filterPlatforms.length === 0 || filterPlatforms.includes(order.platformId);
         const carrierMatch = filterCarriers.length === 0 || filterCarriers.includes(order.carrierId);
         
@@ -157,11 +160,12 @@ export default function DashboardPage() {
 
     const returnMovementsInPeriod = allMovements.filter(m => {
         if (!m.date) return false;
-        const movementDate = new Date(m.date);
-        if (isNaN(movementDate.getTime())) return false;
-
+        
+        const movementDateKey = formatToTimeZone(new Date(m.date), 'yyyy-MM-dd');
+        const dateMatch = (!fromDateKey || movementDateKey >= fromDateKey) && (!toDateKey || movementDateKey <= toDateKey);
+        
         const isReturn = m.type === 'Entrada' && (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia'));
-        if (!isReturn || !(movementDate >= fromDate && movementDate <= toDate)) {
+        if (!isReturn || !dateMatch) {
             return false;
         }
 
@@ -193,22 +197,25 @@ export default function DashboardPage() {
     const returnsChartData = [];
     
     if (dateRange?.from && dateRange?.to) {
-      let currentDate = new Date(dateRange.from);
-      while (currentDate <= dateRange.to) {
-          const dayKey = formatToTimeZone(currentDate, 'yyyy-MM-dd');
-          chartData.push({
-              date: dayKey,
-              orders: ordersByDay[dayKey] || 0,
-          });
-          pendingChartData.push({
-              date: dayKey,
-              orders: pendingUnitsByDay[dayKey] || 0,
-          });
-          returnsChartData.push({
-              date: dayKey,
-              returns: returnsByDay[dayKey] || 0,
-          });
-          currentDate.setDate(currentDate.getDate() + 1);
+      const dayIntervals = eachDayOfInterval({
+        start: dateRange.from,
+        end: dateRange.to
+      });
+
+      for (const day of dayIntervals) {
+        const dayKey = formatToTimeZone(day, 'yyyy-MM-dd');
+        chartData.push({
+          date: dayKey,
+          orders: ordersByDay[dayKey] || 0,
+        });
+        pendingChartData.push({
+          date: dayKey,
+          orders: pendingUnitsByDay[dayKey] || 0,
+        });
+        returnsChartData.push({
+          date: dayKey,
+          returns: returnsByDay[dayKey] || 0,
+        });
       }
     }
     
@@ -738,3 +745,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
