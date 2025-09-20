@@ -905,9 +905,11 @@ export const cancelPendingDispatchItems = async (
     productsToCancel: { productId: string; variantId?: string; quantity: number }[], 
     user: User | null, 
     cancellationGuide: string
-) => {
+): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
     const counterRef = doc(db, 'counters', 'inventoryMovements');
+
+    let updatedOrderData: Partial<DispatchOrder> = {};
 
     await runTransaction(db, async (transaction) => {
         const [orderSnap, counterSnap] = await Promise.all([
@@ -931,7 +933,7 @@ export const cancelPendingDispatchItems = async (
         for (const itemToCancel of productsToCancel) {
             const productIndex = updatedProducts.findIndex(p => 
                 p.productId === itemToCancel.productId && 
-                (p.variantId || 'undefined') === (itemToCancel.variantId || 'undefined')
+                (p.variantId || undefined) === (itemToCancel.variantId || undefined)
             );
             
             if (productIndex !== -1) {
@@ -969,12 +971,14 @@ export const cancelPendingDispatchItems = async (
             throw new Error("No se encontraron los productos seleccionados para anular en esta orden de despacho.");
         }
 
+        const newTotalItems = updatedProducts.reduce((sum, p) => sum + p.quantity, 0);
+
         const updatePayload: Record<string, any> = {
             products: updatedProducts,
-            totalItems: updatedProducts.reduce((sum, p) => sum + p.quantity, 0),
+            totalItems: newTotalItems,
         };
 
-        if (updatedProducts.length === 0) {
+        if (newTotalItems === 0) {
             updatePayload.status = 'Anulada';
         }
 
@@ -988,7 +992,16 @@ export const cancelPendingDispatchItems = async (
             const reqDoc = reqSnap.docs[0];
             transaction.update(reqDoc.ref, { status: 'completed' });
         }
+
+        // Prepare the data to return
+        updatedOrderData = {
+            products: updatedProducts,
+            totalItems: newTotalItems,
+            status: updatePayload.status || orderData.status,
+        };
     });
+
+    return updatedOrderData;
 };
 
 
@@ -1673,5 +1686,6 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 

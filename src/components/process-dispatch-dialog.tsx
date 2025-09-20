@@ -72,9 +72,10 @@ interface AnnulmentItem {
     maxQuantity: number;
 }
 
-export function ProcessDispatchDialog({ order, productsById, children, onDispatchProcessed }: ProcessDispatchDialogProps) {
+export function ProcessDispatchDialog({ order: initialOrder, productsById, children, onDispatchProcessed }: ProcessDispatchDialogProps) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [order, setOrder] = useState<DispatchOrder>(initialOrder);
   const [trackingNumbers, setTrackingNumbers] = useState('');
   const [exceptions, setExceptions] = useState<DispatchException[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -85,6 +86,14 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
   const [annulmentDialog, setAnnulmentDialog] = useState<AnnulmentDialogState>({ isOpen: false, guide: '', request: null });
   const [itemsToAnnul, setItemsToAnnul] = useState<Record<string, AnnulmentItem>>({});
   const [isAnnulling, setIsAnnulling] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setOrder(initialOrder);
+      setTrackingNumbers('');
+      setExceptions([]);
+    }
+  }, [open, initialOrder]);
 
 
   const handleAddExceptionGroup = () => {
@@ -147,7 +156,7 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     
     try {
         await processDispatch(order.id, trackingList, exceptions);
-        toast({ title: 'Éxito', description: 'La orden ha sido despachada correctamente.' });
+        toast({ title: '¡Éxito!', description: 'La orden ha sido despachada correctamente.' });
         onDispatchProcessed();
         setOpen(false);
         setTrackingNumbers('');
@@ -207,19 +216,32 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     
     setIsAnnulling(true);
     try {
-        await cancelPendingDispatchItems(order.id, itemsToCancelForApi, user, annulmentDialog.guide);
+        const updatedOrderData = await cancelPendingDispatchItems(order.id, itemsToCancelForApi, user, annulmentDialog.guide);
+
         toast({
             title: '¡Anulación Exitosa!',
-            description: `Se anularon los productos seleccionados y se restauró el stock. La guía ${annulmentDialog.guide} ha sido removida del despacho.`
+            description: `Se anularon los productos seleccionados y se restauró el stock.`
         });
         
         // Remove the blocked guide from the textarea
         setTrackingNumbers(prev => prev.split('\n').filter(tn => tn.trim() !== annulmentDialog.guide).join('\n'));
 
-        // Close all dialogs and refresh the main page data
         setAnnulmentDialog({ isOpen: false, guide: '', request: null });
-        setOpen(false);
-        onDispatchProcessed();
+
+        if (updatedOrderData.status === 'Anulada') {
+            // If the whole order was cancelled, close the dialog and refresh
+            toast({ title: 'Orden Completamente Anulada', description: 'Todos los productos fueron removidos, la orden ha sido anulada.' });
+            setOpen(false);
+            onDispatchProcessed();
+        } else {
+            // Otherwise, just update the order state locally to continue processing
+            setOrder(prevOrder => ({
+                ...prevOrder,
+                products: updatedOrderData.products,
+                totalItems: updatedOrderData.totalItems,
+            }));
+        }
+
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
@@ -279,11 +301,12 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                 {order.products.map(p => {
                      const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
                      const item = itemsToAnnul[key];
+                     if (!item) return null;
                      return (
                         <div key={key} className="flex items-center space-x-3 p-2 border rounded-md">
                             <Checkbox
                                 id={key}
-                                checked={item?.selected || false}
+                                checked={item.selected || false}
                                 onCheckedChange={(checked) => setItemsToAnnul(prev => ({
                                     ...prev,
                                     [key]: { ...prev[key], selected: !!checked }
@@ -295,13 +318,13 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                              <Input 
                                 type="number"
                                 className="w-24 h-8"
-                                value={item?.quantity}
+                                value={item.quantity}
                                 onChange={(e) => handleAnnulmentQuantityChange(key, parseInt(e.target.value, 10) || 0)}
-                                max={item?.maxQuantity}
+                                max={item.maxQuantity}
                                 min="0"
-                                disabled={!item?.selected}
+                                disabled={!item.selected}
                             />
-                            <span className="text-sm text-muted-foreground">/ {item?.maxQuantity}</span>
+                            <span className="text-sm text-muted-foreground">/ {item.maxQuantity}</span>
                         </div>
                     )
                 })}
