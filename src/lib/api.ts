@@ -945,20 +945,34 @@ export const cancelPendingDispatchItems = async (
             const productRef = doc(db, 'products', itemToCancel.productId);
             const productSnap = await transaction.get(productRef);
             if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
-            const productData = productSnap.data();
+            const productData = productSnap.data() as Product;
 
             productsWereCancelled = true;
             
+            let stockUpdateData: Record<string, any> = {};
+
             // Restore stock based on whether it was an exception or a regular dispatched item
             if (isFromException) {
                 // If it's an exception, it was in pending stock, so we just reduce pending stock
                 const currentPendingStock = productData.pendingStock || 0;
-                transaction.update(productRef, { pendingStock: Math.max(0, currentPendingStock - itemToCancel.quantity) });
+                stockUpdateData.pendingStock = Math.max(0, currentPendingStock - itemToCancel.quantity);
             } else {
                 // If it wasn't an exception, it was in physical stock, so we add it back
-                const variantSku = itemToCancel.variantId ? productData.variants?.find((v:any) => v.id === itemToCancel.variantId)?.sku : productData.sku;
-                await updateProductStock(itemToCancel.productId, itemToCancel.quantity, 'add', variantSku);
+                if (productData.productType === 'variable') {
+                    const variants = [...(productData.variants || [])];
+                    const variantIndex = variants.findIndex(v => v.id === itemToCancel.variantId);
+                    if (variantIndex !== -1) {
+                        variants[variantIndex].stock += itemToCancel.quantity;
+                        stockUpdateData.variants = variants;
+                        stockUpdateData.stock = variants.reduce((sum, v) => sum + v.stock, 0);
+                    } else {
+                        throw new Error(`Variante no encontrada para anulación: ${itemToCancel.variantId}`);
+                    }
+                } else {
+                    stockUpdateData.stock = (productData.stock || 0) + itemToCancel.quantity;
+                }
             }
+            transaction.update(productRef, stockUpdateData);
             
             // Log the "Anulado" movement
             const movementRef = doc(collection(db, 'inventoryMovements'));
@@ -966,7 +980,7 @@ export const cancelPendingDispatchItems = async (
                 movementId: nextMovementId++,
                 type: 'Anulado',
                 productId: itemToCancel.productId,
-                productName: productSnap.data().name,
+                productName: productData.name,
                 quantity: itemToCancel.quantity,
                 notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
                 userId: user?.id,
@@ -1019,11 +1033,11 @@ export const cancelPendingDispatchItems = async (
         // Re-evaluate the status of the order
         if (newTotalItems === 0) {
             updatePayload.status = 'Anulada';
-        } else if (updatedExceptions.length === 0) {
-            // If there are no more exceptions, the order is fully dispatched
+        } else if (updatedExceptions.length === 0 && orderData.trackingNumbers && orderData.trackingNumbers.length > 0) {
+            // If there are no more exceptions and some items were dispatched, it's fully dispatched
             updatePayload.status = 'Despachada';
         } else {
-            // Otherwise it remains partial
+            // Otherwise it remains partial or becomes partial
             updatePayload.status = 'Parcial';
         }
 
@@ -1748,3 +1762,6 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
 
+
+
+    
