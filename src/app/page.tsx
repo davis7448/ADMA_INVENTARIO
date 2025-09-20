@@ -100,8 +100,8 @@ export default function DashboardPage() {
   const hasActiveFilters = filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0;
 
   const filteredData = useMemo(() => {
-    const fromDate = dateRange?.from ? startOfDay(dateRange.from) : undefined;
-    const toDate = dateRange?.to ? endOfDay(dateRange.to) : undefined;
+    const fromDate = dateRange?.from;
+    const toDate = dateRange?.to;
 
     const fromDateKey = fromDate ? formatToTimeZone(fromDate, 'yyyy-MM-dd') : null;
     const toDateKey = toDate ? formatToTimeZone(toDate, 'yyyy-MM-dd') : null;
@@ -746,5 +746,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 
 

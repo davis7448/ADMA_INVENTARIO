@@ -8,7 +8,7 @@ import { formatToTimeZone } from '@/lib/utils';
 
 const chartConfig = {
     orders: {
-      label: "Órdenes Pendientes",
+      label: "Unidades Pendientes",
       color: "hsl(var(--chart-2))",
     },
   } satisfies ChartConfig;
