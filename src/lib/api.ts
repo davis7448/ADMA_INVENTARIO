@@ -1583,9 +1583,70 @@ export const getCancellationRequests = async (): Promise<CancellationRequest[]> 
     return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
 };
     
+export const updateCancellationRequestStatus = async (requestId: string, status: 'completed' | 'rejected', user: User | null): Promise<void> => {
+    const requestRef = doc(db, 'cancellationRequests', requestId);
 
+    await runTransaction(db, async (transaction) => {
+        const requestSnap = await transaction.get(requestRef);
+        if (!requestSnap.exists()) {
+            throw new Error("Solicitud de anulación no encontrada.");
+        }
+        
+        const requestData = requestSnap.data() as CancellationRequest;
 
+        // If completing the cancellation, find the original dispatch and revert stock
+        if (status === 'completed') {
+            const dispatchQuery = query(
+                collection(db, 'dispatchOrders'), 
+                where('exceptions', 'array-contains', { trackingNumber: requestData.trackingNumber })
+            );
+            
+            const dispatchSnapshot = await getDocs(dispatchQuery);
+            // This is a simplification. A more robust solution would handle multiple products in an exception
+            // and find the specific exception object. For now, we assume one guide maps to one exception.
+            if (!dispatchSnapshot.empty) {
+                const dispatchDoc = dispatchSnapshot.docs[0];
+                const dispatchData = dispatchDoc.data() as DispatchOrder;
+                
+                const exception = dispatchData.exceptions.find(ex => ex.trackingNumber === requestData.trackingNumber);
+                if (exception && exception.products) {
+                    for (const p of exception.products) {
+                         const productRef = doc(db, 'products', p.productId);
+                         // Use transaction.get to read within the transaction
+                         const productSnap = await transaction.get(productRef);
+                         if (productSnap.exists()) {
+                            const newPendingStock = (productSnap.data().pendingStock || 0) - p.quantity;
+                            transaction.update(productRef, { pendingStock: newPendingStock });
+                            
+                            // Also add back to main stock
+                            const newStock = (productSnap.data().stock || 0) + p.quantity;
+                            transaction.update(productRef, { stock: newStock });
 
+                            // Create movement log
+                            const movementRef = doc(collection(db, 'inventoryMovements'));
+                            const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
+                                type: 'Anulado',
+                                productId: p.productId,
+                                productName: productSnap.data().name,
+                                quantity: p.quantity,
+                                notes: `Guía ${requestData.trackingNumber} anulada por ${user?.name}. Stock restaurado.`,
+                                userId: user?.id,
+                                userName: user?.name,
+                                date: Timestamp.now(),
+                            };
+                            transaction.set(movementRef, movementData);
+                         }
+                    }
+                }
+            } else {
+                 console.warn(`No se encontró una orden de despacho con la guía de excepción ${requestData.trackingNumber} para revertir el stock.`);
+            }
+        }
+        
+        transaction.update(requestRef, { status });
+    });
+};
+    
     
 
     
@@ -1609,3 +1670,6 @@ export const getCancellationRequests = async (): Promise<CancellationRequest[]> 
 
 
 
+
+
+    

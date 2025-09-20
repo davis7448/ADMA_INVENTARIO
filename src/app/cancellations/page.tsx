@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useTransition } from 'react';
@@ -25,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
-import { getCancellationRequests, createCancellationRequests } from '@/lib/api';
+import { getCancellationRequests, createCancellationRequests, updateCancellationRequestStatus } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatToTimeZone } from '@/lib/utils';
@@ -38,9 +37,12 @@ function CancellationsContent() {
     const { toast } = useToast();
     const [requests, setRequests] = useState<CancellationRequest[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isSubmitting, startTransition] = useTransition();
+    const [isSubmitting, startSubmittingTransition] = useTransition();
+    const [isUpdating, startUpdatingTransition] = useTransition();
     const [guidesToCancel, setGuidesToCancel] = useState('');
     const [submissionWarnings, setSubmissionWarnings] = useState<string[]>([]);
+    
+    const canManageRequests = user?.role === 'admin' || user?.role === 'logistics';
 
     const fetchRequests = async () => {
         setLoading(true);
@@ -66,7 +68,7 @@ function CancellationsContent() {
             return;
         }
 
-        startTransition(async () => {
+        startSubmittingTransition(async () => {
             setSubmissionWarnings([]);
             try {
                 const { alreadyDispatched } = await createCancellationRequests(trackingNumbers, user);
@@ -93,6 +95,26 @@ function CancellationsContent() {
             }
         });
     };
+
+    const handleUpdateStatus = (requestId: string, status: 'completed' | 'rejected') => {
+        startUpdatingTransition(async () => {
+            try {
+                await updateCancellationRequestStatus(requestId, status, user);
+                toast({
+                    title: 'Estado Actualizado',
+                    description: `La solicitud ha sido marcada como ${status === 'completed' ? 'Anulada' : 'Rechazada'}.`
+                });
+                fetchRequests();
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+                toast({
+                    variant: 'destructive',
+                    title: 'Error al Actualizar',
+                    description: errorMessage
+                });
+            }
+        });
+    }
 
     const getStatusBadge = (status: 'pending' | 'completed' | 'rejected') => {
         switch (status) {
@@ -163,13 +185,14 @@ function CancellationsContent() {
                                 <TableHead>Número de Guía</TableHead>
                                 <TableHead>Solicitado por</TableHead>
                                 <TableHead>Estado</TableHead>
+                                {canManageRequests && <TableHead className="text-right">Acciones</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
                                 Array.from({ length: 3 }).map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={4}><Skeleton className="h-8 w-full" /></TableCell>
+                                        <TableCell colSpan={canManageRequests ? 5 : 4}><Skeleton className="h-8 w-full" /></TableCell>
                                     </TableRow>
                                 ))
                             ) : requests.length > 0 ? (
@@ -179,11 +202,21 @@ function CancellationsContent() {
                                         <TableCell className="font-mono">{req.trackingNumber}</TableCell>
                                         <TableCell>{req.requestedBy.name}</TableCell>
                                         <TableCell>{getStatusBadge(req.status)}</TableCell>
+                                        {canManageRequests && (
+                                            <TableCell className="text-right">
+                                                {req.status === 'pending' && (
+                                                    <div className="flex gap-2 justify-end">
+                                                        <Button size="sm" variant="outline" onClick={() => handleUpdateStatus(req.id, 'completed')} disabled={isUpdating}>Anular</Button>
+                                                        <Button size="sm" variant="destructive" onClick={() => handleUpdateStatus(req.id, 'rejected')} disabled={isUpdating}>Rechazar</Button>
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">No hay solicitudes de anulación.</TableCell>
+                                    <TableCell colSpan={canManageRequests ? 5 : 4} className="h-24 text-center">No hay solicitudes de anulación.</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>
@@ -196,8 +229,10 @@ function CancellationsContent() {
 
 export default function CancellationsPage() {
     return (
-        <AuthProviderWrapper allowedRoles={['admin', 'commercial']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'logistics']}>
             <CancellationsContent />
         </AuthProviderWrapper>
     )
 }
+
+    
