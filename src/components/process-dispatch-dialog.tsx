@@ -165,7 +165,7 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
             if (relevantRequest) {
                 // Initialize items to annul with all products in the current order
                 const initialItems = order.products.reduce((acc, p) => {
-                    const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+                    const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
                     acc[key] = { selected: false, quantity: p.quantity, maxQuantity: p.quantity };
                     return acc;
                 }, {} as Record<string, AnnulmentItem>);
@@ -189,11 +189,13 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     const itemsToCancelForApi = Object.entries(itemsToAnnul)
         .filter(([, val]) => val.selected && val.quantity > 0)
         .map(([key, val]) => {
-            const [productId, variantId] = key.split('-');
+            const ids = key.split('|');
+            const productId = ids[0];
+            const variantId = ids.length > 1 ? ids[1] : undefined;
             
             return {
                 productId: productId,
-                variantId: variantId !== 'undefined' ? variantId : undefined,
+                variantId: variantId,
                 quantity: val.quantity,
             };
         });
@@ -275,7 +277,7 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
             </DialogHeader>
             <div className="py-4 space-y-3 max-h-60 overflow-y-auto">
                 {order.products.map(p => {
-                     const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+                     const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
                      const item = itemsToAnnul[key];
                      return (
                         <div key={key} className="flex items-center space-x-3 p-2 border rounded-md">
