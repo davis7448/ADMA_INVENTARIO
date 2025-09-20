@@ -1,10 +1,12 @@
 
 "use client";
 
+import { useState } from 'react';
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -17,13 +19,23 @@ import {
 import { formatToTimeZone } from '@/lib/utils';
 import { Badge } from './ui/badge';
 import { es } from 'date-fns/locale';
+import { Button } from './ui/button';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface DailyDispatchSummaryProps {
   data: Record<string, Record<string, Record<string, number>>>;
 }
 
+const DAYS_PER_PAGE = 4;
+
 export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps) {
+  const [currentPage, setCurrentPage] = useState(1);
   const sortedDays = Object.keys(data).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+  const totalPages = Math.ceil(sortedDays.length / DAYS_PER_PAGE);
+  const startIndex = (currentPage - 1) * DAYS_PER_PAGE;
+  const endIndex = startIndex + DAYS_PER_PAGE;
+  const paginatedDays = sortedDays.slice(startIndex, endIndex);
 
   if (sortedDays.length === 0) {
     return (
@@ -53,7 +65,7 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
       </CardHeader>
       <CardContent>
         <Accordion type="multiple" className="w-full space-y-2">
-          {sortedDays.map((day) => {
+          {paginatedDays.map((day) => {
             const carriers = data[day];
             const totalGuidesForDay = Object.values(carriers).reduce(
               (dayTotal, platforms) =>
@@ -102,6 +114,31 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
           })}
         </Accordion>
       </CardContent>
+      {totalPages > 1 && (
+        <CardFooter className="flex items-center justify-end space-x-2 pt-4">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+            >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Anterior
+            </Button>
+            <span className="text-sm font-medium">
+                Página {currentPage} de {totalPages}
+            </span>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+            >
+                Siguiente
+                <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+        </CardFooter>
+      )}
     </Card>
   );
 }
