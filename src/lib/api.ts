@@ -959,7 +959,7 @@ export const cancelPendingDispatchItems = async (
             
             // Log the "Anulado" movement
             const movementRef = doc(collection(db, 'inventoryMovements'));
-            const movementData: Omit<InventoryMovement, 'id'> = {
+            const movementData: Omit<InventoryMovement, 'id' | 'date'> = {
                 movementId: nextMovementId++,
                 type: 'Anulado',
                 productId: itemToCancel.productId,
@@ -1362,16 +1362,8 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
 };
 
 export const deleteReservation = async (reservationId: string) => {
-    const q = query(collection(db, 'reservations'), where('id', '==', reservationId));
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        const docToDelete = snapshot.docs[0];
-        await deleteDoc(docToDelete.ref);
-    } else {
-        // Fallback for when the direct ID is passed
-        const reservationRef = doc(db, 'reservations', reservationId);
-         await deleteDoc(reservationRef);
-    }
+    const reservationRef = doc(db, 'reservations', reservationId);
+    await deleteDoc(reservationRef);
 };
 
 // Stale Reservation Alert Functions
@@ -1642,7 +1634,8 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     });
 
     for (const tn of trackingNumbers) {
-        if (dispatchedGuides.has(tn)) {
+        const isDispatched = dispatchedGuides.has(tn);
+        if (isDispatched) {
             alreadyDispatched.push(tn);
         }
         // Always create the request, even if already dispatched.
@@ -1651,6 +1644,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
             requestedBy: { id: user.id, name: user.name },
             requestDate: Timestamp.now(),
             status: 'pending',
+            isDispatched,
         };
         const docRef = doc(requestsCol);
         batch.set(docRef, newRequest);
@@ -1681,7 +1675,8 @@ export const getCancellationRequests = async (): Promise<CancellationRequest[]> 
             id: doc.id,
             ...data,
             requestDate: (data.requestDate as Timestamp).toDate().toISOString(),
-            isDispatched: dispatchedGuides.has(data.trackingNumber),
+            // `isDispatched` is now read directly from the document
+            isDispatched: !!data.isDispatched,
         } as CancellationRequest;
     });
 
@@ -1735,6 +1730,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 
