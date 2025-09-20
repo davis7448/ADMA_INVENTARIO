@@ -907,13 +907,23 @@ export const cancelPendingDispatchItems = async (
     cancellationGuide: string
 ) => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
+    const counterRef = doc(db, 'counters', 'inventoryMovements');
 
     await runTransaction(db, async (transaction) => {
-        const orderSnap = await transaction.get(orderRef);
+        const [orderSnap, counterSnap] = await Promise.all([
+            transaction.get(orderRef),
+            transaction.get(counterRef)
+        ]);
+
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
         }
         const orderData = orderSnap.data() as DispatchOrder;
+
+        let nextMovementId = 1000;
+        if (counterSnap.exists()) {
+            nextMovementId = counterSnap.data().currentId + 1;
+        }
 
         const updatedProducts: DispatchOrderProduct[] = [...orderData.products];
         let productsWereCancelled = false;
@@ -933,7 +943,8 @@ export const cancelPendingDispatchItems = async (
                 
                 // Log the "Anulado" movement
                 const movementRef = doc(collection(db, 'inventoryMovements'));
-                const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
+                const movementData: Omit<InventoryMovement, 'id'> = {
+                    movementId: nextMovementId++,
                     type: 'Anulado',
                     productId: productInOrder.productId,
                     productName: productInOrder.name,
@@ -958,7 +969,7 @@ export const cancelPendingDispatchItems = async (
             throw new Error("No se encontraron los productos seleccionados para anular en esta orden de despacho.");
         }
 
-        const updatePayload: Partial<DispatchOrder> = {
+        const updatePayload: Record<string, any> = {
             products: updatedProducts,
             totalItems: updatedProducts.reduce((sum, p) => sum + p.quantity, 0),
         };
@@ -968,6 +979,7 @@ export const cancelPendingDispatchItems = async (
         }
 
         transaction.update(orderRef, updatePayload);
+        transaction.set(counterRef, { currentId: nextMovementId - 1 }, { merge: true });
 
         // Mark the cancellation request as completed
         const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
@@ -1661,4 +1673,5 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
