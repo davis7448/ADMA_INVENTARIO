@@ -703,7 +703,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
     
         const newDispatchOrder: Omit<DispatchOrder, 'id'> = {
             dispatchId: newDispatchId,
-            date: orderDate.toDate().toISOString(),
+            date: orderDate, // Keep as Timestamp object
             platformId,
             carrierId,
             products: cleanProducts,
@@ -715,7 +715,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             createdBy,
         };
     
-        const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate };
+        const dataToSet: Record<string, any> = { ...newDispatchOrder };
         if (!dataToSet.createdBy) {
           delete dataToSet.createdBy;
         }
@@ -746,29 +746,31 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
 };
 
 
+const parseFirestoreDate = (dateValue: any): string => {
+    if (dateValue instanceof Timestamp) {
+      return dateValue.toDate().toISOString();
+    } else if (typeof dateValue === 'string') {
+      // Attempt to parse ISO string
+      const d = new Date(dateValue);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString();
+      }
+    } else if (dateValue instanceof Date) {
+        return dateValue.toISOString();
+    }
+    // Fallback for unexpected formats
+    return new Date().toISOString();
+  };
+
 export const getDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const q = query(collection(db, 'dispatchOrders'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-            formattedDate = dateValue.toDate().toISOString();
-        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
-            const d = new Date(dateValue);
-            if (!isNaN(d.getTime())) {
-                formattedDate = d.toISOString();
-            } else {
-                formattedDate = new Date().toISOString(); // Fallback
-            }
-        } else {
-            formattedDate = new Date().toISOString(); // Fallback for other types
-        }
         return { 
             id: doc.id,
             ...data,
-            date: formattedDate,
+            date: parseFirestoreDate(data.date),
         } as DispatchOrder
     });
 }
@@ -779,24 +781,10 @@ export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-            formattedDate = dateValue.toDate().toISOString();
-        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
-            const d = new Date(dateValue);
-            if (!isNaN(d.getTime())) {
-                formattedDate = d.toISOString();
-            } else {
-                formattedDate = new Date().toISOString(); // Fallback
-            }
-        } else {
-            formattedDate = new Date().toISOString(); // Fallback for other types
-        }
         return { 
             id: doc.id,
             ...data,
-            date: formattedDate
+            date: parseFirestoreDate(data.date),
         } as DispatchOrder
     });
 }
@@ -806,24 +794,10 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-            formattedDate = dateValue.toDate().toISOString();
-        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
-            const d = new Date(dateValue);
-            if (!isNaN(d.getTime())) {
-                formattedDate = d.toISOString();
-            } else {
-                formattedDate = new Date().toISOString(); // Fallback
-            }
-        } else {
-            formattedDate = new Date().toISOString(); // Fallback for other types
-        }
         return { 
             id: doc.id,
             ...data,
-            date: formattedDate
+            date: parseFirestoreDate(data.date),
         } as DispatchOrder
     });
 }
@@ -987,24 +961,10 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
     const alertSnapshot = await getDocs(query(alertsCol));
     const alertList = alertSnapshot.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-            formattedDate = dateValue.toDate().toISOString();
-        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
-            const d = new Date(dateValue);
-            if (!isNaN(d.getTime())) {
-                formattedDate = d.toISOString();
-            } else {
-                formattedDate = new Date().toISOString(); // Fallback
-            }
-        } else {
-            formattedDate = new Date().toISOString(); // Fallback for other types
-        }
         return {
             id: doc.id,
             ...data,
-            date: formattedDate,
+            date: parseFirestoreDate(data.date),
         } as AuditAlert;
     });
     return alertList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1245,24 +1205,10 @@ export const getAllReservations = async (): Promise<Reservation[]> => {
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-            formattedDate = dateValue.toDate().toISOString();
-        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
-            const d = new Date(dateValue);
-            if (!isNaN(d.getTime())) {
-                formattedDate = d.toISOString();
-            } else {
-                formattedDate = new Date().toISOString(); // Fallback
-            }
-        } else {
-            formattedDate = new Date().toISOString(); // Fallback for other types
-        }
         return { 
             id: doc.id, 
             ...data,
-            date: formattedDate,
+            date: parseFirestoreDate(data.date),
         } as Reservation;
     });
 }
@@ -1272,24 +1218,10 @@ export const getReservationsByProductId = async (productId: string): Promise<Res
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-            formattedDate = dateValue.toDate().toISOString();
-        } else if (typeof dateValue === 'string' || dateValue instanceof Date) {
-            const d = new Date(dateValue);
-            if (!isNaN(d.getTime())) {
-                formattedDate = d.toISOString();
-            } else {
-                formattedDate = new Date().toISOString(); // Fallback
-            }
-        } else {
-            formattedDate = new Date().toISOString(); // Fallback for other types
-        }
         return { 
             id: doc.id, 
             ...data,
-            date: formattedDate,
+            date: parseFirestoreDate(data.date),
         } as Reservation;
     });
 };
@@ -1362,42 +1294,11 @@ export const getStaleReservationAlerts = async (): Promise<StaleReservationAlert
     const snapshot = await getDocs(alertsCol);
     const alertList = snapshot.docs.map(doc => {
       const data = doc.data();
-      const alertDateValue = data.alertDate;
-      const reservationDateValue = data.reservationDate;
-
-      let formattedAlertDate: string;
-      if (alertDateValue instanceof Timestamp) {
-          formattedAlertDate = alertDateValue.toDate().toISOString();
-      } else if (typeof alertDateValue === 'string' || alertDateValue instanceof Date) {
-        const d = new Date(alertDateValue);
-        if (!isNaN(d.getTime())) {
-            formattedAlertDate = d.toISOString();
-        } else {
-            formattedAlertDate = new Date().toISOString(); // Fallback
-        }
-      } else {
-          formattedAlertDate = new Date().toISOString(); // Fallback for other types
-      }
-
-      let formattedReservationDate: string;
-      if (reservationDateValue instanceof Timestamp) {
-        formattedReservationDate = reservationDateValue.toDate().toISOString();
-      } else if (typeof reservationDateValue === 'string' || reservationDateValue instanceof Date) {
-        const d = new Date(reservationDateValue);
-        if (!isNaN(d.getTime())) {
-            formattedReservationDate = d.toISOString();
-        } else {
-            formattedReservationDate = new Date().toISOString(); // Fallback
-        }
-      } else {
-        formattedReservationDate = new Date().toISOString(); // Fallback for other types
-      }
-
       return { 
         id: doc.id, 
         ...data,
-        alertDate: formattedAlertDate,
-        reservationDate: formattedReservationDate,
+        alertDate: parseFirestoreDate(data.alertDate),
+        reservationDate: parseFirestoreDate(data.reservationDate),
       } as StaleReservationAlert;
     });
     return alertList.sort((a,b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
@@ -1423,17 +1324,9 @@ export const checkForStaleReservations = async (): Promise<void> => {
 
     const movements = allMovements.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-            formattedDate = dateValue.toDate().toISOString();
-        } else {
-            formattedDate = dateValue as string;
-        }
-
         return {
             ...data,
-            date: formattedDate
+            date: parseFirestoreDate(data.date)
         } as InventoryMovement;
     });
 
@@ -1645,6 +1538,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
 
     
+
 
 
 
