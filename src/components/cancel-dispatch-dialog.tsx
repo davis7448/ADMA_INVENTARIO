@@ -63,9 +63,23 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
         return;
     }
 
+    const itemsToCancel = allExceptions
+        .filter(ex => guidesToCancel.includes(ex.trackingNumber))
+        .flatMap(ex => ex.products.map(p => ({ ...p, trackingNumber: ex.trackingNumber })));
+    
+    if (itemsToCancel.length === 0) {
+        toast({ variant: 'destructive', title: 'Error', description: 'No se encontraron productos para las guías seleccionadas.' });
+        return;
+    }
+
     setIsProcessing(true);
     try {
-        await cancelPendingDispatchItems(order.id, guidesToCancel, user);
+        const productsToCancelForApi = itemsToCancel.map(item => ({
+            productId: item.productId,
+            variantId: item.variantId,
+            quantity: item.quantity
+        }));
+        await cancelPendingDispatchItems(order.id, productsToCancelForApi, user, guidesToCancel.join(', '));
         toast({ title: 'Éxito', description: 'Los items pendientes han sido anulados y el stock ha sido restaurado.' });
         onCancelled();
         setOpen(false);

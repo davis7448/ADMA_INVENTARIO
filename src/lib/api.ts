@@ -806,13 +806,15 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
     // Check for cancellation requests before processing
-    const cancellationRequestsCol = collection(db, 'cancellationRequests');
-    const cancellationQuery = query(cancellationRequestsCol, where('trackingNumber', 'in', trackingNumbers), where('status', '==', 'pending'));
-    const cancellationSnapshot = await getDocs(cancellationQuery);
+    if (trackingNumbers.length > 0) {
+        const cancellationRequestsCol = collection(db, 'cancellationRequests');
+        const cancellationQuery = query(cancellationRequestsCol, where('trackingNumber', 'in', trackingNumbers), where('status', '==', 'pending'));
+        const cancellationSnapshot = await getDocs(cancellationQuery);
 
-    if (!cancellationSnapshot.empty) {
-        const cancelledGuide = cancellationSnapshot.docs[0].data().trackingNumber;
-        throw new Error(`La guía ${cancelledGuide} tiene una solicitud de anulación pendiente y no puede ser despachada.`);
+        if (!cancellationSnapshot.empty) {
+            const cancelledGuide = cancellationSnapshot.docs[0].data().trackingNumber;
+            throw new Error(`La guía ${cancelledGuide} tiene una solicitud de anulación pendiente y no puede ser despachada.`);
+        }
     }
 
 
@@ -898,58 +900,65 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     });
 };
 
-export const cancelPendingDispatchItems = async (orderId: string, cancelledTrackingNumbers: string[], user: { id: string; name: string; } | null) => {
+export const cancelPendingDispatchItems = async (orderId: string, productsToCancel: { productId: string, variantId?: string, quantity: number }[], user: User | null, cancellationGuide?: string) => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
-    // Use a transaction to ensure atomicity
     await runTransaction(db, async (transaction) => {
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
-            throw new Error("No se encontró la órden de despacho.");
+            throw new Error("No se encontró la orden de despacho.");
         }
         const orderData = orderSnap.data() as DispatchOrder;
 
-        const exceptionsToCancel = (orderData.exceptions || []).filter(ex => cancelledTrackingNumbers.includes(ex.trackingNumber));
-        if (exceptionsToCancel.length === 0) {
-            throw new Error("No se encontraron excepciones para cancelar con las guías proporcionadas.");
-        }
+        const updatedProducts: DispatchOrderProduct[] = [...orderData.products];
 
-        for (const ex of exceptionsToCancel) {
-            for (const exProd of ex.products) {
-                const productRef = doc(db, 'products', exProd.productId);
-                const productSnap = await transaction.get(productRef);
-
-                if (productSnap.exists()) {
-                    const currentPendingStock = productSnap.data().pendingStock || 0;
-                    const newPendingStock = Math.max(0, currentPendingStock - exProd.quantity);
-                    transaction.update(productRef, { pendingStock: newPendingStock });
-                    
-                    const movementRef = doc(collection(db, 'inventoryMovements'));
-                    const productName = productSnap.data().name || 'Producto Desconocido';
-                    const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
-                        type: 'Anulado',
-                        productId: exProd.productId,
-                        productName: productName,
-                        quantity: exProd.quantity,
-                        notes: `Anulación de guía pendiente por falta de stock: ${ex.trackingNumber}. Despacho: ${orderData.dispatchId}. SKU: ${exProd.variantSku || productSnap.data()?.sku || 'N/A'}`,
-                        userId: user?.id,
-                        userName: user?.name,
-                        date: Timestamp.now(),
-                    };
-                    transaction.set(movementRef, movementData);
+        for (const itemToCancel of productsToCancel) {
+            const productIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && p.variantId === itemToCancel.variantId);
+            
+            if (productIndex !== -1) {
+                const product = updatedProducts[productIndex];
+                
+                // Restore stock
+                await updateProductStock(product.productId, itemToCancel.quantity, 'add', product.sku);
+                
+                // Log movement
+                const movementRef = doc(collection(db, 'inventoryMovements'));
+                const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
+                    type: 'Anulado',
+                    productId: product.productId,
+                    productName: product.name,
+                    quantity: itemToCancel.quantity,
+                    notes: `Anulación de guía ${cancellationGuide || ''} en despacho ${orderData.dispatchId} por ${user?.name}. Stock restaurado.`,
+                    userId: user?.id,
+                    userName: user?.name,
+                    date: Timestamp.now(),
+                };
+                transaction.set(movementRef, movementData);
+                
+                // Update or remove product from dispatch order
+                if (product.quantity > itemToCancel.quantity) {
+                    updatedProducts[productIndex] = { ...product, quantity: product.quantity - itemToCancel.quantity };
+                } else {
+                    updatedProducts.splice(productIndex, 1);
                 }
             }
         }
         
-        const remainingExceptions = (orderData.exceptions || []).filter(ex => !cancelledTrackingNumbers.includes(ex.trackingNumber));
-        const newStatus = remainingExceptions.length === 0 && orderData.status === 'Parcial' ? 'Despachada' : orderData.status;
-        const currentCancelled = orderData.cancelledExceptions || [];
-
+        // Update the dispatch order
         transaction.update(orderRef, {
-            exceptions: remainingExceptions,
-            status: newStatus,
-            cancelledExceptions: [...currentCancelled, ...exceptionsToCancel],
+            products: updatedProducts,
+            totalItems: updatedProducts.reduce((sum, p) => sum + p.quantity, 0),
         });
+
+        // Mark the cancellation request as completed if a guide was provided
+        if (cancellationGuide) {
+            const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
+            const reqSnap = await getDocs(reqQuery);
+            if (!reqSnap.empty) {
+                const reqDoc = reqSnap.docs[0];
+                transaction.update(reqDoc.ref, { status: 'completed' });
+            }
+        }
     });
 };
 
@@ -1536,6 +1545,10 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     
     const alreadyDispatched: string[] = [];
 
+    if (trackingNumbers.length === 0) {
+        return { alreadyDispatched: [] };
+    }
+    
     // Check for already dispatched guides
     const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', trackingNumbers));
     const dispatchedSnapshot = await getDocs(dispatchedQuery);
@@ -1543,7 +1556,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     const dispatchedGuides = new Set<string>();
     dispatchedSnapshot.forEach(doc => {
         const order = doc.data() as DispatchOrder;
-        order.trackingNumbers.forEach(tn => {
+        order.trackingNumbers?.forEach(tn => {
             if (trackingNumbers.includes(tn)) {
                 dispatchedGuides.add(tn);
             }
@@ -1594,53 +1607,10 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
         
         const requestData = requestSnap.data() as CancellationRequest;
 
-        // If completing the cancellation, find the original dispatch and revert stock
         if (status === 'completed') {
-            const dispatchQuery = query(
-                collection(db, 'dispatchOrders'), 
-                where('exceptions', 'array-contains', { trackingNumber: requestData.trackingNumber })
-            );
-            
-            const dispatchSnapshot = await getDocs(dispatchQuery);
-            // This is a simplification. A more robust solution would handle multiple products in an exception
-            // and find the specific exception object. For now, we assume one guide maps to one exception.
-            if (!dispatchSnapshot.empty) {
-                const dispatchDoc = dispatchSnapshot.docs[0];
-                const dispatchData = dispatchDoc.data() as DispatchOrder;
-                
-                const exception = dispatchData.exceptions.find(ex => ex.trackingNumber === requestData.trackingNumber);
-                if (exception && exception.products) {
-                    for (const p of exception.products) {
-                         const productRef = doc(db, 'products', p.productId);
-                         // Use transaction.get to read within the transaction
-                         const productSnap = await transaction.get(productRef);
-                         if (productSnap.exists()) {
-                            const newPendingStock = (productSnap.data().pendingStock || 0) - p.quantity;
-                            transaction.update(productRef, { pendingStock: newPendingStock });
-                            
-                            // Also add back to main stock
-                            const newStock = (productSnap.data().stock || 0) + p.quantity;
-                            transaction.update(productRef, { stock: newStock });
-
-                            // Create movement log
-                            const movementRef = doc(collection(db, 'inventoryMovements'));
-                            const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
-                                type: 'Anulado',
-                                productId: p.productId,
-                                productName: productSnap.data().name,
-                                quantity: p.quantity,
-                                notes: `Guía ${requestData.trackingNumber} anulada por ${user?.name}. Stock restaurado.`,
-                                userId: user?.id,
-                                userName: user?.name,
-                                date: Timestamp.now(),
-                            };
-                            transaction.set(movementRef, movementData);
-                         }
-                    }
-                }
-            } else {
-                 console.warn(`No se encontró una orden de despacho con la guía de excepción ${requestData.trackingNumber} para revertir el stock.`);
-            }
+            // Logic to revert stock is now handled in cancelPendingDispatchItems
+            // This function just updates the status.
+            console.warn(`La guía ${requestData.trackingNumber} fue marcada como anulada. La reversión de stock debe manejarse por separado si no es una excepción.`);
         }
         
         transaction.update(requestRef, { status });
