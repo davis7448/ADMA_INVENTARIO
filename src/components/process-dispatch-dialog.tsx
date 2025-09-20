@@ -66,6 +66,12 @@ interface AnnulmentDialogState {
     request: CancellationRequest | null;
 }
 
+interface AnnulmentItem {
+    selected: boolean;
+    quantity: number;
+    maxQuantity: number;
+}
+
 export function ProcessDispatchDialog({ order, productsById, children, onDispatchProcessed }: ProcessDispatchDialogProps) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -77,7 +83,7 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
   
   // State for the new inline annulment flow
   const [annulmentDialog, setAnnulmentDialog] = useState<AnnulmentDialogState>({ isOpen: false, guide: '', request: null });
-  const [itemsToAnnul, setItemsToAnnul] = useState<Record<string, { selected: boolean, quantity: number }>>({});
+  const [itemsToAnnul, setItemsToAnnul] = useState<Record<string, AnnulmentItem>>({});
   const [isAnnulling, setIsAnnulling] = useState(false);
 
 
@@ -160,9 +166,9 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                 // Initialize items to annul with all products in the current order
                 const initialItems = order.products.reduce((acc, p) => {
                     const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
-                    acc[key] = { selected: false, quantity: p.quantity };
+                    acc[key] = { selected: false, quantity: p.quantity, maxQuantity: p.quantity };
                     return acc;
-                }, {} as Record<string, { selected: boolean; quantity: number }>);
+                }, {} as Record<string, AnnulmentItem>);
                 
                 setItemsToAnnul(initialItems);
                 setAnnulmentDialog({ isOpen: true, guide: blockedGuide, request: relevantRequest });
@@ -181,22 +187,19 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     if (!annulmentDialog.request) return;
 
     const itemsToCancelForApi = Object.entries(itemsToAnnul)
-        .filter(([, val]) => val.selected)
-        .map(([key]) => {
+        .filter(([, val]) => val.selected && val.quantity > 0)
+        .map(([key, val]) => {
             const [productId, variantId] = key.split('-');
-            const productInOrder = order.products.find(p => p.productId === productId && (p.variantId || 'undefined') === (variantId || 'undefined'));
-            if (!productInOrder) return null;
-
+            
             return {
-                productId: productInOrder.productId,
-                variantId: productInOrder.variantId,
-                quantity: productInOrder.quantity,
+                productId: productId,
+                variantId: variantId !== 'undefined' ? variantId : undefined,
+                quantity: val.quantity,
             };
-        })
-        .filter(Boolean) as { productId: string; variantId?: string; quantity: number }[];
+        });
 
     if (itemsToCancelForApi.length === 0) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto para anular.' });
+        toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto e indicar una cantidad mayor a 0.' });
         return;
     }
     
@@ -249,6 +252,16 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
     return null;
   }
 
+  const handleAnnulmentQuantityChange = (key: string, newQuantity: number) => {
+    const item = itemsToAnnul[key];
+    if (item && newQuantity >= 0 && newQuantity <= item.maxQuantity) {
+        setItemsToAnnul(prev => ({
+            ...prev,
+            [key]: { ...item, quantity: newQuantity }
+        }));
+    }
+  }
+
   return (
     <>
     <Dialog open={annulmentDialog.isOpen} onOpenChange={(open) => !open && setAnnulmentDialog({isOpen: false, guide: '', request: null})}>
@@ -260,22 +273,33 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
                     Selecciona los productos de esta orden de despacho que corresponden a la guía que deseas anular. El stock será restaurado.
                 </DialogDescription>
             </DialogHeader>
-            <div className="py-4 space-y-2 max-h-60 overflow-y-auto">
+            <div className="py-4 space-y-3 max-h-60 overflow-y-auto">
                 {order.products.map(p => {
                      const key = p.variantId ? `${p.productId}-${p.variantId}` : p.productId;
+                     const item = itemsToAnnul[key];
                      return (
-                        <div key={key} className="flex items-center space-x-2">
+                        <div key={key} className="flex items-center space-x-3 p-2 border rounded-md">
                             <Checkbox
                                 id={key}
-                                checked={itemsToAnnul[key]?.selected || false}
+                                checked={item?.selected || false}
                                 onCheckedChange={(checked) => setItemsToAnnul(prev => ({
                                     ...prev,
                                     [key]: { ...prev[key], selected: !!checked }
                                 }))}
                             />
-                            <Label htmlFor={key} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                {p.name} ({p.sku}) - Cant: {p.quantity}
+                            <Label htmlFor={key} className="text-sm font-medium flex-1">
+                                {p.name} ({p.sku})
                             </Label>
+                             <Input 
+                                type="number"
+                                className="w-24 h-8"
+                                value={item?.quantity}
+                                onChange={(e) => handleAnnulmentQuantityChange(key, parseInt(e.target.value, 10) || 0)}
+                                max={item?.maxQuantity}
+                                min="0"
+                                disabled={!item?.selected}
+                            />
+                            <span className="text-sm text-muted-foreground">/ {item?.maxQuantity}</span>
                         </div>
                     )
                 })}
