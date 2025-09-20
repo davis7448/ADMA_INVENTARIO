@@ -38,7 +38,7 @@ import { Label } from '@/components/ui/label';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
 import React from 'react';
-
+import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -105,6 +105,9 @@ export default function DashboardPage() {
     const productIdsInCategory = filterCategories.length > 0 
         ? allProducts.filter(p => filterCategories.includes(p.categoryId)).map(p => p.id)
         : null;
+    
+    const platformNameMap = allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>);
+    const carrierNameMap = allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>);
 
     let ordersInPeriod = allOrders.filter(order => {
         if (!order.date) return false;
@@ -215,9 +218,6 @@ export default function DashboardPage() {
         acc[category.id] = category.name;
         return acc;
     }, {} as Record<string, string>);
-    
-    const platformNameMap = allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>);
-    const carrierNameMap = allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>);
 
     const salesByProduct: Record<string, { total: number; variants: Record<string, number> }> = {};
     const salesByCategory: Record<string, number> = {};
@@ -286,6 +286,8 @@ export default function DashboardPage() {
     const carrierUsageCount: { [carrierId: string]: number } = {};
     let totalProductsShipped = 0;
 
+    const dailyDispatchSummaryData: Record<string, Record<string, Record<string, number>>> = {};
+
     ordersInPeriod.forEach(order => {
         const platformName = platformNameMap[order.platformId] || 'Unknown Platform';
         const carrierName = carrierNameMap[order.carrierId] || 'Unknown Carrier';
@@ -298,6 +300,20 @@ export default function DashboardPage() {
         platformOrderCount[platformName] = (platformOrderCount[platformName] || 0) + 1;
         carrierUsageCount[carrierName] = (carrierUsageCount[carrierName] || 0) + order.totalItems;
         totalProductsShipped += order.totalItems;
+
+        // New Daily Dispatch Summary logic
+        const day = format(new Date(order.date), 'yyyy-MM-dd');
+        const guideCount = order.trackingNumbers?.length || 0;
+
+        if (guideCount > 0) {
+            if (!dailyDispatchSummaryData[day]) {
+                dailyDispatchSummaryData[day] = {};
+            }
+            if (!dailyDispatchSummaryData[day][platformName]) {
+                dailyDispatchSummaryData[day][platformName] = {};
+            }
+            dailyDispatchSummaryData[day][platformName][carrierName] = (dailyDispatchSummaryData[day][platformName][carrierName] || 0) + guideCount;
+        }
     });
 
     for (const platformName in platformCarrierMap) {
@@ -336,6 +352,7 @@ export default function DashboardPage() {
       allCarrierNames: Object.values(carrierNameMap),
       mostUsedCarrier,
       platformWithMostOrders,
+      dailyDispatchSummaryData,
     };
   }, [dateRange, allOrders, allCarriers, allProducts, allCategories, allPlatforms, allMovements, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
 
@@ -522,6 +539,10 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
         </div>
+      )}
+      
+      {loading ? null : (
+        <DailyDispatchSummary data={filteredData.dailyDispatchSummaryData} />
       )}
 
         <Card>
