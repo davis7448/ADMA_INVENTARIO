@@ -23,7 +23,7 @@ import { getDispatchOrders, getProducts, getCarriers, getCategories, getInventor
 import type { DispatchOrder, Product, Carrier, Category, InventoryMovement, Platform, ProductVariant } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
-import { subDays, format, eachDayOfInterval } from 'date-fns';
+import { addDays, format, startOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn, formatToTimeZone } from '@/lib/utils';
@@ -40,11 +40,13 @@ import { Badge } from '@/components/ui/badge';
 import React from 'react';
 import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 import { es } from 'date-fns/locale';
+import { utcToZonedTime } from 'date-fns-tz';
 
 export default function DashboardPage() {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 6),
-    to: new Date(),
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const to = new Date();
+    const from = addDays(to, -6);
+    return { from, to };
   });
   const [allOrders, setAllOrders] = useState<DispatchOrder[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -198,27 +200,27 @@ export default function DashboardPage() {
     const returnsChartData = [];
     
     if (dateRange?.from && dateRange?.to) {
-        const dayIntervals = eachDayOfInterval({
-            start: dateRange.from,
-            end: dateRange.to
-        });
-    
-        for (const day of dayIntervals) {
-            // Ensure the day key for lookup is in the correct timezone
-            const dayKey = formatToTimeZone(day, 'yyyy-MM-dd');
-            chartData.push({
-                date: dayKey,
-                orders: ordersByDay[dayKey] || 0,
-            });
-            pendingChartData.push({
-                date: dayKey,
-                orders: pendingUnitsByDay[dayKey] || 0,
-            });
-            returnsChartData.push({
-                date: dayKey,
-                returns: returnsByDay[dayKey] || 0,
-            });
-        }
+      let currentDate = startOfDay(dateRange.from);
+      const endDate = startOfDay(dateRange.to);
+
+      while (currentDate <= endDate) {
+          const dayKey = format(currentDate, 'yyyy-MM-dd');
+          
+          chartData.push({
+              date: dayKey,
+              orders: ordersByDay[dayKey] || 0,
+          });
+          pendingChartData.push({
+              date: dayKey,
+              orders: pendingUnitsByDay[dayKey] || 0,
+          });
+          returnsChartData.push({
+              date: dayKey,
+              returns: returnsByDay[dayKey] || 0,
+          });
+
+          currentDate = addDays(currentDate, 1);
+      }
     }
     
     const productInfoMap = allProducts.reduce((acc, product) => {
@@ -458,11 +460,11 @@ export default function DashboardPage() {
                     {dateRange?.from ? (
                         dateRange.to ? (
                             <>
-                                {format(dateRange.from, "LLL dd, y")} -{" "}
-                                {format(dateRange.to, "LLL dd, y")}
+                                {format(dateRange.from, "LLL dd, y", { locale: es })} -{" "}
+                                {format(dateRange.to, "LLL dd, y", { locale: es })}
                             </>
                         ) : (
-                            format(dateRange.from, "LLL dd, y")
+                            format(dateRange.from, "LLL dd, y", { locale: es })
                         )
                     ) : (
                         <span>Seleccionar rango</span>
@@ -747,6 +749,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 
 
 
