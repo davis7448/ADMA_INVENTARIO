@@ -39,6 +39,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Badge } from '@/components/ui/badge';
 import React from 'react';
 import DailyDispatchSummary from '@/components/daily-dispatch-summary';
+import { es } from 'date-fns/locale';
 
 export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -190,23 +191,25 @@ export default function DashboardPage() {
     const chartData = [];
     const pendingChartData = [];
     const returnsChartData = [];
-    let currentDate = new Date(fromDate);
     
-    while (currentDate <= toDate) {
-        const dayKey = formatToTimeZone(currentDate, 'yyyy-MM-dd');
-        chartData.push({
-            date: dayKey,
-            orders: ordersByDay[dayKey] || 0,
-        });
-        pendingChartData.push({
-            date: dayKey,
-            orders: pendingUnitsByDay[dayKey] || 0,
-        });
-        returnsChartData.push({
-            date: dayKey,
-            returns: returnsByDay[dayKey] || 0,
-        });
-        currentDate.setDate(currentDate.getDate() + 1);
+    if (dateRange?.from && dateRange?.to) {
+      let currentDate = new Date(dateRange.from);
+      while (currentDate <= dateRange.to) {
+          const dayKey = formatToTimeZone(currentDate, 'yyyy-MM-dd');
+          chartData.push({
+              date: dayKey,
+              orders: ordersByDay[dayKey] || 0,
+          });
+          pendingChartData.push({
+              date: dayKey,
+              orders: pendingUnitsByDay[dayKey] || 0,
+          });
+          returnsChartData.push({
+              date: dayKey,
+              returns: returnsByDay[dayKey] || 0,
+          });
+          currentDate.setDate(currentDate.getDate() + 1);
+      }
     }
     
     const productInfoMap = allProducts.reduce((acc, product) => {
@@ -465,6 +468,7 @@ export default function DashboardPage() {
                     selected={dateRange}
                     onSelect={setDateRange}
                     numberOfMonths={2}
+                    locale={es}
                 />
             </PopoverContent>
         </Popover>

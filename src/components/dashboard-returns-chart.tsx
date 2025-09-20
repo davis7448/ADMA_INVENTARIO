@@ -3,6 +3,9 @@
 
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import { es } from 'date-fns/locale';
+import { formatToTimeZone } from '@/lib/utils';
+
 
 const chartConfig = {
   returns: {
@@ -36,7 +39,7 @@ export default function DashboardReturnsChart({ data }: DashboardReturnsChartPro
             cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
             content={<ChartTooltipContent 
                 indicator="dot"
-                labelFormatter={(value) => new Date(value).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })}
+                labelFormatter={(value) => formatToTimeZone(new Date(value), 'eeee, dd MMM', { locale: es })}
             />}
           />
           <XAxis
@@ -46,7 +49,7 @@ export default function DashboardReturnsChart({ data }: DashboardReturnsChartPro
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            tickFormatter={(value) => new Date(value).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+            tickFormatter={(value) => formatToTimeZone(new Date(value), 'dd MMM', { locale: es })}
           />
           <YAxis
             stroke="#888888"
