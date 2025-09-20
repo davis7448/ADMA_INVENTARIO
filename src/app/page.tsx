@@ -26,7 +26,7 @@ import type { DateRange } from 'react-day-picker';
 import { subDays, format, startOfDay, endOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { cn } from '@/lib/utils';
+import { cn, formatToTimeZone } from '@/lib/utils';
 import DashboardOrdersChart from '@/components/dashboard-orders-chart';
 import DashboardPendingChart from '@/components/dashboard-pending-chart';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -139,7 +139,7 @@ export default function DashboardPage() {
     let totalPendingUnits = 0;
     const pendingUnitsByDay: Record<string, number> = {};
     pendingAndPartialInPeriod.forEach(order => {
-        const day = format(new Date(order.date), 'yyyy-MM-dd');
+        const day = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
         let unitsInOrder = 0;
         if (order.status === 'Pendiente') {
             // For a 'Pendiente' order, all items are considered pending
@@ -176,13 +176,13 @@ export default function DashboardPage() {
     const totalReturns = returnMovementsInPeriod.reduce((sum, m) => sum + m.quantity, 0);
 
     const returnsByDay = returnMovementsInPeriod.reduce((acc, m) => {
-        const day = format(new Date(m.date), 'yyyy-MM-dd');
+        const day = formatToTimeZone(new Date(m.date), 'yyyy-MM-dd');
         acc[day] = (acc[day] || 0) + m.quantity;
         return acc;
     }, {} as Record<string, number>);
 
     const ordersByDay = ordersInPeriod.reduce((acc, order) => {
-        const day = format(new Date(order.date), 'yyyy-MM-dd');
+        const day = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
         acc[day] = (acc[day] || 0) + order.totalItems; // Aggregate by items now
         return acc;
     }, {} as Record<string, number>);
@@ -193,7 +193,7 @@ export default function DashboardPage() {
     let currentDate = new Date(fromDate);
     
     while (currentDate <= toDate) {
-        const dayKey = format(currentDate, 'yyyy-MM-dd');
+        const dayKey = formatToTimeZone(currentDate, 'yyyy-MM-dd');
         chartData.push({
             date: dayKey,
             orders: ordersByDay[dayKey] || 0,
@@ -302,7 +302,7 @@ export default function DashboardPage() {
         totalProductsShipped += order.totalItems;
 
         // New Daily Dispatch Summary logic
-        const day = format(new Date(order.date), 'yyyy-MM-dd');
+        const day = formatToTimeZone(new Date(order.date), 'yyyy-MM-dd');
         const guideCount = order.trackingNumbers?.length || 0;
 
         if (guideCount > 0) {
