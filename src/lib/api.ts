@@ -1627,15 +1627,29 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
 
 export const getCancellationRequests = async (): Promise<CancellationRequest[]> => {
     const requestsCol = collection(db, 'cancellationRequests');
-    const snapshot = await getDocs(requestsCol);
-    const requestList = snapshot.docs.map(doc => {
+    const dispatchOrdersCol = collection(db, 'dispatchOrders');
+
+    const [requestsSnapshot, dispatchOrdersSnapshot] = await Promise.all([
+        getDocs(requestsCol),
+        getDocs(dispatchOrdersCol)
+    ]);
+
+    const dispatchedGuides = new Set<string>();
+    dispatchOrdersSnapshot.forEach(doc => {
+        const order = doc.data() as DispatchOrder;
+        order.trackingNumbers?.forEach(tn => dispatchedGuides.add(tn));
+    });
+
+    const requestList: CancellationRequest[] = requestsSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...data,
             requestDate: (data.requestDate as Timestamp).toDate().toISOString(),
+            isDispatched: dispatchedGuides.has(data.trackingNumber),
         } as CancellationRequest;
     });
+
     return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
 };
     
@@ -1686,6 +1700,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 

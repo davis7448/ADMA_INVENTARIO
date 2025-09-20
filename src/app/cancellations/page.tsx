@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useTransition } from 'react';
@@ -214,17 +215,28 @@ function CancellationsContent() {
         }
       }
 
-    const getStatusBadge = (status: 'pending' | 'completed' | 'rejected') => {
+    const getStatusBadge = (status: 'pending' | 'completed' | 'rejected', isDispatched?: boolean) => {
+        const badges = [];
+        
         switch (status) {
             case 'pending':
-                return <Badge variant="secondary">Pendiente</Badge>;
+                badges.push(<Badge key="status" variant="secondary">Pendiente</Badge>);
+                if (isDispatched) {
+                    badges.push(<Badge key="dispatch" variant="outline" className="ml-2 border-orange-500 text-orange-500">Revisión Física</Badge>);
+                }
+                break;
             case 'completed':
-                return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Anulada</Badge>;
+                badges.push(<Badge key="status" className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Anulada</Badge>);
+                break;
             case 'rejected':
-                return <Badge variant="destructive">Rechazada</Badge>;
+                badges.push(<Badge key="status" variant="destructive">Rechazada</Badge>);
+                break;
             default:
-                return <Badge variant="outline">Desconocido</Badge>;
+                badges.push(<Badge key="status" variant="outline">Desconocido</Badge>);
+                break;
         }
+
+        return <div className="flex items-center gap-2">{badges}</div>;
     };
 
     return (
@@ -345,7 +357,7 @@ function CancellationsContent() {
                                         <TableCell>{formatToTimeZone(new Date(req.requestDate), 'dd/MM/yyyy HH:mm')}</TableCell>
                                         <TableCell className="font-mono">{req.trackingNumber}</TableCell>
                                         <TableCell>{req.requestedBy.name}</TableCell>
-                                        <TableCell>{getStatusBadge(req.status)}</TableCell>
+                                        <TableCell>{getStatusBadge(req.status, req.isDispatched)}</TableCell>
                                         {canManageRequests && (
                                             <TableCell className="text-right">
                                                 {req.status === 'pending' && (
