@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/accordion';
 import { formatToTimeZone } from '@/lib/utils';
 import { Badge } from './ui/badge';
+import { es } from 'date-fns/locale';
 
 interface DailyDispatchSummaryProps {
   data: Record<string, Record<string, Record<string, number>>>;
@@ -68,8 +69,8 @@ export default function DailyDispatchSummary({ data }: DailyDispatchSummaryProps
               <AccordionItem value={day} key={day} className="border rounded-lg px-4">
                 <AccordionTrigger>
                   <div className="flex justify-between items-center w-full">
-                    <span className="font-semibold text-lg">
-                      {formatToTimeZone(new Date(day), 'eeee, dd MMM yyyy')}
+                    <span className="font-semibold text-lg capitalize">
+                      {formatToTimeZone(new Date(day), 'eeee, dd MMM yyyy', { locale: es })}
                     </span>
                     <Badge variant="secondary">{totalGuidesForDay} Guías</Badge>
                   </div>
