@@ -189,7 +189,7 @@ export function ProcessDispatchDialog({ order, productsById, children, onDispatc
 
             return {
                 productId: productInOrder.productId,
-                variantId: productIn-order.variantId,
+                variantId: productInOrder.variantId,
                 quantity: productInOrder.quantity,
             };
         })

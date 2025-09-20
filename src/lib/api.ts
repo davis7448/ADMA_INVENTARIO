@@ -900,7 +900,12 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
     });
 };
 
-export const cancelPendingDispatchItems = async (orderId: string, productsToCancel: { productId: string, variantId?: string, quantity: number }[], user: User | null, cancellationGuide?: string) => {
+export const cancelPendingDispatchItems = async (
+    orderId: string, 
+    productsToCancel: { productId: string; variantId?: string; quantity: number }[], 
+    user: User | null, 
+    cancellationGuide: string
+) => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
     await runTransaction(db, async (transaction) => {
@@ -911,56 +916,69 @@ export const cancelPendingDispatchItems = async (orderId: string, productsToCanc
         const orderData = orderSnap.data() as DispatchOrder;
 
         const updatedProducts: DispatchOrderProduct[] = [...orderData.products];
+        let productsWereCancelled = false;
 
         for (const itemToCancel of productsToCancel) {
-            const productIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && p.variantId === itemToCancel.variantId);
+            const productIndex = updatedProducts.findIndex(p => 
+                p.productId === itemToCancel.productId && 
+                (p.variantId || 'undefined') === (itemToCancel.variantId || 'undefined')
+            );
             
             if (productIndex !== -1) {
-                const product = updatedProducts[productIndex];
+                productsWereCancelled = true;
+                const productInOrder = updatedProducts[productIndex];
                 
-                // Restore stock
-                await updateProductStock(product.productId, itemToCancel.quantity, 'add', product.sku);
+                // Restore stock by calling the existing utility function
+                await updateProductStock(productInOrder.productId, itemToCancel.quantity, 'add', productInOrder.sku);
                 
-                // Log movement
+                // Log the "Anulado" movement
                 const movementRef = doc(collection(db, 'inventoryMovements'));
                 const movementData: Omit<InventoryMovement, 'id' | 'movementId'> = {
                     type: 'Anulado',
-                    productId: product.productId,
-                    productName: product.name,
+                    productId: productInOrder.productId,
+                    productName: productInOrder.name,
                     quantity: itemToCancel.quantity,
-                    notes: `Anulación de guía ${cancellationGuide || ''} en despacho ${orderData.dispatchId} por ${user?.name}. Stock restaurado.`,
+                    notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}. Stock restaurado.`,
                     userId: user?.id,
                     userName: user?.name,
                     date: Timestamp.now(),
                 };
                 transaction.set(movementRef, movementData);
                 
-                // Update or remove product from dispatch order
-                if (product.quantity > itemToCancel.quantity) {
-                    updatedProducts[productIndex] = { ...product, quantity: product.quantity - itemToCancel.quantity };
+                // Update or remove the product from the dispatch order's product list
+                if (productInOrder.quantity > itemToCancel.quantity) {
+                    updatedProducts[productIndex] = { ...productInOrder, quantity: productInOrder.quantity - itemToCancel.quantity };
                 } else {
                     updatedProducts.splice(productIndex, 1);
                 }
             }
         }
         
-        // Update the dispatch order
-        transaction.update(orderRef, {
+        if (!productsWereCancelled) {
+            throw new Error("No se encontraron los productos seleccionados para anular en esta orden de despacho.");
+        }
+
+        const updatePayload: Partial<DispatchOrder> = {
             products: updatedProducts,
             totalItems: updatedProducts.reduce((sum, p) => sum + p.quantity, 0),
-        });
+        };
 
-        // Mark the cancellation request as completed if a guide was provided
-        if (cancellationGuide) {
-            const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
-            const reqSnap = await getDocs(reqQuery);
-            if (!reqSnap.empty) {
-                const reqDoc = reqSnap.docs[0];
-                transaction.update(reqDoc.ref, { status: 'completed' });
-            }
+        if (updatedProducts.length === 0) {
+            updatePayload.status = 'Anulada';
+        }
+
+        transaction.update(orderRef, updatePayload);
+
+        // Mark the cancellation request as completed
+        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
+        const reqSnap = await getDocs(reqQuery);
+        if (!reqSnap.empty) {
+            const reqDoc = reqSnap.docs[0];
+            transaction.update(reqDoc.ref, { status: 'completed' });
         }
     });
 };
+
 
 
 // Audit Alert Functions
@@ -1388,7 +1406,7 @@ export const resolveStaleReservationAlert = async (alertId: string): Promise<voi
     const reservationRef = doc(db, 'reservations', alertData.reservationId);
 
     const batch = writeBatch(db);
-    batch.delete(reservationRef);
+batch.delete(reservationRef);
     batch.delete(alertRef);
     
     await batch.commit();
@@ -1643,3 +1661,4 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
