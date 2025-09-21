@@ -990,18 +990,18 @@ export const cancelPendingDispatchItems = async (
                 }
             }
             
-            const movementRef = doc(collection(db, 'inventoryMovements'));
-            const movementData = {
+            await addInventoryMovement({
                 type: 'Anulado',
                 productId: itemToCancel.productId,
                 productName: productData.name,
                 quantity: itemToCancel.quantity,
                 notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
+                platformId: orderData.platformId,
+                carrierId: orderData.carrierId,
+                dispatchId: orderData.dispatchId,
                 userId: user?.id,
                 userName: user?.name,
-                date: Timestamp.now(),
-            };
-            transaction.set(movementRef, movementData);
+            });
             
             const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
             if (productInOrderIndex !== -1) {
@@ -1727,3 +1727,6 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
 
+
+
+    
