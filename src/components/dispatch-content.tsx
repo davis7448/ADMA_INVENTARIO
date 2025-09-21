@@ -452,13 +452,13 @@ export function DispatchContent() {
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
-                                        <div className="pr-4 pl-2">
+                                        <div className="pr-4 pl-2 shrink-0">
                                             <ProcessDispatchDialog
                                                 order={orderForDialog}
                                                 productsById={productsById}
                                                 onDispatchProcessed={handleDispatchProcessed}
                                             >
-                                                <Button>Procesar Pendientes</Button>
+                                                <Button onClick={(e) => e.stopPropagation()}>Procesar Pendientes</Button>
                                             </ProcessDispatchDialog>
                                         </div>
                                     </div>
