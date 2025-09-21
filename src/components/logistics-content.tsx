@@ -101,6 +101,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     
     // Devoluciones State
     const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
+    const [isReturnProcessing, startReturnTransition] = useTransition();
     const [returnCarrier, setReturnCarrier] = useState('');
     const [returnedProducts, setReturnedProducts] = useState<(LogisticItem & {trackingNumber: string})[]>([]);
     const [currentTrackingNumber, setCurrentTrackingNumber] = useState('');
@@ -308,7 +309,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                 dispatchQuantity: p.quantity,
             }));
             
-            const pdfResult = await generatePickingListAction(dispatchId, pdfProducts, platformName, carrierName, date);
+            const pdfResult = await generatePickingListAction(dispatchId, pdfProducts, platformName, carrierName, date as any);
             if (pdfResult.success && pdfResult.pdfData) {
                 const byteCharacters = atob(pdfResult.pdfData);
                 const byteNumbers = new Array(byteCharacters.length);
@@ -485,7 +486,6 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     };
 
     const handleProcessReturn = async () => {
-         // This function will need to be converted to a server action call
         if (!returnCarrier || returnedProducts.length === 0) {
             toast({
                 variant: 'destructive',
@@ -494,14 +494,24 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             });
             return;
         }
-    
-        toast({
-            title: 'Devolución Procesada (Simulado)',
-            description: `Se ha procesado una devolución con ${returnedProducts.length} producto(s).`
-        });
         
-        setReturnCarrier('');
-        setReturnedProducts([]);
+        startReturnTransition(async () => {
+            const result = await registerInventoryEntryAction(returnedProducts, user, 'Devolución de Cliente', undefined, returnCarrier);
+            if (result.success) {
+                toast({
+                    title: '¡Devolución Procesada!',
+                    description: `Se han procesado ${result.count} productos. El stock ha sido restaurado.`
+                });
+                setReturnCarrier('');
+                setReturnedProducts([]);
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Error al Procesar Devolución',
+                    description: result.message
+                });
+            }
+        });
     };
 
     // --- AVERÍAS ---
@@ -1051,7 +1061,9 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                                     </Card>
                                 </CardContent>
                                 <CardFooter>
-                                    <Button onClick={handleProcessReturn}>Procesar Devolución</Button>
+                                    <Button onClick={handleProcessReturn} disabled={isReturnProcessing}>
+                                        {isReturnProcessing ? 'Procesando...' : 'Procesar Devolución'}
+                                    </Button>
                                 </CardFooter>
                             </Card>
                         </TabsContent>

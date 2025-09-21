@@ -32,7 +32,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 
 // Product Functions
-export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any }): Promise<{ products: Product[], totalPages: number }> => {
+export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     const productsCol = collection(db, 'products');
     const productSnapshot = await getDocs(productsCol);
     let productList = productSnapshot.docs.map(doc => {
@@ -659,13 +659,18 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: LogisticItem[], user: User | null, entryReasonLabel: string, supplierId?: string): Promise<void> => {
+export const registerInventoryEntry = async (items: LogisticItem[], user: User | null, entryReasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
     const batch = writeBatch(db);
 
     let reasonText = entryReasonLabel;
     if (supplierId) {
         const supplier = await getSupplierById(supplierId);
         reasonText = `${reasonText}: ${supplier?.name || 'Desconocido'}`;
+    }
+    if (carrierId) {
+        const carriers = await getCarriers();
+        const carrier = carriers.find(c => c.id === carrierId);
+        reasonText = `${reasonText} (Transportadora: ${carrier?.name || 'Desconocido'})`;
     }
 
     for (const item of items) {
@@ -683,7 +688,8 @@ export const registerInventoryEntry = async (items: LogisticItem[], user: User |
             quantity: item.quantity,
             notes: reasonText,
             userId: user?.id,
-            userName: user?.name
+            userName: user?.name,
+            carrierId,
         };
         const dataToSet: Record<string, any> = {
             ...movementData,
@@ -1722,5 +1728,6 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 

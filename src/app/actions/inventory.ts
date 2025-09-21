@@ -10,13 +10,14 @@ export async function registerInventoryEntryAction(
     user: User | null,
     entryReason: string,
     supplierId?: string,
+    carrierId?: string,
 ): Promise<{ success: boolean; message: string, count: number }> {
     if (!items || items.length === 0) {
         return { success: false, message: "No hay items para registrar.", count: 0 };
     }
 
     try {
-        await registerInventoryEntry(items, user, entryReason, supplierId);
+        await registerInventoryEntry(items, user, entryReason, supplierId, carrierId);
         revalidatePath('/logistics');
         revalidatePath('/products');
         revalidatePath('/history');
