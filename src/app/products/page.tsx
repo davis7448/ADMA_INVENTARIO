@@ -7,17 +7,33 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 
 export const revalidate = 0;
 
-export default async function ProductsPage() {
-    const [products, supplierIdMap, categoryIdMap, allMovements, rotationCategories] = await Promise.all([
-        getProducts(),
-        getSuppliersByIds([]), // Fetch logic is now inside component
-        getCategoriesByIds([]), // Fetch logic is now inside component
-        getInventoryMovements(7), // Fetch only last 7 days of movements
+export default async function ProductsPage({
+    searchParams
+  }: {
+    searchParams: { [key: string]: string | string[] | undefined }
+  }) {
+
+    const page = Number(searchParams?.page || '1');
+    const limit = Number(searchParams?.limit || '20');
+    const filters = {
+        searchQuery: searchParams?.q as string,
+        selectedCategory: searchParams?.category as string,
+        selectedRotation: searchParams?.rotation as string,
+        selectedVendedor: searchParams?.vendedor as string,
+        minStock: searchParams?.minStock as string,
+        hasPending: searchParams?.pending === 'true',
+        hasReservations: searchParams?.reservations === 'true',
+        onlyAudited: searchParams?.audited === 'true',
+    };
+
+    const [productsResult, allMovements, rotationCategories] = await Promise.all([
+        getProducts({ page, limit, filters }),
+        getInventoryMovements({ limit: 10000, filters: { startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() } }),
         getRotationCategories(),
     ]);
 
     const salesByProduct: Record<string, number> = {};
-    for (const movement of allMovements) {
+    for (const movement of allMovements.movements) {
         if (movement.type === 'Salida') {
             salesByProduct[movement.productId] = (salesByProduct[movement.productId] || 0) + movement.quantity;
         }
@@ -35,14 +51,14 @@ export default async function ProductsPage() {
         return 'Inactivo';
     }
 
-    const productsWithRotation = products.map(product => ({
+    const productsWithRotation = productsResult.products.map(product => ({
         ...product,
         rotationCategoryName: getRotationCategoryName(product.id),
     }));
 
-    // We pass empty maps because the content component will fetch them based on the initial products
-    const uniqueVendorIds = [...new Set(productsWithRotation.map(p => p.vendorId))];
-    const uniqueCategoryIds = [...new Set(productsWithRotation.map(p => p.categoryId))];
+    // Fetch names only for the products on the current page to optimize
+    const uniqueVendorIds = [...new Set(productsWithRotation.map(p => p.vendorId).filter(Boolean))];
+    const uniqueCategoryIds = [...new Set(productsWithRotation.map(p => p.categoryId).filter(Boolean))];
     
     const [supplierNames, categoryNames] = await Promise.all([
         getSuppliersByIds(uniqueVendorIds),
@@ -54,6 +70,7 @@ export default async function ProductsPage() {
       <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas', 'logistics']}>
         <ProductsContent 
           initialProducts={productsWithRotation}
+          totalPages={productsResult.totalPages}
           initialSupplierNames={supplierNames}
           initialCategoryNames={categoryNames}
           allRotationCategories={rotationCategories}

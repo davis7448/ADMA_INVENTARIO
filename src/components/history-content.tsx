@@ -1,8 +1,8 @@
 
-
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -38,7 +38,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 interface HistoryContentProps {
     initialMovements: InventoryMovement[];
+    movementsTotalPages: number;
     initialDispatchOrders: DispatchOrder[];
+    ordersTotalPages: number;
     allProducts: Product[];
     allPlatforms: Platform[];
     allCarriers: Carrier[];
@@ -46,105 +48,63 @@ interface HistoryContentProps {
 
 export function HistoryContent({
     initialMovements,
+    movementsTotalPages,
     initialDispatchOrders,
+    ordersTotalPages,
     allProducts,
     allPlatforms,
     allCarriers
 }: HistoryContentProps) {
 
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+
     // Filter states
-    const [filterPlatformId, setFilterPlatformId] = useState<string>('all');
-    const [filterCarrierId, setFilterCarrierId] = useState<string>('all');
-    const [filterProductId, setFilterProductId] = useState<string>('all');
-    const [filterMovementType, setFilterMovementType] = useState<string>('all');
-    const [dateRange, setDateRange] = useState<DateRange | undefined>();
+    const [filterPlatformId, setFilterPlatformId] = useState<string>(searchParams.get('platformId') || 'all');
+    const [filterCarrierId, setFilterCarrierId] = useState<string>(searchParams.get('carrierId') || 'all');
+    const [filterProductId, setFilterProductId] = useState<string>(searchParams.get('productId') || 'all');
+    const [filterMovementType, setFilterMovementType] = useState<string>(searchParams.get('movementType') || 'all');
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
+        if (startDate && endDate) {
+            return { from: new Date(startDate), to: new Date(endDate) };
+        }
+        return undefined;
+    });
     const [productComboboxOpen, setProductComboboxOpen] = useState(false);
 
-    // Pagination states
-    const [movementsPage, setMovementsPage] = useState(1);
-    const [ordersPage, setOrdersPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(20);
+    // Pagination states from URL
+    const movementsPage = Number(searchParams.get('movementsPage') || '1');
+    const ordersPage = Number(searchParams.get('ordersPage') || '1');
+    const itemsPerPage = Number(searchParams.get('limit') || '10');
 
-    const { filteredMovements, filteredDispatchOrders } = useMemo(() => {
-        let movements = [...initialMovements];
-        let dispatchOrders = [...initialDispatchOrders];
+    useEffect(() => {
+        const params = new URLSearchParams(searchParams.toString());
         
-        const fromDate = dateRange?.from;
-        const toDate = dateRange?.to;
+        // Update params from state
+        if (filterProductId !== 'all') params.set('productId', filterProductId); else params.delete('productId');
+        if (filterPlatformId !== 'all') params.set('platformId', filterPlatformId); else params.delete('platformId');
+        if (filterCarrierId !== 'all') params.set('carrierId', filterCarrierId); else params.delete('carrierId');
+        if (filterMovementType !== 'all') params.set('movementType', filterMovementType); else params.delete('movementType');
 
-        // Filter by Date Range
-        if (fromDate) {
-            const startDate = startOfDay(fromDate);
-            movements = movements.filter(m => new Date(m.date) >= startDate);
-            dispatchOrders = dispatchOrders.filter(o => new Date(o.date) >= startDate);
-        }
-        if (toDate) {
-            const endDate = endOfDay(toDate);
-            movements = movements.filter(m => new Date(m.date) <= endDate);
-            dispatchOrders = dispatchOrders.filter(o => new Date(o.date) <= endDate);
-        }
+        if (dateRange?.from) params.set('startDate', dateRange.from.toISOString()); else params.delete('startDate');
+        if (dateRange?.to) params.set('endDate', dateRange.to.toISOString()); else params.delete('endDate');
+
+        params.set('limit', String(itemsPerPage));
+        // Reset page to 1 when filters change, but keep the other pagination
+        params.set('movementsPage', '1');
+        params.set('ordersPage', '1');
         
-        // Filter by Product
-        if (filterProductId !== 'all') {
-            movements = movements.filter(m => m.productId === filterProductId);
-            dispatchOrders = dispatchOrders.filter(o => o.products.some(p => p.productId === filterProductId));
-        }
+        router.push(`${pathname}?${params.toString()}`);
+    }, [filterProductId, filterPlatformId, filterCarrierId, filterMovementType, dateRange, itemsPerPage]);
 
-        // Filter Movements by Type
-        if (filterMovementType !== 'all') {
-            movements = movements.filter(m => m.type === filterMovementType);
-        }
-        
-        // Filter Movements by Platform
-        if (filterPlatformId !== 'all') {
-            movements = movements.filter(m => m.platformId === filterPlatformId);
-        }
 
-        // Filter Movements by Carrier
-        if (filterCarrierId !== 'all') {
-            movements = movements.filter(m => m.carrierId === filterCarrierId);
-        }
-
-        // Filter by Platform (only affects dispatch orders)
-        if (filterPlatformId !== 'all') {
-            dispatchOrders = dispatchOrders.filter(o => o.platformId === filterPlatformId);
-        }
-
-        // Filter by Carrier (only affects dispatch orders)
-        if (filterCarrierId !== 'all') {
-            dispatchOrders = dispatchOrders.filter(o => o.carrierId === filterCarrierId);
-        }
-        
-        // Sort results
-        movements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        dispatchOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        // Reset pages on filter change
-        setMovementsPage(1);
-        setOrdersPage(1);
-
-        return { filteredMovements: movements, filteredDispatchOrders: dispatchOrders };
-
-    }, [initialMovements, initialDispatchOrders, filterPlatformId, filterCarrierId, filterProductId, filterMovementType, dateRange]);
-
-    // Paginated data
-    const paginatedMovements = useMemo(() => {
-        const startIndex = (movementsPage - 1) * itemsPerPage;
-        return filteredMovements.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredMovements, movementsPage, itemsPerPage]);
-
-    const paginatedDispatchOrders = useMemo(() => {
-        const startIndex = (ordersPage - 1) * itemsPerPage;
-        return filteredDispatchOrders.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredDispatchOrders, ordersPage, itemsPerPage]);
-    
-    const totalMovementPages = Math.ceil(filteredMovements.length / itemsPerPage);
-    const totalOrderPages = Math.ceil(filteredDispatchOrders.length / itemsPerPage);
-
-    const handleItemsPerPageChange = (value: number) => {
-        setItemsPerPage(value);
-        setMovementsPage(1);
-        setOrdersPage(1);
+    const handlePaginationChange = (type: 'movements' | 'orders', newPage: number) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set(`${type}Page`, String(newPage));
+        router.push(`${pathname}?${params.toString()}`);
     }
 
 
@@ -158,7 +118,7 @@ export function HistoryContent({
     };
 
     const handleExportMovementsExcel = () => {
-        const flattenedData = filteredMovements.map(movement => ({
+        const flattenedData = initialMovements.map(movement => ({
             'ID Movimiento': movement.movementId,
             'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
             'Tipo': movement.type,
@@ -178,7 +138,7 @@ export function HistoryContent({
     };
 
     const handleExportExcel = () => {
-        const flattenedData = filteredDispatchOrders.flatMap(order => 
+        const flattenedData = initialDispatchOrders.flatMap(order => 
             order.products.map(product => ({
                 'ID Despacho': order.dispatchId,
                 'Fecha': formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm"),
@@ -228,6 +188,18 @@ export function HistoryContent({
     };
 
     const clearFilters = () => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete('productId');
+        params.delete('platformId');
+        params.delete('carrierId');
+        params.delete('movementType');
+        params.delete('startDate');
+        params.delete('endDate');
+        params.set('movementsPage', '1');
+        params.set('ordersPage', '1');
+        router.push(`${pathname}?${params.toString()}`);
+        
+        // Also reset local state
         setFilterPlatformId('all');
         setFilterCarrierId('all');
         setFilterProductId('all');
@@ -332,34 +304,13 @@ export function HistoryContent({
         currentPage: number;
         totalPages: number;
         onPageChange: (page: number) => void;
-        itemsPerPage: number;
-        onItemsPerPageChange: (value: number) => void;
-        totalItems: number;
     }
     
-    const PaginationControls = ({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalItems }: PaginationControlsProps) => {
-        if (totalPages <= 1 && totalItems <= itemsPerPage) return null;
+    const PaginationControls = ({ currentPage, totalPages, onPageChange}: PaginationControlsProps) => {
+        if (totalPages <= 1) return null;
         
         return (
             <div className="flex items-center justify-end space-x-6 lg:space-x-8 w-full">
-                <div className="flex items-center space-x-2">
-                    <p className="text-sm font-medium">Filas por página</p>
-                    <Select
-                        value={`${itemsPerPage}`}
-                        onValueChange={(value) => onItemsPerPageChange(Number(value))}
-                    >
-                        <SelectTrigger className="h-8 w-[70px]">
-                            <SelectValue placeholder={itemsPerPage} />
-                        </SelectTrigger>
-                        <SelectContent side="top">
-                            {[10, 20, 50, 100].map((pageSize) => (
-                            <SelectItem key={pageSize} value={`${pageSize}`}>
-                                {pageSize}
-                            </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
                 <div className="flex w-[100px] items-center justify-center text-sm font-medium">
                     Página {currentPage} de {totalPages > 0 ? totalPages : 1}
                 </div>
@@ -427,8 +378,8 @@ export function HistoryContent({
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                    {paginatedMovements.length > 0 ? (
-                        paginatedMovements.map((movement) => (
+                    {initialMovements.length > 0 ? (
+                        initialMovements.map((movement) => (
                         <TableRow key={movement.id}>
                             <TableCell className="font-mono text-xs">{movement.movementId || 'N/A'}</TableCell>
                             <TableCell className="font-medium">
@@ -460,11 +411,8 @@ export function HistoryContent({
              <CardFooter>
                 <PaginationControls 
                     currentPage={movementsPage} 
-                    totalPages={totalMovementPages}
-                    onPageChange={setMovementsPage} 
-                    itemsPerPage={itemsPerPage}
-                    onItemsPerPageChange={handleItemsPerPageChange}
-                    totalItems={filteredMovements.length}
+                    totalPages={movementsTotalPages}
+                    onPageChange={(page) => handlePaginationChange('movements', page)}
                 />
             </CardFooter>
         </Card>
@@ -485,9 +433,9 @@ export function HistoryContent({
                 </div>
             </CardHeader>
             <CardContent>
-                {paginatedDispatchOrders.length > 0 ? (
+                {initialDispatchOrders.length > 0 ? (
                     <Accordion type="single" collapsible className="w-full">
-                        {paginatedDispatchOrders.map((order) => (
+                        {initialDispatchOrders.map((order) => (
                             <AccordionItem value={order.id} key={order.id}>
                                 <AccordionTrigger>
                                     <div className="flex justify-between items-center w-full pr-4">
@@ -585,20 +533,11 @@ export function HistoryContent({
             <CardFooter>
                  <PaginationControls 
                     currentPage={ordersPage} 
-                    totalPages={totalOrderPages}
-                    onPageChange={setOrdersPage} 
-                    itemsPerPage={itemsPerPage}
-                    onItemsPerPageChange={handleItemsPerPageChange}
-                    totalItems={filteredDispatchOrders.length}
+                    totalPages={ordersTotalPages}
+                    onPageChange={(page) => handlePaginationChange('orders', page)}
                 />
             </CardFooter>
         </Card>
         </div>
     );
 }
-
-    
-
-    
-
-    

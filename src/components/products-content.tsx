@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useTransition, useEffect } from 'react';
@@ -44,7 +45,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
-import { getProducts, getVendedores } from '@/lib/api';
+import { getVendedores } from '@/lib/api';
 import type { Product, RotationCategory, Vendedor } from '@/lib/types';
 import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -61,7 +62,7 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { auditProductStockAction, clearProductAuditAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import { formatToTimeZone } from '@/lib/utils';
@@ -69,12 +70,13 @@ import { AlertDialogTrigger } from './ui/alert-dialog';
 
 interface ProductsContentProps {
     initialProducts: Product[];
+    totalPages: number;
     initialSupplierNames: Record<string, string>;
     initialCategoryNames: Record<string, string>;
     allRotationCategories: RotationCategory[];
 }
 
-export function ProductsContent({ initialProducts, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
+export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [supplierNames, setSupplierNames] = useState<Record<string, string>>(initialSupplierNames);
     const [categoryNames, setCategoryNames] = useState<Record<string, string>>(initialCategoryNames);
@@ -82,31 +84,48 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const { toast } = useToast();
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-    // Filter states
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('all');
-    const [selectedRotation, setSelectedRotation] = useState('all');
-    const [selectedVendedor, setSelectedVendedor] = useState('all');
-    const [minStock, setMinStock] = useState('');
-    const [hasPending, setHasPending] = useState(false);
-    const [hasReservations, setHasReservations] = useState(false);
-    const [onlyAudited, setOnlyAudited] = useState(false);
+    // Filter states from URL
+    const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
+    const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || 'all');
+    const [selectedRotation, setSelectedRotation] = useState(searchParams.get('rotation') || 'all');
+    const [selectedVendedor, setSelectedVendedor] = useState(searchParams.get('vendedor') || 'all');
+    const [minStock, setMinStock] = useState(searchParams.get('minStock') || '');
+    const [hasPending, setHasPending] = useState(searchParams.get('pending') === 'true');
+    const [hasReservations, setHasReservations] = useState(searchParams.get('reservations') === 'true');
+    const [onlyAudited, setOnlyAudited] = useState(searchParams.get('audited') === 'true');
 
-    // Pagination states
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(20);
+    // Pagination states from URL
+    const currentPage = Number(searchParams.get('page') || '1');
+    const itemsPerPage = Number(searchParams.get('limit') || '20');
     
     useEffect(() => {
         getVendedores().then(setVendedores);
     }, []);
 
+    useEffect(() => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (searchQuery) params.set('q', searchQuery); else params.delete('q');
+        if (selectedCategory !== 'all') params.set('category', selectedCategory); else params.delete('category');
+        if (selectedRotation !== 'all') params.set('rotation', selectedRotation); else params.delete('rotation');
+        if (selectedVendedor !== 'all') params.set('vendedor', selectedVendedor); else params.delete('vendedor');
+        if (minStock) params.set('minStock', minStock); else params.delete('minStock');
+        if (hasPending) params.set('pending', 'true'); else params.delete('pending');
+        if (hasReservations) params.set('reservations', 'true'); else params.delete('reservations');
+        if (onlyAudited) params.set('audited', 'true'); else params.delete('audited');
+        params.set('page', '1'); // Reset to first page on filter change
+        router.replace(`${pathname}?${params.toString()}`);
+    }, [searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited]);
+
     const refreshProducts = () => {
         setLoading(true);
         router.refresh();
+        // The page will re-render with new initialProducts
         setLoading(false);
     }
 
@@ -157,56 +176,17 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
         });
     };
 
-    const filteredProducts = useMemo(() => {
-        setCurrentPage(1); // Reset page on filter change
-        return products.filter(product => {
-            const lowercasedQuery = searchQuery.toLowerCase();
-            // Text search
-            const searchMatch = searchQuery.length > 2 
-                ? product.name.toLowerCase().includes(lowercasedQuery) || 
-                  (product.sku && product.sku.toLowerCase().includes(lowercasedQuery)) ||
-                  (product.productType === 'variable' && product.variants?.some(variant => 
-                      variant.name.toLowerCase().includes(lowercasedQuery) ||
-                      variant.sku.toLowerCase().includes(lowercasedQuery)
-                  ))
-                : true;
-            
-            // Category filter
-            const categoryMatch = selectedCategory === 'all' || product.categoryId === selectedCategory;
-
-            // Rotation filter
-            const rotationMatch = selectedRotation === 'all' || product.rotationCategoryName === selectedRotation;
-
-            // Min stock filter
-            const stockMatch = minStock === '' || product.stock >= parseInt(minStock, 10);
-
-            // Has pending filter
-            const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
-
-            // Has reservations filter
-            const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
-            
-            // Audited filter
-            const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
-
-            // Vendedor filter
-            const vendedorMatch = selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
-
-            return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch && vendedorMatch;
-        });
-    }, [products, searchQuery, selectedCategory, selectedRotation, minStock, hasPending, hasReservations, onlyAudited, selectedVendedor]);
-    
-    // Paginated data
-    const paginatedProducts = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredProducts.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredProducts, currentPage, itemsPerPage]);
-
-    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    const handlePaginationChange = (newPage: number) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('page', String(newPage));
+        router.push(`${pathname}?${params.toString()}`);
+    }
 
     const handleItemsPerPageChange = (value: number) => {
-        setItemsPerPage(value);
-        setCurrentPage(1);
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('limit', String(value));
+        params.set('page', '1'); // Reset to first page
+        router.push(`${pathname}?${params.toString()}`);
     }
 
     const handleRowClick = (product: Product) => {
@@ -220,6 +200,12 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     };
 
     const clearFilters = () => {
+        const params = new URLSearchParams();
+        params.set('page', '1');
+        params.set('limit', String(itemsPerPage));
+        router.push(`${pathname}?${params.toString()}`);
+        
+        // Reset local state
         setSearchQuery('');
         setSelectedCategory('all');
         setSelectedRotation('all');
@@ -255,7 +241,7 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
     }
 
     const handleExportExcel = () => {
-        const dataToExport = filteredProducts.flatMap(p => {
+        const dataToExport = initialProducts.flatMap(p => {
             const baseData = {
                 'Categoría': categoryNames[p.categoryId] || 'Desconocida',
                 'Rotación': p.rotationCategoryName || 'N/A',
@@ -461,8 +447,8 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                                 </TableRow>
                             ))}
                             </>
-                        ) : paginatedProducts.length > 0 ? (
-                            paginatedProducts.map((product) => (
+                        ) : initialProducts.length > 0 ? (
+                            initialProducts.map((product) => (
                                 <React.Fragment key={product.id}>
                                     <TableRow 
                                         className="cursor-pointer hover:bg-muted/50"
@@ -642,10 +628,9 @@ export function ProductsContent({ initialProducts, initialSupplierNames, initial
                  <PaginationControls
                     currentPage={currentPage}
                     totalPages={totalPages}
-                    onPageChange={setCurrentPage}
+                    onPageChange={handlePaginationChange}
                     itemsPerPage={itemsPerPage}
                     onItemsPerPageChange={handleItemsPerPageChange}
-                    totalItems={filteredProducts.length}
                 />
             </CardFooter>
           </Card>
@@ -668,11 +653,10 @@ interface PaginationControlsProps {
     onPageChange: (page: number) => void;
     itemsPerPage: number;
     onItemsPerPageChange: (value: number) => void;
-    totalItems: number;
 }
 
-function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalItems }: PaginationControlsProps) {
-    if (totalPages <= 1 && totalItems <= itemsPerPage) return null;
+function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange }: PaginationControlsProps) {
+    if (totalPages <= 1) return null;
     
     return (
         <div className="flex items-center justify-end space-x-6 lg:space-x-8 w-full">
