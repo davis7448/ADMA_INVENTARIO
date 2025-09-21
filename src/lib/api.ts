@@ -958,7 +958,8 @@ export const cancelPendingDispatchItems = async (
         const updatedProducts: DispatchOrderProduct[] = JSON.parse(JSON.stringify(orderData.products));
         const updatedExceptions: DispatchException[] = JSON.parse(JSON.stringify(orderData.exceptions || []));
 
-        const isFromException = updatedExceptions.some(ex => ex.trackingNumber === cancellationGuide);
+        // A guide from a dispatched order is NOT an exception. A guide from a partial order IS an exception.
+        const isFromException = (orderData.exceptions || []).some(ex => ex.trackingNumber === cancellationGuide);
 
         for (const itemToCancel of productsToCancel) {
             const productRef = doc(db, 'products', itemToCancel.productId);
@@ -966,12 +967,23 @@ export const cancelPendingDispatchItems = async (
             if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
             const productData = productSnap.data() as Product;
             
+            let variantSkuToUpdate: string | undefined;
+
+            if (itemToCancel.variantId) {
+                variantSkuToUpdate = productData.variants?.find(v => v.id === itemToCancel.variantId)?.sku;
+                if (!variantSkuToUpdate) {
+                    throw new Error(`No se pudo actualizar el stock para la variante. SKU no encontrado.`);
+                }
+            } else {
+                variantSkuToUpdate = productData.sku;
+            }
+
             if (isFromException) {
                 // If it's from an exception, it never left physical stock, just reduce pending stock
                 await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
             } else {
                 // If it's a normal cancellation, add back to physical stock
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', productData.sku);
+                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
             }
             
             await addInventoryMovement({
