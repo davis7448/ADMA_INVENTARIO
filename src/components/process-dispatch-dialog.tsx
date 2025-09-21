@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { processDispatch, getCancellationRequests, cancelPendingDispatchItems } from '@/lib/api';
+import { processDispatch, annulGuideDuringDispatch, cancelPendingDispatchItems } from '@/lib/api';
 import {
     Table,
     TableBody,
@@ -63,7 +63,7 @@ interface ProcessDispatchDialogProps {
 interface AnnulmentDialogState {
     isOpen: boolean;
     guide: string;
-    request: CancellationRequest | null;
+    request: { id: string } | null;
 }
 
 interface AnnulmentItem {
@@ -164,26 +164,21 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
         
-        // Check if it's our specific cancellation error
         const cancellationMatch = errorMessage.match(/La guía (.*) tiene una solicitud de anulación pendiente/);
-        if (cancellationMatch) {
+        const cancellationRequestId = (error as any).cancellationRequestId;
+
+        if (cancellationMatch && cancellationRequestId) {
             const blockedGuide = cancellationMatch[1];
-            const cancellationRequests = await getCancellationRequests();
-            const relevantRequest = cancellationRequests.find(r => r.trackingNumber === blockedGuide && r.status === 'pending');
             
-            if (relevantRequest) {
-                // Initialize items to annul with all products in the current order
-                const initialItems = order.products.reduce((acc, p) => {
-                    const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                    acc[key] = { selected: false, quantity: p.quantity, maxQuantity: p.quantity };
-                    return acc;
-                }, {} as Record<string, AnnulmentItem>);
-                
-                setItemsToAnnul(initialItems);
-                setAnnulmentDialog({ isOpen: true, guide: blockedGuide, request: relevantRequest });
-            } else {
-                 toast({ variant: 'destructive', title: 'Error al procesar', description: errorMessage });
-            }
+            const initialItems = order.products.reduce((acc, p) => {
+                const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+                acc[key] = { selected: false, quantity: p.quantity, maxQuantity: p.quantity };
+                return acc;
+            }, {} as Record<string, AnnulmentItem>);
+            
+            setItemsToAnnul(initialItems);
+            setAnnulmentDialog({ isOpen: true, guide: blockedGuide, request: { id: cancellationRequestId } });
+
         } else {
             toast({ variant: 'destructive', title: 'Error al procesar', description: errorMessage });
         }
@@ -199,12 +194,11 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
         .filter(([, val]) => val.selected && val.quantity > 0)
         .map(([key, val]) => {
             const ids = key.split('|');
-            const productId = ids[0];
-            const variantId = ids.length > 1 ? ids[1] : undefined;
-            
+            const productInOrder = order.products.find(p => p.productId === ids[0] && p.variantId === ids[1]);
             return {
-                productId: productId,
-                variantId: variantId,
+                productId: ids[0],
+                variantId: ids.length > 1 ? ids[1] : undefined,
+                sku: productInOrder?.sku,
                 quantity: val.quantity,
             };
         });
@@ -216,32 +210,28 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
     
     setIsAnnulling(true);
     try {
-        const updatedOrderData = await cancelPendingDispatchItems(order.id, itemsToCancelForApi, user, annulmentDialog.guide);
+        const updatedOrderData = await annulGuideDuringDispatch(annulmentDialog.request.id, order, itemsToCancelForApi, user);
 
         toast({
             title: '¡Anulación Exitosa!',
             description: `Se anularon los productos seleccionados y se restauró el stock.`
         });
         
-        // Remove the blocked guide from the textarea
         setTrackingNumbers(prev => prev.split('\n').filter(tn => tn.trim() !== annulmentDialog.guide).join('\n'));
 
         setAnnulmentDialog({ isOpen: false, guide: '', request: null });
 
         if (updatedOrderData.status === 'Anulada') {
-            // If the whole order was cancelled, close the dialog and refresh
             toast({ title: 'Orden Completamente Anulada', description: 'Todos los productos fueron removidos, la orden ha sido anulada.' });
             setOpen(false);
             onDispatchProcessed();
         } else {
-            // Otherwise, just update the order state locally to continue processing
             setOrder(prevOrder => ({
                 ...prevOrder,
-                products: updatedOrderData.products,
-                totalItems: updatedOrderData.totalItems,
+                products: updatedOrderData.products as DispatchOrderProduct[],
+                totalItems: updatedOrderData.totalItems as number,
             }));
         }
-
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
