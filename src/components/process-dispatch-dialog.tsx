@@ -339,6 +339,9 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
     </Dialog>
 
     <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+          {children}
+      </DialogTrigger>
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Procesar Despacho: {order.dispatchId}</DialogTitle>
@@ -508,4 +511,3 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
     </>
   );
 }
-
