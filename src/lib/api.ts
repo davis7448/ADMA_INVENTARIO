@@ -229,6 +229,10 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
     }
   }
   
+  if (productUpdate.cost === undefined) {
+    delete updateData.cost;
+  }
+
   await updateDoc(productRef, updateData);
 };
 
@@ -659,29 +663,29 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: LogisticItem[], user: User | null, entryReasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
-    const batch = writeBatch(db);
-
-    let reasonText = entryReasonLabel;
-    if (supplierId) {
-        const supplier = await getSupplierById(supplierId);
-        reasonText = `${reasonText}: ${supplier?.name || 'Desconocido'}`;
-    }
-    if (carrierId) {
-        const carriers = await getCarriers();
-        const carrier = carriers.find(c => c.id === carrierId);
-        reasonText = `${reasonText} (Transportadora: ${carrier?.name || 'Desconocido'})`;
-    }
+export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, entryReasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
 
     for (const item of items) {
         await runTransaction(db, async (transaction) => {
             await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
         });
-    }
+        
+        let reasonText = entryReasonLabel;
+        if (supplierId) {
+            const supplier = await getSupplierById(supplierId);
+            reasonText = `${reasonText}: ${supplier?.name || 'Desconocido'}`;
+        }
+        if (carrierId) {
+            const carriers = await getCarriers();
+            const carrier = carriers.find(c => c.id === carrierId);
+            reasonText = `${reasonText} (Transportadora: ${carrier?.name || 'Desconocido'})`;
+        }
 
-    for (const item of items) {
-        const movementRef = doc(collection(db, 'inventoryMovements'));
-        const movementData: Omit<InventoryMovement, 'id' | 'movementId' | 'date'> = {
+        if (item.trackingNumber) {
+            reasonText = `${reasonText} | Guía: ${item.trackingNumber}`;
+        }
+
+        await addInventoryMovement({
             type: 'Entrada',
             productId: item.productId,
             productName: item.name,
@@ -690,17 +694,8 @@ export const registerInventoryEntry = async (items: LogisticItem[], user: User |
             userId: user?.id,
             userName: user?.name,
             carrierId,
-        };
-        const dataToSet: Record<string, any> = {
-            ...movementData,
-            date: Timestamp.now(),
-          };
-          Object.keys(dataToSet).forEach(key => dataToSet[key] === undefined && delete dataToSet[key]);
-      
-        batch.set(movementRef, dataToSet);
+        });
     }
-
-    await batch.commit();
 };
     
 // Dispatch Order Functions
@@ -1728,6 +1723,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 

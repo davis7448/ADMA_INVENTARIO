@@ -6,7 +6,7 @@ import type { LogisticItem, User } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 
 export async function registerInventoryEntryAction(
-    items: LogisticItem[], 
+    items: (LogisticItem & { trackingNumber?: string })[], 
     user: User | null,
     entryReason: string,
     supplierId?: string,
