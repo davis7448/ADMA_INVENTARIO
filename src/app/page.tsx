@@ -68,20 +68,22 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const [orders, products, carriers, categories, platforms, movements] = await Promise.all([
-          getDispatchOrders(), 
-          getProducts(), 
+      // For dashboard, we need all data for the period, so we fetch with a high limit.
+      // In a real-world scenario with millions of records, this would be handled by a dedicated analytics backend.
+      const [ordersResult, productsResult, carriers, categories, platforms, movementsResult] = await Promise.all([
+          getDispatchOrders({ limit: 10000 }), 
+          getProducts({ limit: 10000 }), 
           getCarriers(),
           getCategories(),
           getPlatforms(),
-          getInventoryMovements() // Fetch all movements
+          getInventoryMovements({ limit: 10000 })
         ]);
-      setAllOrders(orders);
-      setAllProducts(products);
+      setAllOrders(ordersResult.orders);
+      setAllProducts(productsResult.products);
       setAllCarriers(carriers);
       setAllCategories(categories);
       setAllPlatforms(platforms);
-      setAllMovements(movements);
+      setAllMovements(movementsResult.movements);
       setLoading(false);
     };
     fetchData();
@@ -755,3 +757,6 @@ export default function DashboardPage() {
 
 
 
+
+
+  
