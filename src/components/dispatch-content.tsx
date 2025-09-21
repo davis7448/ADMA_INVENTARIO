@@ -454,7 +454,7 @@ export function DispatchContent() {
                                                 productsById={productsById}
                                                 onDispatchProcessed={handleDispatchProcessed}
                                             >
-                                                <Button variant="outline">Procesar Pendientes</Button>
+                                                <Button>Procesar Pendientes</Button>
                                             </ProcessDispatchDialog>
                                         </div>
                                     </div>
@@ -523,6 +523,8 @@ export function DispatchContent() {
     </>
   );
 }
+
+    
 
     
 
