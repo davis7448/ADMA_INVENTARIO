@@ -944,13 +944,12 @@ export const cancelPendingDispatchItems = async (
     orderId: string,
     productsToCancel: { productId: string; variantId?: string; quantity: number }[],
     user: User | null,
-    cancellationGuide: string
+    cancellationGuide: string // Now just a string for logging, no longer used for querying requests
 ): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
     let movementPromises: Promise<any>[] = [];
 
     const result = await runTransaction(db, async (transaction) => {
-        // --- ALL READS MUST HAPPEN FIRST ---
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
@@ -960,12 +959,7 @@ export const cancelPendingDispatchItems = async (
         const productRefs = productIdsToRead.map(id => doc(db, 'products', id));
         const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
 
-        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
-        const reqSnap = await getDocs(reqQuery); // This is a read
-        
-        // --- PROCESS DATA AND PREPARE WRITES ---
         const orderData = orderSnap.data() as DispatchOrder;
-        const isFromException = (orderData.exceptions || []).some(ex => ex.trackingNumber === cancellationGuide);
         
         const productDataMap = new Map<string, Product>();
         for (const snap of productSnaps) {
@@ -979,6 +973,11 @@ export const cancelPendingDispatchItems = async (
             if (!productData) {
                 throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
             }
+
+            const isFromException = (orderData.exceptions || []).some(ex => 
+                ex.trackingNumber === cancellationGuide && 
+                ex.products.some(p => p.productId === itemToCancel.productId && (p.variantId || '') === (itemToCancel.variantId || ''))
+            );
 
             let variantSkuToUpdate: string | undefined;
             if (itemToCancel.variantId) {
@@ -1013,69 +1012,29 @@ export const cancelPendingDispatchItems = async (
                 userName: user?.name,
             }));
         }
-
-        const updatedProducts: DispatchOrderProduct[] = JSON.parse(JSON.stringify(orderData.products));
-        const updatedExceptions: DispatchException[] = JSON.parse(JSON.stringify(orderData.exceptions || []));
-
-        for (const itemToCancel of productsToCancel) {
-            const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
-            if (productInOrderIndex !== -1) {
-                updatedProducts[productInOrderIndex].quantity -= itemToCancel.quantity;
-                if (updatedProducts[productInOrderIndex].quantity <= 0) {
-                    updatedProducts.splice(productInOrderIndex, 1);
-                }
-            }
-
-            if (isFromException) {
-                const exceptionIndex = updatedExceptions.findIndex(ex => ex.trackingNumber === cancellationGuide);
-                if (exceptionIndex > -1) {
-                    const productInExIndex = updatedExceptions[exceptionIndex].products.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
-                    if (productInExIndex !== -1) {
-                        updatedExceptions[exceptionIndex].products[productInExIndex].quantity -= itemToCancel.quantity;
-                        if (updatedExceptions[exceptionIndex].products[productInExIndex].quantity <= 0) {
-                            updatedExceptions[exceptionIndex].products.splice(productInExIndex, 1);
-                        }
-                    }
-                    if (updatedExceptions[exceptionIndex].products.length === 0) {
-                        updatedExceptions.splice(exceptionIndex, 1);
-                    }
-                }
-            }
-        }
         
-        const newTotalItems = updatedProducts.reduce((sum, p) => sum + p.quantity, 0);
-
-        let finalStatus = orderData.status;
-        if (newTotalItems === 0) {
-            finalStatus = 'Anulada';
-        } else if (updatedExceptions.length === 0 && (orderData.trackingNumbers.length > 0 || cancellationGuide)) {
-            finalStatus = 'Despachada';
-        }
-
+        // This part needs to be inside the transaction to avoid race conditions
+        const updatedExceptions = (orderData.exceptions || []).filter(ex => ex.trackingNumber !== cancellationGuide);
+        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...((orderData.exceptions || []).filter(ex => ex.trackingNumber === cancellationGuide))];
+        
         const updatePayload = {
-            products: updatedProducts,
-            totalItems: newTotalItems,
             exceptions: updatedExceptions,
-            status: finalStatus,
+            cancelledExceptions: updatedCancelledExceptions,
         };
 
-        // --- ALL WRITES HAPPEN AT THE END ---
         transaction.update(orderRef, updatePayload);
-        
-        if (!reqSnap.empty) {
-            const reqDoc = reqSnap.docs[0];
-            transaction.update(reqDoc.ref, { status: 'completed' });
-        }
-        
-        return updatePayload;
+
+        // Return a partial update for the client if needed
+        return {
+            exceptions: updatedExceptions,
+            cancelledExceptions: updatedCancelledExceptions,
+        };
     });
     
-    // Execute non-transactional writes after the transaction is complete
     await Promise.all(movementPromises);
 
     return result;
 };
-
 
 // Audit Alert Functions
 export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
@@ -1751,4 +1710,5 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
