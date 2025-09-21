@@ -944,96 +944,87 @@ export const cancelPendingDispatchItems = async (
     orderId: string,
     productsToCancel: { productId: string; variantId?: string; quantity: number }[],
     user: User | null,
-    cancellationGuide: string // Now just a string for logging, no longer used for querying requests
+    cancellationGuide: string
 ): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
-    let movementPromises: Promise<any>[] = [];
 
-    const result = await runTransaction(db, async (transaction) => {
-        const orderSnap = await transaction.get(orderRef);
-        if (!orderSnap.exists()) {
-            throw new Error("No se encontró la orden de despacho.");
-        }
-        
-        const productIdsToRead = [...new Set(productsToCancel.map(p => p.productId))];
-        const productRefs = productIdsToRead.map(id => doc(db, 'products', id));
-        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-
-        const orderData = orderSnap.data() as DispatchOrder;
-        
-        const productDataMap = new Map<string, Product>();
-        for (const snap of productSnaps) {
-            if (snap.exists()) {
-                productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
-            }
-        }
-
-        for (const itemToCancel of productsToCancel) {
-            const productData = productDataMap.get(itemToCancel.productId);
-            if (!productData) {
-                throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
-            }
-
-            const isFromException = (orderData.exceptions || []).some(ex => 
-                ex.trackingNumber === cancellationGuide && 
-                ex.products.some(p => p.productId === itemToCancel.productId && (p.variantId || '') === (itemToCancel.variantId || ''))
-            );
-
-            let variantSkuToUpdate: string | undefined;
-            if (itemToCancel.variantId) {
-                const variant = productData.variants?.find(v => v.id === itemToCancel.variantId);
-                variantSkuToUpdate = variant?.sku;
-            } else {
-                variantSkuToUpdate = productData.sku;
-            }
-
-            if (!variantSkuToUpdate) {
-                throw new Error(`SKU no encontrado para el producto a anular.`);
+    try {
+        const result = await runTransaction(db, async (transaction) => {
+            const orderSnap = await transaction.get(orderRef);
+            if (!orderSnap.exists()) {
+                throw new Error("No se encontró la orden de despacho.");
             }
             
-            if (isFromException) {
-                const currentPending = productData.pendingStock || 0;
-                const newPending = Math.max(0, currentPending - itemToCancel.quantity);
-                transaction.update(doc(db, 'products', itemToCancel.productId), { pendingStock: newPending });
-            } 
+            const productIdsToRead = [...new Set(productsToCancel.map(p => p.productId))];
+            const productRefs = productIdsToRead.map(id => doc(db, 'products', id));
+            const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+
+            const orderData = orderSnap.data() as DispatchOrder;
             
-            await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
+            const productDataMap = new Map<string, Product>();
+            for (const snap of productSnaps) {
+                if (snap.exists()) {
+                    productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+                }
+            }
+            
+            const movementPromises: Promise<any>[] = [];
 
-            movementPromises.push(addInventoryMovement({
-                type: 'Anulado',
-                productId: itemToCancel.productId,
-                productName: productData.name,
-                quantity: itemToCancel.quantity,
-                notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
-                platformId: orderData.platformId,
-                carrierId: orderData.carrierId,
-                dispatchId: orderData.dispatchId,
-                userId: user?.id,
-                userName: user?.name,
-            }));
-        }
-        
-        // This part needs to be inside the transaction to avoid race conditions
-        const updatedExceptions = (orderData.exceptions || []).filter(ex => ex.trackingNumber !== cancellationGuide);
-        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...((orderData.exceptions || []).filter(ex => ex.trackingNumber === cancellationGuide))];
-        
-        const updatePayload = {
-            exceptions: updatedExceptions,
-            cancelledExceptions: updatedCancelledExceptions,
-        };
+            for (const itemToCancel of productsToCancel) {
+                const productData = productDataMap.get(itemToCancel.productId);
+                if (!productData) {
+                    throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
+                }
 
-        transaction.update(orderRef, updatePayload);
+                // An exception is being cancelled, so we only need to reduce the pending stock.
+                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
 
-        // Return a partial update for the client if needed
-        return {
-            exceptions: updatedExceptions,
-            cancelledExceptions: updatedCancelledExceptions,
-        };
-    });
-    
-    await Promise.all(movementPromises);
+                movementPromises.push(addInventoryMovement({
+                    type: 'Anulado',
+                    productId: itemToCancel.productId,
+                    productName: productData.name,
+                    quantity: itemToCancel.quantity,
+                    notes: `Anulación de excepción de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
+                    platformId: orderData.platformId,
+                    carrierId: orderData.carrierId,
+                    dispatchId: orderData.dispatchId,
+                    userId: user?.id,
+                    userName: user?.name,
+                }));
+            }
+            
+            // This part needs to be inside the transaction to avoid race conditions
+            const updatedExceptions = (orderData.exceptions || []).filter(ex => ex.trackingNumber !== cancellationGuide);
+            const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...((orderData.exceptions || []).filter(ex => ex.trackingNumber === cancellationGuide))];
+            
+            const updatePayload: Record<string, any> = {
+                exceptions: updatedExceptions,
+                cancelledExceptions: updatedCancelledExceptions,
+            };
 
-    return result;
+            // Check if all original exceptions for this order are now cancelled
+            const allOriginalProductsInExceptions = (orderData.exceptions || []).flatMap(ex => ex.products);
+            if (allOriginalProductsInExceptions.length === 0 && updatedExceptions.length === 0) {
+                updatePayload.status = 'Despachada'; // or 'Anulada' if no regular guides either
+            }
+            
+            transaction.update(orderRef, updatePayload);
+
+            await Promise.all(movementPromises);
+
+            return {
+                exceptions: updatedExceptions,
+                cancelledExceptions: updatedCancelledExceptions,
+                status: updatePayload.status,
+            };
+        });
+
+        return result;
+
+    } catch (error) {
+        console.error("Error cancelling dispatch items:", error);
+        throw error;
+    }
 };
 
 // Audit Alert Functions
@@ -1710,5 +1701,6 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
