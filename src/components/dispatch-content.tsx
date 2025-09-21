@@ -434,16 +434,16 @@ export function DispatchContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <AccordionTrigger>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 w-full items-center text-sm">
+                                        <div className="flex justify-between items-center w-full pr-4 gap-4">
                                             <div className="text-left">
                                                 <p className="font-semibold">{order.dispatchId}</p>
-                                                <p className="text-muted-foreground">
+                                                <p className="text-sm text-muted-foreground">
                                                     {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
                                                 </p>
                                             </div>
-                                            <div className="text-left md:text-center">
+                                            <div className="text-right">
                                                 <p className="font-medium">{platformNames[order.platformId]}</p>
-                                                <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                                <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                             </div>
                                         </div>
                                     </AccordionTrigger>
@@ -512,4 +512,5 @@ export function DispatchContent() {
     </>
   );
 }
- 
+
+    
