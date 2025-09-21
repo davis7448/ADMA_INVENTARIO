@@ -434,7 +434,8 @@ export function DispatchContent() {
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
-                                    <AccordionTrigger>
+                                    <div className="flex items-center w-full">
+                                    <AccordionTrigger className="flex-1">
                                         <div className="grid grid-cols-2 md:grid-cols-3 w-full items-center text-sm">
                                             <div className="text-left">
                                                 <p className="font-semibold">{order.dispatchId}</p>
@@ -448,6 +449,16 @@ export function DispatchContent() {
                                             </div>
                                         </div>
                                     </AccordionTrigger>
+                                    <div className="px-4">
+                                        <ProcessDispatchDialog 
+                                            order={orderForDialog}
+                                            productsById={productsById}
+                                            onDispatchProcessed={handleDispatchProcessed}
+                                        >
+                                            <Button>Procesar Pendientes</Button>
+                                        </ProcessDispatchDialog>
+                                    </div>
+                                    </div>
                                     <AccordionContent>
                                         <div className="p-4 bg-muted/50 rounded-md">
                                             <h4 className="font-semibold mb-4 text-destructive">Productos Pendientes (Excepciones)</h4>
