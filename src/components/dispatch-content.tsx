@@ -434,31 +434,20 @@ export function DispatchContent() {
 
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
-                                    <div className="flex items-center w-full">
-                                        <AccordionTrigger className="flex-grow">
-                                            <div className="grid grid-cols-2 md:grid-cols-3 w-full items-center text-sm">
-                                                <div className="text-left">
-                                                    <p className="font-semibold">{order.dispatchId}</p>
-                                                    <p className="text-muted-foreground">
-                                                        {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
-                                                    </p>
-                                                </div>
-                                                <div className="text-center hidden md:block">
-                                                    <p className="font-medium">{platformNames[order.platformId]}</p>
-                                                    <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
-                                                </div>
+                                    <AccordionTrigger>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 w-full items-center text-sm">
+                                            <div className="text-left">
+                                                <p className="font-semibold">{order.dispatchId}</p>
+                                                <p className="text-muted-foreground">
+                                                    {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
+                                                </p>
                                             </div>
-                                        </AccordionTrigger>
-                                        <div className="pr-4 pl-2">
-                                            <ProcessDispatchDialog
-                                                order={orderForDialog}
-                                                productsById={productsById}
-                                                onDispatchProcessed={handleDispatchProcessed}
-                                            >
-                                                <Button>Procesar Pendientes</Button>
-                                            </ProcessDispatchDialog>
+                                            <div className="text-center hidden md:block">
+                                                <p className="font-medium">{platformNames[order.platformId]}</p>
+                                                <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                            </div>
                                         </div>
-                                    </div>
+                                    </AccordionTrigger>
                                     <AccordionContent>
                                         <div className="p-4 bg-muted/50 rounded-md">
                                             <h4 className="font-semibold mb-4 text-destructive">Productos Pendientes (Excepciones)</h4>
