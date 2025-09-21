@@ -5,14 +5,14 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { PendingInventoryContent } from '@/components/pending-inventory-content';
 
 export default async function PendingInventoryPage() {
-    const [pendingItems, products] = await Promise.all([
+    const [pendingItems, productsResult] = await Promise.all([
         getPendingInventory(),
-        getProducts()
+        getProducts({})
     ]);
 
     return (
       <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas', 'commercial']}>
-        <PendingInventoryContent initialPendingItems={pendingItems} allProducts={products} />
+        <PendingInventoryContent initialPendingItems={pendingItems} allProducts={productsResult.products} />
       </AuthProviderWrapper>
     );
 }
