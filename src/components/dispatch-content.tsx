@@ -449,16 +449,19 @@ export function DispatchContent() {
                                                         <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                                     </div>
                                                     <div className="text-right pr-4">
-                                                      <ProcessDispatchDialog
-                                                          order={orderForDialog}
-                                                          productsById={productsById}
-                                                          onDispatchProcessed={handleDispatchProcessed}
-                                                      >
-                                                          <Button>Procesar Pendientes</Button>
-                                                      </ProcessDispatchDialog>
+                                                        {/* This div was missing, now it's back */}
                                                     </div>
                                                 </div>
                                             </AccordionTrigger>
+                                        </div>
+                                        <div className="pr-4">
+                                            <ProcessDispatchDialog
+                                                order={orderForDialog}
+                                                productsById={productsById}
+                                                onDispatchProcessed={handleDispatchProcessed}
+                                            >
+                                                <Button>Procesar Pendientes</Button>
+                                            </ProcessDispatchDialog>
                                         </div>
                                     </div>
                                     <AccordionContent>
