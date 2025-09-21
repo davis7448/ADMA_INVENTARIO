@@ -1,4 +1,5 @@
 
+
 import { getAuditAlerts } from '@/lib/api';
 import type { AuditAlert } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
@@ -8,6 +9,7 @@ import {
     CardDescription,
     CardHeader,
     CardTitle,
+    CardFooter,
 } from '@/components/ui/card';
 import {
     Table,
@@ -18,8 +20,11 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatToTimeZone } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Suspense } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 async function AuditAlertsContent() {
     const alerts: AuditAlert[] = await getAuditAlerts();
@@ -84,6 +89,36 @@ async function AuditAlertsContent() {
                         </TableBody>
                     </Table>
                 </CardContent>
+                 {/* This could be a paginated component in the future */}
+            </Card>
+        </div>
+    );
+}
+
+function AuditAlertsSkeleton() {
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-3xl font-bold font-headline tracking-tight">Alertas de Auditoría de Stock</h1>
+                <p className="text-muted-foreground">
+                    Discrepancias de inventario detectadas durante el proceso de despacho.
+                </p>
+            </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Registros de Alertas</CardTitle>
+                    <CardDescription>
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-2/3 mt-2" />
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-2">
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                    </div>
+                </CardContent>
             </Card>
         </div>
     );
@@ -93,7 +128,9 @@ async function AuditAlertsContent() {
 export default function AuditAlertsPage() {
     return (
       <AuthProviderWrapper allowedRoles={['admin', 'plataformas']}>
-        <AuditAlertsContent />
+        <Suspense fallback={<AuditAlertsSkeleton />}>
+            <AuditAlertsContent />
+        </Suspense>
       </AuthProviderWrapper>
     );
 }

@@ -10,6 +10,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from '@/components/ui/card';
 import {
   Table,
@@ -20,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from './ui/skeleton';
-import { AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertCircle, AlertTriangle, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { formatToTimeZone } from '@/lib/utils';
@@ -30,6 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/use-auth';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 interface StockAlertsContentProps {
@@ -45,6 +47,10 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
   const { toast } = useToast();
   const { user } = useAuth();
   const [hideNoSales, setHideNoSales] = useState(false);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const canForceRegenerate = user?.role === 'admin' || user?.role === 'plataformas';
 
@@ -73,6 +79,13 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
     }
     return alerts;
   }, [alerts, hideNoSales]);
+
+  const paginatedAlerts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredAlerts.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredAlerts, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredAlerts.length / itemsPerPage);
 
   return (
     <div className="space-y-6">
@@ -139,8 +152,8 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
                         <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                     </TableRow>
                 ))
-              ) : filteredAlerts.length > 0 ? (
-                filteredAlerts.map((item) => (
+              ) : paginatedAlerts.length > 0 ? (
+                paginatedAlerts.map((item) => (
                   <TableRow key={item.id} className="hover:bg-destructive/5">
                     <TableCell>
                         <div className="flex items-center gap-4">
@@ -173,6 +186,51 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
             </TableBody>
           </Table>
         </CardContent>
+        <CardFooter>
+            <div className="flex items-center justify-end space-x-6 lg:space-x-8 w-full">
+                <div className="flex items-center space-x-2">
+                    <p className="text-sm font-medium">Filas por página</p>
+                    <Select
+                        value={`${itemsPerPage}`}
+                        onValueChange={(value) => setItemsPerPage(Number(value))}
+                    >
+                        <SelectTrigger className="h-8 w-[70px]">
+                            <SelectValue placeholder={itemsPerPage} />
+                        </SelectTrigger>
+                        <SelectContent side="top">
+                            {[10, 20, 50].map((pageSize) => (
+                            <SelectItem key={pageSize} value={`${pageSize}`}>
+                                {pageSize}
+                            </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+                    Página {currentPage} de {totalPages > 0 ? totalPages : 1}
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                    >
+                        <span className="sr-only">Ir a la página anterior</span>
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        variant="outline"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages || totalPages === 0}
+                    >
+                        <span className="sr-only">Ir a la página siguiente</span>
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+            </div>
+        </CardFooter>
       </Card>
     </div>
   );

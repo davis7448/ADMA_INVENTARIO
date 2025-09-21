@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useMemo } from 'react';
 import type { CancellationRequest, DispatchOrder, Product } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import {
@@ -31,10 +31,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatToTimeZone } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Trash2 } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 interface AnnulmentItem {
     selected: boolean;
@@ -53,6 +55,11 @@ function CancellationsContent() {
     const [isUpdating, startUpdatingTransition] = useTransition();
     const [guidesToCancel, setGuidesToCancel] = useState('');
     const [submissionWarnings, setSubmissionWarnings] = useState<string[]>([]);
+    
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
 
     // State for the cancellation dialog
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
@@ -69,10 +76,18 @@ function CancellationsContent() {
         setRequests(fetchedRequests);
         setLoading(false);
     }
-
+    
     useEffect(() => {
         fetchRequests();
     }, []);
+
+    const paginatedRequests = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return requests.slice(startIndex, startIndex + itemsPerPage);
+    }, [requests, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(requests.length / itemsPerPage);
+
 
     const handleSubmit = () => {
         if (!user) return;
@@ -174,11 +189,10 @@ function CancellationsContent() {
         startUpdatingTransition(async () => {
             try {
                 await cancelPendingDispatchItems(orderToCancel.id, itemsToCancelForApi, user, guideToCancelInDialog);
-                await updateCancellationRequestStatus(requestToUpdate.id, 'completed', user);
-
+                
                 toast({
                     title: '¡Anulación Exitosa!',
-                    description: 'La guía ha sido marcada como anulada y el stock ha sido restaurado.'
+                    description: 'La guía ha sido marcada como anulada y el stock ha sido ajustado.'
                 });
                 setIsCancelDialogOpen(false);
                 fetchRequests();
@@ -247,11 +261,11 @@ function CancellationsContent() {
                     <DialogTitle>Confirmar Anulación de Guía</DialogTitle>
                     <DialogDescription>
                         La guía <span className="font-mono font-semibold">{guideToCancelInDialog}</span> está en la orden de despacho <span className="font-semibold">{orderToCancel?.dispatchId}</span>. 
-                        Selecciona los productos y cantidades a anular. El stock será restaurado.
+                        Selecciona los productos y cantidades a anular. El stock será ajustado.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-4 space-y-3 max-h-60 overflow-y-auto">
-                    {Object.entries(itemsToAnnul).map(([key, item]) => (
+                    {Object.keys(itemsToAnnul).length > 0 ? Object.entries(itemsToAnnul).map(([key, item]) => (
                          <div key={key} className="flex items-center space-x-3 p-2 border rounded-md">
                             <Checkbox
                                 id={key}
@@ -275,7 +289,9 @@ function CancellationsContent() {
                             />
                             <span className="text-sm text-muted-foreground">/ {item.maxQuantity}</span>
                         </div>
-                    ))}
+                    )) : (
+                        <p className="text-sm text-muted-foreground text-center">No hay productos elegibles para anular en esta guía.</p>
+                    )}
                 </div>
                 <DialogFooter>
                     <Button variant="secondary" onClick={() => setIsCancelDialogOpen(false)}>Cancelar</Button>
@@ -351,8 +367,8 @@ function CancellationsContent() {
                                         <TableCell colSpan={canManageRequests ? 5 : 4}><Skeleton className="h-8 w-full" /></TableCell>
                                     </TableRow>
                                 ))
-                            ) : requests.length > 0 ? (
-                                requests.map(req => (
+                            ) : paginatedRequests.length > 0 ? (
+                                paginatedRequests.map(req => (
                                     <TableRow key={req.id}>
                                         <TableCell>{formatToTimeZone(new Date(req.requestDate), 'dd/MM/yyyy HH:mm')}</TableCell>
                                         <TableCell className="font-mono">{req.trackingNumber}</TableCell>
@@ -378,6 +394,51 @@ function CancellationsContent() {
                         </TableBody>
                     </Table>
                 </CardContent>
+                <CardFooter>
+                    <div className="flex items-center justify-end space-x-6 lg:space-x-8 w-full">
+                         <div className="flex items-center space-x-2">
+                            <p className="text-sm font-medium">Filas por página</p>
+                            <Select
+                                value={`${itemsPerPage}`}
+                                onValueChange={(value) => setItemsPerPage(Number(value))}
+                            >
+                                <SelectTrigger className="h-8 w-[70px]">
+                                    <SelectValue placeholder={itemsPerPage} />
+                                </SelectTrigger>
+                                <SelectContent side="top">
+                                    {[10, 20, 50].map((pageSize) => (
+                                    <SelectItem key={pageSize} value={`${pageSize}`}>
+                                        {pageSize}
+                                    </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+                            Página {currentPage} de {totalPages > 0 ? totalPages : 1}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Button
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                            >
+                                <span className="sr-only">Ir a la página anterior</span>
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="h-8 w-8 p-0"
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                disabled={currentPage === totalPages || totalPages === 0}
+                            >
+                                <span className="sr-only">Ir a la página siguiente</span>
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                </CardFooter>
             </Card>
         </div>
         </>
@@ -391,5 +452,3 @@ export default function CancellationsPage() {
         </AuthProviderWrapper>
     )
 }
-
-    
