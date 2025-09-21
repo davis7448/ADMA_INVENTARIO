@@ -229,6 +229,7 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
     }
   }
   
+  // This logic is important to prevent non-admins from clearing the cost
   if (productUpdate.cost === undefined) {
     delete updateData.cost;
   }
@@ -964,30 +965,13 @@ export const cancelPendingDispatchItems = async (
             const productSnap = await transaction.get(productRef);
             if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
             const productData = productSnap.data() as Product;
-
-            let variantSku: string | undefined = undefined;
-            if (productData.productType === 'variable') {
-                variantSku = productData.variants?.find(v => v.id === itemToCancel.variantId)?.sku;
-            } else {
-                variantSku = productData.sku;
-            }
-
+            
             if (isFromException) {
-                const currentPendingStock = productData.pendingStock || 0;
-                transaction.update(productRef, { pendingStock: Math.max(0, currentPendingStock - itemToCancel.quantity) });
+                // If it's from an exception, it never left physical stock, just reduce pending stock
+                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
             } else {
-                let newStock = (productData.stock || 0) + itemToCancel.quantity;
-                let newVariants = productData.variants;
-                if(productData.productType === 'variable' && newVariants) {
-                    const variantIndex = newVariants.findIndex(v => v.id === itemToCancel.variantId);
-                    if(variantIndex > -1) {
-                        newVariants[variantIndex].stock = (newVariants[variantIndex].stock || 0) + itemToCancel.quantity;
-                        newStock = newVariants.reduce((sum, v) => sum + v.stock, 0);
-                    }
-                    transaction.update(productRef, { stock: newStock, variants: newVariants });
-                } else {
-                    transaction.update(productRef, { stock: newStock });
-                }
+                // If it's a normal cancellation, add back to physical stock
+                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', productData.sku);
             }
             
             await addInventoryMovement({
