@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -434,27 +433,27 @@ export function DispatchContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <AccordionTrigger className="hover:no-underline">
-                                        <div className="flex justify-between items-center w-full">
-                                            <div className="text-left">
-                                                <p className="font-semibold">{order.dispatchId}</p>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
-                                                </p>
-                                            </div>
-                                            <div className="text-center px-4">
-                                                <p className="font-medium">{platformNames[order.platformId]}</p>
-                                                <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
-                                            </div>
-                                            <div onClick={(e) => e.stopPropagation()}>
-                                                <ProcessDispatchDialog 
-                                                    order={orderForDialog}
-                                                    productsById={productsById}
-                                                    onDispatchProcessed={handleDispatchProcessed}
-                                                >
-                                                    <Button>Procesar Pendientes</Button>
-                                                </ProcessDispatchDialog>
-                                            </div>
+                                      <div className="grid grid-cols-3 items-center w-full">
+                                        <div className="text-left">
+                                          <p className="font-semibold">{order.dispatchId}</p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
+                                          </p>
                                         </div>
+                                        <div className="text-center">
+                                          <p className="font-medium">{platformNames[order.platformId]}</p>
+                                          <p className="text-sm text-muted-foreground">{carrierNames[order.carrierId]}</p>
+                                        </div>
+                                        <div className="text-right" onClick={(e) => e.stopPropagation()}>
+                                          <ProcessDispatchDialog
+                                            order={orderForDialog}
+                                            productsById={productsById}
+                                            onDispatchProcessed={handleDispatchProcessed}
+                                          >
+                                            <Button>Procesar Pendientes</Button>
+                                          </ProcessDispatchDialog>
+                                        </div>
+                                      </div>
                                     </AccordionTrigger>
                                     <AccordionContent>
                                         <div className="p-4 bg-muted/50 rounded-md">
@@ -521,5 +520,3 @@ export function DispatchContent() {
     </>
   );
 }
-
-    
