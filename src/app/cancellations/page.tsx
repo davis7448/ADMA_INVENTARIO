@@ -25,7 +25,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
-import { getCancellationRequests, createCancellationRequests, updateCancellationRequestStatus, getDispatchOrders, cancelPendingDispatchItems, getProducts } from '@/lib/api';
+import { getCancellationRequests, createCancellationRequests, annulDispatchedGuideItems, getDispatchOrders } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatToTimeZone } from '@/lib/utils';
@@ -185,25 +185,26 @@ function CancellationsContent() {
     const handleConfirmCancellation = () => {
         if (!orderToCancel || !user || !requestToUpdate) return;
     
-        const itemsToCancelForApi = Object.entries(itemsToAnnul)
+        const itemsToAnnulForApi = Object.entries(itemsToAnnul)
             .filter(([, val]) => val.selected && val.quantity > 0)
             .map(([key, val]) => {
                 const ids = key.split('|');
                 return {
                     productId: ids[0],
                     variantId: ids.length > 1 ? ids[1] : undefined,
+                    sku: val.sku,
                     quantity: val.quantity,
                 };
             });
         
-        if (itemsToCancelForApi.length === 0) {
+        if (itemsToAnnulForApi.length === 0) {
             toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto e indicar una cantidad mayor a 0.' });
             return;
         }
 
         startUpdatingTransition(async () => {
             try {
-                await cancelPendingDispatchItems(orderToCancel.id, itemsToCancelForApi, user, guideToCancelInDialog);
+                await annulDispatchedGuideItems(requestToUpdate.id, orderToCancel.id, itemsToAnnulForApi, user, guideToCancelInDialog);
                 
                 toast({
                     title: '¡Anulación Exitosa!',
