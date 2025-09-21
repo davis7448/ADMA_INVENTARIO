@@ -530,7 +530,7 @@ export const sendPasswordReset = async (email: string) => {
 };
 
 // Inventory Movement Functions
-export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, filters = {} }: { page?: number, limit?: number, filters?: any }): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
+export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any }): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const movementsCol = collection(db, 'inventoryMovements');
     
     const querySnapshot = await getDocs(query(movementsCol, orderBy('date', 'desc')));
@@ -562,6 +562,10 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
 
         return dateMatch && productMatch && platformMatch && carrierMatch && typeMatch;
     });
+
+    if (fetchAll) {
+        return { movements: filteredMovements, totalPages: 1, totalCount: filteredMovements.length };
+    }
 
     const totalCount = filteredMovements.length;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
@@ -789,7 +793,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
     return new Date();
   };
 
-export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, filters = {} }: { page?: number, limit?: number, filters?: any }): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
+export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any }): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const ordersCol = collection(db, 'dispatchOrders');
     
     const querySnapshot = await getDocs(query(ordersCol, orderBy('date', 'desc')));
@@ -808,6 +812,10 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fi
         });
     }
     
+    if (fetchAll) {
+        return { orders: allOrders, totalPages: 1 };
+    }
+
     const totalPages = Math.ceil(allOrders.length / itemsPerPage);
     const paginatedOrders = allOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
@@ -952,7 +960,7 @@ export const cancelPendingDispatchItems = async (
 
         for (const itemToCancel of productsToCancel) {
             const productRef = doc(db, 'products', itemToCancel.productId);
-            const productSnap = await transaction.get(productRef); // Use transaction get
+            const productSnap = await transaction.get(productRef);
             if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
             const productData = productSnap.data() as Product;
 
@@ -967,7 +975,6 @@ export const cancelPendingDispatchItems = async (
                 const currentPendingStock = productData.pendingStock || 0;
                 transaction.update(productRef, { pendingStock: Math.max(0, currentPendingStock - itemToCancel.quantity) });
             } else {
-                // To avoid transaction conflicts, we directly call the logic of updateProductStock here
                 let newStock = (productData.stock || 0) + itemToCancel.quantity;
                 let newVariants = productData.variants;
                 if(productData.productType === 'variable' && newVariants) {
@@ -1025,10 +1032,8 @@ export const cancelPendingDispatchItems = async (
         let finalStatus = orderData.status;
         if (newTotalItems === 0) {
             finalStatus = 'Anulada';
-        } else if (updatedExceptions.length === 0) {
+        } else if (updatedExceptions.length === 0 && (orderData.trackingNumbers.length > 0 || cancellationGuide)) {
             finalStatus = 'Despachada';
-        } else {
-            finalStatus = 'Parcial';
         }
 
         const updatePayload = {
@@ -1041,7 +1046,7 @@ export const cancelPendingDispatchItems = async (
         transaction.update(orderRef, updatePayload);
 
         const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
-        const reqSnap = await getDocs(reqQuery); // This should be a transaction read if possible, but Firestore limits this.
+        const reqSnap = await getDocs(reqQuery);
         if (!reqSnap.empty) {
             const reqDoc = reqSnap.docs[0];
             transaction.update(reqDoc.ref, { status: 'completed' });
@@ -1485,7 +1490,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
     try {
         const [productsResult, allMovementsResult] = await Promise.all([
             getProducts({ limit: 10000 }),
-            getInventoryMovements({ limit: 10000, filters: { startDate: subDays(new Date(), 7).toISOString() } }),
+            getInventoryMovements({ limit: 10000, fetchAll: true, filters: { startDate: subDays(new Date(), 7).toISOString() } }),
         ]);
 
         const salesByProductId: Record<string, number[]> = {};
@@ -1717,4 +1722,5 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 

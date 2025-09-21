@@ -46,7 +46,7 @@ export default async function HistoryPage({
   ] = await Promise.all([
     getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
     getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
-    getProducts({}), // Fetch all for filter dropdowns
+    getProducts({ limit: 10000 }), // Fetch all for filter dropdowns
     getPlatforms(),
     getCarriers(),
   ]);
@@ -61,6 +61,7 @@ export default async function HistoryPage({
         allProducts={allProducts.products}
         allPlatforms={allPlatforms}
         allCarriers={allCarriers}
+        currentFilters={filters}
       />
     </AuthProviderWrapper>
   );

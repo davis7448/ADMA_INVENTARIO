@@ -34,6 +34,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getInventoryMovements, getDispatchOrders } from '@/lib/api';
 
 
 interface HistoryContentProps {
@@ -44,6 +45,7 @@ interface HistoryContentProps {
     allProducts: Product[];
     allPlatforms: Platform[];
     allCarriers: Carrier[];
+    currentFilters: any;
 }
 
 export function HistoryContent({
@@ -53,7 +55,8 @@ export function HistoryContent({
     ordersTotalPages,
     allProducts,
     allPlatforms,
-    allCarriers
+    allCarriers,
+    currentFilters,
 }: HistoryContentProps) {
 
     const router = useRouter();
@@ -117,8 +120,9 @@ export function HistoryContent({
         generatePickingListPDF(order.dispatchId, productsForPdf, platformNames[order.platformId] || 'N/A', carrierNames[order.carrierId] || 'N/A', new Date(order.date));
     };
 
-    const handleExportMovementsExcel = () => {
-        const flattenedData = initialMovements.map(movement => ({
+    const handleExportMovementsExcel = async () => {
+        const { movements } = await getInventoryMovements({ filters: currentFilters, fetchAll: true });
+        const flattenedData = movements.map(movement => ({
             'ID Movimiento': movement.movementId,
             'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
             'Tipo': movement.type,
@@ -137,8 +141,9 @@ export function HistoryContent({
         XLSX.writeFile(workbook, `Historial-Movimientos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
-    const handleExportExcel = () => {
-        const flattenedData = initialDispatchOrders.flatMap(order => 
+    const handleExportExcel = async () => {
+        const { orders } = await getDispatchOrders({ filters: currentFilters, fetchAll: true });
+        const flattenedData = orders.flatMap(order => 
             order.products.map(product => ({
                 'ID Despacho': order.dispatchId,
                 'Fecha': formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm"),
