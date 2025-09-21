@@ -947,9 +947,9 @@ export const cancelPendingDispatchItems = async (
     cancellationGuide: string
 ): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
+    const movementPromises: Promise<any>[] = [];
 
-    return runTransaction(db, async (transaction) => {
-        // Step 1: Read all necessary documents first.
+    const result = await runTransaction(db, async (transaction) => {
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
@@ -966,18 +966,10 @@ export const cancelPendingDispatchItems = async (
             }
         }
 
-        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
-        const reqSnap = await getDocs(reqQuery); // This is a read outside the transaction, but it's for finding the doc to update.
-        const reqDoc = reqSnap.empty ? null : reqSnap.docs[0];
-
-
-        // Step 2: Perform logic with the read data.
         const orderData = orderSnap.data() as DispatchOrder;
         const updatedProducts: DispatchOrderProduct[] = JSON.parse(JSON.stringify(orderData.products));
         const updatedExceptions: DispatchException[] = JSON.parse(JSON.stringify(orderData.exceptions || []));
         const isFromException = (orderData.exceptions || []).some(ex => ex.trackingNumber === cancellationGuide);
-        const movementPromises: Promise<any>[] = [];
-
 
         for (const itemToCancel of productsToCancel) {
             const productData = productDataMap.get(itemToCancel.productId);
@@ -996,33 +988,24 @@ export const cancelPendingDispatchItems = async (
                 throw new Error(`SKU no encontrado para el producto a anular.`);
             }
 
-            // This is a "deferred" write. It will be executed on the transaction object later.
-            const updateStockOperation = () => {
-                if (isFromException) {
-                    updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
-                } else {
-                    updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
-                }
-            };
+            if (isFromException) {
+                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
+            } else {
+                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
+            }
             
-            // This is also a "deferred" write.
-            const addMovementOperation = () => {
-                movementPromises.push(addInventoryMovement({
-                    type: 'Anulado',
-                    productId: itemToCancel.productId,
-                    productName: productData.name,
-                    quantity: itemToCancel.quantity,
-                    notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
-                    platformId: orderData.platformId,
-                    carrierId: orderData.carrierId,
-                    dispatchId: orderData.dispatchId,
-                    userId: user?.id,
-                    userName: user?.name,
-                }));
-            };
-
-            updateStockOperation();
-            addMovementOperation();
+            movementPromises.push(addInventoryMovement({
+                type: 'Anulado',
+                productId: itemToCancel.productId,
+                productName: productData.name,
+                quantity: itemToCancel.quantity,
+                notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
+                platformId: orderData.platformId,
+                carrierId: orderData.carrierId,
+                dispatchId: orderData.dispatchId,
+                userId: user?.id,
+                userName: user?.name,
+            }));
             
             const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
             if (productInOrderIndex !== -1) {
@@ -1065,22 +1048,21 @@ export const cancelPendingDispatchItems = async (
             status: finalStatus,
         };
 
-        // Step 3: Now execute all writes on the transaction object.
         transaction.update(orderRef, updatePayload);
-        if (reqDoc) {
+        
+        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
+        const reqSnap = await getDocs(reqQuery);
+        if (!reqSnap.empty) {
+            const reqDoc = reqSnap.docs[0];
             transaction.update(reqDoc.ref, { status: 'completed' });
         }
         
-        // Return the payload to update client state.
         return updatePayload;
-
-    }).then(async (result) => {
-        // Execute non-transactional writes (like addInventoryMovement) after transaction commits.
-        await Promise.all(movementPromises);
-        return result;
     });
-};
 
+    await Promise.all(movementPromises);
+    return result;
+};
 
 
 // Audit Alert Functions
