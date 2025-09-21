@@ -63,24 +63,15 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
         return;
     }
 
+    // This logic to find items is not needed anymore as we pass the guides to the backend
     const itemsToCancel = allExceptions
         .filter(ex => guidesToCancel.includes(ex.trackingNumber))
         .flatMap(ex => ex.products.map(p => ({ ...p, trackingNumber: ex.trackingNumber })));
-    
-    if (itemsToCancel.length === 0) {
-        toast({ variant: 'destructive', title: 'Error', description: 'No se encontraron productos para las guías seleccionadas.' });
-        return;
-    }
 
     setIsProcessing(true);
     try {
-        const productsToCancelForApi = itemsToCancel.map(item => ({
-            productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity
-        }));
-        await cancelPendingDispatchItems(order.id, productsToCancelForApi, user, guidesToCancel.join(', '));
-        toast({ title: 'Éxito', description: 'Los items pendientes han sido anulados y el stock ha sido restaurado.' });
+        await cancelPendingDispatchItems(order.id, itemsToCancel, user, guidesToCancel);
+        toast({ title: 'Éxito', description: 'Los items pendientes han sido anulados.' });
         onCancelled();
         setOpen(false);
         setSelectedGuides({});
@@ -99,7 +90,7 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
         <DialogHeader>
           <DialogTitle>Anular Items Pendientes</DialogTitle>
           <DialogDescription>
-            Selecciona las guías de excepción que deseas anular. Los productos asociados volverán al stock principal.
+            Selecciona las guías de excepción que deseas anular. El stock pendiente asociado será eliminado.
           </DialogDescription>
         </DialogHeader>
         
@@ -151,3 +142,4 @@ export function CancelDispatchDialog({ order, children, onCancelled }: CancelDis
     </Dialog>
   );
 }
+

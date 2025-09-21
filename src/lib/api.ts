@@ -944,88 +944,100 @@ export const cancelPendingDispatchItems = async (
     orderId: string,
     productsToCancel: { productId: string; variantId?: string; quantity: number }[],
     user: User | null,
-    cancellationGuide: string
+    cancellationGuides: string[]
 ): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
-    try {
-        const result = await runTransaction(db, async (transaction) => {
-            const orderSnap = await transaction.get(orderRef);
-            if (!orderSnap.exists()) {
-                throw new Error("No se encontró la orden de despacho.");
-            }
-            
-            const productIdsToRead = [...new Set(productsToCancel.map(p => p.productId))];
-            const productRefs = productIdsToRead.map(id => doc(db, 'products', id));
-            const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+    // This array will hold data for creating movements after the transaction
+    const movementsToCreate: Omit<InventoryMovement, 'id' | 'movementId' | 'date'>[] = [];
 
-            const orderData = orderSnap.data() as DispatchOrder;
-            
-            const productDataMap = new Map<string, Product>();
-            for (const snap of productSnaps) {
-                if (snap.exists()) {
-                    productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
-                }
-            }
-            
-            const movementPromises: Promise<any>[] = [];
+    const updatedOrderData = await runTransaction(db, async (transaction) => {
+        // 1. READ all necessary documents first
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists()) {
+            throw new Error("No se encontró la orden de despacho.");
+        }
+        
+        const productIdsToRead = [...new Set(productsToCancel.map(p => p.productId))];
+        const productRefs = productIdsToRead.map(id => doc(db, 'products', id));
+        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
 
-            for (const itemToCancel of productsToCancel) {
+        // 2. PROCESS the data in memory
+        const orderData = orderSnap.data() as DispatchOrder;
+        const productDataMap = new Map<string, Product>();
+        for (const snap of productSnaps) {
+            if (snap.exists()) {
+                productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+            }
+        }
+
+        const guidesSet = new Set(cancellationGuides);
+        const exceptionsToCancel = (orderData.exceptions || []).filter(ex => guidesSet.has(ex.trackingNumber));
+        
+        if (exceptionsToCancel.length !== cancellationGuides.length) {
+            console.warn("Algunas guías a anular no se encontraron como excepciones en la orden.");
+        }
+
+        for (const exception of exceptionsToCancel) {
+            for (const itemToCancel of exception.products) {
                 const productData = productDataMap.get(itemToCancel.productId);
                 if (!productData) {
-                    throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
+                    console.warn(`Producto ${itemToCancel.productId} no encontrado durante anulación.`);
+                    continue;
                 }
 
-                // An exception is being cancelled, so we only need to reduce the pending stock.
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
-
-                movementPromises.push(addInventoryMovement({
+                // Prepare to update pending stock
+                const currentPendingStock = productData.pendingStock || 0;
+                const newPendingStock = Math.max(0, currentPendingStock - itemToCancel.quantity);
+                transaction.update(doc(db, 'products', itemToCancel.productId), { pendingStock: newPendingStock });
+                
+                // Prepare movement data to be created after transaction
+                movementsToCreate.push({
                     type: 'Anulado',
                     productId: itemToCancel.productId,
                     productName: productData.name,
                     quantity: itemToCancel.quantity,
-                    notes: `Anulación de excepción de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
+                    notes: `Anulación de excepción de guía ${exception.trackingNumber} en despacho ${orderData.dispatchId} por ${user?.name}.`,
                     platformId: orderData.platformId,
                     carrierId: orderData.carrierId,
                     dispatchId: orderData.dispatchId,
                     userId: user?.id,
                     userName: user?.name,
-                }));
+                });
             }
-            
-            // This part needs to be inside the transaction to avoid race conditions
-            const updatedExceptions = (orderData.exceptions || []).filter(ex => ex.trackingNumber !== cancellationGuide);
-            const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...((orderData.exceptions || []).filter(ex => ex.trackingNumber === cancellationGuide))];
-            
-            const updatePayload: Record<string, any> = {
-                exceptions: updatedExceptions,
-                cancelledExceptions: updatedCancelledExceptions,
-            };
+        }
+        
+        // 3. PERFORM all write operations at the end of the transaction
+        const updatedExceptions = (orderData.exceptions || []).filter(ex => !guidesSet.has(ex.trackingNumber));
+        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...exceptionsToCancel];
+        
+        const updatePayload: Record<string, any> = {
+            exceptions: updatedExceptions,
+            cancelledExceptions: updatedCancelledExceptions,
+        };
 
-            // Check if all original exceptions for this order are now cancelled
-            const allOriginalProductsInExceptions = (orderData.exceptions || []).flatMap(ex => ex.products);
-            if (allOriginalProductsInExceptions.length === 0 && updatedExceptions.length === 0) {
-                updatePayload.status = 'Despachada'; // or 'Anulada' if no regular guides either
-            }
-            
-            transaction.update(orderRef, updatePayload);
+        const allOriginalProductsInExceptions = (orderData.exceptions || []).flatMap(ex => ex.products);
+        if (allOriginalProductsInExceptions.length > 0 && updatedExceptions.length === 0) {
+            updatePayload.status = orderData.trackingNumbers.length > 0 ? 'Despachada' : 'Anulada';
+        }
 
-            await Promise.all(movementPromises);
-
-            return {
-                exceptions: updatedExceptions,
-                cancelledExceptions: updatedCancelledExceptions,
-                status: updatePayload.status,
-            };
-        });
-
-        return result;
-
-    } catch (error) {
-        console.error("Error cancelling dispatch items:", error);
-        throw error;
+        transaction.update(orderRef, updatePayload);
+        
+        // Return the final state of the order
+        return {
+            ...orderData,
+            ...updatePayload,
+        };
+    });
+    
+    // 4. PERFORM operations that have their own transactions AFTER the main transaction
+    for (const movement of movementsToCreate) {
+        await addInventoryMovement(movement);
     }
+    
+    return updatedOrderData;
 };
+
 
 // Audit Alert Functions
 export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
@@ -1701,6 +1713,8 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
+
 
 
 
