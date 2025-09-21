@@ -435,30 +435,30 @@ export function DispatchContent() {
                                 return (
                                 <AccordionItem value={order.id} key={order.id}>
                                     <div className="flex items-center border-b">
-                                        <div className="w-[80%]">
+                                        <div className="flex-grow">
                                             <AccordionTrigger>
-                                                <div className="grid grid-cols-2 w-full items-center text-sm">
+                                                <div className="grid grid-cols-2 md:grid-cols-3 w-full items-center text-sm">
                                                     <div className="text-left">
                                                         <p className="font-semibold">{order.dispatchId}</p>
                                                         <p className="text-muted-foreground">
                                                             {formatToTimeZone(new Date(order.date), "dd/MM/yyyy HH:mm")}
                                                         </p>
                                                     </div>
-                                                    <div className="text-center">
+                                                    <div className="text-center hidden md:block">
                                                         <p className="font-medium">{platformNames[order.platformId]}</p>
                                                         <p className="text-muted-foreground">{carrierNames[order.carrierId]}</p>
                                                     </div>
+                                                    <div className="text-right pr-4">
+                                                      <ProcessDispatchDialog
+                                                          order={orderForDialog}
+                                                          productsById={productsById}
+                                                          onDispatchProcessed={handleDispatchProcessed}
+                                                      >
+                                                          <Button>Procesar Pendientes</Button>
+                                                      </ProcessDispatchDialog>
+                                                    </div>
                                                 </div>
                                             </AccordionTrigger>
-                                        </div>
-                                        <div className="w-[20%] flex justify-end pr-4">
-                                            <ProcessDispatchDialog
-                                                order={orderForDialog}
-                                                productsById={productsById}
-                                                onDispatchProcessed={handleDispatchProcessed}
-                                            >
-                                                <Button>Procesar Pendientes</Button>
-                                            </ProcessDispatchDialog>
                                         </div>
                                     </div>
                                     <AccordionContent>
