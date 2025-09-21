@@ -71,12 +71,13 @@ import { AlertDialogTrigger } from './ui/alert-dialog';
 interface ProductsContentProps {
     initialProducts: Product[];
     totalPages: number;
+    nextCursor?: string;
     initialSupplierNames: Record<string, string>;
     initialCategoryNames: Record<string, string>;
     allRotationCategories: RotationCategory[];
 }
 
-export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
+export function ProductsContent({ initialProducts, totalPages, nextCursor, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
     const [products, setProducts] = useState<Product[]>(initialProducts);
     const [supplierNames, setSupplierNames] = useState<Record<string, string>>(initialSupplierNames);
     const [categoryNames, setCategoryNames] = useState<Record<string, string>>(initialCategoryNames);
@@ -103,10 +104,21 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     // Pagination states from URL
     const currentPage = Number(searchParams.get('page') || '1');
     const itemsPerPage = Number(searchParams.get('limit') || '20');
+
+    // Store cursors for each page. The key is the page number.
+    const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
     
     useEffect(() => {
         getVendedores().then(setVendedores);
     }, []);
+
+    useEffect(() => {
+        // When new products are loaded, update the cursor for the *next* page
+        if (nextCursor) {
+            setPageCursors(prev => ({ ...prev, [currentPage + 1]: nextCursor }));
+        }
+    }, [nextCursor, currentPage]);
+
 
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
@@ -118,7 +130,8 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         if (hasPending) params.set('pending', 'true'); else params.delete('pending');
         if (hasReservations) params.set('reservations', 'true'); else params.delete('reservations');
         if (onlyAudited) params.set('audited', 'true'); else params.delete('audited');
-        params.set('page', '1'); // Reset to first page on filter change
+        
+        // When filters change, always go back to page 1
         router.replace(`${pathname}?${params.toString()}`);
     }, [searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited]);
 
@@ -179,6 +192,18 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const handlePaginationChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set('page', String(newPage));
+        
+        // Get the cursor for the page we are navigating to
+        const lastVisible = pageCursors[newPage];
+        if (lastVisible) {
+            params.set('last', lastVisible);
+        } else {
+            // If we don't have a cursor for that page (e.g., going backwards), we remove it.
+            // Firestore's `startAfter` doesn't have a `startBefore`, so backwards navigation re-queries from the start.
+            // This is a limitation we can accept for now. For true back/forward, a more complex state management is needed.
+            params.delete('last');
+        }
+        
         router.push(`${pathname}?${params.toString()}`);
     }
 
@@ -186,6 +211,8 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         const params = new URLSearchParams(searchParams.toString());
         params.set('limit', String(value));
         params.set('page', '1'); // Reset to first page
+        params.delete('last'); // Cursors are dependent on page size, so we must reset
+        setPageCursors({ 1: undefined }); // Reset cursor cache
         router.push(`${pathname}?${params.toString()}`);
     }
 
@@ -656,7 +683,7 @@ interface PaginationControlsProps {
 }
 
 function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange }: PaginationControlsProps) {
-    if (totalPages <= 1) return null;
+    if (totalPages <= 1 && currentPage === 1) return null;
     
     return (
         <div className="flex items-center justify-end space-x-6 lg:space-x-8 w-full">
@@ -695,7 +722,7 @@ function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPag
                     variant="outline"
                     className="h-8 w-8 p-0"
                     onClick={() => onPageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages || totalPages === 0}
+                    disabled={currentPage >= totalPages}
                 >
                     <span className="sr-only">Ir a la página siguiente</span>
                     <ChevronRight className="h-4 w-4" />

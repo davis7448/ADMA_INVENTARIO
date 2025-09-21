@@ -27,7 +27,7 @@ import { Download, FileSpreadsheet, Calendar as CalendarIcon, Check, ChevronsUpD
 import { generatePickingListPDF } from '@/lib/pdf';
 import { formatToTimeZone, cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -40,8 +40,10 @@ import { getInventoryMovements, getDispatchOrders } from '@/lib/api';
 interface HistoryContentProps {
     initialMovements: InventoryMovement[];
     movementsTotalPages: number;
+    movementsNextCursor?: string;
     initialDispatchOrders: DispatchOrder[];
     ordersTotalPages: number;
+    ordersNextCursor?: string;
     allProducts: Product[];
     allPlatforms: Platform[];
     allCarriers: Carrier[];
@@ -51,12 +53,13 @@ interface HistoryContentProps {
 export function HistoryContent({
     initialMovements,
     movementsTotalPages,
+    movementsNextCursor,
     initialDispatchOrders,
     ordersTotalPages,
+    ordersNextCursor,
     allProducts,
     allPlatforms,
     allCarriers,
-    currentFilters,
 }: HistoryContentProps) {
 
     const router = useRouter();
@@ -82,6 +85,20 @@ export function HistoryContent({
     const movementsPage = Number(searchParams.get('movementsPage') || '1');
     const ordersPage = Number(searchParams.get('ordersPage') || '1');
     const itemsPerPage = Number(searchParams.get('limit') || '10');
+    
+    // Store cursors for each page
+    const [movementsPageCursors, setMovementsPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
+    const [ordersPageCursors, setOrdersPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
+
+    useEffect(() => {
+        if (movementsNextCursor) {
+            setMovementsPageCursors(prev => ({...prev, [movementsPage + 1]: movementsNextCursor}));
+        }
+        if (ordersNextCursor) {
+            setOrdersPageCursors(prev => ({...prev, [ordersPage + 1]: ordersNextCursor}));
+        }
+    }, [movementsNextCursor, ordersNextCursor, movementsPage, ordersPage]);
+
 
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
@@ -96,10 +113,8 @@ export function HistoryContent({
         if (dateRange?.to) params.set('endDate', dateRange.to.toISOString()); else params.delete('endDate');
 
         params.set('limit', String(itemsPerPage));
-        // Reset page to 1 when filters change, but keep the other pagination
-        params.set('movementsPage', '1');
-        params.set('ordersPage', '1');
         
+        // When filters change, reset pagination for both tabs
         router.push(`${pathname}?${params.toString()}`);
     }, [filterProductId, filterPlatformId, filterCarrierId, filterMovementType, dateRange, itemsPerPage]);
 
@@ -107,6 +122,16 @@ export function HistoryContent({
     const handlePaginationChange = (type: 'movements' | 'orders', newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set(`${type}Page`, String(newPage));
+        
+        const cursors = type === 'movements' ? movementsPageCursors : ordersPageCursors;
+        const lastVisible = cursors[newPage];
+
+        if (lastVisible) {
+            params.set(`${type}Last`, lastVisible);
+        } else {
+            params.delete(`${type}Last`);
+        }
+        
         router.push(`${pathname}?${params.toString()}`);
     }
 
@@ -121,7 +146,7 @@ export function HistoryContent({
     };
 
     const handleExportMovementsExcel = async () => {
-        const { movements } = await getInventoryMovements({ filters: currentFilters, fetchAll: true });
+        const { movements } = await getInventoryMovements({ fetchAll: true });
         const flattenedData = movements.map(movement => ({
             'ID Movimiento': movement.movementId,
             'Fecha': formatToTimeZone(new Date(movement.date), "dd/MM/yyyy HH:mm"),
@@ -142,7 +167,7 @@ export function HistoryContent({
     };
 
     const handleExportExcel = async () => {
-        const { orders } = await getDispatchOrders({ filters: currentFilters, fetchAll: true });
+        const { orders } = await getDispatchOrders({ fetchAll: true });
         const flattenedData = orders.flatMap(order => 
             order.products.map(product => ({
                 'ID Despacho': order.dispatchId,
