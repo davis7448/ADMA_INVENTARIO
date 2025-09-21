@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -60,6 +61,7 @@ export function HistoryContent({
     allProducts,
     allPlatforms,
     allCarriers,
+    currentFilters
 }: HistoryContentProps) {
 
     const router = useRouter();
@@ -67,13 +69,13 @@ export function HistoryContent({
     const searchParams = useSearchParams();
 
     // Filter states
-    const [filterPlatformId, setFilterPlatformId] = useState<string>(searchParams.get('platformId') || 'all');
-    const [filterCarrierId, setFilterCarrierId] = useState<string>(searchParams.get('carrierId') || 'all');
-    const [filterProductId, setFilterProductId] = useState<string>(searchParams.get('productId') || 'all');
-    const [filterMovementType, setFilterMovementType] = useState<string>(searchParams.get('movementType') || 'all');
+    const [filterPlatformId, setFilterPlatformId] = useState<string>(currentFilters.platformId || 'all');
+    const [filterCarrierId, setFilterCarrierId] = useState<string>(currentFilters.carrierId || 'all');
+    const [filterProductId, setFilterProductId] = useState<string>(currentFilters.productId || 'all');
+    const [filterMovementType, setFilterMovementType] = useState<string>(currentFilters.movementType || 'all');
     const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-        const startDate = searchParams.get('startDate');
-        const endDate = searchParams.get('endDate');
+        const startDate = currentFilters.startDate;
+        const endDate = currentFilters.endDate;
         if (startDate && endDate) {
             return { from: new Date(startDate), to: new Date(endDate) };
         }
@@ -87,23 +89,12 @@ export function HistoryContent({
     const itemsPerPage = Number(searchParams.get('limit') || '10');
     
     // Store cursors for each page
-    const [movementsPageCursors, setMovementsPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
-    const [ordersPageCursors, setOrdersPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
-
-    useEffect(() => {
-        if (movementsNextCursor) {
-            setMovementsPageCursors(prev => ({...prev, [movementsPage + 1]: movementsNextCursor}));
-        }
-        if (ordersNextCursor) {
-            setOrdersPageCursors(prev => ({...prev, [ordersPage + 1]: ordersNextCursor}));
-        }
-    }, [movementsNextCursor, ordersNextCursor, movementsPage, ordersPage]);
-
+    const [movementsPageCursors, setMovementsPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined, 2: movementsNextCursor });
+    const [ordersPageCursors, setOrdersPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined, 2: ordersNextCursor });
 
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
         
-        // Update params from state
         if (filterProductId !== 'all') params.set('productId', filterProductId); else params.delete('productId');
         if (filterPlatformId !== 'all') params.set('platformId', filterPlatformId); else params.delete('platformId');
         if (filterCarrierId !== 'all') params.set('carrierId', filterCarrierId); else params.delete('carrierId');
@@ -114,7 +105,6 @@ export function HistoryContent({
 
         params.set('limit', String(itemsPerPage));
         
-        // When filters change, reset pagination for both tabs
         router.push(`${pathname}?${params.toString()}`);
     }, [filterProductId, filterPlatformId, filterCarrierId, filterMovementType, dateRange, itemsPerPage]);
 
@@ -229,7 +219,6 @@ export function HistoryContent({
         params.set('ordersPage', '1');
         router.push(`${pathname}?${params.toString()}`);
         
-        // Also reset local state
         setFilterPlatformId('all');
         setFilterCarrierId('all');
         setFilterProductId('all');
@@ -358,7 +347,7 @@ export function HistoryContent({
                         variant="outline"
                         className="h-8 w-8 p-0"
                         onClick={() => onPageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages || totalPages === 0}
+                        disabled={currentPage >= totalPages}
                     >
                         <span className="sr-only">Ir a la página siguiente</span>
                         <ChevronRight className="h-4 w-4" />
@@ -486,7 +475,7 @@ export function HistoryContent({
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
-                                    <div className="p-4 bg-muted/50 rounded-md grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="p-4 bg-muted/50 rounded-md grid grid-cols-1 lg:grid-cols-2 gap-6">
                                         <div>
                                             <h4 className="font-semibold mb-2">Productos de la Orden</h4>
                                             <Table>
@@ -527,6 +516,27 @@ export function HistoryContent({
                                                     {order.exceptions.map((ex, index) => (
                                                         <div key={index} className="mb-3">
                                                             <p className="text-sm font-semibold">Guía de Excepción: <span className="font-mono bg-destructive/10 px-2 py-1 rounded">{ex.trackingNumber}</span></p>
+                                                            <Table>
+                                                                <TableBody>
+                                                                    {ex.products.map(p => (
+                                                                        <TableRow key={p.productId + (p.variantId || '')}>
+                                                                            <TableCell className="text-xs">{productsById[p.productId]?.name || 'Producto desconocido'}</TableCell>
+                                                                            <TableCell className="text-right text-xs">Cant: {p.quantity}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {order.cancelledExceptions && order.cancelledExceptions.length > 0 && (
+                                                <div>
+                                                    <h4 className="font-semibold mb-2 text-gray-500">Anulaciones Registradas</h4>
+                                                    {order.cancelledExceptions.map((ex, index) => (
+                                                        <div key={index} className="mb-3">
+                                                            <p className="text-sm font-semibold">Guía Anulada: <span className="font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">{ex.trackingNumber}</span></p>
                                                             <Table>
                                                                 <TableBody>
                                                                     {ex.products.map(p => (
