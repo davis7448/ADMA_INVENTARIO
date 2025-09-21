@@ -33,10 +33,6 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any }): Promise<{ products: Product[], totalPages: number }> => {
-    // This function will now be complex and won't support server-side filtering for all cases due to Firestore limitations.
-    // We will do a best-effort server-side filter and then finish in the client.
-    // This is a trade-off for this demo. A real-world app would use a search service like Algolia or Elasticsearch.
-    
     const productsCol = collection(db, 'products');
     const productSnapshot = await getDocs(productsCol);
     let productList = productSnapshot.docs.map(doc => {
@@ -90,7 +86,6 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
       reservations: reservationsByProductId[product.id] || [],
     }));
 
-    // Client-side filtering as a simplified solution for the demo
     const filteredProducts = productsWithData.filter(product => {
         const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited } = filters;
         
@@ -129,7 +124,6 @@ export const getProductById = async (id: string): Promise<Product | null> => {
     const reservations = await getReservationsByProductId(id);
     const purchaseDate = data.purchaseDate;
 
-    // Robust date handling
     let formattedPurchaseDate: string | undefined = undefined;
     if (purchaseDate) {
         if (purchaseDate instanceof Timestamp) {
@@ -169,11 +163,10 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     if (!isNaN(date.getTime())) {
       dataToAdd.purchaseDate = Timestamp.fromDate(date);
     } else {
-        delete dataToAdd.purchaseDate; // Or handle invalid date string appropriately
+        delete dataToAdd.purchaseDate; 
     }
   }
 
-  // Remove undefined fields before sending to Firestore
   if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
     delete dataToAdd.cost;
   }
@@ -208,7 +201,6 @@ export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
           delete dataToAdd.createdBy;
       }
 
-      // Ensure 'cost' is not undefined before adding
       if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
         delete dataToAdd.cost;
       }
@@ -250,15 +242,13 @@ export const updateProductStock = async (transaction: any, productId: string, qu
   
     const productData = productSnap.data() as Product;
   
-    // For 'subtract-pending', we only care about the parent product's pendingStock
     if (operation === 'subtract-pending') {
         const currentPendingStock = productData.pendingStock || 0;
         const newPendingStock = Math.max(0, currentPendingStock - quantity);
         transaction.update(productRef, { pendingStock: newPendingStock });
-        return; // End transaction here for this specific operation
+        return; 
     }
 
-    // If product is variable, handle variant logic
     if (productData.productType === 'variable') {
         if (!variantSku) {
             throw new Error(`Debe proporcionar un SKU de variante para actualizar el stock de un producto variable como ${productData.name}.`);
@@ -277,7 +267,7 @@ export const updateProductStock = async (transaction: any, productId: string, qu
 
         if (operation === 'add') {
             newVariantStock = currentVariantStock + quantity;
-        } else { // 'subtract'
+        } else { 
             if (currentVariantStock < quantity) {
                 throw new Error(`No hay suficiente stock para la variante ${variant.name}. Stock actual: ${currentVariantStock}, se requieren: ${quantity}.`);
             }
@@ -293,12 +283,12 @@ export const updateProductStock = async (transaction: any, productId: string, qu
             stock: newTotalStock 
         });
 
-    } else { // Product is simple, update its own stock
+    } else { 
         const currentStock = productData.stock || 0;
         let newStock;
         if (operation === 'add') {
             newStock = currentStock + quantity;
-        } else { // 'subtract'
+        } else { 
             if (currentStock < quantity) {
                 throw new Error(`No hay suficiente stock para ${productData.name}. Stock actual: ${currentStock}, se requieren: ${quantity}.`);
             }
@@ -326,7 +316,6 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         const currentDamagedStock = productData.damagedStock || 0;
         updateData.damagedStock = currentDamagedStock + quantity;
         
-        // Find the variant to update its stock
         if (productData.productType === 'variable') {
             const variants = [...(productData.variants || [])];
             const variantIndex = variants.findIndex(v => v.sku.toLowerCase() === variantSku.toLowerCase());
@@ -338,23 +327,16 @@ export const registerDamagedProduct = async (productId: string, quantity: number
             const variant = variants[variantIndex];
             productNameForMovement = `${productData.name} (${variant.name})`;
 
-            // Reduce stock from the variant, not the main product
              if (variant.stock >= quantity) {
                 variant.stock -= quantity;
             } else {
-                // If there's not enough stock in the variant, what happens?
-                // For now, let's assume this is an error condition.
-                // Or maybe it should pull from pending stock first?
-                // For now, simple validation.
                 throw new Error(`No hay suficiente stock para la variante ${variant.name} para marcar como averiado. Disponible: ${variant.stock}, Averiado: ${quantity}`);
             }
 
             updateData.variants = variants;
-            // Recalculate total product stock
             updateData.stock = variants.reduce((acc, v) => acc + v.stock, 0);
 
-        } else { // Simple product
-             // If it's a simple product, reduce its stock
+        } else { 
              if (productData.stock >= quantity) {
                 updateData.stock = productData.stock - quantity;
             } else {
@@ -365,7 +347,6 @@ export const registerDamagedProduct = async (productId: string, quantity: number
         transaction.update(productRef, updateData);
     });
 
-    // Create the inventory movement after the transaction is successful
     await addInventoryMovement({
         type: 'Averia',
         productId: productId,
@@ -492,7 +473,6 @@ export const addPlatform = async (platform: Omit<Platform, 'id'>): Promise<strin
 
 // Order Functions
 export const getOrders = (): Order[] => {
-    // This is mock data
     return [];
   };
 
@@ -512,7 +492,6 @@ export const getUsers = async (): Promise<User[]> => {
 
 export const addUser = async (user: Omit<User, 'id'>): Promise<string> => {
     const usersCol = collection(db, 'users');
-    // Ensure email is unique
     const q = query(usersCol, where("email", "==", user.email));
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
@@ -553,59 +532,42 @@ export const sendPasswordReset = async (email: string) => {
 // Inventory Movement Functions
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, filters = {} }: { page?: number, limit?: number, filters?: any }): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const movementsCol = collection(db, 'inventoryMovements');
-    let q: Query = movementsCol;
-    let countQuery: Query = movementsCol;
-
-    // Apply filters
-    const queryConstraints = [];
-    if (filters.startDate) queryConstraints.push(where('date', '>=', new Date(filters.startDate)));
-    if (filters.endDate) queryConstraints.push(where('date', '<=', new Date(filters.endDate)));
-    if (filters.productId && filters.productId !== 'all') queryConstraints.push(where('productId', '==', filters.productId));
-    if (filters.platformId && filters.platformId !== 'all') queryConstraints.push(where('platformId', '==', filters.platformId));
-    if (filters.carrierId && filters.carrierId !== 'all') queryConstraints.push(where('carrierId', '==', filters.carrierId));
-    if (filters.movementType && filters.movementType !== 'all') queryConstraints.push(where('type', '==', filters.movementType));
-
-    if (queryConstraints.length > 0) {
-        q = query(q, ...queryConstraints);
-        countQuery = query(countQuery, ...queryConstraints);
-    }
-
-    // Get total count for pagination
-    const countSnapshot = await getDocs(countQuery);
-    const totalCount = countSnapshot.size;
-    const totalPages = Math.ceil(totalCount / itemsPerPage);
-
-    // Apply sorting and pagination
-    q = query(q, orderBy('date', 'desc'));
-
-    if (page > 1) {
-        const lastVisibleQuery = query(q, limit((page - 1) * itemsPerPage));
-        const lastVisibleSnapshot = await getDocs(lastVisibleQuery);
-        const lastVisible = lastVisibleSnapshot.docs[lastVisibleSnapshot.docs.length - 1];
-        if (lastVisible) {
-            q = query(q, startAfter(lastVisible));
-        }
-    }
     
-    q = query(q, limit(itemsPerPage));
-
-    const movementSnapshot = await getDocs(q);
-    const movementList = movementSnapshot.docs.map(doc => {
-      const data = doc.data();
-      const dateValue = data.date;
-      let formattedDate: string;
-      if (dateValue instanceof Timestamp) {
-        formattedDate = dateValue.toDate().toISOString();
-      } else {
-        formattedDate = dateValue; // Assume it's already a string
-      }
-      return { 
-        id: doc.id, 
-        ...data,
-        date: formattedDate,
-      } as InventoryMovement
+    const querySnapshot = await getDocs(query(movementsCol, orderBy('date', 'desc')));
+    const allMovements = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const dateValue = data.date;
+        let formattedDate: string;
+        if (dateValue instanceof Timestamp) {
+          formattedDate = dateValue.toDate().toISOString();
+        } else {
+          formattedDate = dateValue; 
+        }
+        return { 
+          id: doc.id, 
+          ...data,
+          date: formattedDate,
+        } as InventoryMovement
     });
-    return { movements: movementList, totalPages, totalCount };
+
+    const filteredMovements = allMovements.filter(movement => {
+        const { startDate, endDate, productId, platformId, carrierId, movementType } = filters;
+        const movementDate = new Date(movement.date);
+        
+        const dateMatch = (!startDate || movementDate >= new Date(startDate)) && (!endDate || movementDate <= new Date(endDate));
+        const productMatch = !productId || productId === 'all' || movement.productId === productId;
+        const platformMatch = !platformId || platformId === 'all' || movement.platformId === platformId;
+        const carrierMatch = !carrierId || carrierId === 'all' || movement.carrierId === carrierId;
+        const typeMatch = !movementType || movementType === 'all' || movement.type === movementType;
+
+        return dateMatch && productMatch && platformMatch && carrierMatch && typeMatch;
+    });
+
+    const totalCount = filteredMovements.length;
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+    const paginatedMovements = filteredMovements.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    return { movements: paginatedMovements, totalPages, totalCount };
 };
 
 export const getInventoryMovementsByProductId = async (productId: string): Promise<InventoryMovement[]> => {
@@ -619,7 +581,7 @@ export const getInventoryMovementsByProductId = async (productId: string): Promi
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
         } else {
-            formattedDate = dateValue; // Assume it's already a string
+            formattedDate = dateValue; 
         }
         return {
             id: doc.id,
@@ -645,7 +607,7 @@ export const getInventoryMovementsByDate = async (date: Date): Promise<Inventory
         if (dateValue instanceof Timestamp) {
             formattedDate = dateValue.toDate().toISOString();
         } else {
-            formattedDate = dateValue; // Assume it's already a string
+            formattedDate = dateValue; 
         }
         return {
             id: doc.id,
@@ -680,7 +642,6 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
         date: Timestamp.now(),
       };
       
-      // Clean up undefined fields before setting
       Object.keys(dataToSet).forEach(key => dataToSet[key] === undefined && delete dataToSet[key]);
 
       transaction.set(newMovementRef, dataToSet);
@@ -703,15 +664,12 @@ export const registerInventoryEntry = async (items: LogisticItem[], user: User |
         reasonText = `${reasonText}: ${supplier?.name || 'Desconocido'}`;
     }
 
-    // Since updateProductStock is transactional, we can't batch it. We have to do it separately.
-    // This is a limitation. For a high-throughput system, this would need a different approach (e.g., Cloud Functions).
     for (const item of items) {
         await runTransaction(db, async (transaction) => {
             await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
         });
     }
 
-    // Now batch the inventory movements
     for (const item of items) {
         const movementRef = doc(collection(db, 'inventoryMovements'));
         const movementData: Omit<InventoryMovement, 'id' | 'movementId' | 'date'> = {
@@ -750,7 +708,6 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
     const newDispatchOrderRef = doc(collection(db, 'dispatchOrders'));
     const orderDate = Timestamp.now();
 
-    // Use a transaction to atomically get and increment the counter for today
     const dispatchId = await runTransaction(db, async (transaction) => {
         const counterDoc = await transaction.get(counterRef);
         let nextId = 1;
@@ -784,7 +741,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             createdBy,
         };
     
-        const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; // Save as Timestamp
+        const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; 
         if (!dataToSet.createdBy) {
           delete dataToSet.createdBy;
         }
@@ -794,7 +751,6 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
     });
 
 
-    // 2. Create inventory movements and update stock for each product
     for (const product of products) {
         await runTransaction(db, async (transaction) => {
             await updateProductStock(transaction, product.productId, product.quantity, 'subtract', product.sku);
@@ -829,69 +785,33 @@ const parseFirestoreDate = (dateValue: any): Date => {
     } else if (dateValue instanceof Date) {
         return dateValue;
     }
-    // Fallback for unexpected formats, though this should be rare.
     console.warn("Unexpected date format from Firestore, using current date as fallback:", dateValue);
     return new Date();
   };
 
 export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, filters = {} }: { page?: number, limit?: number, filters?: any }): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const ordersCol = collection(db, 'dispatchOrders');
-    let q: Query = ordersCol;
-    let countQuery: Query = ordersCol;
+    
+    const querySnapshot = await getDocs(query(ordersCol, orderBy('date', 'desc')));
+    let allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
 
-    const queryConstraints = [];
-    if (filters.startDate) queryConstraints.push(where('date', '>=', new Date(filters.startDate)));
-    if (filters.endDate) queryConstraints.push(where('date', '<=', new Date(filters.endDate)));
-    if (filters.productId && filters.productId !== 'all') queryConstraints.push(where('products.productId', '==', filters.productId)); // Note: This will not work as expected in Firestore for arrays.
-    if (filters.platformId && filters.platformId !== 'all') queryConstraints.push(where('platformId', '==', filters.platformId));
-    if (filters.carrierId && filters.carrierId !== 'all') queryConstraints.push(where('carrierId', '==', filters.carrierId));
+    const { startDate, endDate, productId, platformId, carrierId } = filters;
 
-    if (queryConstraints.length > 0) {
-        // Due to Firestore limitations, complex filtering on arrays and other fields is not fully supported server-side.
-        // We will perform a fetch and then a client-side-like filter here.
-        // For a true production app, a search service like Algolia is recommended.
-        const allDocsSnapshot = await getDocs(query(ordersCol, ...queryConstraints.filter(c => c._op !== 'array-contains')));
-        let allOrders = allDocsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
-        
-        if (filters.productId && filters.productId !== 'all') {
-            allOrders = allOrders.filter(o => o.products.some(p => p.productId === filters.productId));
-        }
-
-        const totalPages = Math.ceil(allOrders.length / itemsPerPage);
-        const paginatedOrders = allOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-
-        return { orders: paginatedOrders, totalPages };
-    }
-
-    // If no complex filters, proceed with pagination
-    const countSnapshot = await getDocs(countQuery);
-    const totalCount = countSnapshot.size;
-    const totalPages = Math.ceil(totalCount / itemsPerPage);
-
-    q = query(q, orderBy('date', 'desc'));
-
-    if (page > 1) {
-        const lastVisibleQuery = query(q, limit((page - 1) * itemsPerPage));
-        const lastVisibleSnapshot = await getDocs(lastVisibleQuery);
-        const lastVisible = lastVisibleSnapshot.docs[lastVisibleSnapshot.docs.length - 1];
-        if (lastVisible) {
-            q = query(q, startAfter(lastVisible));
-        }
+    if (startDate || endDate || productId || platformId || carrierId) {
+        allOrders = allOrders.filter(order => {
+            const orderDate = new Date(order.date);
+            const dateMatch = (!startDate || orderDate >= new Date(startDate)) && (!endDate || orderDate <= new Date(endDate));
+            const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
+            const platformMatch = !platformId || platformId === 'all' || order.platformId === platformId;
+            const carrierMatch = !carrierId || carrierId === 'all' || order.carrierId === carrierId;
+            return dateMatch && productMatch && platformMatch && carrierMatch;
+        });
     }
     
-    q = query(q, limit(itemsPerPage));
+    const totalPages = Math.ceil(allOrders.length / itemsPerPage);
+    const paginatedOrders = allOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
-    const snapshot = await getDocs(q);
-    const orders = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-            id: doc.id,
-            ...data,
-            date: parseFirestoreDate(data.date),
-        } as DispatchOrder
-    });
-
-    return { orders, totalPages };
+    return { orders: paginatedOrders, totalPages };
 }
 
 
@@ -924,7 +844,6 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
 export const processDispatch = async (orderId: string, trackingNumbers: string[], newExceptions: DispatchException[]) => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
-    // Check for cancellation requests before processing
     if (trackingNumbers.length > 0) {
         const cancellationRequestsCol = collection(db, 'cancellationRequests');
         const cancellationQuery = query(cancellationRequestsCol, where('trackingNumber', 'in', trackingNumbers), where('status', '==', 'pending'));
@@ -938,7 +857,6 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 
 
     await runTransaction(db, async (transaction) => {
-        // ========== 1. READ PHASE ==========
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error('No se encontró la órden');
@@ -957,22 +875,16 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
                 productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
             }
         });
-
-        // ========== 2. LOGIC / VALIDATION PHASE ==========
         
         const existingExceptions = new Map((orderData.exceptions || []).map(ex => [ex.trackingNumber, ex]));
         const processedExceptionGuides = new Set<string>();
 
-        // For each tracking number we are dispatching now, check if it resolves an existing exception.
         for (const tn of trackingNumbers) {
             if (existingExceptions.has(tn)) {
                 processedExceptionGuides.add(tn);
             }
         }
-
-        // ========== 3. WRITE PHASE ==========
         
-        // Handle stock reduction for exceptions that are now being dispatched.
         for (const guide of Array.from(processedExceptionGuides)) {
             const exception = existingExceptions.get(guide)!;
             for (const p of exception.products) {
@@ -984,7 +896,6 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             }
         }
         
-        // Handle new exceptions: move stock to pending and create audit alerts.
         for (const ex of newExceptions) {
             for (const exProd of ex.products) {
                 const productData = productDataMap.get(exProd.productId);
@@ -1026,57 +937,53 @@ export const cancelPendingDispatchItems = async (
     cancellationGuide: string
 ): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
-    const counterRef = doc(db, 'counters', 'inventoryMovements');
 
-    let updatedOrderData: Partial<DispatchOrder> = {};
-
-    await runTransaction(db, async (transaction) => {
-        const [orderSnap, counterSnap] = await Promise.all([
-            transaction.get(orderRef),
-            transaction.get(counterRef)
-        ]);
-
+    return runTransaction(db, async (transaction) => {
+        const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
         }
         const orderData = orderSnap.data() as DispatchOrder;
 
-        let nextMovementId = 1000;
-        if (counterSnap.exists()) {
-            nextMovementId = counterSnap.data().currentId + 1;
-        }
+        const updatedProducts: DispatchOrderProduct[] = JSON.parse(JSON.stringify(orderData.products));
+        const updatedExceptions: DispatchException[] = JSON.parse(JSON.stringify(orderData.exceptions || []));
 
-        const updatedProducts: DispatchOrderProduct[] = [...orderData.products];
-        const updatedExceptions: DispatchException[] = [...(orderData.exceptions || [])];
-
-        let productsWereCancelled = false;
-
-        // Check if the cancellation corresponds to an existing exception
-        const exceptionIndex = updatedExceptions.findIndex(ex => ex.trackingNumber === cancellationGuide);
-        const isFromException = exceptionIndex !== -1;
+        const isFromException = updatedExceptions.some(ex => ex.trackingNumber === cancellationGuide);
 
         for (const itemToCancel of productsToCancel) {
             const productRef = doc(db, 'products', itemToCancel.productId);
-            const productSnap = await transaction.get(productRef);
+            const productSnap = await transaction.get(productRef); // Use transaction get
             if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
             const productData = productSnap.data() as Product;
 
-            productsWereCancelled = true;
-            
-            // Restore stock based on whether it was an exception or a regular dispatched item
+            let variantSku: string | undefined = undefined;
+            if (productData.productType === 'variable') {
+                variantSku = productData.variants?.find(v => v.id === itemToCancel.variantId)?.sku;
+            } else {
+                variantSku = productData.sku;
+            }
+
             if (isFromException) {
-                // If it's an exception, it was in pending stock, so we just reduce pending stock
                 const currentPendingStock = productData.pendingStock || 0;
                 transaction.update(productRef, { pendingStock: Math.max(0, currentPendingStock - itemToCancel.quantity) });
             } else {
-                // If it wasn't an exception, it was in physical stock, so we add it back
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', productData.productType === 'variable' ? productData.variants?.find(v => v.id === itemToCancel.variantId)?.sku : productData.sku);
+                // To avoid transaction conflicts, we directly call the logic of updateProductStock here
+                let newStock = (productData.stock || 0) + itemToCancel.quantity;
+                let newVariants = productData.variants;
+                if(productData.productType === 'variable' && newVariants) {
+                    const variantIndex = newVariants.findIndex(v => v.id === itemToCancel.variantId);
+                    if(variantIndex > -1) {
+                        newVariants[variantIndex].stock = (newVariants[variantIndex].stock || 0) + itemToCancel.quantity;
+                        newStock = newVariants.reduce((sum, v) => sum + v.stock, 0);
+                    }
+                    transaction.update(productRef, { stock: newStock, variants: newVariants });
+                } else {
+                    transaction.update(productRef, { stock: newStock });
+                }
             }
             
-            // Log the "Anulado" movement
             const movementRef = doc(collection(db, 'inventoryMovements'));
-            const movementData: Omit<InventoryMovement, 'id' | 'date'> = {
-                movementId: nextMovementId++,
+            const movementData = {
                 type: 'Anulado',
                 productId: itemToCancel.productId,
                 productName: productData.name,
@@ -1088,79 +995,60 @@ export const cancelPendingDispatchItems = async (
             };
             transaction.set(movementRef, movementData);
             
-             // Update or remove the product from the dispatch order's product list
-             const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
-             if (productInOrderIndex !== -1) {
-                 const productInOrder = updatedProducts[productInOrderIndex];
-                 if (productInOrder.quantity > itemToCancel.quantity) {
-                    updatedProducts[productInOrderIndex] = { ...productInOrder, quantity: productInOrder.quantity - itemToCancel.quantity };
-                 } else {
+            const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
+            if (productInOrderIndex !== -1) {
+                updatedProducts[productInOrderIndex].quantity -= itemToCancel.quantity;
+                if (updatedProducts[productInOrderIndex].quantity <= 0) {
                     updatedProducts.splice(productInOrderIndex, 1);
-                 }
-             }
-
-             // If cancelling from exception, remove it from the exception list
-             if (isFromException) {
-                const exception = updatedExceptions[exceptionIndex];
-                const productInExIndex = exception.products.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
-                if (productInExIndex !== -1) {
-                    if (exception.products[productInExIndex].quantity > itemToCancel.quantity) {
-                        exception.products[productInExIndex].quantity -= itemToCancel.quantity;
-                    } else {
-                        exception.products.splice(productInExIndex, 1);
-                    }
                 }
-                // If exception has no more products, remove it
-                if (exception.products.length === 0) {
-                    updatedExceptions.splice(exceptionIndex, 1);
+            }
+
+            if (isFromException) {
+                const exceptionIndex = updatedExceptions.findIndex(ex => ex.trackingNumber === cancellationGuide);
+                if(exceptionIndex > -1) {
+                    const productInExIndex = updatedExceptions[exceptionIndex].products.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
+                    if (productInExIndex !== -1) {
+                        updatedExceptions[exceptionIndex].products[productInExIndex].quantity -= itemToCancel.quantity;
+                        if (updatedExceptions[exceptionIndex].products[productInExIndex].quantity <= 0) {
+                            updatedExceptions[exceptionIndex].products.splice(productInExIndex, 1);
+                        }
+                    }
+                    if (updatedExceptions[exceptionIndex].products.length === 0) {
+                        updatedExceptions.splice(exceptionIndex, 1);
+                    }
                 }
             }
         }
         
-        if (!productsWereCancelled) {
-            throw new Error("No se encontraron los productos seleccionados para anular en esta orden de despacho.");
-        }
-
         const newTotalItems = updatedProducts.reduce((sum, p) => sum + p.quantity, 0);
 
-        const updatePayload: Record<string, any> = {
+        let finalStatus = orderData.status;
+        if (newTotalItems === 0) {
+            finalStatus = 'Anulada';
+        } else if (updatedExceptions.length === 0) {
+            finalStatus = 'Despachada';
+        } else {
+            finalStatus = 'Parcial';
+        }
+
+        const updatePayload = {
             products: updatedProducts,
             totalItems: newTotalItems,
             exceptions: updatedExceptions,
+            status: finalStatus,
         };
 
-        // Re-evaluate the status of the order
-        if (newTotalItems === 0) {
-            updatePayload.status = 'Anulada';
-        } else if (updatedExceptions.length === 0 && orderData.trackingNumbers && orderData.trackingNumbers.length > 0) {
-            // If there are no more exceptions and some items were dispatched, it's fully dispatched
-            updatePayload.status = 'Despachada';
-        } else {
-            // Otherwise it remains partial or becomes partial
-            updatePayload.status = 'Parcial';
-        }
-
-
         transaction.update(orderRef, updatePayload);
-        transaction.set(counterRef, { currentId: nextMovementId - 1 }, { merge: true });
 
-        // Mark the cancellation request as completed
         const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
-        const reqSnap = await getDocs(reqQuery);
+        const reqSnap = await getDocs(reqQuery); // This should be a transaction read if possible, but Firestore limits this.
         if (!reqSnap.empty) {
             const reqDoc = reqSnap.docs[0];
             transaction.update(reqDoc.ref, { status: 'completed' });
         }
 
-        // Prepare the data to return
-        updatedOrderData = {
-            products: updatedProducts,
-            totalItems: newTotalItems,
-            status: updatePayload.status || orderData.status,
-        };
+        return updatePayload;
     });
-
-    return updatedOrderData;
 };
 
 
@@ -1182,14 +1070,11 @@ export const getAuditAlerts = async (): Promise<AuditAlert[]> => {
 
 // Pending Inventory Functions
 export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => {
-    // 1. Get all products to create a lookup map
-    const productsResult = await getProducts({});
+    const productsResult = await getProducts({ limit: 10000 });
     const productsById = new Map(productsResult.products.map(p => [p.id, p]));
 
-    // 2. Get all dispatch orders with exceptions
     const dispatchOrders = await getPartialDispatchOrders();
     
-    // 3. Create a flat list of all individual pending items
     const pendingItems: PendingInventoryItem[] = [];
 
     for (const order of dispatchOrders) {
@@ -1234,7 +1119,6 @@ export const getRotationCategories = async (): Promise<RotationCategory[]> => {
     const rotationCategoriesCol = collection(db, 'rotationCategories');
     const snapshot = await getDocs(rotationCategoriesCol);
     const categoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RotationCategory));
-    // Sort by salesThreshold in descending order
     return categoryList.sort((a, b) => b.salesThreshold - a.salesThreshold);
 };
 
@@ -1284,7 +1168,7 @@ export const updateEntryReasons = async (reasons: EntryReason[]): Promise<void> 
 export const getProductPerformanceData = async (productId: string): Promise<ProductPerformanceData> => {
     const [product, dispatchOrdersResult, movements, carriers, platforms] = await Promise.all([
         getProductById(productId),
-        getDispatchOrders({ limit: 1000 }), // Fetch a large number for analytics
+        getDispatchOrders({ limit: 1000 }), 
         getInventoryMovementsByProductId(productId),
         getCarriers(),
         getPlatforms(),
@@ -1319,7 +1203,6 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
         product.variants.forEach(v => initializeVariantData(v.id));
     }
 
-    // Process dispatch orders for sales data
     for (const order of dispatchOrdersResult.orders) {
         for (const p of order.products) {
             if (p.productId === productId) {
@@ -1328,12 +1211,10 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
                 const day = format(startOfDay(order.date), 'yyyy-MM-dd');
                 const qty = p.quantity;
 
-                // Aggregate total data
                 salesByCarrier[carrierName] = (salesByCarrier[carrierName] || 0) + qty;
                 salesByPlatform[platformName] = (salesByPlatform[platformName] || 0) + qty;
                 salesByDay[day] = (salesByDay[day] || 0) + qty;
 
-                // Aggregate variant data
                 if (p.variantId && salesByVariant[p.variantId]) {
                     const variantSales = salesByVariant[p.variantId];
                     variantSales.byDay[day] = (variantSales.byDay[day] || 0) + qty;
@@ -1350,7 +1231,6 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
         }
     }
     
-    // Process movements for returns data
     const thirtyDaysAgo = subDays(new Date(), 30);
     const returnMovements = movements.filter(m => 
         (m.type === 'Entrada' || m.type === 'Averia') && 
@@ -1538,9 +1418,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
     for (const reservation of allReservations) {
         const reservationDate = new Date(reservation.date);
 
-        // Check if reservation is older than 5 days and not already alerted
         if (reservationDate <= FIVE_DAYS_AGO && !existingAlertReservationIds.has(reservation.id)) {
-            // Check for any 'Salida' movement for this product after the reservation was made
             const hasRecentSale = movements.some(m => 
                 m.productId === reservation.productId &&
                 m.type === 'Salida' &&
@@ -1548,7 +1426,6 @@ export const checkForStaleReservations = async (): Promise<void> => {
             );
 
             if (!hasRecentSale) {
-                // This is a stale reservation, create an alert
                 const productInfo = productMap.get(reservation.productId);
                 const vendedorName = vendedorMap.get(reservation.vendedorId) || 'Desconocido';
 
@@ -1596,7 +1473,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
         if (metadataSnap.exists()) {
             const lastGenerated = (metadataSnap.data().lastGenerated as Timestamp).toDate();
             if (isToday(lastGenerated)) {
-                // Data is fresh, return from cache
                 const alertsCol = collection(db, 'stockAlertsCache');
                 const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
                 const alertSnapshot = await getDocs(q);
@@ -1606,10 +1482,9 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
         }
     }
 
-    // Data is stale or doesn't exist, or regeneration is forced
     try {
         const [productsResult, allMovementsResult] = await Promise.all([
-            getProducts({ limit: 10000 }), // Fetch all products for analysis
+            getProducts({ limit: 10000 }),
             getInventoryMovements({ limit: 10000, filters: { startDate: subDays(new Date(), 7).toISOString() } }),
         ]);
 
@@ -1638,7 +1513,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                     physicalStock: product.stock,
                     reservedStock: totalReserved,
                     salesLast7Days,
-                    // Pass through data for storage
                     name: product.name, sku: product.sku, imageUrl: product.imageUrl,
                 });
             } else if (product.productType === 'variable' && product.variants) {
@@ -1652,8 +1526,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
                         productName: `${product.name} - ${variant.name}`,
                         physicalStock: variant.stock,
                         reservedStock: variantReserved,
-                        salesLast7Days, // Use parent's sales for variant check
-                        // Pass through data for storage
+                        salesLast7Days, 
                         name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
                     });
                 }
@@ -1670,11 +1543,9 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
             const hasSales = item.salesLast7Days.some((s: number) => s > 0);
             
-            // For products with no sales, trigger if stock is low
             if (!hasSales) {
                 return analysis.availableForSale <= 5 && analysis.availableForSale > 0;
             }
-            // For products with sales, use the AI's triggered alert
             return analysis.alertTriggered;
         });
 
@@ -1693,10 +1564,8 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
             };
         });
         
-        // Cache new alerts in Firestore
         const batch = writeBatch(db);
         const alertsCol = collection(db, 'stockAlertsCache');
-        // Clear old alerts first
         const oldAlertsSnap = await getDocs(query(alertsCol, where(documentId(), '!=', 'metadata')));
         oldAlertsSnap.forEach(doc => batch.delete(doc.ref));
 
@@ -1713,7 +1582,6 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
 
     } catch (e: any) {
         console.error("Failed to generate stock alerts:", e);
-        // Try to return cached data if generation fails
         const metadataSnap = await getDoc(metadataRef);
         if (metadataSnap.exists()) {
             const alertsCol = collection(db, 'stockAlertsCache');
@@ -1742,7 +1610,6 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
         return { alreadyDispatched: [] };
     }
     
-    // Check for already dispatched guides
     const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', trackingNumbers));
     const dispatchedSnapshot = await getDocs(dispatchedQuery);
 
@@ -1761,7 +1628,6 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
         if (isDispatched) {
             alreadyDispatched.push(tn);
         }
-        // Always create the request, even if already dispatched.
         const newRequest: Omit<CancellationRequest, 'id'> = {
             trackingNumber: tn,
             requestedBy: { id: user.id, name: user.name },
@@ -1779,18 +1645,8 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
 
 export const getCancellationRequests = async (): Promise<CancellationRequest[]> => {
     const requestsCol = collection(db, 'cancellationRequests');
-    const dispatchOrdersCol = collection(db, 'dispatchOrders');
 
-    const [requestsSnapshot, dispatchOrdersSnapshot] = await Promise.all([
-        getDocs(requestsCol),
-        getDocs(dispatchOrdersCol)
-    ]);
-
-    const dispatchedGuides = new Set<string>();
-    dispatchOrdersSnapshot.forEach(doc => {
-        const order = doc.data() as DispatchOrder;
-        order.trackingNumbers?.forEach(tn => dispatchedGuides.add(tn));
-    });
+    const requestsSnapshot = await getDocs(requestsCol);
 
     const requestList: CancellationRequest[] = requestsSnapshot.docs.map(doc => {
         const data = doc.data();
@@ -1798,7 +1654,6 @@ export const getCancellationRequests = async (): Promise<CancellationRequest[]> 
             id: doc.id,
             ...data,
             requestDate: (data.requestDate as Timestamp).toDate().toISOString(),
-            // `isDispatched` is now read directly from the document
             isDispatched: !!data.isDispatched,
         } as CancellationRequest;
     });
@@ -1818,8 +1673,6 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
         const requestData = requestSnap.data() as CancellationRequest;
 
         if (status === 'completed') {
-            // Logic to revert stock is now handled in cancelPendingDispatchItems
-            // This function just updates the status.
             console.warn(`La guía ${requestData.trackingNumber} fue marcada como anulada. La reversión de stock debe manejarse por separado si no es una excepción.`);
         }
         
@@ -1864,3 +1717,4 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
