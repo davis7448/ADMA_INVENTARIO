@@ -954,50 +954,46 @@ export const cancelPendingDispatchItems = async (
 
     const movementsToCreate: Omit<InventoryMovement, 'id' | 'movementId' | 'date'>[] = [];
     let orderData: DispatchOrder;
-    let productsData: Map<string, Product> = new Map();
 
-    // 1. READ all necessary data outside the transaction
-    const orderSnap = await getDoc(orderRef);
-    if (!orderSnap.exists()) {
-        throw new Error("No se encontró la orden de despacho.");
-    }
-    orderData = { id: orderSnap.id, ...orderSnap.data(), date: parseFirestoreDate(orderSnap.data().date) } as DispatchOrder;
+    const updatedOrderData = await runTransaction(db, async (transaction) => {
+        // --- 1. READS ---
+        const orderSnap = await transaction.get(orderRef);
+        if (!orderSnap.exists()) {
+            throw new Error("No se encontró la orden de despacho.");
+        }
+        orderData = { id: orderSnap.id, ...orderSnap.data(), date: parseFirestoreDate(orderSnap.data().date) } as DispatchOrder;
 
-    const productIdsToRead = [...new Set(itemsToCancel.map(p => p.productId))];
-    if (productIdsToRead.length > 0) {
-        const productSnaps = await Promise.all(productIdsToRead.map(id => getDoc(doc(db, 'products', id))));
-        productSnaps.forEach(snap => {
+        const productIdsToRead = [...new Set(itemsToCancel.map(p => p.productId))];
+        const productDocs = productIdsToRead.length > 0
+            ? await Promise.all(productIdsToRead.map(id => transaction.get(doc(db, 'products', id))))
+            : [];
+        
+        const productDataMap = new Map<string, Product>();
+        productDocs.forEach(snap => {
             if (snap.exists()) {
-                productsData.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+                productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
             }
         });
-    }
 
-    // 2. Perform the TRANSACTION for atomic writes
-    const updatedOrderData = await runTransaction(db, async (transaction) => {
-        // We already read the order, no need to get it again inside the transaction
-        
+        // --- 2. LOGIC & WRITES ---
         const guidesSet = new Set(cancellationGuides);
         const exceptionsToCancel = (orderData.exceptions || []).filter(ex => guidesSet.has(ex.trackingNumber));
-        
+
         for (const exception of exceptionsToCancel) {
             for (const itemToCancel of exception.products) {
-                const productData = productsData.get(itemToCancel.productId);
+                const productData = productDataMap.get(itemToCancel.productId);
                 if (!productData) {
                     console.warn(`Producto ${itemToCancel.productId} no encontrado durante anulación. Se omitirá la actualización de stock pendiente.`);
                     continue;
                 }
 
                 // Logic to reduce pending stock
-                const currentPendingStock = productData.pendingStock || 0;
-                const newPendingStock = Math.max(0, currentPendingStock - itemToCancel.quantity);
-                transaction.update(doc(db, 'products', itemToCancel.productId), { pendingStock: newPendingStock });
-                
-                // Prepare movement for later, outside the transaction
+                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantSku);
+
                 movementsToCreate.push({
                     type: 'Anulado',
                     productId: itemToCancel.productId,
-                    productName: productData.name,
+                    productName: productData.name + (itemToCancel.variantId ? ` - ${productData.variants?.find(v => v.id === itemToCancel.variantId)?.name}` : ''),
                     quantity: itemToCancel.quantity,
                     notes: `Anulación de excepción ${exception.trackingNumber} en despacho ${orderData.dispatchId} por ${user?.name}.`,
                     platformId: orderData.platformId,
@@ -1024,14 +1020,13 @@ export const cancelPendingDispatchItems = async (
 
         transaction.update(orderRef, updatePayload);
         
-        // Return the updated data for the UI
         return {
             ...orderData,
             ...updatePayload,
         };
     });
     
-    // 3. Perform non-atomic side-effects AFTER the transaction
+    // --- 3. POST-TRANSACTION OPERATIONS ---
     for (const movement of movementsToCreate) {
         await addInventoryMovement(movement);
     }
@@ -1147,25 +1142,23 @@ export const annulGuideDuringDispatch = async (
         const updatedProducts: DispatchOrderProduct[] = [...order.products];
         
         for (const item of itemsToAnnul) {
-            // Restore stock for the annulled item.
-            // This function contains its own transaction.get, so it can't be here. We do it manually.
             const productData = productDataMap.get(item.productId);
             if (productData) {
                 await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
 
-                // Prepare inventory movement to be created after the transaction.
                 movementsToCreate.push({
                     type: 'Anulado',
                     productId: item.productId,
                     productName: productData.name + (item.variantId ? ` - ${productData.variants?.find(v => v.id === item.variantId)?.name}` : ''),
                     quantity: item.quantity,
                     notes: `Anulación de guía durante despacho ${order.dispatchId} por ${user?.name}.`,
+                    platformId: order.platformId,
+                    carrierId: order.carrierId,
                     userId: user?.id,
                     userName: user?.name,
                 });
             }
 
-            // Subtract item from the order's product list
             const productIndex = updatedProducts.findIndex(p => p.productId === item.productId && p.variantId === item.variantId);
             if (productIndex > -1) {
                 updatedProducts[productIndex].quantity -= item.quantity;
@@ -1184,14 +1177,12 @@ export const annulGuideDuringDispatch = async (
             status: finalStatus,
         };
 
-        // All writes are performed here.
         transaction.update(orderRef, updatePayload);
         transaction.update(cancellationRequestRef, { status: 'completed' });
 
         return updatePayload;
     });
 
-    // After transaction succeeds, create inventory movements.
     for (const movement of movementsToCreate) {
         await addInventoryMovement(movement);
     }
@@ -1875,6 +1866,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 
