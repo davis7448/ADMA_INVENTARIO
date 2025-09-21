@@ -941,63 +941,88 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 };
 
 export const cancelPendingDispatchItems = async (
-    orderId: string, 
-    productsToCancel: { productId: string; variantId?: string; quantity: number }[], 
-    user: User | null, 
+    orderId: string,
+    productsToCancel: { productId: string; variantId?: string; quantity: number }[],
+    user: User | null,
     cancellationGuide: string
 ): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
     return runTransaction(db, async (transaction) => {
+        // Step 1: Read all necessary documents first.
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
         }
-        const orderData = orderSnap.data() as DispatchOrder;
 
+        const productIdsToRead = [...new Set(productsToCancel.map(p => p.productId))];
+        const productRefs = productIdsToRead.map(id => doc(db, 'products', id));
+        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+
+        const productDataMap = new Map<string, Product>();
+        for (const snap of productSnaps) {
+            if (snap.exists()) {
+                productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+            }
+        }
+
+        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
+        const reqSnap = await getDocs(reqQuery); // This is a read outside the transaction, but it's for finding the doc to update.
+        const reqDoc = reqSnap.empty ? null : reqSnap.docs[0];
+
+
+        // Step 2: Perform logic with the read data.
+        const orderData = orderSnap.data() as DispatchOrder;
         const updatedProducts: DispatchOrderProduct[] = JSON.parse(JSON.stringify(orderData.products));
         const updatedExceptions: DispatchException[] = JSON.parse(JSON.stringify(orderData.exceptions || []));
-
-        // A guide from a dispatched order is NOT an exception. A guide from a partial order IS an exception.
         const isFromException = (orderData.exceptions || []).some(ex => ex.trackingNumber === cancellationGuide);
+        const movementPromises: Promise<any>[] = [];
+
 
         for (const itemToCancel of productsToCancel) {
-            const productRef = doc(db, 'products', itemToCancel.productId);
-            const productSnap = await transaction.get(productRef);
-            if (!productSnap.exists()) throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
-            const productData = productSnap.data() as Product;
-            
-            let variantSkuToUpdate: string | undefined;
+            const productData = productDataMap.get(itemToCancel.productId);
+            if (!productData) {
+                throw new Error(`Producto ${itemToCancel.productId} no encontrado.`);
+            }
 
+            let variantSkuToUpdate: string | undefined;
             if (itemToCancel.variantId) {
                 variantSkuToUpdate = productData.variants?.find(v => v.id === itemToCancel.variantId)?.sku;
-                if (!variantSkuToUpdate) {
-                    throw new Error(`No se pudo actualizar el stock para la variante. SKU no encontrado.`);
-                }
             } else {
                 variantSkuToUpdate = productData.sku;
             }
 
-            if (isFromException) {
-                // If it's from an exception, it never left physical stock, just reduce pending stock
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
-            } else {
-                // If it's a normal cancellation, add back to physical stock
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
+            if (!variantSkuToUpdate) {
+                throw new Error(`SKU no encontrado para el producto a anular.`);
             }
+
+            // This is a "deferred" write. It will be executed on the transaction object later.
+            const updateStockOperation = () => {
+                if (isFromException) {
+                    updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
+                } else {
+                    updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
+                }
+            };
             
-            await addInventoryMovement({
-                type: 'Anulado',
-                productId: itemToCancel.productId,
-                productName: productData.name,
-                quantity: itemToCancel.quantity,
-                notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
-                platformId: orderData.platformId,
-                carrierId: orderData.carrierId,
-                dispatchId: orderData.dispatchId,
-                userId: user?.id,
-                userName: user?.name,
-            });
+            // This is also a "deferred" write.
+            const addMovementOperation = () => {
+                movementPromises.push(addInventoryMovement({
+                    type: 'Anulado',
+                    productId: itemToCancel.productId,
+                    productName: productData.name,
+                    quantity: itemToCancel.quantity,
+                    notes: `Anulación de guía ${cancellationGuide} en despacho ${orderData.dispatchId} por ${user?.name}.`,
+                    platformId: orderData.platformId,
+                    carrierId: orderData.carrierId,
+                    dispatchId: orderData.dispatchId,
+                    userId: user?.id,
+                    userName: user?.name,
+                }));
+            };
+
+            updateStockOperation();
+            addMovementOperation();
             
             const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
             if (productInOrderIndex !== -1) {
@@ -1009,7 +1034,7 @@ export const cancelPendingDispatchItems = async (
 
             if (isFromException) {
                 const exceptionIndex = updatedExceptions.findIndex(ex => ex.trackingNumber === cancellationGuide);
-                if(exceptionIndex > -1) {
+                if (exceptionIndex > -1) {
                     const productInExIndex = updatedExceptions[exceptionIndex].products.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
                     if (productInExIndex !== -1) {
                         updatedExceptions[exceptionIndex].products[productInExIndex].quantity -= itemToCancel.quantity;
@@ -1040,16 +1065,19 @@ export const cancelPendingDispatchItems = async (
             status: finalStatus,
         };
 
+        // Step 3: Now execute all writes on the transaction object.
         transaction.update(orderRef, updatePayload);
-
-        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
-        const reqSnap = await getDocs(reqQuery);
-        if (!reqSnap.empty) {
-            const reqDoc = reqSnap.docs[0];
+        if (reqDoc) {
             transaction.update(reqDoc.ref, { status: 'completed' });
         }
-
+        
+        // Return the payload to update client state.
         return updatePayload;
+
+    }).then(async (result) => {
+        // Execute non-transactional writes (like addInventoryMovement) after transaction commits.
+        await Promise.all(movementPromises);
+        return result;
     });
 };
 
@@ -1470,21 +1498,21 @@ export const resolveStaleReservationAlert = async (alertId: string): Promise<voi
 export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise<GetStockAlertsResult> => {
     const metadataRef = doc(db, 'stockAlertsCache', 'metadata');
     
-    if (!forceRegenerate) {
-        const metadataSnap = await getDoc(metadataRef);
-        if (metadataSnap.exists()) {
-            const lastGenerated = (metadataSnap.data().lastGenerated as Timestamp).toDate();
-            if (isToday(lastGenerated)) {
-                const alertsCol = collection(db, 'stockAlertsCache');
-                const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
-                const alertSnapshot = await getDocs(q);
-                const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
-                return { alerts, lastGenerated: lastGenerated.toISOString() };
+    try {
+        if (!forceRegenerate) {
+            const metadataSnap = await getDoc(metadataRef);
+            if (metadataSnap.exists()) {
+                const lastGenerated = (metadataSnap.data().lastGenerated as Timestamp).toDate();
+                if (isToday(lastGenerated)) {
+                    const alertsCol = collection(db, 'stockAlertsCache');
+                    const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
+                    const alertSnapshot = await getDocs(q);
+                    const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
+                    return { alerts, lastGenerated: lastGenerated.toISOString() };
+                }
             }
         }
-    }
 
-    try {
         const [productsResult, allMovementsResult] = await Promise.all([
             getProducts({ limit: 10000 }),
             getInventoryMovements({ limit: 10000, fetchAll: true, filters: { startDate: subDays(new Date(), 7).toISOString() } }),

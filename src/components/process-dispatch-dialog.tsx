@@ -364,10 +364,11 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {order.products.map(p => {
+                                {order.products.map((p, index) => {
                                     const exceptionTracking = isPartial ? getExceptionTrackingForProduct(p.productId, p.variantId) : null;
+                                    const uniqueKey = `${p.productId}-${p.variantId || 'simple'}-${index}`;
                                     return (
-                                        <TableRow key={p.productId + (p.variantId || '')}>
+                                        <TableRow key={uniqueKey}>
                                             <TableCell>
                                                 <div>{p.name}</div>
                                                 <div className="text-xs text-muted-foreground">{p.sku}</div>
