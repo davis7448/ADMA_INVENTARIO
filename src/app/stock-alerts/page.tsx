@@ -3,8 +3,10 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { StockAlertsContent } from '@/components/stock-alerts-content';
 import { Suspense } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const revalidate = 0; // Disable caching for this page
+export const maxDuration = 120; // Increase timeout to 2 minutes
 
 async function StockAlertsData() {
     const result = await getOrGenerateStockAlerts();
