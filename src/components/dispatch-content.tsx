@@ -69,20 +69,20 @@ export function DispatchContent() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [fetchedPendingOrders, fetchedPartialOrders, fetchedProducts, fetchedPlatforms, fetchedCarriers] = await Promise.all([
+    const [fetchedPendingOrders, fetchedPartialOrders, fetchedProductsResult, fetchedPlatforms, fetchedCarriers] = await Promise.all([
       getPendingDispatchOrders(),
       getPartialDispatchOrders(),
-      getProducts(),
+      getProducts({ limit: 10000 }),
       getPlatforms(),
       getCarriers(),
     ]);
     setPendingOrders(fetchedPendingOrders);
     setPartialOrders(fetchedPartialOrders);
-    setProducts(fetchedProducts);
+    setProducts(fetchedProductsResult.products);
     setPlatforms(fetchedPlatforms);
     setCarriers(fetchedCarriers);
 
-    const newProductsById = fetchedProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>);
+    const newProductsById = fetchedProductsResult.products.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>);
     setProductsById(newProductsById);
     
     setLoading(false);
