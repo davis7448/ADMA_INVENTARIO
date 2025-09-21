@@ -26,6 +26,8 @@ import { Button } from '@/components/ui/button';
 import { Suspense } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
+export const revalidate = 0;
+
 async function AuditAlertsContent() {
     const alerts: AuditAlert[] = await getAuditAlerts();
 
