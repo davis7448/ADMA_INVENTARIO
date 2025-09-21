@@ -177,9 +177,9 @@ export async function updateProductAction(
             productUpdate.imageUrl = imageUrl;
         }
         
-        // The cost field will only be present in formData if the admin user submitted it.
+        // The cost field is only present in validatedFields.data if the admin user submitted it.
         // If not, it will be undefined and won't be included in the update, preserving the existing value.
-        if (formData.has('cost')) {
+        if (validatedFields.data.cost !== undefined) {
             productUpdate.cost = validatedFields.data.cost;
         }
 
