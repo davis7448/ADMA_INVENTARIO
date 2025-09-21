@@ -982,7 +982,8 @@ export const cancelPendingDispatchItems = async (
 
             let variantSkuToUpdate: string | undefined;
             if (itemToCancel.variantId) {
-                variantSkuToUpdate = productData.variants?.find(v => v.id === itemToCancel.variantId)?.sku;
+                const variant = productData.variants?.find(v => v.id === itemToCancel.variantId);
+                variantSkuToUpdate = variant?.sku;
             } else {
                 variantSkuToUpdate = productData.sku;
             }
@@ -991,14 +992,13 @@ export const cancelPendingDispatchItems = async (
                 throw new Error(`SKU no encontrado para el producto a anular.`);
             }
             
-            // This is still a write, but it's now using pre-read data.
             if (isFromException) {
                 const currentPending = productData.pendingStock || 0;
                 const newPending = Math.max(0, currentPending - itemToCancel.quantity);
                 transaction.update(doc(db, 'products', itemToCancel.productId), { pendingStock: newPending });
-            } else {
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
-            }
+            } 
+            
+            await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
 
             movementPromises.push(addInventoryMovement({
                 type: 'Anulado',
@@ -1751,3 +1751,4 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
