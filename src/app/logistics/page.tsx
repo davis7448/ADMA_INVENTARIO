@@ -5,8 +5,8 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { LogisticsContent } from '@/components/logistics-content';
 
 export default async function LogisticsPage() {
-    const [products, carriers, platforms] = await Promise.all([
-        getProducts(),
+    const [productsResult, carriers, platforms] = await Promise.all([
+        getProducts({}),
         getCarriers(),
         getPlatforms(),
     ]);
@@ -14,7 +14,7 @@ export default async function LogisticsPage() {
     return (
         <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
             <LogisticsContent 
-                initialProducts={products}
+                initialProducts={productsResult.products}
                 initialCarriers={carriers}
                 initialPlatforms={platforms}
             />
