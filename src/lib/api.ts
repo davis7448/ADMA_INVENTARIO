@@ -535,7 +535,7 @@ export const sendPasswordReset = async (email: string) => {
 };
 
 // Inventory Movement Functions
-export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any }): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
+export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const movementsCol = collection(db, 'inventoryMovements');
     
     const querySnapshot = await getDocs(query(movementsCol, orderBy('date', 'desc')));
@@ -795,7 +795,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
     return new Date();
   };
 
-export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any }): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
+export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const ordersCol = collection(db, 'dispatchOrders');
     
     const querySnapshot = await getDocs(query(ordersCol, orderBy('date', 'desc')));
@@ -947,29 +947,32 @@ export const cancelPendingDispatchItems = async (
     cancellationGuide: string
 ): Promise<Partial<DispatchOrder>> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
-    const movementPromises: Promise<any>[] = [];
+    let movementPromises: Promise<any>[] = [];
 
     const result = await runTransaction(db, async (transaction) => {
+        // --- ALL READS MUST HAPPEN FIRST ---
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
         }
-
+        
         const productIdsToRead = [...new Set(productsToCancel.map(p => p.productId))];
         const productRefs = productIdsToRead.map(id => doc(db, 'products', id));
         const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
 
+        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
+        const reqSnap = await getDocs(reqQuery); // This is a read
+        
+        // --- PROCESS DATA AND PREPARE WRITES ---
+        const orderData = orderSnap.data() as DispatchOrder;
+        const isFromException = (orderData.exceptions || []).some(ex => ex.trackingNumber === cancellationGuide);
+        
         const productDataMap = new Map<string, Product>();
         for (const snap of productSnaps) {
             if (snap.exists()) {
                 productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
             }
         }
-
-        const orderData = orderSnap.data() as DispatchOrder;
-        const updatedProducts: DispatchOrderProduct[] = JSON.parse(JSON.stringify(orderData.products));
-        const updatedExceptions: DispatchException[] = JSON.parse(JSON.stringify(orderData.exceptions || []));
-        const isFromException = (orderData.exceptions || []).some(ex => ex.trackingNumber === cancellationGuide);
 
         for (const itemToCancel of productsToCancel) {
             const productData = productDataMap.get(itemToCancel.productId);
@@ -987,13 +990,16 @@ export const cancelPendingDispatchItems = async (
             if (!variantSkuToUpdate) {
                 throw new Error(`SKU no encontrado para el producto a anular.`);
             }
-
+            
+            // This is still a write, but it's now using pre-read data.
             if (isFromException) {
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending');
+                const currentPending = productData.pendingStock || 0;
+                const newPending = Math.max(0, currentPending - itemToCancel.quantity);
+                transaction.update(doc(db, 'products', itemToCancel.productId), { pendingStock: newPending });
             } else {
                 await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'add', variantSkuToUpdate);
             }
-            
+
             movementPromises.push(addInventoryMovement({
                 type: 'Anulado',
                 productId: itemToCancel.productId,
@@ -1006,7 +1012,12 @@ export const cancelPendingDispatchItems = async (
                 userId: user?.id,
                 userName: user?.name,
             }));
-            
+        }
+
+        const updatedProducts: DispatchOrderProduct[] = JSON.parse(JSON.stringify(orderData.products));
+        const updatedExceptions: DispatchException[] = JSON.parse(JSON.stringify(orderData.exceptions || []));
+
+        for (const itemToCancel of productsToCancel) {
             const productInOrderIndex = updatedProducts.findIndex(p => p.productId === itemToCancel.productId && (p.variantId || undefined) === (itemToCancel.variantId || undefined));
             if (productInOrderIndex !== -1) {
                 updatedProducts[productInOrderIndex].quantity -= itemToCancel.quantity;
@@ -1048,10 +1059,9 @@ export const cancelPendingDispatchItems = async (
             status: finalStatus,
         };
 
+        // --- ALL WRITES HAPPEN AT THE END ---
         transaction.update(orderRef, updatePayload);
         
-        const reqQuery = query(collection(db, 'cancellationRequests'), where('trackingNumber', '==', cancellationGuide), where('status', '==', 'pending'));
-        const reqSnap = await getDocs(reqQuery);
         if (!reqSnap.empty) {
             const reqDoc = reqSnap.docs[0];
             transaction.update(reqDoc.ref, { status: 'completed' });
@@ -1059,8 +1069,10 @@ export const cancelPendingDispatchItems = async (
         
         return updatePayload;
     });
-
+    
+    // Execute non-transactional writes after the transaction is complete
     await Promise.all(movementPromises);
+
     return result;
 };
 
