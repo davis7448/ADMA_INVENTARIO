@@ -132,13 +132,13 @@ function CancellationsContent() {
 
     const handleOpenCancelDialog = async (request: CancellationRequest) => {
         setRequestToUpdate(request);
-        const allOrders = await getDispatchOrders();
-        
-        const targetOrder = allOrders.find(order => 
+        const allOrders = await getDispatchOrders({ fetchAll: true });
+    
+        const targetOrder = allOrders.orders.find(order => 
             order.trackingNumbers?.includes(request.trackingNumber) || 
             order.exceptions?.some(ex => ex.trackingNumber === request.trackingNumber)
         );
-
+    
         if (!targetOrder) {
             toast({
                 variant: 'destructive',
@@ -147,22 +147,37 @@ function CancellationsContent() {
             });
             return;
         }
-        
+    
         setGuideToCancelInDialog(request.trackingNumber);
         setOrderToCancel(targetOrder);
-
-        const initialItemsToAnnul = targetOrder.products.reduce((acc, p) => {
+    
+        const isException = targetOrder.exceptions?.some(ex => ex.trackingNumber === request.trackingNumber);
+    
+        // If it's an exception, only products from that exception can be cancelled.
+        // If it's a regular dispatch, all products from the order can be cancelled.
+        const productsInScope = isException
+            ? targetOrder.exceptions!.find(ex => ex.trackingNumber === request.trackingNumber)?.products || []
+            : targetOrder.products;
+    
+        const initialItemsToAnnul = productsInScope.reduce((acc, p) => {
             const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-            acc[key] = {
-                selected: false,
-                quantity: p.quantity,
-                maxQuantity: p.quantity,
-                name: p.name,
-                sku: p.sku
-            };
+            
+            const fullProductDetails = targetOrder.products.find(op => 
+                op.productId === p.productId && (op.variantId || undefined) === (p.variantId || undefined)
+            );
+            
+            if (fullProductDetails) {
+                acc[key] = {
+                    selected: false,
+                    quantity: fullProductDetails.quantity,
+                    maxQuantity: fullProductDetails.quantity,
+                    name: fullProductDetails.name,
+                    sku: fullProductDetails.sku,
+                };
+            }
             return acc;
         }, {} as Record<string, AnnulmentItem>);
-        
+    
         setItemsToAnnul(initialItemsToAnnul);
         setIsCancelDialogOpen(true);
     };
