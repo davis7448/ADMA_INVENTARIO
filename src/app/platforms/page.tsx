@@ -4,6 +4,8 @@ import type { Platform } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { PlatformsContent } from '@/components/platforms-content';
 
+export const revalidate = 0;
+
 export default async function PlatformsPage() {
     const platforms: Platform[] = await getPlatforms();
 
