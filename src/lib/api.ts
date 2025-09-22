@@ -156,12 +156,12 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
       product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
     }
     
-    const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
+    const dataToAdd: Partial<Omit<Product, 'id'>> = { ...product };
   
     if (product.purchaseDate) {
       const date = new Date(product.purchaseDate);
       if (!isNaN(date.getTime())) {
-        dataToAdd.purchaseDate = Timestamp.fromDate(date);
+        dataToAdd.purchaseDate = Timestamp.fromDate(date).toDate().toISOString();
       } else {
           delete dataToAdd.purchaseDate; 
       }
@@ -187,11 +187,11 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
       products.forEach((product) => {
         const docRef = doc(productsCol);
         
-        const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
+        const dataToAdd: Partial<Omit<Product, 'id'>> = { ...product };
         if (product.purchaseDate) {
           const date = new Date(product.purchaseDate);
           if (!isNaN(date.getTime())) {
-            dataToAdd.purchaseDate = Timestamp.fromDate(date);
+            dataToAdd.purchaseDate = Timestamp.fromDate(date).toDate().toISOString();
           } else {
             delete dataToAdd.purchaseDate;
           }
@@ -227,7 +227,7 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
   if (productUpdate.purchaseDate) {
     const date = new Date(productUpdate.purchaseDate);
     if (!isNaN(date.getTime())) {
-      updateData.purchaseDate = Timestamp.fromDate(date);
+      updateData.purchaseDate = Timestamp.fromDate(date).toDate().toISOString();
     } else {
         delete updateData.purchaseDate;
     }
@@ -702,27 +702,29 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
 };
 
 export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
+    let operation: 'add' | 'subtract' = 'add';
+    let movementType: InventoryMovement['type'] = 'Entrada';
+    let notes = reasonLabel;
+
+    if (reasonLabel === 'Ajuste de Salida') {
+        operation = 'subtract';
+        movementType = 'Ajuste de Salida';
+        notes = 'Ajuste de Salida manual';
+    } else if (reasonLabel === 'Ajuste de Entrada') {
+        movementType = 'Ajuste de Entrada';
+        notes = 'Ajuste de Entrada manual';
+    } else if (reasonLabel === 'Devolución de Cliente') {
+        movementType = 'Entrada';
+    } else { // Recepción de Proveedor
+        const supplier = await getSupplierById(supplierId!);
+        notes = `Recepción de Proveedor: ${supplier?.name || 'Desconocido'}`;
+    }
 
     for (const item of items) {
-        let operation: 'add' | 'subtract' = 'add';
-        let movementType: InventoryMovement['type'] = 'Entrada';
-        let notes = reasonLabel;
-
-        if (reasonLabel === 'Ajuste de Salida') {
-            operation = 'subtract';
-            movementType = 'Ajuste de Salida';
-            notes = 'Ajuste de Salida manual';
-        } else if (reasonLabel === 'Ajuste de Entrada') {
-            movementType = 'Ajuste de Entrada';
-            notes = 'Ajuste de Entrada manual';
-        } else if (reasonLabel === 'Devolución de Cliente') {
-            movementType = 'Entrada';
+        if (reasonLabel === 'Devolución de Cliente') {
             notes = `Devolución de cliente. Guía: ${item.trackingNumber}`;
-        } else { // Recepción de Proveedor
-            const supplier = await getSupplierById(supplierId!);
-            notes = `Recepción de Proveedor: ${supplier?.name || 'Desconocido'}`;
         }
-
+        
         await runTransaction(db, async (transaction) => {
             await updateProductStock(transaction, item.productId, item.quantity, operation, item.sku);
         });
@@ -2152,3 +2154,4 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
