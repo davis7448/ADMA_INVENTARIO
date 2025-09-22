@@ -150,70 +150,71 @@ export const getProductById = async (id: string): Promise<Product | null> => {
 };
 
 export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> => {
-  const productsCol = collection(db, 'products');
-  
-  if (product.productType === 'variable') {
-    product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
-  }
-  
-  const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
-
-  if (product.purchaseDate) {
-    const date = new Date(product.purchaseDate);
-    if (!isNaN(date.getTime())) {
-      dataToAdd.purchaseDate = Timestamp.fromDate(date);
-    } else {
-        delete dataToAdd.purchaseDate; 
-    }
-  } else {
-    delete dataToAdd.purchaseDate;
-  }
-
-  if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
-    delete dataToAdd.cost;
-  }
-  if (dataToAdd.priceWholesale === undefined || dataToAdd.priceWholesale === null) {
-    delete dataToAdd.priceWholesale;
-  }
-
-  const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
-  return docRef.id;
-};
-
-export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
-    const batch = writeBatch(db);
     const productsCol = collection(db, 'products');
+    
+    if (product.productType === 'variable') {
+      product.stock = product.variants?.reduce((acc, v) => acc + v.stock, 0) || 0;
+    }
+    
+    const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
   
-    products.forEach((product) => {
-      const docRef = doc(productsCol);
-      
-      const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
-      if (product.purchaseDate) {
-        const date = new Date(product.purchaseDate);
-        if (!isNaN(date.getTime())) {
-          dataToAdd.purchaseDate = Timestamp.fromDate(date);
+    if (product.purchaseDate) {
+      const date = new Date(product.purchaseDate);
+      if (!isNaN(date.getTime())) {
+        dataToAdd.purchaseDate = Timestamp.fromDate(date);
+      } else {
+          delete dataToAdd.purchaseDate; 
+      }
+    } else {
+        // Explicitly delete if undefined or null to avoid Firestore errors
+        delete dataToAdd.purchaseDate;
+    }
+  
+    if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
+      delete dataToAdd.cost;
+    }
+    if (dataToAdd.priceWholesale === undefined || dataToAdd.priceWholesale === null) {
+      delete dataToAdd.priceWholesale;
+    }
+  
+    const docRef = await addDoc(productsCol, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
+    return docRef.id;
+  };
+  
+  export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
+      const batch = writeBatch(db);
+      const productsCol = collection(db, 'products');
+    
+      products.forEach((product) => {
+        const docRef = doc(productsCol);
+        
+        const dataToAdd: Partial<Omit<Product, 'id'>> & { purchaseDate?: Timestamp | string } = { ...product };
+        if (product.purchaseDate) {
+          const date = new Date(product.purchaseDate);
+          if (!isNaN(date.getTime())) {
+            dataToAdd.purchaseDate = Timestamp.fromDate(date);
+          } else {
+            delete dataToAdd.purchaseDate;
+          }
         } else {
           delete dataToAdd.purchaseDate;
         }
-      } else {
-        delete dataToAdd.purchaseDate;
-      }
-      
-      if (product.createdBy) {
-          dataToAdd.createdBy = product.createdBy;
-      } else {
-          delete dataToAdd.createdBy;
-      }
-
-      if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
-        delete dataToAdd.cost;
-      }
-      
-      batch.set(docRef, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
-    });
+        
+        if (product.createdBy) {
+            dataToAdd.createdBy = product.createdBy;
+        } else {
+            delete dataToAdd.createdBy;
+        }
   
-    await batch.commit();
-};
+        if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
+          delete dataToAdd.cost;
+        }
+        
+        batch.set(docRef, { ...dataToAdd, damagedStock: 0, pendingStock: 0 });
+      });
+    
+      await batch.commit();
+  };
 
 export const updateProduct = async (productId: string, productUpdate: Partial<Omit<Product, 'id'>>) => {
   const productRef = doc(db, 'products', productId);
@@ -232,9 +233,12 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
         delete updateData.purchaseDate;
     }
   } else {
+    // Ensure the field is removed if not provided, instead of sending undefined
     delete updateData.purchaseDate;
   }
   
+  // If cost is not part of the update (e.g., for non-admin users), don't include it.
+  // This prevents accidentally overwriting it with undefined.
   if (productUpdate.cost === undefined) {
     delete updateData.cost;
   }
@@ -704,14 +708,14 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, entryReasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
+export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, entryReason: string, supplierId?: string, carrierId?: string): Promise<void> => {
 
     for (const item of items) {
         await runTransaction(db, async (transaction) => {
             await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
         });
         
-        let reasonText = entryReasonLabel;
+        let reasonText = entryReason;
         if (supplierId) {
             const supplier = await getSupplierById(supplierId);
             reasonText = `${reasonText}: ${supplier?.name || 'Desconocido'}`;
@@ -727,7 +731,7 @@ export const registerInventoryEntry = async (items: (LogisticItem & { trackingNu
         }
 
         await addInventoryMovement({
-            type: 'Entrada',
+            type: entryReason === 'Ajuste de Inventario' ? 'Ajuste de Entrada' : 'Entrada',
             productId: item.productId,
             productName: item.name,
             quantity: item.quantity,
@@ -738,7 +742,7 @@ export const registerInventoryEntry = async (items: (LogisticItem & { trackingNu
         });
     }
 };
-    
+
 // Dispatch Order Functions
 
 export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'>): Promise<{ id: string, dispatchId: string, date: Date }> => {
@@ -1940,24 +1944,35 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     // Now, perform aggregations on the filtered data
     let totalInitialDispatchItems = 0;
     let totalAnnulledItems = 0;
+    let totalAdjustIn = 0;
+    let totalAdjustOut = 0;
     const ordersByDay: Record<string, number> = {};
     const annulledByDay: Record<string, number> = {};
+    const adjustInByDay: Record<string, number> = {};
+    const adjustOutByDay: Record<string, number> = {};
 
-    ordersInPeriod.forEach(order => {
-        totalInitialDispatchItems += order.totalItems;
-        const day = format(order.date, 'yyyy-MM-dd');
-        ordersByDay[day] = (ordersByDay[day] || 0) + order.totalItems;
-
-        if (order.cancelledExceptions) {
-            const annulledInOrder = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
-            totalAnnulledItems += annulledInOrder;
-            annulledByDay[day] = (annulledByDay[day] || 0) + annulledInOrder;
-            ordersByDay[day] -= annulledInOrder;
+    movementsInPeriod.forEach(m => {
+        const day = format(new Date(m.date), 'yyyy-MM-dd');
+        if (m.type === 'Salida') {
+            totalInitialDispatchItems += m.quantity;
+            ordersByDay[day] = (ordersByDay[day] || 0) + m.quantity;
+        } else if (m.type === 'Anulado') {
+            totalAnnulledItems += m.quantity;
+            annulledByDay[day] = (annulledByDay[day] || 0) + m.quantity;
+            if (ordersByDay[day]) {
+                ordersByDay[day] -= m.quantity;
+            }
+        } else if (m.type === 'Ajuste de Entrada') {
+            totalAdjustIn += m.quantity;
+            adjustInByDay[day] = (adjustInByDay[day] || 0) + m.quantity;
+        } else if (m.type === 'Ajuste de Salida') {
+            totalAdjustOut += m.quantity;
+            adjustOutByDay[day] = (adjustOutByDay[day] || 0) + m.quantity;
         }
     });
-    
-    const totalItemsDispatched = totalInitialDispatchItems - totalAnnulledItems;
 
+    const totalItemsDispatched = totalInitialDispatchItems;
+    
     let totalPendingUnits = 0;
     const pendingUnitsByDay: Record<string, number> = {};
     ordersInPeriod
@@ -1988,6 +2003,9 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const pendingChartData = [];
     const returnsChartData = [];
     const annulledChartData = [];
+    const adjustInChartData = [];
+    const adjustOutChartData = [];
+
     if (fromDate && toDate) {
         let currentDate = startOfDay(fromDate);
         while (currentDate <= toDate) {
@@ -1996,6 +2014,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             pendingChartData.push({ date: dayKey, orders: pendingUnitsByDay[dayKey] || 0 });
             returnsChartData.push({ date: dayKey, returns: returnsByDay[dayKey] || 0 });
             annulledChartData.push({ date: dayKey, annulled: annulledByDay[dayKey] || 0 });
+            adjustInChartData.push({ date: dayKey, value: adjustInByDay[dayKey] || 0 });
+            adjustOutChartData.push({ date: dayKey, value: adjustOutByDay[dayKey] || 0 });
             currentDate.setDate(currentDate.getDate() + 1);
         }
     }
@@ -2100,10 +2120,14 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
       totalAnnulledItems,
       totalPendingUnits,
       totalReturns,
+      totalAdjustIn,
+      totalAdjustOut,
       chartData,
       pendingChartData,
       returnsChartData,
       annulledChartData,
+      adjustInChartData,
+      adjustOutChartData,
       productChartData,
       categoryChartData,
       platformCarrierChartData,
@@ -2127,6 +2151,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 

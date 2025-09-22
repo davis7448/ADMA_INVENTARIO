@@ -110,7 +110,7 @@ export type User = {
 export type InventoryMovement = {
   id: string; // Firestore document ID
   movementId: number; // Sequential ID
-  type: 'Entrada' | 'Salida' | 'Averia' | 'Anulado' | 'Eliminación';
+  type: 'Entrada' | 'Salida' | 'Averia' | 'Anulado' | 'Eliminación' | 'Ajuste de Salida' | 'Ajuste de Entrada';
   productId: string;
   productName: string;
   quantity: number;
@@ -305,10 +305,14 @@ export type DashboardData = {
     totalAnnulledItems: number;
     totalPendingUnits: number;
     totalReturns: number;
+    totalAdjustIn: number;
+    totalAdjustOut: number;
     chartData: { date: string; orders: number }[];
     pendingChartData: { date: string; orders: number }[];
     returnsChartData: { date: string; returns: number }[];
     annulledChartData: { date: string; annulled: number }[];
+    adjustInChartData: { date: string; value: number }[];
+    adjustOutChartData: { date: string; value: number }[];
     productChartData: { id: string; name: string; value: number, percentage: number; productType: 'simple' | 'variable'; variants: any[] }[];
     categoryChartData: { name: string; value: number, percentage: number }[];
     platformCarrierChartData: any[];
