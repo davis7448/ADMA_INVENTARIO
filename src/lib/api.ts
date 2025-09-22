@@ -1836,7 +1836,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
       getCarriers(),
     ]);
   
-    const { fromDate, toDate } = filters.dateRange || {};
+    const { from: fromDate, to: toDate } = filters.dateRange || {};
     
     const fromDateKey = fromDate ? format(startOfDay(fromDate), 'yyyy-MM-dd') : null;
     const toDateKey = toDate ? format(endOfDay(toDate), 'yyyy-MM-dd') : null;
@@ -1930,7 +1930,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             chartData.push({ date: dayKey, orders: ordersByDay[dayKey] || 0 });
             pendingChartData.push({ date: dayKey, orders: pendingUnitsByDay[dayKey] || 0 });
             returnsChartData.push({ date: dayKey, returns: returnsByDay[dayKey] || 0 });
-            currentDate = subDays(currentDate, -1);
+            currentDate.setDate(currentDate.getDate() + 1);
         }
     }
   
@@ -2043,3 +2043,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
   export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
+
+
+    
