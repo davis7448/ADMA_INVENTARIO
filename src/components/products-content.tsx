@@ -593,7 +593,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                                 <AlertDialogHeader>
                                                                     <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
                                                                     <AlertDialogDescription>
-                                                                        Esta acción eliminará el producto y todo su historial de forma permanente. No se puede deshacer.
+                                                                        Esta acción eliminará el producto y sus reservas asociadas. Se creará un registro de "Eliminación" en el historial de movimientos, pero los movimientos pasados (entradas, salidas) se conservarán. Esta acción no se puede deshacer.
                                                                     </AlertDialogDescription>
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
@@ -753,3 +753,5 @@ function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPag
         </div>
     );
 };
+
+    
