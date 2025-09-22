@@ -1610,20 +1610,25 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
     const metadataRef = doc(db, 'stockAlertsCache', 'metadata');
     
     try {
-        if (!forceRegenerate) {
-            const metadataSnap = await getDoc(metadataRef);
-            if (metadataSnap.exists()) {
-                const lastGenerated = (metadataSnap.data().lastGenerated as Timestamp).toDate();
-                if (isToday(lastGenerated)) {
-                    const alertsCol = collection(db, 'stockAlertsCache');
-                    const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
-                    const alertSnapshot = await getDocs(q);
-                    const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
-                    return { alerts, lastGenerated: lastGenerated.toISOString() };
-                }
-            }
+        const metadataSnap = await getDoc(metadataRef);
+        if (metadataSnap.exists() && !forceRegenerate) {
+            const alertsCol = collection(db, 'stockAlertsCache');
+            const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
+            const alertSnapshot = await getDocs(q);
+            const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
+            return { alerts, lastGenerated: (metadataSnap.data().lastGenerated as Timestamp).toDate().toISOString() };
+        } else {
+             // Return empty alerts if not forcing and no cache exists, to be populated by manual generation
+            return { alerts: [], lastGenerated: metadataSnap.exists() ? (metadataSnap.data().lastGenerated as Timestamp).toDate().toISOString() : undefined };
         }
+    } catch (e: any) {
+        console.error("Failed to fetch stock alerts from cache:", e);
+        return { alerts: [], error: e.message || "Ocurrió un error desconocido al obtener las alertas." };
+    }
+};
 
+export const generateAndCacheStockAlerts = async (): Promise<GetStockAlertsResult> => {
+    try {
         const [productsResult, allMovementsResult] = await Promise.all([
             getProducts({ limit: 10000 }),
             getInventoryMovements({ limit: 10000, fetchAll: true, filters: { startDate: subDays(new Date(), 7).toISOString() } }),
@@ -1716,28 +1721,16 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false): Promise
         });
 
         const newGeneratedDate = new Date();
-        batch.set(metadataRef, { lastGenerated: newGeneratedDate });
+        batch.set(doc(alertsCol, 'metadata'), { lastGenerated: newGeneratedDate });
         await batch.commit();
 
         return { alerts: newAlerts, lastGenerated: newGeneratedDate.toISOString() };
-
     } catch (e: any) {
-        console.error("Failed to generate stock alerts:", e);
-        const metadataSnap = await getDoc(metadataRef);
-        if (metadataSnap.exists()) {
-            const alertsCol = collection(db, 'stockAlertsCache');
-            const q = query(alertsCol, where(documentId(), '!=', 'metadata'));
-            const alertSnapshot = await getDocs(q);
-            const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
-            return {
-                alerts,
-                error: e.message || "Ocurrió un error desconocido durante el análisis de IA.",
-                lastGenerated: (metadataSnap.data().lastGenerated as Timestamp).toDate().toISOString()
-            };
-        }
-        return { alerts: [], error: e.message || "Ocurrió un error desconocido durante el análisis de IA." };
+         console.error("Failed to generate and cache stock alerts:", e);
+         return { alerts: [], error: e.message || "Ocurrió un error desconocido al generar las alertas." };
     }
 }
+
 
 // Cancellation Request Functions
 export const createCancellationRequests = async (trackingNumbers: string[], user: User): Promise<{ alreadyDispatched: string[] }> => {
@@ -1880,3 +1873,4 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+

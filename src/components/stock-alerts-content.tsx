@@ -32,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/use-auth';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useRouter } from 'next/navigation';
 
 
 interface StockAlertsContentProps {
@@ -46,6 +47,7 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const { user } = useAuth();
+  const router = useRouter();
   const [hideNoSales, setHideNoSales] = useState(false);
   
   // Pagination
@@ -56,13 +58,14 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
 
   const handleRegenerate = () => {
     startTransition(async () => {
+        setLoading(true);
         const result = await regenerateStockAlertsAction();
         if (result.success) {
             toast({
                 title: "¡Éxito!",
                 description: result.message,
             });
-            // This will cause a page refresh and get new initial props
+            router.refresh();
         } else {
             toast({
                 title: "Error",
@@ -70,6 +73,7 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
                 variant: "destructive",
             });
         }
+        setLoading(false);
     });
   }
 
@@ -123,9 +127,9 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
               )}
           </div>
            {canForceRegenerate && (
-            <Button onClick={handleRegenerate} disabled={isPending} variant="outline">
-                <RefreshCw className={`mr-2 h-4 w-4 ${isPending ? 'animate-spin' : ''}`} />
-                {isPending ? 'Verificando...' : 'Forzar Verificación'}
+            <Button onClick={handleRegenerate} disabled={isPending || loading} variant="outline">
+                <RefreshCw className={`mr-2 h-4 w-4 ${(isPending || loading) ? 'animate-spin' : ''}`} />
+                {(isPending || loading) ? 'Verificando...' : 'Forzar Verificación'}
             </Button>
            )}
         </CardHeader>
@@ -146,7 +150,7 @@ export function StockAlertsContent({ initialAlerts, error, lastGenerated }: Stoc
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {(loading || isPending) ? (
                 Array.from({ length: 3 }).map((_, i) => (
                     <TableRow key={i}>
                         <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
