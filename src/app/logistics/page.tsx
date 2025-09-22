@@ -6,7 +6,7 @@ import { LogisticsContent } from '@/components/logistics-content';
 
 export default async function LogisticsPage() {
     const [productsResult, carriers, platforms] = await Promise.all([
-        getProducts({}),
+        getProducts({ limit: 10000 }),
         getCarriers(),
         getPlatforms(),
     ]);
