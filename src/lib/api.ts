@@ -1050,11 +1050,10 @@ export const annulDispatchedGuideItems = async (
 ): Promise<void> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
     const cancellationRequestRef = doc(db, 'cancellationRequests', cancellationRequestId);
-
     const movementsToCreate: Omit<InventoryMovement, 'id' | 'movementId' | 'date'>[] = [];
 
     await runTransaction(db, async (transaction) => {
-        // --- 1. READS (All reads must happen first) ---
+        // --- 1. READS ---
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
@@ -1071,7 +1070,7 @@ export const annulDispatchedGuideItems = async (
             }
         });
 
-        // --- 2. LOGIC & WRITES (Perform all writes after reads and logic) ---
+        // --- 2. LOGIC & WRITES ---
         for (const item of itemsToAnnul) {
             const productData = productDataMap.get(item.productId);
             if (!productData) {
@@ -1109,11 +1108,23 @@ export const annulDispatchedGuideItems = async (
         }
 
         const updatedTrackingNumbers = (orderData.trackingNumbers || []).filter(tn => tn !== annulledGuide);
-        const annulledException: DispatchException = {
+        
+        const annulledExceptionProduct: any = {
             trackingNumber: annulledGuide,
-            products: itemsToAnnul.map(p => ({ productId: p.productId, quantity: p.quantity, variantId: p.variantId, variantSku: p.sku }))
+            products: itemsToAnnul.map(p => {
+                const cleanProduct: Partial<DispatchExceptionProduct> = { 
+                    productId: p.productId, 
+                    quantity: p.quantity,
+                    variantId: p.variantId,
+                    variantSku: p.sku
+                };
+                // Remove undefined keys before storing
+                if (cleanProduct.variantId === undefined) delete cleanProduct.variantId;
+                if (cleanProduct.variantSku === undefined) delete cleanProduct.variantSku;
+                return cleanProduct as DispatchExceptionProduct;
+            })
         };
-        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), annulledException];
+        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), annulledExceptionProduct];
 
         transaction.update(orderRef, {
             trackingNumbers: updatedTrackingNumbers,
@@ -1124,8 +1135,7 @@ export const annulDispatchedGuideItems = async (
             status: 'completed'
         });
     });
-    
-    // --- 3. POST-TRANSACTION OPERATIONS ---
+
     for (const movement of movementsToCreate) {
         await addInventoryMovement(movement);
     }
