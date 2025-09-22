@@ -165,6 +165,8 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
     } else {
         delete dataToAdd.purchaseDate; 
     }
+  } else {
+    delete dataToAdd.purchaseDate;
   }
 
   if (dataToAdd.cost === undefined || dataToAdd.cost === null) {
@@ -227,11 +229,16 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
     } else {
         delete updateData.purchaseDate;
     }
+  } else {
+    delete updateData.purchaseDate;
   }
   
-  // This logic is important to prevent non-admins from clearing the cost
   if (productUpdate.cost === undefined) {
     delete updateData.cost;
+  }
+
+  if (productUpdate.priceWholesale === undefined) {
+    delete updateData.priceWholesale;
   }
 
   await updateDoc(productRef, updateData);
@@ -1100,17 +1107,16 @@ export const annulDispatchedGuideItems = async (
         const annulledExceptionProduct: Partial<DispatchException> = {
             trackingNumber: annulledGuide,
             products: itemsToAnnul.map(p => {
-                const cleanProduct: any = { 
+                const cleanProduct: Partial<DispatchExceptionProduct> = { 
                     productId: p.productId, 
                     quantity: p.quantity,
-                    variantId: p.variantId,
-                    variantSku: p.sku
                 };
-                if (!cleanProduct.variantId) delete cleanProduct.variantId;
-                if (!cleanProduct.variantSku) delete cleanProduct.variantSku;
+                if (p.variantId) cleanProduct.variantId = p.variantId;
+                if (p.sku) cleanProduct.variantSku = p.sku;
                 return cleanProduct as DispatchExceptionProduct;
             })
         };
+
         const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), annulledExceptionProduct as DispatchException];
 
         transaction.update(orderRef, {
@@ -2087,5 +2093,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
