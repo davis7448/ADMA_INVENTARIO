@@ -255,10 +255,16 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
 
     const filteredProducts = useMemo(() => {
         if (!searchQuery) return allProductsList;
-        return allProductsList.filter(p => 
-            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
+        const lowercasedQuery = searchQuery.toLowerCase();
+        return allProductsList.filter(p => {
+            const nameMatch = p.name.toLowerCase().includes(lowercasedQuery);
+            const skuMatch = p.sku && p.sku.toLowerCase().includes(lowercasedQuery);
+            const variantMatch = p.productType === 'variable' && p.variants?.some(v => 
+                v.name.toLowerCase().includes(lowercasedQuery) || 
+                v.sku.toLowerCase().includes(lowercasedQuery)
+            );
+            return nameMatch || skuMatch || variantMatch;
+        });
     }, [searchQuery, allProductsList]);
 
 
