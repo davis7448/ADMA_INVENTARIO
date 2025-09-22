@@ -1050,7 +1050,7 @@ export const annulDispatchedGuideItems = async (
 ): Promise<void> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
     const cancellationRequestRef = doc(db, 'cancellationRequests', cancellationRequestId);
-    
+
     const movementsToCreate: Omit<InventoryMovement, 'id' | 'movementId' | 'date'>[] = [];
 
     await runTransaction(db, async (transaction) => {
@@ -1064,7 +1064,6 @@ export const annulDispatchedGuideItems = async (
         const productIds = [...new Set(itemsToAnnul.map(item => item.productId))];
         const productDocs = await Promise.all(productIds.map(id => transaction.get(doc(db, 'products', id))));
 
-        // --- 2. LOGIC (In-memory, using read data) ---
         const productDataMap = new Map<string, Product>();
         productDocs.forEach(snap => {
             if (snap.exists()) {
@@ -1072,7 +1071,7 @@ export const annulDispatchedGuideItems = async (
             }
         });
 
-        // --- 3. WRITES (Perform all writes after reads and logic) ---
+        // --- 2. LOGIC & WRITES (Perform all writes after reads and logic) ---
         for (const item of itemsToAnnul) {
             const productData = productDataMap.get(item.productId);
             if (!productData) {
@@ -1080,8 +1079,20 @@ export const annulDispatchedGuideItems = async (
                 continue;
             }
             
-            // This is now a write operation inside the loop, which is fine as long as all GETs are done.
-            await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+            const productDocRef = doc(db, 'products', item.productId);
+
+            if (productData.productType === 'variable' && item.sku) {
+                const variants = [...(productData.variants || [])];
+                const variantIndex = variants.findIndex(v => v.sku === item.sku);
+                if (variantIndex > -1) {
+                    variants[variantIndex].stock += item.quantity;
+                    const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
+                    transaction.update(productDocRef, { variants, stock: newTotalStock });
+                }
+            } else {
+                const newStock = (productData.stock || 0) + item.quantity;
+                transaction.update(productDocRef, { stock: newStock });
+            }
 
             movementsToCreate.push({
                 type: 'Anulado',
@@ -1096,7 +1107,7 @@ export const annulDispatchedGuideItems = async (
                 userName: user?.name,
             });
         }
-        
+
         const updatedTrackingNumbers = (orderData.trackingNumbers || []).filter(tn => tn !== annulledGuide);
         const annulledException: DispatchException = {
             trackingNumber: annulledGuide,
@@ -1114,7 +1125,7 @@ export const annulDispatchedGuideItems = async (
         });
     });
     
-    // --- 4. POST-TRANSACTION OPERATIONS ---
+    // --- 3. POST-TRANSACTION OPERATIONS ---
     for (const movement of movementsToCreate) {
         await addInventoryMovement(movement);
     }
