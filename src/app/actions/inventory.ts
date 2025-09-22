@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache';
 export async function registerInventoryEntryAction(
     items: (LogisticItem & { trackingNumber?: string })[], 
     user: User | null,
-    entryReason: string,
+    reasonLabel: string,
     supplierId?: string,
     carrierId?: string,
 ): Promise<{ success: boolean; message: string, count: number }> {
@@ -17,7 +17,7 @@ export async function registerInventoryEntryAction(
     }
 
     try {
-        await registerInventoryEntry(items, user, entryReason, supplierId, carrierId);
+        await registerInventoryEntry(items, user, reasonLabel, supplierId, carrierId);
         revalidatePath('/logistics');
         revalidatePath('/products');
         revalidatePath('/history');

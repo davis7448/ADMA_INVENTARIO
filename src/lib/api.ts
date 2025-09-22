@@ -701,34 +701,38 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, entryReason: string, supplierId?: string, carrierId?: string): Promise<void> => {
+export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
 
     for (const item of items) {
+        let operation: 'add' | 'subtract' = 'add';
+        let movementType: InventoryMovement['type'] = 'Entrada';
+        let notes = reasonLabel;
+
+        if (reasonLabel === 'Ajuste de Salida') {
+            operation = 'subtract';
+            movementType = 'Ajuste de Salida';
+            notes = 'Ajuste de Salida manual';
+        } else if (reasonLabel === 'Ajuste de Entrada') {
+            movementType = 'Ajuste de Entrada';
+            notes = 'Ajuste de Entrada manual';
+        } else if (reasonLabel === 'Devolución de Cliente') {
+            movementType = 'Entrada';
+            notes = `Devolución de cliente. Guía: ${item.trackingNumber}`;
+        } else { // Recepción de Proveedor
+            const supplier = await getSupplierById(supplierId!);
+            notes = `Recepción de Proveedor: ${supplier?.name || 'Desconocido'}`;
+        }
+
         await runTransaction(db, async (transaction) => {
-            await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+            await updateProductStock(transaction, item.productId, item.quantity, operation, item.sku);
         });
         
-        let reasonText = entryReason;
-        if (supplierId) {
-            const supplier = await getSupplierById(supplierId);
-            reasonText = `${reasonText}: ${supplier?.name || 'Desconocido'}`;
-        }
-        if (carrierId) {
-            const carriers = await getCarriers();
-            const carrier = carriers.find(c => c.id === carrierId);
-            reasonText = `${reasonText} (Transportadora: ${carrier?.name || 'Desconocido'})`;
-        }
-
-        if (item.trackingNumber) {
-            reasonText = `${reasonText} | Guía: ${item.trackingNumber}`;
-        }
-
         await addInventoryMovement({
-            type: entryReason === 'Ajuste de Inventario' ? 'Ajuste de Entrada' : 'Entrada',
+            type: movementType,
             productId: item.productId,
             productName: item.name,
             quantity: item.quantity,
-            notes: reasonText,
+            notes: notes,
             userId: user?.id,
             userName: user?.name,
             carrierId,
