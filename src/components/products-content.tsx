@@ -214,7 +214,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         setOnlyAudited(false);
     };
 
-    const canEdit = user?.role === 'admin' || user?.role === 'plataformas';
+    const canEdit = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
     const canAudit = user?.role === 'admin' || user?.role === 'logistics';
 
     const getRotationIcon = (categoryName?: string) => {
