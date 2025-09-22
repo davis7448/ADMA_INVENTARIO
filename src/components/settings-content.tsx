@@ -13,24 +13,27 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { getRotationCategories, updateRotationCategories, getUsers } from '@/lib/api';
-import type { RotationCategory, User, EntryReason } from '@/lib/types';
+import { getRotationCategories, updateRotationCategories, getUsers, getWarehouses } from '@/lib/api';
+import type { RotationCategory, User, EntryReason, Warehouse } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UserManagement } from './user-management';
 import { ProfileManagement } from './profile-management';
 import { EntryReasonsManagement } from './entry-reasons-management';
+import { WarehouseManagement } from './warehouse-management';
 
 interface SettingsContentProps {
     initialRotationCategories: RotationCategory[];
     initialUsers: User[];
     initialEntryReasons: EntryReason[];
+    initialWarehouses: Warehouse[];
 }
 
-export function SettingsContent({ initialRotationCategories, initialUsers, initialEntryReasons }: SettingsContentProps) {
+export function SettingsContent({ initialRotationCategories, initialUsers, initialEntryReasons, initialWarehouses }: SettingsContentProps) {
     const [rotationCategories, setRotationCategories] = useState<RotationCategory[]>(initialRotationCategories);
     const [users, setUsers] = useState<User[]>(initialUsers);
+    const [warehouses, setWarehouses] = useState<Warehouse[]>(initialWarehouses);
     const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const { user } = useAuth();
@@ -47,9 +50,20 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
         setLoading(false);
     }
     
+    const refreshWarehouses = async () => {
+        setLoading(true);
+        const fetchedWarehouses = await getWarehouses();
+        setWarehouses(fetchedWarehouses);
+        setLoading(false);
+    };
+
     useEffect(() => {
         setUsers(initialUsers);
     }, [initialUsers]);
+
+    useEffect(() => {
+        setWarehouses(initialWarehouses);
+    }, [initialWarehouses]);
 
 
     const handleThresholdChange = (id: string, value: string) => {
@@ -97,6 +111,10 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
 
           {isAdmin && (
             <UserManagement initialUsers={users} onUsersUpdate={refreshUsers} loading={loading} />
+          )}
+
+          {isAdmin && (
+            <WarehouseManagement initialWarehouses={warehouses} onWarehousesUpdate={refreshWarehouses} loading={loading} />
           )}
           
           {canManageSettings && (
