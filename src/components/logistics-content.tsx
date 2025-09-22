@@ -91,6 +91,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     const [searchContext, setSearchContext] = useState<SearchContext>('salidas');
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
     const [productToConfirm, setProductToConfirm] = useState<Product | null>(null);
+    const [isDispatching, startDispatchTransition] = useTransition();
 
     // Entradas State
     const [receivedProducts, setReceivedProducts] = useState<LogisticItem[]>([]);
@@ -290,71 +291,73 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             return;
         }
 
-        const platformName = platforms.find(p => p.id === platform)?.name || 'N/A';
-        const carrierName = carriers.find(c => c.id === carrier)?.name || 'N/A';
-        
-        const productsForDispatch: DispatchOrderProduct[] = dispatchedProducts.map(p => ({
-            productId: p.productId,
-            variantId: p.variantId,
-            sku: p.sku,
-            name: p.name,
-            quantity: p.quantity
-        }));
-
-        try {
-            const { dispatchId, date } = await createDispatchOrder({
-                platformId: platform,
-                carrierId: carrier,
-                products: productsForDispatch,
-                createdBy: user ? { id: user.id, name: user.name } : undefined,
-            });
-
-            const pdfProducts = dispatchedProducts.map(p => ({
+        startDispatchTransition(async () => {
+            const platformName = platforms.find(p => p.id === platform)?.name || 'N/A';
+            const carrierName = carriers.find(c => c.id === carrier)?.name || 'N/A';
+            
+            const productsForDispatch: DispatchOrderProduct[] = dispatchedProducts.map(p => ({
+                productId: p.productId,
+                variantId: p.variantId,
                 sku: p.sku,
                 name: p.name,
-                dispatchQuantity: p.quantity,
+                quantity: p.quantity
             }));
-            
-            const pdfResult = await generatePickingListAction(dispatchId, pdfProducts, platformName, carrierName, date as any);
-            if (pdfResult.success && pdfResult.pdfData) {
-                const byteCharacters = atob(pdfResult.pdfData);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-                const byteArray = new Uint8Array(byteNumbers);
-                const blob = new Blob([byteArray], {type: 'application/pdf'});
-                const link = document.createElement('a');
-                link.href = window.URL.createObjectURL(blob);
-                link.download = `picking-list-${dispatchId.replace(/\s/g, '-')}.pdf`;
-                link.click();
-            } else {
-                 toast({
-                    variant: 'destructive',
-                    title: 'Error al Generar PDF',
-                    description: pdfResult.message || "No se pudo generar el PDF del picking list.",
-                });
-            }
-    
-            toast({
-                title: "Salida Creada y PDF Generado",
-                description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.quantity, 0)} unidades. El stock ha sido actualizado.`
-            });
-    
-            setPlatform('');
-            setCarrier('');
-            setDispatchedProducts([]);
-            router.refresh();
 
-        } catch (error) {
-            console.error("Failed to create dispatch:", error);
-            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado';
-            toast({
-                variant: 'destructive',
-                title: 'Error al Crear Despacho',
-                description: errorMessage,
-            })
-        }
+            try {
+                const { dispatchId, date } = await createDispatchOrder({
+                    platformId: platform,
+                    carrierId: carrier,
+                    products: productsForDispatch,
+                    createdBy: user ? { id: user.id, name: user.name } : undefined,
+                });
+
+                const pdfProducts = dispatchedProducts.map(p => ({
+                    sku: p.sku,
+                    name: p.name,
+                    dispatchQuantity: p.quantity,
+                }));
+                
+                const pdfResult = await generatePickingListAction(dispatchId, pdfProducts, platformName, carrierName, date as any);
+                if (pdfResult.success && pdfResult.pdfData) {
+                    const byteCharacters = atob(pdfResult.pdfData);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], {type: 'application/pdf'});
+                    const link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = `picking-list-${dispatchId.replace(/\s/g, '-')}.pdf`;
+                    link.click();
+                } else {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Error al Generar PDF',
+                        description: pdfResult.message || "No se pudo generar el PDF del picking list.",
+                    });
+                }
+        
+                toast({
+                    title: "Salida Creada y PDF Generado",
+                    description: `Se ha creado una salida con ${dispatchedProducts.reduce((acc, p) => acc + p.quantity, 0)} unidades. El stock ha sido actualizado.`
+                });
+        
+                setPlatform('');
+                setCarrier('');
+                setDispatchedProducts([]);
+                router.refresh();
+
+            } catch (error) {
+                console.error("Failed to create dispatch:", error);
+                const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado';
+                toast({
+                    variant: 'destructive',
+                    title: 'Error al Crear Despacho',
+                    description: errorMessage,
+                })
+            }
+        });
     }
 
     // --- ENTRADAS ---
@@ -864,7 +867,9 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                             </Card>
                         </CardContent>
                         <CardFooter>
-                            <Button onClick={handleCreateDispatch}>Crear Salida</Button>
+                            <Button onClick={handleCreateDispatch} disabled={isDispatching}>
+                                {isDispatching ? 'Creando...' : 'Crear Salida'}
+                            </Button>
                         </CardFooter>
                     </Card>
                 </TabsContent>
