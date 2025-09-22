@@ -858,16 +858,21 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 
     if (trackingNumbers.length > 0) {
         const cancellationRequestsCol = collection(db, 'cancellationRequests');
-        const cancellationQuery = query(cancellationRequestsCol, where('trackingNumber', 'in', trackingNumbers), where('status', '==', 'pending'));
-        const cancellationSnapshot = await getDocs(cancellationQuery);
+        const CHUNK_SIZE = 30; // Firestore 'in' query limit
 
-        if (!cancellationSnapshot.empty) {
-            const cancelledGuide = cancellationSnapshot.docs[0].data().trackingNumber;
-            const cancellationRequestId = cancellationSnapshot.docs[0].id;
-            // Throw a specific error that includes the request ID
-            const error = new Error(`La guía ${cancelledGuide} tiene una solicitud de anulación pendiente y no puede ser despachada.`);
-            (error as any).cancellationRequestId = cancellationRequestId;
-            throw error;
+        for (let i = 0; i < trackingNumbers.length; i += CHUNK_SIZE) {
+            const chunk = trackingNumbers.slice(i, i + CHUNK_SIZE);
+            const cancellationQuery = query(cancellationRequestsCol, where('trackingNumber', 'in', chunk), where('status', '==', 'pending'));
+            const cancellationSnapshot = await getDocs(cancellationQuery);
+
+            if (!cancellationSnapshot.empty) {
+                const cancelledGuide = cancellationSnapshot.docs[0].data().trackingNumber;
+                const cancellationRequestId = cancellationSnapshot.docs[0].id;
+                // Throw a specific error that includes the request ID
+                const error = new Error(`La guía ${cancelledGuide} tiene una solicitud de anulación pendiente y no puede ser despachada.`);
+                (error as any).cancellationRequestId = cancellationRequestId;
+                throw error;
+            }
         }
     }
 
