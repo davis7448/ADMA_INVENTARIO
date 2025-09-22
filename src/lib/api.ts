@@ -1878,13 +1878,10 @@ export const getWarehouses = async (): Promise<Warehouse[]> => {
 };
 
 export async function getDashboardData(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }) {
-    // For this prototype, we'll keep fetching all data and filtering in memory.
-    // In a real-world high-volume application, this logic should be moved to a
-    // dedicated backend service or use optimized database queries/views.
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
       getDispatchOrders({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }),
       getInventoryMovements({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }),
-      getProducts({ limit: 10000 }), // These are needed for names/mappings
+      getProducts({ limit: 10000 }),
       getCategories(),
       getPlatforms(),
       getCarriers(),
@@ -1892,7 +1889,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
   
     const { from: fromDate, to: toDate } = filters.dateRange || {};
     
-    // Corrected date filtering
     const fromDateStart = fromDate ? startOfDay(fromDate) : null;
     const toDateEnd = toDate ? endOfDay(toDate) : null;
     
@@ -1905,7 +1901,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const allCarrierNames = allCarriers.map(c => c.name);
     
     const ordersInPeriod = ordersResult.orders.filter(order => {
-        const orderDate = order.date;
+        const orderDate = new Date(order.date);
         
         const dateMatch = (!fromDateStart || orderDate >= fromDateStart) && (!toDateEnd || orderDate <= toDateEnd);
         if (!dateMatch) return false;
@@ -1947,15 +1943,30 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const adjustInByDay: Record<string, number> = {};
     const adjustOutByDay: Record<string, number> = {};
 
+    ordersInPeriod.forEach(order => {
+        if (order.status === 'Despachada' || order.status === 'Parcial') {
+            const day = format(order.date, 'yyyy-MM-dd');
+            let dispatchedInOrder = order.totalItems;
+    
+            if (order.status === 'Parcial' && order.exceptions) {
+                const exceptionsTotal = order.exceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
+                dispatchedInOrder -= exceptionsTotal;
+            }
+
+            if (order.cancelledExceptions) {
+                const cancelledTotal = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
+                totalAnnulledItems += cancelledTotal;
+                annulledByDay[day] = (annulledByDay[day] || 0) + cancelledTotal;
+            }
+            
+            totalInitialDispatchItems += dispatchedInOrder;
+            ordersByDay[day] = (ordersByDay[day] || 0) + dispatchedInOrder;
+        }
+    });
+
     movementsInPeriod.forEach(m => {
         const day = format(new Date(m.date), 'yyyy-MM-dd');
-        if (m.type === 'Salida') {
-            totalInitialDispatchItems += m.quantity;
-            ordersByDay[day] = (ordersByDay[day] || 0) + m.quantity;
-        } else if (m.type === 'Anulado') {
-            totalAnnulledItems += m.quantity;
-            annulledByDay[day] = (annulledByDay[day] || 0) + m.quantity;
-        } else if (m.type === 'Ajuste de Entrada') {
+        if (m.type === 'Ajuste de Entrada') {
             totalAdjustIn += m.quantity;
             adjustInByDay[day] = (adjustInByDay[day] || 0) + m.quantity;
         } else if (m.type === 'Ajuste de Salida') {
@@ -1964,7 +1975,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         }
     });
 
-    const totalItemsDispatched = totalInitialDispatchItems - totalAnnulledItems;
+    const totalItemsDispatched = totalInitialDispatchItems;
     
     let totalPendingUnits = 0;
     const pendingUnitsByDay: Record<string, number> = {};
@@ -2003,7 +2014,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         let currentDate = startOfDay(fromDate);
         while (currentDate <= toDate) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            chartData.push({ date: dayKey, orders: (ordersByDay[dayKey] || 0) - (annulledByDay[dayKey] || 0) });
+            chartData.push({ date: dayKey, orders: ordersByDay[dayKey] || 0 });
             pendingChartData.push({ date: dayKey, orders: pendingUnitsByDay[dayKey] || 0 });
             returnsChartData.push({ date: dayKey, returns: returnsByDay[dayKey] || 0 });
             annulledChartData.push({ date: dayKey, annulled: annulledByDay[dayKey] || 0 });
