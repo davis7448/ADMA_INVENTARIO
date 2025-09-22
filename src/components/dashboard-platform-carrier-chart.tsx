@@ -33,9 +33,10 @@ export default function DashboardPlatformCarrierChart({ data, carriers }: Platfo
           <p className="font-bold mb-1">{label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={index} style={{ color: entry.color }}>
-              {`${entry.name}: ${entry.value} (${((entry.value / total) * 100).toFixed(1)}%)`}
+              {`${entry.name}: ${entry.value}`}
             </div>
           ))}
+           <p className="font-semibold mt-2 pt-2 border-t">Total: {total}</p>
         </div>
       );
     }
@@ -45,12 +46,12 @@ export default function DashboardPlatformCarrierChart({ data, carriers }: Platfo
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer>
-        <BarChart data={data} stackOffset="expand">
+        <BarChart data={data}>
           <YAxis
-            type="number"
-            hide
-            domain={[0, 1]}
-            tickFormatter={(value) => `${value * 100}%`}
+            stroke="#888888"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
           />
           <XAxis
             type="category"
@@ -59,6 +60,9 @@ export default function DashboardPlatformCarrierChart({ data, carriers }: Platfo
             fontSize={12}
             tickLine={false}
             axisLine={false}
+            angle={-45}
+            textAnchor="end"
+            height={60}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted))' }} />
           <Legend />
