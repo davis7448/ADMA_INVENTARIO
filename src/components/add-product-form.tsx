@@ -71,6 +71,8 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const canEditSensitiveData = user?.role === 'admin' || user?.role === 'plataformas';
+
   const form = useForm<AddProductFormValues>({
     resolver: zodResolver(AddProductFormSchema),
     defaultValues: {
@@ -531,7 +533,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               render={({ field }) => (
                                 <FormItem className="col-span-1">
                                   <FormControl>
-                                    <Input type="number" placeholder="Stock" {...field} />
+                                    <Input type="number" placeholder="Stock" {...field} disabled={!canEditSensitiveData} />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -614,7 +616,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                           {...field} 
                                           value={field.value ?? ''}
                                           onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} 
-                                          disabled={productType === 'variable'}
+                                          disabled={productType === 'variable' || !canEditSensitiveData}
                                           readOnly={productType === 'variable'}
                                       />
                                   </FormControl>
@@ -622,21 +624,26 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               </FormItem>
                           )}
                       />
-                      {user?.role === 'admin' && (
-                        <FormField
-                            control={form.control}
-                            name="cost"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Costo</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" step="0.01" placeholder="e.g., 45.50" {...field} value={field.value ?? ''} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                      )}
+                      <FormField
+                        control={form.control}
+                        name="cost"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Costo</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type={canEditSensitiveData ? "number" : "password"}
+                                    step="0.01" 
+                                    placeholder={canEditSensitiveData ? "e.g., 45.50" : "****"}
+                                    {...field} 
+                                    value={canEditSensitiveData ? field.value ?? '' : '****'}
+                                    disabled={!canEditSensitiveData}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                       <FormField
                             control={form.control}
                             name="purchaseDate"
