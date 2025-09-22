@@ -1847,6 +1847,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     
     const platformNameMap = allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>);
     const carrierNameMap = allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>);
+    const allCarrierNames = allCarriers.map(c => c.name);
     
     const ordersInPeriod = ordersResult.orders.filter(order => {
         const orderDateKey = format(order.date, 'yyyy-MM-dd');
@@ -1904,7 +1905,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             if (order.status === 'Pendiente') {
                 unitsInOrder = order.totalItems;
             } else if (order.status === 'Parcial' && order.exceptions) {
-                unitsInOrder = order.exceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
+                unitsInOrder = order.exceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p => pSum + p.quantity), 0), 0);
             }
             totalPendingUnits += unitsInOrder;
             pendingUnitsByDay[day] = (pendingUnitsByDay[day] || 0) + unitsInOrder;
@@ -1983,35 +1984,45 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         percentage: totalItemsSold > 0 ? (count / totalItemsSold) * 100 : 0,
     })).sort((a, b) => b.value - a.value);
 
-    const platformCarrierData: any[] = [];
-    const platformCarrierMap: { [platformId: string]: { [carrierId: string]: number } } = {};
-    const platformOrderCount: { [platformId: string]: number } = {};
-    const carrierUsageCount: { [carrierId: string]: number } = {};
+    const platformCarrierMap: { [platformName: string]: { [carrierName: string]: number } } = {};
+    allPlatforms.forEach(p => {
+        platformCarrierMap[p.name] = {};
+    });
+
+    const platformOrderCount: { [platformName: string]: number } = {};
+    const carrierUsageCount: { [carrierName: string]: number } = {};
     let totalProductsShipped = 0;
     const dailyDispatchSummaryData: Record<string, Record<string, Record<string, number>>> = {};
 
     ordersInPeriod.forEach(order => {
         const platformName = platformNameMap[order.platformId] || 'Unknown Platform';
         const carrierName = carrierNameMap[order.carrierId] || 'Unknown Carrier';
-        if (!platformCarrierMap[platformName]) {
-            platformCarrierMap[platformName] = {};
+
+        if (platformName !== 'Unknown Platform' && carrierName !== 'Unknown Carrier') {
+            if (!platformCarrierMap[platformName]) {
+                platformCarrierMap[platformName] = {};
+            }
+            platformCarrierMap[platformName][carrierName] = (platformCarrierMap[platformName][carrierName] || 0) + order.totalItems;
         }
-        platformCarrierMap[platformName][carrierName] = (platformCarrierMap[platformName][carrierName] || 0) + order.totalItems;
+
         platformOrderCount[platformName] = (platformOrderCount[platformName] || 0) + 1;
-        carrierUsageCount[carrierName] = (carrierUsageCount[carrierName] || 0) + order.totalItems;
+        if(carrierName !== 'Unknown Carrier') {
+            carrierUsageCount[carrierName] = (carrierUsageCount[carrierName] || 0) + order.totalItems;
+        }
         totalProductsShipped += order.totalItems;
         const day = format(order.date, 'yyyy-MM-dd');
         const guideCount = order.trackingNumbers?.length || 0;
-        if (guideCount > 0) {
+        if (guideCount > 0 && carrierName !== 'Unknown Carrier' && platformName !== 'Unknown Platform') {
             if (!dailyDispatchSummaryData[day]) dailyDispatchSummaryData[day] = {};
             if (!dailyDispatchSummaryData[day][carrierName]) dailyDispatchSummaryData[day][carrierName] = {};
             dailyDispatchSummaryData[day][carrierName][platformName] = (dailyDispatchSummaryData[day][carrierName][platformName] || 0) + guideCount;
         }
     });
 
-    for (const platformName in platformCarrierMap) {
-        platformCarrierData.push({ name: platformName, ...platformCarrierMap[platformName] });
-    }
+    const platformCarrierChartData = Object.entries(platformCarrierMap).map(([platformName, carriers]) => ({
+        name: platformName,
+        ...carriers
+    }));
 
     const mostUsedCarrierEntry = Object.entries(carrierUsageCount).sort((a, b) => b[1] - a[1])[0];
     const platformWithMostOrdersEntry = Object.entries(platformOrderCount).sort((a, b) => b[1] - a[1])[0];
@@ -2025,8 +2036,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
       returnsChartData,
       productChartData,
       categoryChartData,
-      platformCarrierChartData: platformCarrierData,
-      allCarrierNames: Object.keys(carrierNameMap),
+      platformCarrierChartData,
+      allCarrierNames,
       mostUsedCarrier: {
         name: mostUsedCarrierEntry?.[0] || 'N/A',
         count: mostUsedCarrierEntry?.[1] || 0,
