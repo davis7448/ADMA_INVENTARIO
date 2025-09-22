@@ -15,7 +15,6 @@ export default async function ProductsPage({
 
     const page = Number(searchParams?.page || '1');
     const limit = Number(searchParams?.limit || '20');
-    const lastVisible = searchParams?.last as string | undefined;
 
     const filters = {
         searchQuery: searchParams?.q as string,
@@ -29,7 +28,7 @@ export default async function ProductsPage({
     };
 
     const [productsResult, allMovements, rotationCategories] = await Promise.all([
-        getProducts({ page, limit, filters, lastVisible }),
+        getProducts({ page, limit, filters }),
         getInventoryMovements({ limit: 10000, filters: { startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() } }),
         getRotationCategories(),
     ]);
@@ -73,7 +72,6 @@ export default async function ProductsPage({
         <ProductsContent 
           initialProducts={productsWithRotation}
           totalPages={productsResult.totalPages}
-          nextCursor={productsResult.nextCursor}
           initialSupplierNames={supplierNames}
           initialCategoryNames={categoryNames}
           allRotationCategories={rotationCategories}

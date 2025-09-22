@@ -535,46 +535,37 @@ export const sendPasswordReset = async (email: string) => {
 };
 
 // Inventory Movement Functions
-export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
+export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number, nextCursor?: string }> => {
     const movementsCol = collection(db, 'inventoryMovements');
     
-    const querySnapshot = await getDocs(query(movementsCol, orderBy('date', 'desc')));
-    const allMovements = querySnapshot.docs.map(doc => {
+    let q: Query = query(movementsCol, orderBy('date', 'desc'));
+    
+    const { startDate, endDate, productId, platformId, carrierId, movementType } = filters;
+    
+    if (startDate) q = query(q, where('date', '>=', new Date(startDate)));
+    if (endDate) q = query(q, where('date', '<=', new Date(endDate)));
+    if (productId && productId !== 'all') q = query(q, where('productId', '==', productId));
+    if (platformId && platformId !== 'all') q = query(q, where('platformId', '==', platformId));
+    if (carrierId && carrierId !== 'all') q = query(q, where('carrierId', '==', carrierId));
+    if (movementType && movementType !== 'all') q = query(q, where('type', '==', movementType));
+    
+    const allMatchingMovementsSnap = await getDocs(q);
+    const allMovements = allMatchingMovementsSnap.docs.map(doc => {
         const data = doc.data();
-        const dateValue = data.date;
-        let formattedDate: string;
-        if (dateValue instanceof Timestamp) {
-          formattedDate = dateValue.toDate().toISOString();
-        } else {
-          formattedDate = dateValue; 
-        }
         return { 
           id: doc.id, 
           ...data,
-          date: formattedDate,
+          date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
     });
 
-    const filteredMovements = allMovements.filter(movement => {
-        const { startDate, endDate, productId, platformId, carrierId, movementType } = filters;
-        const movementDate = new Date(movement.date);
-        
-        const dateMatch = (!startDate || movementDate >= new Date(startDate)) && (!endDate || movementDate <= new Date(endDate));
-        const productMatch = !productId || productId === 'all' || movement.productId === productId;
-        const platformMatch = !platformId || platformId === 'all' || movement.platformId === platformId;
-        const carrierMatch = !carrierId || carrierId === 'all' || movement.carrierId === carrierId;
-        const typeMatch = !movementType || movementType === 'all' || movement.type === movementType;
-
-        return dateMatch && productMatch && platformMatch && carrierMatch && typeMatch;
-    });
-
     if (fetchAll) {
-        return { movements: filteredMovements, totalPages: 1, totalCount: filteredMovements.length };
+        return { movements: allMovements, totalPages: 1, totalCount: allMovements.length };
     }
 
-    const totalCount = filteredMovements.length;
+    const totalCount = allMovements.length;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
-    const paginatedMovements = filteredMovements.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+    const paginatedMovements = allMovements.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
     return { movements: paginatedMovements, totalPages, totalCount };
 };
@@ -795,33 +786,40 @@ const parseFirestoreDate = (dateValue: any): Date => {
     return new Date();
   };
 
-export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
+export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number, nextCursor?: string }> => {
     const ordersCol = collection(db, 'dispatchOrders');
     
-    const querySnapshot = await getDocs(query(ordersCol, orderBy('date', 'desc')));
-    let allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
+    let q: Query = query(ordersCol, orderBy('date', 'desc'));
 
-    const { startDate, endDate, productId, platformId, carrierId } = filters;
+    const { startDate, endDate, productId, platformId, carrierId, lastVisible } = filters;
 
-    if (startDate || endDate || productId || platformId || carrierId) {
-        allOrders = allOrders.filter(order => {
-            const orderDate = new Date(order.date);
-            const dateMatch = (!startDate || orderDate >= new Date(startDate)) && (!endDate || orderDate <= new Date(endDate));
-            const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
-            const platformMatch = !platformId || platformId === 'all' || order.platformId === platformId;
-            const carrierMatch = !carrierId || carrierId === 'all' || order.carrierId === carrierId;
-            return dateMatch && productMatch && platformMatch && carrierMatch;
-        });
+    if (startDate) q = query(q, where('date', '>=', new Date(startDate)));
+    if (endDate) q = query(q, where('date', '<=', new Date(endDate)));
+    if (productId && productId !== 'all') q = query(q, where('products', 'array-contains', { productId }));
+    if (platformId && platformId !== 'all') q = query(q, where('platformId', '==', platformId));
+    if (carrierId && carrierId !== 'all') q = query(q, where('carrierId', '==', carrierId));
+    
+    const countQuery = query(q);
+    const totalDocsSnap = await getDocs(countQuery);
+    const totalCount = totalDocsSnap.size;
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+
+    if (!fetchAll) {
+        q = query(q, limit(itemsPerPage));
+        if (page > 1 && lastVisible) {
+            const lastDocSnap = await getDoc(doc(ordersCol, lastVisible));
+            if (lastDocSnap.exists()) {
+                q = query(q, startAfter(lastDocSnap));
+            }
+        }
     }
     
-    if (fetchAll) {
-        return { orders: allOrders, totalPages: 1 };
-    }
-
-    const totalPages = Math.ceil(allOrders.length / itemsPerPage);
-    const paginatedOrders = allOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-
-    return { orders: paginatedOrders, totalPages };
+    const querySnapshot = await getDocs(q);
+    const allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
+    
+    const nextCursor = querySnapshot.docs.length === itemsPerPage ? querySnapshot.docs[querySnapshot.docs.length - 1].id : undefined;
+    
+    return { orders: allOrders, totalPages, nextCursor };
 }
 
 
@@ -1866,6 +1864,7 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
     
+
 
 
 

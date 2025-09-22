@@ -71,17 +71,12 @@ import { AlertDialogTrigger } from './ui/alert-dialog';
 interface ProductsContentProps {
     initialProducts: Product[];
     totalPages: number;
-    nextCursor?: string;
     initialSupplierNames: Record<string, string>;
     initialCategoryNames: Record<string, string>;
     allRotationCategories: RotationCategory[];
 }
 
-export function ProductsContent({ initialProducts, totalPages, nextCursor, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
-    const [products, setProducts] = useState<Product[]>(initialProducts);
-    const [supplierNames, setSupplierNames] = useState<Record<string, string>>(initialSupplierNames);
-    const [categoryNames, setCategoryNames] = useState<Record<string, string>>(initialCategoryNames);
-    const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
     const [loading, setLoading] = useState(false);
     const { user } = useAuth();
     const router = useRouter();
@@ -90,6 +85,7 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
     const { toast } = useToast();
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
+    const [vendedores, setVendedores] = useState<Vendedor[]>([]);
 
     // Filter states from URL
     const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
@@ -105,20 +101,9 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
     const currentPage = Number(searchParams.get('page') || '1');
     const itemsPerPage = Number(searchParams.get('limit') || '20');
 
-    // Store cursors for each page. The key is the page number.
-    const [pageCursors, setPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined });
-    
     useEffect(() => {
         getVendedores().then(setVendedores);
     }, []);
-
-    useEffect(() => {
-        // When new products are loaded, update the cursor for the *next* page
-        if (nextCursor) {
-            setPageCursors(prev => ({ ...prev, [currentPage + 1]: nextCursor }));
-        }
-    }, [nextCursor, currentPage]);
-
 
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
@@ -132,13 +117,13 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
         if (onlyAudited) params.set('audited', 'true'); else params.delete('audited');
         
         // When filters change, always go back to page 1
+        params.set('page', '1');
         router.replace(`${pathname}?${params.toString()}`);
     }, [searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited]);
 
     const refreshProducts = () => {
         setLoading(true);
         router.refresh();
-        // The page will re-render with new initialProducts
         setLoading(false);
     }
 
@@ -192,18 +177,6 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
     const handlePaginationChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set('page', String(newPage));
-        
-        // Get the cursor for the page we are navigating to
-        const lastVisible = pageCursors[newPage];
-        if (lastVisible) {
-            params.set('last', lastVisible);
-        } else {
-            // If we don't have a cursor for that page (e.g., going backwards), we remove it.
-            // Firestore's `startAfter` doesn't have a `startBefore`, so backwards navigation re-queries from the start.
-            // This is a limitation we can accept for now. For true back/forward, a more complex state management is needed.
-            params.delete('last');
-        }
-        
         router.push(`${pathname}?${params.toString()}`);
     }
 
@@ -211,8 +184,6 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
         const params = new URLSearchParams(searchParams.toString());
         params.set('limit', String(value));
         params.set('page', '1'); // Reset to first page
-        params.delete('last'); // Cursors are dependent on page size, so we must reset
-        setPageCursors({ 1: undefined }); // Reset cursor cache
         router.push(`${pathname}?${params.toString()}`);
     }
 
@@ -270,12 +241,12 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
     const handleExportExcel = () => {
         const dataToExport = initialProducts.flatMap(p => {
             const baseData = {
-                'Categoría': categoryNames[p.categoryId] || 'Desconocida',
+                'Categoría': initialCategoryNames[p.categoryId] || 'Desconocida',
                 'Rotación': p.rotationCategoryName || 'N/A',
                 'Stock Pendiente': p.pendingStock || 0,
                 'Stock Averiado': p.damagedStock || 0,
                 'Costo': user?.role === 'admin' ? p.cost : undefined,
-                'Proveedor': supplierNames[p.vendorId] || 'Desconocido',
+                'Proveedor': initialSupplierNames[p.vendorId] || 'Desconocido',
                 'Fecha Compra': p.purchaseDate ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
                 'Link de Contenido': p.contentLink || '',
             };
@@ -366,7 +337,7 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
                         <SelectTrigger id="category"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">Todas las Categorías</SelectItem>
-                            {Object.entries(categoryNames).map(([id, name]) => (
+                            {Object.entries(initialCategoryNames).map(([id, name]) => (
                                 <SelectItem key={id} value={id}>{name}</SelectItem>
                             ))}
                         </SelectContent>
@@ -563,7 +534,7 @@ export function ProductsContent({ initialProducts, totalPages, nextCursor, initi
                                         </TableCell>
                                         <TableCell>{product.sku}</TableCell>
                                         <TableCell>
-                                            <Badge variant="outline">{categoryNames[product.categoryId] || 'Desconocida'}</Badge>
+                                            <Badge variant="outline">{initialCategoryNames[product.categoryId] || 'Desconocida'}</Badge>
                                         </TableCell>
                                         <TableCell>{product.stock}</TableCell>
                                         <TableCell className="font-semibold text-green-600">
