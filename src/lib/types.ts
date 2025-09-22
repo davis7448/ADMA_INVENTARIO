@@ -308,6 +308,7 @@ export type DashboardData = {
     chartData: { date: string; orders: number }[];
     pendingChartData: { date: string; orders: number }[];
     returnsChartData: { date: string; returns: number }[];
+    annulledChartData: { date: string; annulled: number }[];
     productChartData: { id: string; name: string; value: number, percentage: number; productType: 'simple' | 'variable'; variants: any[] }[];
     categoryChartData: { name: string; value: number, percentage: number }[];
     platformCarrierChartData: any[];

@@ -39,6 +39,7 @@ import { Badge } from '@/components/ui/badge';
 import React from 'react';
 import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 import { es } from 'date-fns/locale';
+import DashboardAnnulledChart from '@/components/dashboard-annulled-chart';
 
 const SKELETON_DASHBOARD_DATA: DashboardData = {
     totalItemsDispatched: 0,
@@ -48,6 +49,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
     chartData: [],
     pendingChartData: [],
     returnsChartData: [],
+    annulledChartData: [],
     productChartData: [],
     categoryChartData: [],
     platformCarrierChartData: [],
@@ -295,6 +297,9 @@ export default function DashboardPage() {
                     <p className="text-xs text-muted-foreground">
                         Unidades anuladas de despachos en el período.
                     </p>
+                    <div className="h-32 mt-4">
+                        <DashboardAnnulledChart data={dashboardData.annulledChartData} />
+                    </div>
                 </CardContent>
             </Card>
             <Card>

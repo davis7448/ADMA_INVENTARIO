@@ -1061,7 +1061,8 @@ export const annulDispatchedGuideItems = async (
         const orderData = orderSnap.data() as DispatchOrder;
 
         const productIds = [...new Set(itemsToAnnul.map(item => item.productId))];
-        const productDocs = await Promise.all(productIds.map(id => transaction.get(doc(db, 'products', id))));
+        const productRefs = productIds.map(id => doc(db, 'products', id));
+        const productDocs = await Promise.all(productRefs.map(ref => transaction.get(ref)));
 
         const productDataMap = new Map<string, Product>();
         productDocs.forEach(snap => {
@@ -1105,8 +1106,8 @@ export const annulDispatchedGuideItems = async (
                     variantId: p.variantId,
                     variantSku: p.sku
                 };
-                if (cleanProduct.variantId === undefined) delete cleanProduct.variantId;
-                if (cleanProduct.variantSku === undefined) delete cleanProduct.variantSku;
+                if (!cleanProduct.variantId) delete cleanProduct.variantId;
+                if (!cleanProduct.variantSku) delete cleanProduct.variantSku;
                 return cleanProduct as DispatchExceptionProduct;
             })
         };
@@ -1900,6 +1901,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     let totalInitialDispatchItems = 0;
     let totalAnnulledItems = 0;
     const ordersByDay: Record<string, number> = {};
+    const annulledByDay: Record<string, number> = {};
 
     ordersInPeriod.forEach(order => {
         totalInitialDispatchItems += order.totalItems;
@@ -1909,6 +1911,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         if (order.cancelledExceptions) {
             const annulledInOrder = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
             totalAnnulledItems += annulledInOrder;
+            annulledByDay[day] = (annulledByDay[day] || 0) + annulledInOrder;
             ordersByDay[day] -= annulledInOrder;
         }
     });
@@ -1944,6 +1947,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const chartData = [];
     const pendingChartData = [];
     const returnsChartData = [];
+    const annulledChartData = [];
     if (fromDate && toDate) {
         let currentDate = startOfDay(fromDate);
         while (currentDate <= toDate) {
@@ -1951,6 +1955,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             chartData.push({ date: dayKey, orders: ordersByDay[dayKey] || 0 });
             pendingChartData.push({ date: dayKey, orders: pendingUnitsByDay[dayKey] || 0 });
             returnsChartData.push({ date: dayKey, returns: returnsByDay[dayKey] || 0 });
+            annulledChartData.push({ date: dayKey, annulled: annulledByDay[dayKey] || 0 });
             currentDate.setDate(currentDate.getDate() + 1);
         }
     }
@@ -2058,6 +2063,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
       chartData,
       pendingChartData,
       returnsChartData,
+      annulledChartData,
       productChartData,
       categoryChartData,
       platformCarrierChartData,
@@ -2081,4 +2087,5 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
