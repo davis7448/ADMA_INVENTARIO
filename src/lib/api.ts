@@ -786,12 +786,12 @@ const parseFirestoreDate = (dateValue: any): Date => {
     return new Date();
   };
 
-export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number, nextCursor?: string }> => {
+export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const ordersCol = collection(db, 'dispatchOrders');
     
     let q: Query = query(ordersCol, orderBy('date', 'desc'));
 
-    const { startDate, endDate, productId, platformId, carrierId, lastVisible } = filters;
+    const { startDate, endDate, productId, platformId, carrierId } = filters;
 
     if (startDate) q = query(q, where('date', '>=', new Date(startDate)));
     if (endDate) q = query(q, where('date', '<=', new Date(endDate)));
@@ -799,27 +799,18 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     if (platformId && platformId !== 'all') q = query(q, where('platformId', '==', platformId));
     if (carrierId && carrierId !== 'all') q = query(q, where('carrierId', '==', carrierId));
     
-    const countQuery = query(q);
-    const totalDocsSnap = await getDocs(countQuery);
-    const totalCount = totalDocsSnap.size;
-    const totalPages = Math.ceil(totalCount / itemsPerPage);
+    const allMatchingDocsSnap = await getDocs(q);
+    const allOrders = allMatchingDocsSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
 
-    if (!fetchAll) {
-        q = query(q, limit(itemsPerPage));
-        if (page > 1 && lastVisible) {
-            const lastDocSnap = await getDoc(doc(ordersCol, lastVisible));
-            if (lastDocSnap.exists()) {
-                q = query(q, startAfter(lastDocSnap));
-            }
-        }
+    if (fetchAll) {
+        return { orders: allOrders, totalPages: 1 };
     }
+
+    const totalCount = allOrders.length;
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+    const paginatedOrders = allOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
     
-    const querySnapshot = await getDocs(q);
-    const allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
-    
-    const nextCursor = querySnapshot.docs.length === itemsPerPage ? querySnapshot.docs[querySnapshot.docs.length - 1].id : undefined;
-    
-    return { orders: allOrders, totalPages, nextCursor };
+    return { orders: paginatedOrders, totalPages };
 }
 
 
@@ -1873,3 +1864,6 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
 
 
 
+
+
+    

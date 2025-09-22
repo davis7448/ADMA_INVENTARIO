@@ -1,8 +1,7 @@
 
-
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Card,
@@ -41,10 +40,8 @@ import { getInventoryMovements, getDispatchOrders } from '@/lib/api';
 interface HistoryContentProps {
     initialMovements: InventoryMovement[];
     movementsTotalPages: number;
-    movementsNextCursor?: string;
     initialDispatchOrders: DispatchOrder[];
     ordersTotalPages: number;
-    ordersNextCursor?: string;
     allProducts: Product[];
     allPlatforms: Platform[];
     allCarriers: Carrier[];
@@ -54,10 +51,8 @@ interface HistoryContentProps {
 export function HistoryContent({
     initialMovements,
     movementsTotalPages,
-    movementsNextCursor,
     initialDispatchOrders,
     ordersTotalPages,
-    ordersNextCursor,
     allProducts,
     allPlatforms,
     allCarriers,
@@ -67,6 +62,7 @@ export function HistoryContent({
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const [isPending, startTransition] = useTransition();
 
     // Filter states
     const [filterPlatformId, setFilterPlatformId] = useState<string>(currentFilters.platformId || 'all');
@@ -88,40 +84,35 @@ export function HistoryContent({
     const ordersPage = Number(searchParams.get('ordersPage') || '1');
     const itemsPerPage = Number(searchParams.get('limit') || '10');
     
-    // Store cursors for each page
-    const [movementsPageCursors, setMovementsPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined, 2: movementsNextCursor });
-    const [ordersPageCursors, setOrdersPageCursors] = useState<Record<number, string | undefined>>({ 1: undefined, 2: ordersNextCursor });
-
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
         
-        if (filterProductId !== 'all') params.set('productId', filterProductId); else params.delete('productId');
-        if (filterPlatformId !== 'all') params.set('platformId', filterPlatformId); else params.delete('platformId');
-        if (filterCarrierId !== 'all') params.set('carrierId', filterCarrierId); else params.delete('carrierId');
-        if (filterMovementType !== 'all') params.set('movementType', filterMovementType); else params.delete('movementType');
+        const updateParam = (key: string, value: string, defaultValue: string) => {
+            if (value !== defaultValue) params.set(key, value); else params.delete(key);
+        };
+        
+        updateParam('productId', filterProductId, 'all');
+        updateParam('platformId', filterPlatformId, 'all');
+        updateParam('carrierId', filterCarrierId, 'all');
+        updateParam('movementType', filterMovementType, 'all');
 
         if (dateRange?.from) params.set('startDate', dateRange.from.toISOString()); else params.delete('startDate');
         if (dateRange?.to) params.set('endDate', dateRange.to.toISOString()); else params.delete('endDate');
-
-        params.set('limit', String(itemsPerPage));
         
-        router.push(`${pathname}?${params.toString()}`);
-    }, [filterProductId, filterPlatformId, filterCarrierId, filterMovementType, dateRange, itemsPerPage]);
+        // When filters change, always go back to page 1
+        params.set('movementsPage', '1');
+        params.set('ordersPage', '1');
+
+        startTransition(() => {
+            router.push(`${pathname}?${params.toString()}`);
+        });
+
+    }, [filterProductId, filterPlatformId, filterCarrierId, filterMovementType, dateRange]);
 
 
     const handlePaginationChange = (type: 'movements' | 'orders', newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set(`${type}Page`, String(newPage));
-        
-        const cursors = type === 'movements' ? movementsPageCursors : ordersPageCursors;
-        const lastVisible = cursors[newPage];
-
-        if (lastVisible) {
-            params.set(`${type}Last`, lastVisible);
-        } else {
-            params.delete(`${type}Last`);
-        }
-        
         router.push(`${pathname}?${params.toString()}`);
     }
 
@@ -581,3 +572,5 @@ export function HistoryContent({
         </div>
     );
 }
+
+    
