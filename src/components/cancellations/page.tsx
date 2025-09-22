@@ -58,7 +58,7 @@ function CancellationsContent() {
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
     const [orderToCancel, setOrderToCancel] = useState<DispatchOrder | null>(null);
     const [itemsToAnnul, setItemsToAnnul] = useState<Record<string, AnnulmentItem>>({});
-    const [guideToCancelInDialog, setGuideToCancelInDialog] = useState<string>('');
+    const [guideToCancelInDialog, setGuideToCancelInDialog] = useState('');
     const [requestToUpdate, setRequestToUpdate] = useState<CancellationRequest | null>(null);
     
     const canManageRequests = user?.role === 'admin' || user?.role === 'logistics';
@@ -117,7 +117,7 @@ function CancellationsContent() {
 
     const handleOpenCancelDialog = async (request: CancellationRequest) => {
         setRequestToUpdate(request);
-        const allOrders = await getDispatchOrders();
+        const { orders: allOrders } = await getDispatchOrders({ fetchAll: true });
         
         // A guide can be in `trackingNumbers` (dispatched) or `exceptions` (not dispatched)
         const targetOrder = allOrders.find(order => 
@@ -187,7 +187,7 @@ function CancellationsContent() {
 
         startUpdatingTransition(async () => {
             try {
-                await cancelPendingDispatchItems(orderToCancel.id, itemsToCancelForApi, user, guideToCancelInDialog);
+                await cancelPendingDispatchItems(orderToCancel.id, itemsToCancelForApi, user, [guideToCancelInDialog]);
                 // The status of the request is now handled inside cancelPendingDispatchItems
                 // await updateCancellationRequestStatus(requestToUpdate.id, 'completed', user);
 
@@ -411,3 +411,6 @@ export default function CancellationsPage() {
 
     
 
+
+
+    

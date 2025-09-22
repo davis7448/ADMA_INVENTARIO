@@ -1892,8 +1892,9 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
   
     const { from: fromDate, to: toDate } = filters.dateRange || {};
     
-    const fromDateKey = fromDate ? format(startOfDay(fromDate), 'yyyy-MM-dd') : null;
-    const toDateKey = toDate ? format(endOfDay(toDate), 'yyyy-MM-dd') : null;
+    // Corrected date filtering
+    const fromDateStart = fromDate ? startOfDay(fromDate) : null;
+    const toDateEnd = toDate ? endOfDay(toDate) : null;
     
     const productIdsInCategory = filters.categoryIds.length > 0
       ? allProducts.products.filter(p => filters.categoryIds.includes(p.categoryId)).map(p => p.id)
@@ -1904,9 +1905,9 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const allCarrierNames = allCarriers.map(c => c.name);
     
     const ordersInPeriod = ordersResult.orders.filter(order => {
-        const orderDateKey = format(order.date, 'yyyy-MM-dd');
+        const orderDate = order.date;
         
-        const dateMatch = (!fromDateKey || orderDateKey >= fromDateKey) && (!toDateKey || orderDateKey <= toDateKey);
+        const dateMatch = (!fromDateStart || orderDate >= fromDateStart) && (!toDateEnd || orderDate <= toDateEnd);
         if (!dateMatch) return false;
         
         const platformMatch = filters.platformIds.length === 0 || filters.platformIds.includes(order.platformId);
@@ -1923,8 +1924,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     });
 
     const movementsInPeriod = movementsResult.movements.filter(m => {
-        const movementDateKey = format(new Date(m.date), 'yyyy-MM-dd');
-        const dateMatch = (!fromDateKey || movementDateKey >= fromDateKey) && (!toDateKey || movementDateKey <= toDateKey);
+        const movementDate = new Date(m.date);
+        const dateMatch = (!fromDateStart || movementDate >= fromDateStart) && (!toDateEnd || movementDate <= toDateEnd);
         if (!dateMatch) return false;
         
         let productMatch = true;
@@ -2155,3 +2156,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
     
 
+
+
+    
