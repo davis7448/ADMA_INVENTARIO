@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms, type DashboardData } from '@/lib/api';
 import type { Product, Carrier, Category, Platform, ProductVariant } from '@/lib/types';
-import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown, ArchiveX } from 'lucide-react';
+import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown, ArchiveX, Settings, Edit } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { addDays, format, startOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -40,16 +40,21 @@ import React from 'react';
 import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 import { es } from 'date-fns/locale';
 import DashboardAnnulledChart from '@/components/dashboard-annulled-chart';
+import DashboardAdjustChart from '@/components/dashboard-adjust-chart';
 
 const SKELETON_DASHBOARD_DATA: DashboardData = {
     totalItemsDispatched: 0,
     totalAnnulledItems: 0,
     totalPendingUnits: 0,
     totalReturns: 0,
+    totalAdjustIn: 0,
+    totalAdjustOut: 0,
     chartData: [],
     pendingChartData: [],
     returnsChartData: [],
     annulledChartData: [],
+    adjustInChartData: [],
+    adjustOutChartData: [],
     productChartData: [],
     categoryChartData: [],
     platformCarrierChartData: [],
@@ -264,14 +269,16 @@ export default function DashboardPage() {
 
 
       {loading ? (
-         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+            <Skeleton className="h-48" />
+            <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
          </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
             <Card className="col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Productos Despachados (Neto)</CardTitle>
@@ -327,6 +334,36 @@ export default function DashboardPage() {
                     </p>
                     <div className="h-32 mt-4">
                         <DashboardReturnsChart data={dashboardData.returnsChartData} />
+                    </div>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ajustes de Entrada</CardTitle>
+                    <Settings className="h-4 w-4 text-blue-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{dashboardData.totalAdjustIn}</div>
+                    <p className="text-xs text-muted-foreground">
+                        Unidades sumadas por ajuste manual.
+                    </p>
+                    <div className="h-32 mt-4">
+                        <DashboardAdjustChart data={dashboardData.adjustInChartData} color="hsl(var(--chart-3))" />
+                    </div>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Ajustes de Salida</CardTitle>
+                    <Edit className="h-4 w-4 text-purple-500" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{dashboardData.totalAdjustOut}</div>
+                    <p className="text-xs text-muted-foreground">
+                        Unidades restadas por ajuste manual.
+                    </p>
+                    <div className="h-32 mt-4">
+                        <DashboardAdjustChart data={dashboardData.adjustOutChartData} color="hsl(var(--chart-4))" />
                     </div>
                 </CardContent>
             </Card>
@@ -527,3 +564,5 @@ export default function DashboardPage() {
   );
 }
   
+
+    

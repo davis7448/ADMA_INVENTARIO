@@ -166,7 +166,6 @@ export const addProduct = async (product: Omit<Product, 'id'>): Promise<string> 
           delete dataToAdd.purchaseDate; 
       }
     } else {
-        // Explicitly delete if undefined or null to avoid Firestore errors
         delete dataToAdd.purchaseDate;
     }
   
@@ -233,12 +232,9 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
         delete updateData.purchaseDate;
     }
   } else {
-    // Ensure the field is removed if not provided, instead of sending undefined
     delete updateData.purchaseDate;
   }
   
-  // If cost is not part of the update (e.g., for non-admin users), don't include it.
-  // This prevents accidentally overwriting it with undefined.
   if (productUpdate.cost === undefined) {
     delete updateData.cost;
   }
@@ -258,25 +254,22 @@ export const deleteProduct = async (productId: string, user: User | null): Promi
     }
     const productData = productSnap.data() as Product;
 
-    // Log the deletion in inventory movements
     await addInventoryMovement({
         type: 'Eliminación',
         productId: productId,
         productName: productData.name,
-        quantity: productData.stock, // Log the stock amount at time of deletion
+        quantity: productData.stock,
         notes: `Producto eliminado por ${user?.name || 'un usuario desconocido'}.`,
         userId: user?.id,
         userName: user?.name
     });
 
-    // Delete associated reservations
     const reservationsSnapshot = await getDocs(query(collection(db, 'reservations'), where('productId', '==', productId)));
     const batch = writeBatch(db);
     reservationsSnapshot.forEach(doc => {
         batch.delete(doc.ref);
     });
     
-    // Delete the product itself
     batch.delete(productRef);
     
     await batch.commit();
@@ -1941,7 +1934,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         return dateMatch && productMatch && platformMatch && carrierMatch;
     });
   
-    // Now, perform aggregations on the filtered data
     let totalInitialDispatchItems = 0;
     let totalAnnulledItems = 0;
     let totalAdjustIn = 0;
@@ -1959,9 +1951,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         } else if (m.type === 'Anulado') {
             totalAnnulledItems += m.quantity;
             annulledByDay[day] = (annulledByDay[day] || 0) + m.quantity;
-            if (ordersByDay[day]) {
-                ordersByDay[day] -= m.quantity;
-            }
         } else if (m.type === 'Ajuste de Entrada') {
             totalAdjustIn += m.quantity;
             adjustInByDay[day] = (adjustInByDay[day] || 0) + m.quantity;
@@ -1971,7 +1960,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         }
     });
 
-    const totalItemsDispatched = totalInitialDispatchItems;
+    const totalItemsDispatched = totalInitialDispatchItems - totalAnnulledItems;
     
     let totalPendingUnits = 0;
     const pendingUnitsByDay: Record<string, number> = {};
@@ -2010,7 +1999,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         let currentDate = startOfDay(fromDate);
         while (currentDate <= toDate) {
             const dayKey = format(currentDate, 'yyyy-MM-dd');
-            chartData.push({ date: dayKey, orders: ordersByDay[dayKey] || 0 });
+            chartData.push({ date: dayKey, orders: (ordersByDay[dayKey] || 0) - (annulledByDay[dayKey] || 0) });
             pendingChartData.push({ date: dayKey, orders: pendingUnitsByDay[dayKey] || 0 });
             returnsChartData.push({ date: dayKey, returns: returnsByDay[dayKey] || 0 });
             annulledChartData.push({ date: dayKey, annulled: annulledByDay[dayKey] || 0 });
@@ -2156,3 +2145,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
 
+
+
+    
