@@ -1054,17 +1054,17 @@ export const annulDispatchedGuideItems = async (
     const movementsToCreate: Omit<InventoryMovement, 'id' | 'movementId' | 'date'>[] = [];
 
     await runTransaction(db, async (transaction) => {
-        // --- 1. READS ---
+        // --- 1. READS (All reads must happen first) ---
         const orderSnap = await transaction.get(orderRef);
         if (!orderSnap.exists()) {
             throw new Error("No se encontró la orden de despacho.");
         }
+        const orderData = orderSnap.data() as DispatchOrder;
 
         const productIds = [...new Set(itemsToAnnul.map(item => item.productId))];
         const productDocs = await Promise.all(productIds.map(id => transaction.get(doc(db, 'products', id))));
 
-        // --- 2. LOGIC ---
-        const orderData = orderSnap.data() as DispatchOrder;
+        // --- 2. LOGIC (In-memory, using read data) ---
         const productDataMap = new Map<string, Product>();
         productDocs.forEach(snap => {
             if (snap.exists()) {
@@ -1072,17 +1072,17 @@ export const annulDispatchedGuideItems = async (
             }
         });
 
+        // --- 3. WRITES (Perform all writes after reads and logic) ---
         for (const item of itemsToAnnul) {
             const productData = productDataMap.get(item.productId);
             if (!productData) {
                 console.warn(`Producto ${item.productId} no encontrado durante la anulación. Se omitirá la actualización de stock.`);
                 continue;
             }
-
-            // Restore stock
+            
+            // This is now a write operation inside the loop, which is fine as long as all GETs are done.
             await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
 
-            // Prepare movement for later
             movementsToCreate.push({
                 type: 'Anulado',
                 productId: item.productId,
@@ -1097,20 +1097,18 @@ export const annulDispatchedGuideItems = async (
             });
         }
         
-        // --- 3. WRITES ---
-        const updatedTrackingNumbers = orderData.trackingNumbers.filter(tn => tn !== annulledGuide);
+        const updatedTrackingNumbers = (orderData.trackingNumbers || []).filter(tn => tn !== annulledGuide);
         const annulledException: DispatchException = {
             trackingNumber: annulledGuide,
             products: itemsToAnnul.map(p => ({ productId: p.productId, quantity: p.quantity, variantId: p.variantId, variantSku: p.sku }))
         };
-
         const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), annulledException];
 
         transaction.update(orderRef, {
             trackingNumbers: updatedTrackingNumbers,
             cancelledExceptions: updatedCancelledExceptions
         });
-
+        
         transaction.update(cancellationRequestRef, {
             status: 'completed'
         });
