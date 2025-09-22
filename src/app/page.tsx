@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms, type DashboardData } from '@/lib/api';
 import type { Product, Carrier, Category, Platform, ProductVariant } from '@/lib/types';
-import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown } from 'lucide-react';
+import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown, ArchiveX } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { addDays, format, startOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -42,6 +42,7 @@ import { es } from 'date-fns/locale';
 
 const SKELETON_DASHBOARD_DATA: DashboardData = {
     totalItemsDispatched: 0,
+    totalAnnulledItems: 0,
     totalPendingUnits: 0,
     totalReturns: 0,
     chartData: [],
@@ -261,27 +262,40 @@ export default function DashboardPage() {
 
 
       {loading ? (
-         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
          </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card className="col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Productos Despachados</CardTitle>
+                <CardTitle className="text-sm font-medium">Productos Despachados (Neto)</CardTitle>
                 <PackageCheck className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">{dashboardData.totalItemsDispatched}</div>
                 <p className="text-xs text-muted-foreground">
-                    Total de unidades despachadas en el período.
+                    Total de unidades despachadas menos anulaciones.
                 </p>
                 <div className="h-32 mt-4">
                     <DashboardOrdersChart data={dashboardData.chartData} />
                 </div>
             </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Productos Anulados</CardTitle>
+                    <ArchiveX className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                    <div className="text-2xl font-bold">{dashboardData.totalAnnulledItems}</div>
+                    <p className="text-xs text-muted-foreground">
+                        Unidades anuladas de despachos en el período.
+                    </p>
+                </CardContent>
             </Card>
             <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

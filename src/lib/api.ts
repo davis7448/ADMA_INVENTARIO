@@ -1078,20 +1078,7 @@ export const annulDispatchedGuideItems = async (
                 continue;
             }
             
-            const productDocRef = doc(db, 'products', item.productId);
-
-            if (productData.productType === 'variable' && item.sku) {
-                const variants = [...(productData.variants || [])];
-                const variantIndex = variants.findIndex(v => v.sku === item.sku);
-                if (variantIndex > -1) {
-                    variants[variantIndex].stock += item.quantity;
-                    const newTotalStock = variants.reduce((acc, v) => acc + (v.stock || 0), 0);
-                    transaction.update(productDocRef, { variants, stock: newTotalStock });
-                }
-            } else {
-                const newStock = (productData.stock || 0) + item.quantity;
-                transaction.update(productDocRef, { stock: newStock });
-            }
+            await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
 
             movementsToCreate.push({
                 type: 'Anulado',
@@ -1109,22 +1096,21 @@ export const annulDispatchedGuideItems = async (
 
         const updatedTrackingNumbers = (orderData.trackingNumbers || []).filter(tn => tn !== annulledGuide);
         
-        const annulledExceptionProduct: any = {
+        const annulledExceptionProduct: Partial<DispatchException> = {
             trackingNumber: annulledGuide,
             products: itemsToAnnul.map(p => {
-                const cleanProduct: Partial<DispatchExceptionProduct> = { 
+                const cleanProduct: any = { 
                     productId: p.productId, 
                     quantity: p.quantity,
                     variantId: p.variantId,
                     variantSku: p.sku
                 };
-                // Remove undefined keys before storing
                 if (cleanProduct.variantId === undefined) delete cleanProduct.variantId;
                 if (cleanProduct.variantSku === undefined) delete cleanProduct.variantSku;
                 return cleanProduct as DispatchExceptionProduct;
             })
         };
-        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), annulledExceptionProduct];
+        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), annulledExceptionProduct as DispatchException];
 
         transaction.update(orderRef, {
             trackingNumbers: updatedTrackingNumbers,
@@ -1911,13 +1897,23 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     });
   
     // Now, perform aggregations on the filtered data
-    let totalItemsDispatched = 0;
+    let totalInitialDispatchItems = 0;
+    let totalAnnulledItems = 0;
     const ordersByDay: Record<string, number> = {};
+
     ordersInPeriod.forEach(order => {
-        totalItemsDispatched += order.totalItems;
+        totalInitialDispatchItems += order.totalItems;
         const day = format(order.date, 'yyyy-MM-dd');
         ordersByDay[day] = (ordersByDay[day] || 0) + order.totalItems;
+
+        if (order.cancelledExceptions) {
+            const annulledInOrder = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
+            totalAnnulledItems += annulledInOrder;
+            ordersByDay[day] -= annulledInOrder;
+        }
     });
+    
+    const totalItemsDispatched = totalInitialDispatchItems - totalAnnulledItems;
 
     let totalPendingUnits = 0;
     const pendingUnitsByDay: Record<string, number> = {};
@@ -2056,6 +2052,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     
     return {
       totalItemsDispatched,
+      totalAnnulledItems,
       totalPendingUnits,
       totalReturns,
       chartData,
@@ -2084,3 +2081,4 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
