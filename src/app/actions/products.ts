@@ -2,7 +2,7 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, updateProduct, uploadImageAndGetURL, createReservation, addMultipleProducts, auditProductStock, clearProductAudit } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL, createReservation, addMultipleProducts, auditProductStock, clearProductAudit, deleteProduct } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
@@ -199,6 +199,26 @@ export async function updateProductAction(
         };
     }
 }
+
+export async function deleteProductAction(
+    productId: string,
+    user: User | null
+): Promise<{ success: boolean; message: string }> {
+    if (!user || user.role !== 'admin') {
+        return { success: false, message: 'No tienes permiso para realizar esta acción.' };
+    }
+
+    try {
+        await deleteProduct(productId, user);
+        revalidatePath('/products');
+        revalidatePath('/history');
+        return { success: true, message: 'Producto eliminado con éxito.' };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+        return { success: false, message: errorMessage };
+    }
+}
+
 
 export async function createReservationAction(
     productId: string,

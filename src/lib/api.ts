@@ -195,6 +195,8 @@ export const addMultipleProducts = async (products: Omit<Product, 'id'>[]) => {
         } else {
           delete dataToAdd.purchaseDate;
         }
+      } else {
+        delete dataToAdd.purchaseDate;
       }
       
       if (product.createdBy) {
@@ -242,6 +244,38 @@ export const updateProduct = async (productId: string, productUpdate: Partial<Om
   }
 
   await updateDoc(productRef, updateData);
+};
+
+export const deleteProduct = async (productId: string, user: User | null): Promise<void> => {
+    const productRef = doc(db, 'products', productId);
+    const productSnap = await getDoc(productRef);
+    if (!productSnap.exists()) {
+        throw new Error("El producto que intentas eliminar no existe.");
+    }
+    const productData = productSnap.data() as Product;
+
+    // Log the deletion in inventory movements
+    await addInventoryMovement({
+        type: 'Eliminación',
+        productId: productId,
+        productName: productData.name,
+        quantity: productData.stock, // Log the stock amount at time of deletion
+        notes: `Producto eliminado por ${user?.name || 'un usuario desconocido'}.`,
+        userId: user?.id,
+        userName: user?.name
+    });
+
+    // Delete associated reservations
+    const reservationsSnapshot = await getDocs(query(collection(db, 'reservations'), where('productId', '==', productId)));
+    const batch = writeBatch(db);
+    reservationsSnapshot.forEach(doc => {
+        batch.delete(doc.ref);
+    });
+    
+    // Delete the product itself
+    batch.delete(productRef);
+    
+    await batch.commit();
 };
 
 export const updateProductStock = async (transaction: any, productId: string, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
@@ -2093,6 +2127,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 

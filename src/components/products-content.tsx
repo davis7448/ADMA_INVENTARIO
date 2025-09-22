@@ -63,7 +63,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { auditProductStockAction, clearProductAuditAction } from '@/app/actions/products';
+import { auditProductStockAction, clearProductAuditAction, deleteProductAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import { formatToTimeZone } from '@/lib/utils';
 import { AlertDialogTrigger } from './ui/alert-dialog';
@@ -131,12 +131,33 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         setExpandedRow(prev => (prev === productId ? null : productId));
     };
 
-    const [isAuditing, startAuditTransition] = useTransition();
+    const [isProcessing, startTransition] = useTransition();
+
+    const handleDeleteProduct = (e: React.MouseEvent, productId: string) => {
+        e.stopPropagation();
+        if (!user) return;
+        startTransition(async () => {
+            const result = await deleteProductAction(productId, user);
+            if (result.success) {
+                toast({
+                    title: '¡Éxito!',
+                    description: result.message,
+                });
+                refreshProducts();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: result.message,
+                });
+            }
+        });
+    };
 
     const handleAuditStock = (e: React.MouseEvent, productId: string) => {
         e.stopPropagation();
         if (!user) return;
-        startAuditTransition(async () => {
+        startTransition(async () => {
             const result = await auditProductStockAction(productId, user.name);
             if (result.success) {
                 toast({
@@ -156,7 +177,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
 
     const handleClearAudit = (e: React.MouseEvent, productId: string) => {
         e.stopPropagation();
-        startAuditTransition(async () => {
+        startTransition(async () => {
             const result = await clearProductAuditAction(productId);
             if (result.success) {
                 toast({
@@ -215,6 +236,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     };
 
     const canEdit = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
+    const canDelete = user?.role === 'admin';
     const canAudit = user?.role === 'admin' || user?.role === 'logistics';
 
     const getRotationIcon = (categoryName?: string) => {
@@ -484,7 +506,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                         <TooltipContent>
                                                             <div className="p-2 space-y-2 text-center">
                                                                 <p>Auditado por {product.lastAuditedBy} el {formatToTimeZone(new Date(product.lastAuditedAt), 'dd/MM/yyyy HH:mm')}</p>
-                                                                {canAudit && <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isAuditing}>Auditar de Nuevo</Button>}
+                                                                {canAudit && <Button variant="outline" size="sm" onClick={(e) => handleAuditStock(e, product.id)} disabled={isProcessing}>Auditar de Nuevo</Button>}
                                                             </div>
                                                         </TooltipContent>
                                                     </Tooltip>
@@ -497,7 +519,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                                 size="icon" 
                                                                 className="h-8 w-8"
                                                                 onClick={(e) => handleAuditStock(e, product.id)}
-                                                                disabled={isAuditing}
+                                                                disabled={isProcessing}
                                                             >
                                                                 <ShieldCheck className="h-5 w-5 text-muted-foreground hover:text-blue-600" />
                                                             </Button>
@@ -558,7 +580,36 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                     <EditProductForm product={product} onProductUpdated={refreshProducts}>
                                                         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Editar</DropdownMenuItem>
                                                     </EditProductForm>
-                                                    <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>
+                                                    {canDelete && (
+                                                        <>
+                                                        <DropdownMenuSeparator />
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <DropdownMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
+                                                                    Eliminar
+                                                                </DropdownMenuItem>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        Esta acción eliminará el producto y todo su historial de forma permanente. No se puede deshacer.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                    <AlertDialogAction
+                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                        onClick={(e) => handleDeleteProduct(e, product.id)}
+                                                                        disabled={isProcessing}
+                                                                    >
+                                                                        {isProcessing ? "Eliminando..." : "Eliminar"}
+                                                                    </AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                        </>
+                                                    )}
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </TableCell>
