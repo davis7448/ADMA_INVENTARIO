@@ -1935,10 +1935,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             productMatch = productIdsInCategory.includes(m.productId);
         }
 
-        const platformMatch = !m.platformId || filters.platformIds.length === 0 || filters.platformIds.includes(m.platformId);
-        const carrierMatch = !m.carrierId || filters.carrierIds.length === 0 || filters.carrierIds.includes(m.carrierId);
-        
-        return dateMatch && productMatch && platformMatch && carrierMatch;
+        return dateMatch && productMatch;
     });
   
     let totalInitialDispatchItems = 0;
