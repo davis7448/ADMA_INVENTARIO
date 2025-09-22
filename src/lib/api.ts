@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, se
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, Query, DocumentSnapshot } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, CancellationRequest } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, CancellationRequest, Warehouse } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -1814,63 +1814,232 @@ export const updateCancellationRequestStatus = async (requestId: string, status:
     });
 };
     
+export const getWarehouses = async (): Promise<Warehouse[]> => {
+    // In a real app, this would fetch from a 'warehouses' collection in Firestore.
+    // For this prototype, we'll return a hardcoded list.
+    return [
+        { id: 'wh-bog', name: 'Bodega Principal (Bogotá)' },
+        { id: 'wh-med', name: 'Bodega Secundaria (Medellín)' },
+    ];
+};
+
+export async function getDashboardData(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }) {
+    // For this prototype, we'll keep fetching all data and filtering in memory.
+    // In a real-world high-volume application, this logic should be moved to a
+    // dedicated backend service or use optimized database queries/views.
+    const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
+      getDispatchOrders({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }),
+      getInventoryMovements({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }),
+      getProducts({ limit: 10000 }), // These are needed for names/mappings
+      getCategories(),
+      getPlatforms(),
+      getCarriers(),
+    ]);
+  
+    const { fromDate, toDate } = filters.dateRange || {};
     
-
+    const fromDateKey = fromDate ? format(startOfDay(fromDate), 'yyyy-MM-dd') : null;
+    const toDateKey = toDate ? format(endOfDay(toDate), 'yyyy-MM-dd') : null;
     
-
-
+    const productIdsInCategory = filters.categoryIds.length > 0
+      ? allProducts.products.filter(p => filters.categoryIds.includes(p.categoryId)).map(p => p.id)
+      : null;
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    const platformNameMap = allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>);
+    const carrierNameMap = allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>);
     
-
-
-
-
-
-
-
-
-
-
+    const ordersInPeriod = ordersResult.orders.filter(order => {
+        const orderDateKey = format(order.date, 'yyyy-MM-dd');
+        
+        const dateMatch = (!fromDateKey || orderDateKey >= fromDateKey) && (!toDateKey || orderDateKey <= toDateKey);
+        if (!dateMatch) return false;
+        
+        const platformMatch = filters.platformIds.length === 0 || filters.platformIds.includes(order.platformId);
+        const carrierMatch = filters.carrierIds.length === 0 || filters.carrierIds.includes(order.carrierId);
+        
+        let productMatch = true;
+        if (filters.productIds.length > 0) {
+            productMatch = order.products.some(p => filters.productIds.includes(p.productId));
+        } else if (productIdsInCategory) {
+            productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
+        }
     
+        return dateMatch && platformMatch && carrierMatch && productMatch;
+    });
 
+    const movementsInPeriod = movementsResult.movements.filter(m => {
+        const movementDateKey = format(new Date(m.date), 'yyyy-MM-dd');
+        const dateMatch = (!fromDateKey || movementDateKey >= fromDateKey) && (!toDateKey || movementDateKey <= toDateKey);
+        if (!dateMatch) return false;
+        
+        let productMatch = true;
+        if (filters.productIds.length > 0) {
+            productMatch = filters.productIds.includes(m.productId);
+        } else if (productIdsInCategory) {
+            productMatch = productIdsInCategory.includes(m.productId);
+        }
 
+        const platformMatch = !m.platformId || filters.platformIds.length === 0 || filters.platformIds.includes(m.platformId);
+        const carrierMatch = !m.carrierId || filters.carrierIds.length === 0 || filters.carrierIds.includes(m.carrierId);
+        
+        return dateMatch && productMatch && platformMatch && carrierMatch;
+    });
+  
+    // Now, perform aggregations on the filtered data
+    let totalItemsDispatched = 0;
+    const ordersByDay: Record<string, number> = {};
+    ordersInPeriod.forEach(order => {
+        totalItemsDispatched += order.totalItems;
+        const day = format(order.date, 'yyyy-MM-dd');
+        ordersByDay[day] = (ordersByDay[day] || 0) + order.totalItems;
+    });
 
+    let totalPendingUnits = 0;
+    const pendingUnitsByDay: Record<string, number> = {};
+    ordersInPeriod
+        .filter(o => o.status === 'Pendiente' || o.status === 'Parcial')
+        .forEach(order => {
+            const day = format(order.date, 'yyyy-MM-dd');
+            let unitsInOrder = 0;
+            if (order.status === 'Pendiente') {
+                unitsInOrder = order.totalItems;
+            } else if (order.status === 'Parcial' && order.exceptions) {
+                unitsInOrder = order.exceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
+            }
+            totalPendingUnits += unitsInOrder;
+            pendingUnitsByDay[day] = (pendingUnitsByDay[day] || 0) + unitsInOrder;
+    });
+  
+    let totalReturns = 0;
+    const returnsByDay: Record<string, number> = {};
+    movementsInPeriod
+        .filter(m => m.type === 'Entrada' && (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia')))
+        .forEach(m => {
+            totalReturns += m.quantity;
+            const day = format(new Date(m.date), 'yyyy-MM-dd');
+            returnsByDay[day] = (returnsByDay[day] || 0) + m.quantity;
+    });
+  
+    const chartData = [];
+    const pendingChartData = [];
+    const returnsChartData = [];
+    if (fromDate && toDate) {
+        let currentDate = startOfDay(fromDate);
+        while (currentDate <= toDate) {
+            const dayKey = format(currentDate, 'yyyy-MM-dd');
+            chartData.push({ date: dayKey, orders: ordersByDay[dayKey] || 0 });
+            pendingChartData.push({ date: dayKey, orders: pendingUnitsByDay[dayKey] || 0 });
+            returnsChartData.push({ date: dayKey, returns: returnsByDay[dayKey] || 0 });
+            currentDate = subDays(currentDate, -1);
+        }
+    }
+  
+    const productInfoMap = allProducts.products.reduce((acc, product) => ({ ...acc, [product.id]: product }), {} as Record<string, Product>);
+    const categoryNameMap = allCategories.reduce((acc, category) => ({ ...acc, [category.id]: category.name }), {} as Record<string, string>);
+  
+    const salesByProduct: Record<string, { total: number; variants: Record<string, number> }> = {};
+    let totalItemsSold = 0;
+    ordersInPeriod.forEach(order => {
+        order.products.forEach(p => {
+            const product = productInfoMap[p.productId];
+            if (!product) return;
+            if (!salesByProduct[p.productId]) {
+                salesByProduct[p.productId] = { total: 0, variants: {} };
+            }
+            salesByProduct[p.productId].total += p.quantity;
+            if (p.variantId) {
+                if (!salesByProduct[p.productId].variants[p.variantId]) {
+                    salesByProduct[p.productId].variants[p.variantId] = 0;
+                }
+                salesByProduct[p.productId].variants[p.variantId] += p.quantity;
+            }
+            totalItemsSold += p.quantity;
+        });
+    });
 
+    const productChartData = Object.entries(salesByProduct).map(([productId, salesData]) => {
+        const product = productInfoMap[productId];
+        return {
+            id: productId,
+            name: product.name,
+            productType: product.productType,
+            value: salesData.total,
+            percentage: totalItemsSold > 0 ? (salesData.total / totalItemsSold) * 100 : 0,
+            variants: product.variants?.map(v => ({ ...v, sales: salesData.variants[v.id] || 0 })) || [],
+        };
+    }).sort((a, b) => b.value - a.value);
 
+    const salesByCategory: Record<string, number> = {};
+    Object.entries(salesByProduct).forEach(([productId, salesData]) => {
+        const product = productInfoMap[productId];
+        if (product?.categoryId) {
+            salesByCategory[product.categoryId] = (salesByCategory[product.categoryId] || 0) + salesData.total;
+        }
+    });
 
+    const categoryChartData = Object.entries(salesByCategory).map(([categoryId, count]) => ({
+        name: categoryNameMap[categoryId] || 'Unknown',
+        value: count,
+        percentage: totalItemsSold > 0 ? (count / totalItemsSold) * 100 : 0,
+    })).sort((a, b) => b.value - a.value);
+
+    const platformCarrierData: any[] = [];
+    const platformCarrierMap: { [platformId: string]: { [carrierId: string]: number } } = {};
+    const platformOrderCount: { [platformId: string]: number } = {};
+    const carrierUsageCount: { [carrierId: string]: number } = {};
+    let totalProductsShipped = 0;
+    const dailyDispatchSummaryData: Record<string, Record<string, Record<string, number>>> = {};
+
+    ordersInPeriod.forEach(order => {
+        const platformName = platformNameMap[order.platformId] || 'Unknown Platform';
+        const carrierName = carrierNameMap[order.carrierId] || 'Unknown Carrier';
+        if (!platformCarrierMap[platformName]) {
+            platformCarrierMap[platformName] = {};
+        }
+        platformCarrierMap[platformName][carrierName] = (platformCarrierMap[platformName][carrierName] || 0) + order.totalItems;
+        platformOrderCount[platformName] = (platformOrderCount[platformName] || 0) + 1;
+        carrierUsageCount[carrierName] = (carrierUsageCount[carrierName] || 0) + order.totalItems;
+        totalProductsShipped += order.totalItems;
+        const day = format(order.date, 'yyyy-MM-dd');
+        const guideCount = order.trackingNumbers?.length || 0;
+        if (guideCount > 0) {
+            if (!dailyDispatchSummaryData[day]) dailyDispatchSummaryData[day] = {};
+            if (!dailyDispatchSummaryData[day][carrierName]) dailyDispatchSummaryData[day][carrierName] = {};
+            dailyDispatchSummaryData[day][carrierName][platformName] = (dailyDispatchSummaryData[day][carrierName][platformName] || 0) + guideCount;
+        }
+    });
+
+    for (const platformName in platformCarrierMap) {
+        platformCarrierData.push({ name: platformName, ...platformCarrierMap[platformName] });
+    }
+
+    const mostUsedCarrierEntry = Object.entries(carrierUsageCount).sort((a, b) => b[1] - a[1])[0];
+    const platformWithMostOrdersEntry = Object.entries(platformOrderCount).sort((a, b) => b[1] - a[1])[0];
     
+    return {
+      totalItemsDispatched,
+      totalPendingUnits,
+      totalReturns,
+      chartData,
+      pendingChartData,
+      returnsChartData,
+      productChartData,
+      categoryChartData,
+      platformCarrierChartData: platformCarrierData,
+      allCarrierNames: Object.keys(carrierNameMap),
+      mostUsedCarrier: {
+        name: mostUsedCarrierEntry?.[0] || 'N/A',
+        count: mostUsedCarrierEntry?.[1] || 0,
+        percentage: totalProductsShipped > 0 ? ((mostUsedCarrierEntry?.[1] || 0) / totalProductsShipped) * 100 : 0,
+      },
+      platformWithMostOrders: {
+        name: platformWithMostOrdersEntry?.[0] || 'N/A',
+        count: platformWithMostOrdersEntry?.[1] || 0,
+        percentage: ordersInPeriod.length > 0 ? ((platformWithMostOrdersEntry?.[1] || 0) / ordersInPeriod.length) * 100 : 0,
+      },
+      dailyDispatchSummaryData,
+    };
+  }
 
-
-    
-
-
-
-
-
-
-
-
-
-
-
-    
+  export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 

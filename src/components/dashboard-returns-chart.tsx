@@ -1,10 +1,11 @@
 
+
 "use client";
 
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { es } from 'date-fns/locale';
-import { formatToTimeZone } from '@/lib/utils';
+import { format } from 'date-fns';
 
 
 const chartConfig = {
@@ -39,7 +40,7 @@ export default function DashboardReturnsChart({ data }: DashboardReturnsChartPro
             cursor={{ fill: 'hsl(var(--muted))', radius: 4 }}
             content={<ChartTooltipContent 
                 indicator="dot"
-                labelFormatter={(value) => formatToTimeZone(new Date(value), 'eeee, dd MMM', { locale: es })}
+                labelFormatter={(value) => format(new Date(`${value}T00:00:00`), 'eeee, dd MMM', { locale: es })}
             />}
           />
           <XAxis
@@ -81,3 +82,4 @@ export default function DashboardReturnsChart({ data }: DashboardReturnsChartPro
 }
 
     
+
