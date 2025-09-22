@@ -1,7 +1,8 @@
 
+
 "use client";
 
-import { Bell, Menu, Package } from 'lucide-react';
+import { Bell, Menu, Package, Building } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,15 +19,28 @@ import { usePathname } from 'next/navigation';
 import MainNav from './main-nav';
 import { Logo } from './logo';
 import Link from 'next/link';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  } from '@/components/ui/select';
 
 export default function AppHeader() {
-  const { user, logout } = useAuth();
+  const { user, logout, warehouses, currentWarehouse, setWarehouse } = useAuth();
   const pathname = usePathname();
 
   if (!user || pathname === '/login') {
     return null;
   }
   
+  const handleWarehouseChange = (warehouseId: string) => {
+    setWarehouse(warehouseId);
+  }
+
+  const canChangeWarehouse = user.role === 'admin';
+
   return (
     <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6 sticky top-0 z-20">
       <div className="flex items-center gap-4 md:hidden">
@@ -61,8 +75,26 @@ export default function AppHeader() {
         <MainNav />
       </div>
 
-
       <div className="flex items-center gap-4 ml-auto">
+        <div className="flex items-center gap-2">
+            <Building className="h-5 w-5 text-muted-foreground" />
+            <Select 
+                value={currentWarehouse?.id || 'all'} 
+                onValueChange={handleWarehouseChange}
+                disabled={!canChangeWarehouse}
+            >
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Seleccionar bodega" />
+                </SelectTrigger>
+                <SelectContent>
+                    {canChangeWarehouse && <SelectItem value="all">Todas las Bodegas</SelectItem>}
+                    {warehouses.map(wh => (
+                        <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </div>
+
         <Button variant="ghost" size="icon" className="rounded-full">
             <Bell className="h-4 w-4" />
             <span className="sr-only">Ver notificaciones</span>

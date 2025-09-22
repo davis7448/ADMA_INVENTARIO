@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import AppHeader from '@/components/header';
 import { AuthProvider } from '@/hooks/use-auth';
+import { WarehouseProvider } from '@/hooks/use-warehouse';
 
 export const metadata: Metadata = {
   title: 'ADMA',
@@ -22,14 +23,16 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@300;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased h-full bg-background flex flex-col">
-        <AuthProvider>
-            <div className="flex flex-col flex-1">
-              <AppHeader />
-                <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
-                  {children}
-                </main>
-            </div>
-        </AuthProvider>
+        <WarehouseProvider>
+            <AuthProvider>
+                <div className="flex flex-col flex-1">
+                <AppHeader />
+                    <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
+                    {children}
+                    </main>
+                </div>
+            </AuthProvider>
+        </WarehouseProvider>
         <Toaster />
       </body>
     </html>

@@ -1,12 +1,14 @@
 
+
 "use client";
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import type { User } from '@/lib/types';
-import { findUserByEmail, addUser } from '@/lib/api';
+import type { User, Warehouse } from '@/lib/types';
+import { findUserByEmail, addUser, getWarehouses } from '@/lib/api';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type User as FirebaseUser } from "firebase/auth";
 import { app } from '@/lib/firebase';
+import { useWarehouse } from '@/hooks/use-warehouse';
 
 
 interface AuthContextType {
@@ -14,6 +16,9 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
+  warehouses: Warehouse[];
+  currentWarehouse: Warehouse | null;
+  setWarehouse: (warehouseId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -24,6 +29,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const auth = getAuth(app);
+  
+  const { warehouses, currentWarehouse, setWarehouse, loading: warehouseLoading } = useWarehouse();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
@@ -43,8 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           appUser = { id: newUserId, ...newUser };
           console.log(`Perfil creado con ID: ${newUserId}`);
         }
-
         setUser(appUser);
+
       } else {
         setUser(null);
       }
@@ -55,7 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   useEffect(() => {
-    if (loading) return; 
+    if (loading || warehouseLoading) return; 
+
+    // If user has a specific warehouse, force it
+    if (user?.warehouseId && warehouses.length > 0) {
+      if (currentWarehouse?.id !== user.warehouseId) {
+        setWarehouse(user.warehouseId);
+      }
+    }
 
     const isLoginPage = pathname === '/login';
 
@@ -64,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else if (user && isLoginPage) {
       router.push('/');
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, warehouseLoading, pathname, router, warehouses, currentWarehouse, setWarehouse]);
 
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -83,9 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
-  const value = { user, login, logout, loading };
+  const value = { user, login, logout, loading: loading || warehouseLoading, warehouses, currentWarehouse, setWarehouse };
 
-  if (loading) {
+  if (loading || warehouseLoading) {
     return (
         <div className="flex h-screen items-center justify-center">
             <div>Cargando...</div>

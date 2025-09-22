@@ -36,6 +36,7 @@ export type Product = {
   };
   lastAuditedAt?: string;
   lastAuditedBy?: string;
+  warehouseId?: string; // New field
 };
 
 export type Reservation = {
@@ -54,6 +55,7 @@ export type Reservation = {
     id: string;
     name: string;
   }
+  warehouseId?: string; // New field
 };
 
 export type Supplier = {
@@ -102,6 +104,7 @@ export type User = {
   phone?: string;
   role: UserRole;
   avatarUrl: string;
+  warehouseId?: string; // New field
 };
 
 export type InventoryMovement = {
@@ -118,6 +121,7 @@ export type InventoryMovement = {
   dispatchId?: string;
   userId?: string;
   userName?: string;
+  warehouseId?: string; // New field
 };
 
 export type Carrier = {
@@ -166,6 +170,7 @@ export interface DispatchOrder {
         id: string;
         name: string;
     }
+    warehouseId?: string; // New field
 }
 
 export interface AuditAlert {
@@ -177,7 +182,7 @@ export interface AuditAlert {
     message: string;
     dispatchId: string;
     exceptionTrackingNumber: string;
-}
+};
 
 export interface PendingInventoryItem {
     id: string; // Unique ID for the specific pending item instance
@@ -191,6 +196,7 @@ export interface PendingInventoryItem {
     dispatchId: string;
     trackingNumber: string;
     date: string; // Date of the original dispatch
+    warehouseId?: string; // New field
 }
 
 export type RotationCategory = {
@@ -286,4 +292,9 @@ export type CancellationRequest = {
     requestDate: string;
     status: 'pending' | 'completed' | 'rejected';
     isDispatched?: boolean;
+};
+
+export type Warehouse = {
+    id: string;
+    name: string;
 };
