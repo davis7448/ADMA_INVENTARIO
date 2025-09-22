@@ -535,22 +535,18 @@ export const sendPasswordReset = async (email: string) => {
 };
 
 // Inventory Movement Functions
-export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number, nextCursor?: string }> => {
+export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const movementsCol = collection(db, 'inventoryMovements');
     
     let q: Query = query(movementsCol, orderBy('date', 'desc'));
     
     const { startDate, endDate, productId, platformId, carrierId, movementType } = filters;
     
-    if (startDate) q = query(q, where('date', '>=', new Date(startDate)));
-    if (endDate) q = query(q, where('date', '<=', new Date(endDate)));
-    if (productId && productId !== 'all') q = query(q, where('productId', '==', productId));
-    if (platformId && platformId !== 'all') q = query(q, where('platformId', '==', platformId));
-    if (carrierId && carrierId !== 'all') q = query(q, where('carrierId', '==', carrierId));
-    if (movementType && movementType !== 'all') q = query(q, where('type', '==', movementType));
-    
-    const allMatchingMovementsSnap = await getDocs(q);
-    const allMovements = allMatchingMovementsSnap.docs.map(doc => {
+    let allMovements: InventoryMovement[] = [];
+
+    // Due to Firestore limitations, we fetch all and filter in memory for complex queries
+    const snapshot = await getDocs(q);
+    allMovements = snapshot.docs.map(doc => {
         const data = doc.data();
         return { 
           id: doc.id, 
@@ -559,13 +555,25 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         } as InventoryMovement
     });
 
+    const filteredMovements = allMovements.filter(m => {
+        const date = new Date(m.date);
+        const startDateMatch = !startDate || date >= new Date(startDate);
+        const endDateMatch = !endDate || date <= new Date(endDate);
+        const productMatch = !productId || productId === 'all' || m.productId === productId;
+        const platformMatch = !platformId || platformId === 'all' || m.platformId === platformId;
+        const carrierMatch = !carrierId || carrierId === 'all' || m.carrierId === carrierId;
+        const typeMatch = !movementType || movementType === 'all' || m.type === movementType;
+
+        return startDateMatch && endDateMatch && productMatch && platformMatch && carrierMatch && typeMatch;
+    });
+
     if (fetchAll) {
-        return { movements: allMovements, totalPages: 1, totalCount: allMovements.length };
+        return { movements: filteredMovements, totalPages: 1, totalCount: filteredMovements.length };
     }
 
-    const totalCount = allMovements.length;
+    const totalCount = filteredMovements.length;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
-    const paginatedMovements = allMovements.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+    const paginatedMovements = filteredMovements.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
     return { movements: paginatedMovements, totalPages, totalCount };
 };
@@ -790,25 +798,30 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     const ordersCol = collection(db, 'dispatchOrders');
     
     let q: Query = query(ordersCol, orderBy('date', 'desc'));
-
-    const { startDate, endDate, productId, platformId, carrierId } = filters;
-
-    if (startDate) q = query(q, where('date', '>=', new Date(startDate)));
-    if (endDate) q = query(q, where('date', '<=', new Date(endDate)));
-    if (productId && productId !== 'all') q = query(q, where('products', 'array-contains', { productId }));
-    if (platformId && platformId !== 'all') q = query(q, where('platformId', '==', platformId));
-    if (carrierId && carrierId !== 'all') q = query(q, where('carrierId', '==', carrierId));
     
-    const allMatchingDocsSnap = await getDocs(q);
-    const allOrders = allMatchingDocsSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
+    const { startDate, endDate, productId, platformId, carrierId } = filters;
+    
+    const snapshot = await getDocs(q);
+    const allOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
+
+    const filteredOrders = allOrders.filter(order => {
+        const date = new Date(order.date);
+        const startDateMatch = !startDate || date >= new Date(startDate);
+        const endDateMatch = !endDate || date <= new Date(endDate);
+        const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
+        const platformMatch = !platformId || platformId === 'all' || order.platformId === platformId;
+        const carrierMatch = !carrierId || carrierId === 'all' || order.carrierId === carrierId;
+
+        return startDateMatch && endDateMatch && productMatch && platformMatch && carrierMatch;
+    });
 
     if (fetchAll) {
-        return { orders: allOrders, totalPages: 1 };
+        return { orders: filteredOrders, totalPages: 1 };
     }
 
-    const totalCount = allOrders.length;
+    const totalCount = filteredOrders.length;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
-    const paginatedOrders = allOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+    const paginatedOrders = filteredOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
     
     return { orders: paginatedOrders, totalPages };
 }

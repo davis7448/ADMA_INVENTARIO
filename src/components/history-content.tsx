@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useEffect, useTransition } from 'react';
+import { useState, useMemo, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Card,
@@ -45,7 +45,6 @@ interface HistoryContentProps {
     allProducts: Product[];
     allPlatforms: Platform[];
     allCarriers: Carrier[];
-    currentFilters: any;
 }
 
 export function HistoryContent({
@@ -56,22 +55,20 @@ export function HistoryContent({
     allProducts,
     allPlatforms,
     allCarriers,
-    currentFilters
 }: HistoryContentProps) {
 
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
-    const [isPending, startTransition] = useTransition();
 
-    // Filter states
-    const [filterPlatformId, setFilterPlatformId] = useState<string>(currentFilters.platformId || 'all');
-    const [filterCarrierId, setFilterCarrierId] = useState<string>(currentFilters.carrierId || 'all');
-    const [filterProductId, setFilterProductId] = useState<string>(currentFilters.productId || 'all');
-    const [filterMovementType, setFilterMovementType] = useState<string>(currentFilters.movementType || 'all');
+    // Filter states from URL
+    const [filterPlatformId, setFilterPlatformId] = useState<string>(searchParams.get('platformId') || 'all');
+    const [filterCarrierId, setFilterCarrierId] = useState<string>(searchParams.get('carrierId') || 'all');
+    const [filterProductId, setFilterProductId] = useState<string>(searchParams.get('productId') || 'all');
+    const [filterMovementType, setFilterMovementType] = useState<string>(searchParams.get('movementType') || 'all');
     const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-        const startDate = currentFilters.startDate;
-        const endDate = currentFilters.endDate;
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
         if (startDate && endDate) {
             return { from: new Date(startDate), to: new Date(endDate) };
         }
@@ -82,9 +79,8 @@ export function HistoryContent({
     // Pagination states from URL
     const movementsPage = Number(searchParams.get('movementsPage') || '1');
     const ordersPage = Number(searchParams.get('ordersPage') || '1');
-    const itemsPerPage = Number(searchParams.get('limit') || '10');
     
-    useEffect(() => {
+    const applyFilters = () => {
         const params = new URLSearchParams(searchParams.toString());
         
         const updateParam = (key: string, value: string, defaultValue: string) => {
@@ -99,23 +95,18 @@ export function HistoryContent({
         if (dateRange?.from) params.set('startDate', dateRange.from.toISOString()); else params.delete('startDate');
         if (dateRange?.to) params.set('endDate', dateRange.to.toISOString()); else params.delete('endDate');
         
-        // When filters change, always go back to page 1
+        // When filters change, always go back to page 1 for both tabs
         params.set('movementsPage', '1');
         params.set('ordersPage', '1');
 
-        startTransition(() => {
-            router.push(`${pathname}?${params.toString()}`);
-        });
-
-    }, [filterProductId, filterPlatformId, filterCarrierId, filterMovementType, dateRange]);
-
+        router.push(`${pathname}?${params.toString()}`);
+    };
 
     const handlePaginationChange = (type: 'movements' | 'orders', newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set(`${type}Page`, String(newPage));
         router.push(`${pathname}?${params.toString()}`);
     }
-
 
     const productsById = useMemo(() => allProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>), [allProducts]);
     const platformNames = useMemo(() => allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>), [allPlatforms]);
@@ -221,7 +212,7 @@ export function HistoryContent({
 
     const renderFilters = () => (
         <div className="mb-6 space-y-4 p-4 border rounded-lg bg-muted/50">
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div className="space-y-2">
                     <Label>Filtrar por producto</Label>
                     <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
@@ -299,14 +290,15 @@ export function HistoryContent({
                     </Popover>
                 </div>
             </div>
-            {hasActiveFilters && (
-                <div className="flex items-center gap-4 mt-4">
+            <div className="flex items-center gap-4 mt-4">
+                 <Button onClick={applyFilters}>Aplicar Filtros</Button>
+                 {hasActiveFilters && (
                     <Button variant="ghost" onClick={clearFilters}>
                         <X className="mr-2 h-4 w-4" />
                         Limpiar filtros
                     </Button>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
     
@@ -572,5 +564,3 @@ export function HistoryContent({
         </div>
     );
 }
-
-    
