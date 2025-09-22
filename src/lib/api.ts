@@ -1905,7 +1905,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             if (order.status === 'Pendiente') {
                 unitsInOrder = order.totalItems;
             } else if (order.status === 'Parcial' && order.exceptions) {
-                unitsInOrder = order.exceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p => pSum + p.quantity), 0), 0);
+                unitsInOrder = order.exceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
             }
             totalPendingUnits += unitsInOrder;
             pendingUnitsByDay[day] = (pendingUnitsByDay[day] || 0) + unitsInOrder;
@@ -2019,10 +2019,13 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         }
     });
 
-    const platformCarrierChartData = Object.entries(platformCarrierMap).map(([platformName, carriers]) => ({
-        name: platformName,
-        ...carriers
-    }));
+    const platformCarrierChartData = Object.entries(platformCarrierMap).map(([platformName, carriers]) => {
+      const chartEntry: { [key: string]: string | number } = { name: platformName };
+      allCarrierNames.forEach(carrierName => {
+        chartEntry[carrierName] = carriers[carrierName] || 0;
+      });
+      return chartEntry;
+    });
 
     const mostUsedCarrierEntry = Object.entries(carrierUsageCount).sort((a, b) => b[1] - a[1])[0];
     const platformWithMostOrdersEntry = Object.entries(platformOrderCount).sort((a, b) => b[1] - a[1])[0];
