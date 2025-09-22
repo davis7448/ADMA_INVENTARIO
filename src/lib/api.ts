@@ -10,6 +10,7 @@ import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
 
 const storage = getStorage();
+const DEFAULT_WAREHOUSE_ID = 'wh-bog';
 
 // Image Upload Function
 export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => {
@@ -64,6 +65,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
       return { 
           id: doc.id, 
           ...data,
+          warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
           purchaseDate: formattedPurchaseDate,
           lastAuditedAt: formattedLastAuditedAt,
           damagedStock: data.damagedStock || 0,
@@ -139,6 +141,7 @@ export const getProductById = async (id: string): Promise<Product | null> => {
     return { 
         id: productSnap.id, 
         ...data,
+        warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
         purchaseDate: formattedPurchaseDate,
         damagedStock: data.damagedStock || 0,
         pendingStock: data.pendingStock || 0,
@@ -589,6 +592,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         return { 
           id: doc.id, 
           ...data,
+          warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
           date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
     });
@@ -632,6 +636,7 @@ export const getInventoryMovementsByProductId = async (productId: string): Promi
         return {
             id: doc.id,
             ...data,
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
             date: formattedDate,
         } as InventoryMovement;
     });
@@ -658,6 +663,7 @@ export const getInventoryMovementsByDate = async (date: Date): Promise<Inventory
         return {
             id: doc.id,
             ...data,
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
             date: formattedDate,
         } as InventoryMovement;
     });
@@ -846,7 +852,15 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     const { startDate, endDate, productId, platformId, carrierId } = filters;
     
     const snapshot = await getDocs(q);
-    const allOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), date: parseFirestoreDate(doc.data().date) } as DispatchOrder));
+    const allOrders = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+            id: doc.id,
+            ...data,
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
+            date: parseFirestoreDate(doc.data().date) 
+        } as DispatchOrder
+    });
 
     const filteredOrders = allOrders.filter(order => {
         const date = new Date(order.date);
@@ -879,6 +893,7 @@ export const getPendingDispatchOrders = async (): Promise<DispatchOrder[]> => {
         return { 
             id: doc.id,
             ...data,
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
     });
@@ -892,6 +907,7 @@ export const getPartialDispatchOrders = async (): Promise<DispatchOrder[]> => {
         return { 
             id: doc.id,
             ...data,
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default warehouse
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
     });
@@ -1944,23 +1960,24 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const adjustOutByDay: Record<string, number> = {};
 
     ordersInPeriod.forEach(order => {
+        const day = format(order.date, 'yyyy-MM-dd');
+
         if (order.status === 'Despachada' || order.status === 'Parcial') {
-            const day = format(order.date, 'yyyy-MM-dd');
-            let dispatchedInOrder = order.totalItems;
-    
+            let dispatchedInOrder = order.products.reduce((sum, p) => sum + p.quantity, 0);
+
             if (order.status === 'Parcial' && order.exceptions) {
                 const exceptionsTotal = order.exceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
                 dispatchedInOrder -= exceptionsTotal;
             }
-
-            if (order.cancelledExceptions) {
-                const cancelledTotal = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
-                totalAnnulledItems += cancelledTotal;
-                annulledByDay[day] = (annulledByDay[day] || 0) + cancelledTotal;
-            }
             
             totalInitialDispatchItems += dispatchedInOrder;
             ordersByDay[day] = (ordersByDay[day] || 0) + dispatchedInOrder;
+        }
+
+        if (order.cancelledExceptions) {
+            const cancelledTotal = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
+            totalAnnulledItems += cancelledTotal;
+            annulledByDay[day] = (annulledByDay[day] || 0) + cancelledTotal;
         }
     });
 
@@ -2167,3 +2184,4 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
