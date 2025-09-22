@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,8 +47,8 @@ function SubmitButton() {
 }
 
 export default function RestockForm() {
-  const initialState: FormState = { message: "", errors: {} };
-  const [state, formAction] = useActionState(checkRestock, initialState);
+  const [state, setState] = useState<FormState>({ message: "", errors: {} });
+  const [isPending, startTransition] = useTransition();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(RestockAlertFormSchema),
@@ -58,6 +59,13 @@ export default function RestockForm() {
       restockThreshold: 0,
     },
   });
+
+  const onSubmit = (formData: FormData) => {
+    startTransition(async () => {
+      const result = await checkRestock(state, formData);
+      setState(result);
+    });
+  };
 
   useEffect(() => {
     if (state.errors) {
@@ -73,7 +81,7 @@ export default function RestockForm() {
   return (
     <Card>
       <Form {...form}>
-        <form action={formAction}>
+        <form action={onSubmit}>
           <CardHeader>
             <CardTitle className="font-headline">Herramienta de Alerta de Reabastecimiento</CardTitle>
             <CardDescription>
@@ -152,7 +160,9 @@ export default function RestockForm() {
             )}
           </CardContent>
           <CardFooter>
-            <SubmitButton />
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Generando..." : "Generar Alerta"}
+            </Button>
           </CardFooter>
         </form>
       </Form>

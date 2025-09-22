@@ -20,7 +20,7 @@ import { getProducts, getSupplierById } from '@/lib/api';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 
 async function LowStockList() {
-    const allProducts = await getProducts();
+    const { products: allProducts } = await getProducts({});
     const lowStockProducts = allProducts.filter(p => p.stock <= 0);
 
     return (
