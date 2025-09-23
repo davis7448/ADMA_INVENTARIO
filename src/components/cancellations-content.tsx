@@ -63,15 +63,15 @@ export function CancellationsContent() {
 
     const fetchRequests = async () => {
         setLoading(true);
-        const fetchedRequests = await getCancellationRequests(currentWarehouse?.id);
-        setRequests(fetchedRequests);
+        if (user) {
+            const fetchedRequests = await getCancellationRequests(currentWarehouse?.id);
+            setRequests(fetchedRequests);
+        }
         setLoading(false);
     }
 
     useEffect(() => {
-        if(user) {
-            fetchRequests();
-        }
+        fetchRequests();
     }, [currentWarehouse, user]);
 
     const handleSubmit = () => {
