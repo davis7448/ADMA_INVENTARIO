@@ -57,7 +57,8 @@ export default function AppHeader() {
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  const canChangeWarehouse = user.role === 'admin' || user.role === 'commercial';
+  const isFromIngenio = user.warehouseId === 'wh-bog';
+  const canSelectAll = user.role === 'admin' || user.role === 'commercial';
 
   return (
     <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6 sticky top-0 z-20">
@@ -99,15 +100,20 @@ export default function AppHeader() {
             <Select 
                 value={currentWarehouse?.id || 'all'} 
                 onValueChange={handleWarehouseChange}
-                disabled={!canChangeWarehouse}
             >
                 <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Seleccionar bodega" />
                 </SelectTrigger>
                 <SelectContent>
-                    {canChangeWarehouse && <SelectItem value="all">Todas las Bodegas</SelectItem>}
+                    <SelectItem value="all" disabled={!canSelectAll}>Todas las Bodegas</SelectItem>
                     {warehouses.map(wh => (
-                        <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
+                        <SelectItem 
+                            key={wh.id} 
+                            value={wh.id}
+                            disabled={!isFromIngenio && wh.id === 'wh-bog'}
+                        >
+                            {wh.name}
+                        </SelectItem>
                     ))}
                 </SelectContent>
             </Select>

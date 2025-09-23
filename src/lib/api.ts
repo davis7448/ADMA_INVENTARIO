@@ -34,28 +34,24 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    let productQuery: Query = query(collection(db, 'products'));
+    const productQuery: Query = query(collection(db, 'products'));
     const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
 
-    // Apply server-side filters where possible
-    if (warehouseId && warehouseId !== 'all') {
-        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
-    }
-    if (selectedCategory && selectedCategory !== 'all') {
-        productQuery = query(productQuery, where('categoryId', '==', selectedCategory));
-    }
-    if (onlyAudited) {
-        productQuery = query(productQuery, where('lastAuditedAt', '!=', null));
-    }
-
     const allProductsSnapshot = await getDocs(productQuery);
-    let allProducts = allProductsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-    }) as Product);
+    let allProducts = allProductsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            ...doc.data(),
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
+        } as Product
+    });
 
-    // Apply client-side (in-memory) filters for complex logic
     const filteredProducts = allProducts.filter(product => {
+        // Warehouse filter
+        const warehouseMatch = !warehouseId || warehouseId === 'all' || product.warehouseId === warehouseId;
+        if (!warehouseMatch) return false;
+
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -71,8 +67,10 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
         const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
+        const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
+        const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
 
-        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch;
+        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch;
     });
 
     const totalCount = filteredProducts.length;
