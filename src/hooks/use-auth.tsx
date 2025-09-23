@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
@@ -27,10 +26,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const auth = getAuth(app);
   
-  const { warehouses, currentWarehouse, setWarehouse, loading: warehouseLoading } = useWarehouse(searchParams.get('warehouse'));
+  // Use useSearchParams at a higher level to pass to the hook
+  const searchParams = useSearchParams();
+  const warehouseIdFromUrl = searchParams.get('warehouse');
+  const { warehouses, currentWarehouse, setWarehouse, loading: warehouseLoading } = useWarehouse(warehouseIdFromUrl);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
