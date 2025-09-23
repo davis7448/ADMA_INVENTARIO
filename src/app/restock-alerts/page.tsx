@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import RestockForm from '@/components/restock-form';
 import { getProducts, getSupplierById } from '@/lib/api';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
+import { Suspense } from 'react';
 
 async function LowStockList() {
     const { products: allProducts } = await getProducts({});
@@ -82,8 +83,10 @@ function RestockAlertsPageContent() {
 
 export default function RestockAlertsPage() {
     return (
-        <AuthProviderWrapper allowedRoles={['admin', 'logistics']}>
-            <RestockAlertsPageContent />
-        </AuthProviderWrapper>
+        <Suspense>
+            <AuthProviderWrapper allowedRoles={['admin', 'logistics']}>
+                <RestockAlertsPageContent />
+            </AuthProviderWrapper>
+        </Suspense>
     );
 }

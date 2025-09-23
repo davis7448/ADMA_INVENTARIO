@@ -4,6 +4,7 @@ import { getRotationCategories, getUsers, getEntryReasons, getWarehouses } from 
 import type { RotationCategory, User, EntryReason, Warehouse } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { SettingsContent } from '@/components/settings-content';
+import { Suspense } from 'react';
 
 export default async function SettingsPage() {
     const [rotationCategories, users, entryReasons, warehouses] = await Promise.all([
@@ -17,13 +18,15 @@ export default async function SettingsPage() {
     ]);
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'plataformas', 'commercial', 'logistics']}>
-        <SettingsContent 
-            initialRotationCategories={rotationCategories} 
-            initialUsers={users}
-            initialEntryReasons={entryReasons}
-            initialWarehouses={warehouses}
-        />
-      </AuthProviderWrapper>
+      <Suspense>
+        <AuthProviderWrapper allowedRoles={['admin', 'plataformas', 'commercial', 'logistics']}>
+          <SettingsContent 
+              initialRotationCategories={rotationCategories} 
+              initialUsers={users}
+              initialEntryReasons={entryReasons}
+              initialWarehouses={warehouses}
+          />
+        </AuthProviderWrapper>
+      </Suspense>
     );
 }

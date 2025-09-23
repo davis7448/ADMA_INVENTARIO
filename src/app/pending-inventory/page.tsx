@@ -3,6 +3,7 @@
 import { getPendingInventory, getProducts } from '@/lib/api';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { PendingInventoryContent } from '@/components/pending-inventory-content';
+import { Suspense } from 'react';
 
 export default async function PendingInventoryPage({
     searchParams
@@ -16,9 +17,11 @@ export default async function PendingInventoryPage({
     ]);
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas', 'commercial']}>
-        <PendingInventoryContent initialPendingItems={pendingItems} allProducts={productsResult.products} />
-      </AuthProviderWrapper>
+        <Suspense>
+            <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas', 'commercial']}>
+                <PendingInventoryContent initialPendingItems={pendingItems} allProducts={productsResult.products} />
+            </AuthProviderWrapper>
+        </Suspense>
     );
 }
 

@@ -1,3 +1,4 @@
+
 import {
   Card,
   CardContent,
@@ -26,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { MoreHorizontal } from 'lucide-react';
 import { getOrders } from '@/lib/api';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
+import { Suspense } from 'react';
 
 const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
@@ -112,8 +114,10 @@ function OrdersPageContent() {
 
 export default function OrdersPage() {
   return (
-    <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas']}>
-      <OrdersPageContent />
-    </AuthProviderWrapper>
+    <Suspense>
+      <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas']}>
+        <OrdersPageContent />
+      </AuthProviderWrapper>
+    </Suspense>
   );
 }

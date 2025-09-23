@@ -21,6 +21,7 @@ import { getReturnRequests } from '@/lib/api';
 import { WarrantyPolicyDialog } from '@/components/warranty-policy-dialog';
 import type { ReturnRequest } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
+import { Suspense } from 'react';
 
 const statusStyles: { [key: string]: string } = {
   Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
@@ -87,8 +88,10 @@ function GarantiasPageContent() {
 
 export default function GarantiasPage() {
   return (
-    <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas']}>
-      <GarantiasPageContent />
-    </AuthProviderWrapper>
+    <Suspense>
+      <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas']}>
+        <GarantiasPageContent />
+      </AuthProviderWrapper>
+    </Suspense>
   );
 }

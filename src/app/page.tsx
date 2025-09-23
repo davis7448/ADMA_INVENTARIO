@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Card,
@@ -65,8 +65,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
     dailyDispatchSummaryData: {},
 };
 
-
-export default function DashboardPage() {
+function DashboardContent() {
   const searchParams = useSearchParams();
   const warehouseId = searchParams.get('warehouse') || undefined;
 
@@ -575,3 +574,10 @@ export default function DashboardPage() {
   );
 }
   
+export default function DashboardPage() {
+    return (
+        <Suspense>
+            <DashboardContent />
+        </Suspense>
+    )
+}
