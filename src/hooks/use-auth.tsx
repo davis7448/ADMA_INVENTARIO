@@ -3,9 +3,9 @@
 "use client";
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { User, Warehouse } from '@/lib/types';
-import { findUserByEmail, addUser, getWarehouses } from '@/lib/api';
+import { findUserByEmail, addUser } from '@/lib/api';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type User as FirebaseUser } from "firebase/auth";
 import { app } from '@/lib/firebase';
 import { useWarehouse } from '@/hooks/use-warehouse';
@@ -18,7 +18,6 @@ interface AuthContextType {
   loading: boolean;
   warehouses: Warehouse[];
   currentWarehouse: Warehouse | null;
-  setWarehouse: (warehouseId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,9 +27,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const auth = getAuth(app);
   
-  const { warehouses, currentWarehouse, setWarehouse, loading: warehouseLoading } = useWarehouse();
+  const { warehouses, currentWarehouse, setWarehouse, loading: warehouseLoading } = useWarehouse(searchParams.get('warehouse'));
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
-  const value = { user, login, logout, loading: loading || warehouseLoading, warehouses, currentWarehouse, setWarehouse };
+  const value = { user, login, logout, loading: loading || warehouseLoading, warehouses, currentWarehouse };
 
   if (loading || warehouseLoading) {
     return (

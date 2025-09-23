@@ -15,7 +15,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import MainNav from './main-nav';
 import { Logo } from './logo';
 import Link from 'next/link';
@@ -28,15 +28,33 @@ import {
   } from '@/components/ui/select';
 
 export default function AppHeader() {
-  const { user, logout, warehouses, currentWarehouse, setWarehouse } = useAuth();
+  const { user, logout, warehouses, currentWarehouse } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   if (!user || pathname === '/login') {
     return null;
   }
   
   const handleWarehouseChange = (warehouseId: string) => {
-    setWarehouse(warehouseId);
+    const params = new URLSearchParams(searchParams.toString());
+    if (warehouseId === 'all') {
+      params.delete('warehouse');
+    } else {
+      params.set('warehouse', warehouseId);
+    }
+    // Reset page for paginated views
+    if (params.has('page')) {
+      params.set('page', '1');
+    }
+    if (params.has('movementsPage')) {
+      params.set('movementsPage', '1');
+    }
+    if (params.has('ordersPage')) {
+      params.set('ordersPage', '1');
+    }
+    router.push(`${pathname}?${params.toString()}`);
   }
 
   const canChangeWarehouse = user.role === 'admin' || user.role === 'commercial';

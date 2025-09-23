@@ -3,6 +3,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -66,6 +67,9 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams();
+  const warehouseId = searchParams.get('warehouse') || undefined;
+
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
     const from = addDays(to, -6);
@@ -92,7 +96,7 @@ export default function DashboardPage() {
   useEffect(() => {
     // Fetch static filter options once
     Promise.all([
-      getProducts({ limit: 10000 }),
+      getProducts({ limit: 10000, filters: { warehouseId } }),
       getCarriers(),
       getCategories(),
       getPlatforms()
@@ -102,13 +106,14 @@ export default function DashboardPage() {
       setAllCategories(categories);
       setAllPlatforms(platforms);
     });
-  }, []);
+  }, [warehouseId]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!dateRange?.from || !dateRange?.to) return;
       setLoading(true);
       const data = await getDashboardData({
+        warehouseId,
         dateRange: { from: dateRange.from, to: dateRange.to },
         platformIds: filterPlatforms,
         carrierIds: filterCarriers,
@@ -119,7 +124,7 @@ export default function DashboardPage() {
       setLoading(false);
     };
     fetchData();
-  }, [dateRange, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
+  }, [warehouseId, dateRange, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
   
   const handleToggleDashboardRow = (productId: string) => {
     setExpandedDashboardRow(prev => (prev === productId ? null : productId));
