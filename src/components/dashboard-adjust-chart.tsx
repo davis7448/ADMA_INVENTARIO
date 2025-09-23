@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
@@ -23,6 +22,9 @@ export default function DashboardAdjustChart({ data, color }: DashboardAdjustCha
     },
   } satisfies ChartConfig;
 
+  // Create a unique ID for the gradient based on the color to avoid conflicts
+  const gradientId = `colorValue-${color.replace(/[^a-zA-Z0-9]/g, '')}`;
+
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer>
@@ -31,9 +33,9 @@ export default function DashboardAdjustChart({ data, color }: DashboardAdjustCha
             margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
         >
           <defs>
-            <linearGradient id={`colorValue-${color}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.4}/>
-              <stop offset="95%" stopColor={color} stopOpacity={0.1}/>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="var(--color-value)" stopOpacity={0.4}/>
+              <stop offset="95%" stopColor="var(--color-value)" stopOpacity={0.1}/>
             </linearGradient>
           </defs>
           <RechartsTooltip
@@ -69,16 +71,14 @@ export default function DashboardAdjustChart({ data, color }: DashboardAdjustCha
           <Area 
             type="monotone" 
             dataKey="value" 
-            stroke={color} 
+            stroke="var(--color-value)" 
             strokeWidth={2} 
             dot={data.length < 30}
             fillOpacity={1} 
-            fill={`url(#colorValue-${color})`}
+            fill={`url(#${gradientId})`}
             />
         </AreaChart>
       </ResponsiveContainer>
     </ChartContainer>
   );
 }
-
-    
