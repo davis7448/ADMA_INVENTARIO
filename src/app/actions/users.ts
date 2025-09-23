@@ -7,7 +7,7 @@ import { getAuth } from 'firebase-admin/auth';
 // We are re-importing the app here to ensure environment variables are loaded before initialization.
 import { app as adminApp } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
-import { findUserByEmail, addUser, updateUserProfile, updateUserRoleInDb, sendPasswordReset, uploadImageAndGetURL } from '@/lib/api';
+import { findUserByEmail, addUser, updateUserProfile, updateUserRoleInDb, sendPasswordReset, uploadImageAndGetURL, updateUserWarehouseInDb } from '@/lib/api';
 import type { CreateUserFormState, CreateUserFormValues, UpdateProfileFormValues, UpdateProfileFormState } from '@/lib/definitions';
 import { CreateUserFormSchema, UpdateProfileFormSchema } from '@/lib/definitions';
 import type { User, UserRole } from '@/lib/types';
@@ -79,6 +79,17 @@ export async function updateUserRoleAction(userId: string, role: UserRole): Prom
     } catch (error) {
         console.error("Error updating user role:", error);
         return { success: false, message: 'No se pudo actualizar el rol del usuario.' };
+    }
+}
+
+export async function updateUserWarehouseAction(userId: string, warehouseId: string): Promise<{ success: boolean; message: string }> {
+    try {
+        await updateUserWarehouseInDb(userId, warehouseId);
+        revalidatePath('/settings');
+        return { success: true, message: 'Bodega del usuario actualizada con éxito.' };
+    } catch (error) {
+        console.error("Error updating user warehouse:", error);
+        return { success: false, message: 'No se pudo actualizar la bodega del usuario.' };
     }
 }
 

@@ -565,6 +565,12 @@ export const updateUserRoleInDb = async (userId: string, role: User['role']) => 
     await updateDoc(userRef, { role });
 };
 
+export const updateUserWarehouseInDb = async (userId: string, warehouseId: string) => {
+    const userRef = doc(db, 'users', userId);
+    const finalWarehouseId = warehouseId === 'none' ? null : warehouseId;
+    await updateDoc(userRef, { warehouseId: finalWarehouseId });
+};
+
 export const updateUserProfile = async (userId: string, profileUpdate: Partial<Omit<User, 'id'>>) => {
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, profileUpdate);
@@ -1305,6 +1311,7 @@ export const getPendingInventory = async (): Promise<PendingInventoryItem[]> => 
                                 dispatchId: order.dispatchId,
                                 trackingNumber: exception.trackingNumber,
                                 date: order.date.toISOString(),
+                                warehouseId: order.warehouseId || DEFAULT_WAREHOUSE_ID,
                             };
 
                             if (exProduct.variantId && productInfo.variants) {
@@ -2196,5 +2203,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 

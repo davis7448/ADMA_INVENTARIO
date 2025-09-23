@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -110,7 +111,7 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
           <ProfileManagement />
 
           {isAdmin && (
-            <UserManagement initialUsers={users} onUsersUpdate={refreshUsers} loading={loading} />
+            <UserManagement initialUsers={users} onUsersUpdate={refreshUsers} loading={loading} warehouses={warehouses} />
           )}
 
           {isAdmin && (

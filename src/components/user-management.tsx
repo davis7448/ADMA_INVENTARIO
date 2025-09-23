@@ -36,8 +36,8 @@ import {
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { MoreHorizontal } from 'lucide-react';
-import type { User, UserRole } from '@/lib/types';
-import { updateUserRoleAction, resetUserPasswordAction } from '@/app/actions/users';
+import type { User, UserRole, Warehouse } from '@/lib/types';
+import { updateUserRoleAction, resetUserPasswordAction, updateUserWarehouseAction } from '@/app/actions/users';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -47,9 +47,10 @@ interface UserManagementProps {
     initialUsers: User[];
     loading: boolean;
     onUsersUpdate: () => void;
+    warehouses: Warehouse[];
 }
 
-export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserManagementProps) {
+export function UserManagement({ initialUsers, loading, onUsersUpdate, warehouses }: UserManagementProps) {
     // Filter states
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedRole, setSelectedRole] = useState('all');
@@ -79,7 +80,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                     <div>
                         <CardTitle>Gestión de Usuarios</CardTitle>
                         <CardDescription>
-                            Gestiona los roles de los usuarios existentes. La lista de usuarios aparecerá una vez desplegada la aplicación.
+                            Gestiona los roles y bodegas de los usuarios. La lista de usuarios aparecerá una vez desplegada la aplicación.
                         </CardDescription>
                     </div>
                     <CreateUserDialog onUserCreated={onUsersUpdate} />
@@ -120,6 +121,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                     <TableHead>Usuario</TableHead>
                     <TableHead>Correo Electrónico</TableHead>
                     <TableHead>Rol</TableHead>
+                    <TableHead>Bodega Asignada</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -127,16 +129,16 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
                   {loading ? (
                      Array.from({ length: 3 }).map((_, i) => (
                         <TableRow key={i}>
-                            <TableCell colSpan={4}><Skeleton className="h-10 w-full" /></TableCell>
+                            <TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell>
                         </TableRow>
                      ))
                   ) : filteredUsers.length > 0 ? (
                     filteredUsers.map((user) => (
-                        <UserRow key={user.id} user={user} onUsersUpdate={onUsersUpdate} />
+                        <UserRow key={user.id} user={user} onUsersUpdate={onUsersUpdate} warehouses={warehouses} />
                     ))
                   ) : (
                     <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center">
+                        <TableCell colSpan={5} className="h-24 text-center">
                             La lista de usuarios estará disponible después de desplegar la aplicación.
                         </TableCell>
                     </TableRow>
@@ -148,8 +150,9 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate }: UserMan
     )
 }
 
-function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => void; }) {
+function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdate: () => void; warehouses: Warehouse[] }) {
     const [isRolePending, startRoleTransition] = useTransition();
+    const [isWarehousePending, startWarehouseTransition] = useTransition();
     const [isResetPending, startResetTransition] = useTransition();
     const { toast } = useToast();
 
@@ -161,6 +164,18 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
                 onUsersUpdate();
             } else {
                 toast({ title: 'Error', description: result.message, variant: 'destructive' });
+            }
+        });
+    };
+
+    const handleWarehouseChange = (newWarehouseId: string) => {
+        startWarehouseTransition(async () => {
+            const result = await updateUserWarehouseAction(user.id, newWarehouseId);
+            if (result.success) {
+                toast({ title: '¡Éxito!', description: 'Bodega asignada correctamente.' });
+                onUsersUpdate();
+            } else {
+                toast({ title: 'Error', description: 'No se pudo asignar la bodega.', variant: 'destructive' });
             }
         });
     };
@@ -198,6 +213,23 @@ function UserRow({ user, onUsersUpdate }: { user: User; onUsersUpdate: () => voi
                         <SelectItem value="plataformas">Plataformas</SelectItem>
                         <SelectItem value="logistics">Logística</SelectItem>
                         <SelectItem value="commercial">Comercial</SelectItem>
+                    </SelectContent>
+                </Select>
+            </TableCell>
+            <TableCell>
+                 <Select 
+                    onValueChange={handleWarehouseChange} 
+                    defaultValue={user.warehouseId || 'none'}
+                    disabled={isWarehousePending || user.role === 'admin'}
+                 >
+                    <SelectTrigger className="w-[200px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">Sin Asignar</SelectItem>
+                        {warehouses.map(wh => (
+                            <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
             </TableCell>
