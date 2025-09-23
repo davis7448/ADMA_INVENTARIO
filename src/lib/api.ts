@@ -53,10 +53,13 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     } else {
         const countQuery = query(collection(db, 'products'));
         const countSnapshot = await getDocs(countQuery);
+        // This count is not fully accurate with filters, but gives a rough idea for pagination.
+        // A more accurate solution would involve a separate count query with all filters.
         const totalCount = countSnapshot.size;
         
         let paginatedQuery = query(productQuery, orderBy('name'), limit(itemsPerPage));
         if (page > 1) {
+            // This is a simplified pagination. For large datasets, a more robust cursor-based pagination is needed.
             const previousPageQuery = query(productQuery, orderBy('name'), limit((page - 1) * itemsPerPage));
             const previousPageSnapshot = await getDocs(previousPageQuery);
             if (!previousPageSnapshot.empty) {
@@ -78,28 +81,20 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
       reservationsByProductId[reservation.productId].push(reservation);
     }
     
-    let productsWithData = allProducts.map(product => {
-        const normalizedProduct: Product = {
-            ...product,
-            warehouseId: product.warehouseId || DEFAULT_WAREHOUSE_ID,
-            purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
-            lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
-            damagedStock: product.damagedStock || 0,
-            pendingStock: product.pendingStock || 0,
-            reservations: reservationsByProductId[product.id] || [],
-        };
-        return normalizedProduct;
-    });
+    // First, map and normalize data, ensuring warehouseId is set.
+    let productsWithData = allProducts.map(product => ({
+        ...product,
+        warehouseId: product.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
+        purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
+        lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
+        damagedStock: product.damagedStock || 0,
+        pendingStock: product.pendingStock || 0,
+        reservations: reservationsByProductId[product.id] || [],
+    }));
 
+    // Then, apply in-memory filtering.
     if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                productsWithData = productsWithData.filter(p => !p.warehouseId || !otherWarehouseIds.includes(p.warehouseId));
-            }
-        } else {
-            productsWithData = productsWithData.filter(p => p.warehouseId === warehouseId);
-        }
+        productsWithData = productsWithData.filter(p => p.warehouseId === warehouseId);
     }
 
 
@@ -627,14 +622,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     
     // In-memory warehouse filtering
     if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                allMovements = allMovements.filter(m => !m.warehouseId || !otherWarehouseIds.includes(m.warehouseId));
-            }
-        } else {
-            allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
-        }
+        allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
     }
     
     const sortedMovements = allMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -901,14 +889,7 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     });
     
     if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                allOrders = allOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
-            }
-        } else {
-            allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-        }
+        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
     }
     
     const filteredOrders = allOrders.filter(order => {
@@ -944,14 +925,7 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
     });
 
     if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                allOrders = allOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
-            }
-        } else {
-            allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-        }
+        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
     }
     
     return allOrders;
@@ -973,14 +947,7 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
     });
     
     if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                allOrders = allOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
-            }
-        } else {
-            allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-        }
+        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
     }
     
     return allOrders;
@@ -1342,18 +1309,12 @@ export const annulGuideDuringDispatch = async (
 
 // Audit Alert Functions
 export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]> => {
-    let q: Query = collection(db, 'auditAlerts');
-    if (warehouseId && warehouseId !== 'all') {
-        const otherWarehouseIds = (await getWarehouses())
-            .map(wh => wh.id)
-            .filter(id => id !== warehouseId);
+    let q: Query = query(collection(db, 'auditAlerts'));
 
-        if (warehouseId === DEFAULT_WAREHOUSE_ID && otherWarehouseIds.length > 0) {
-            q = query(q, where('warehouseId', 'not-in', otherWarehouseIds));
-        } else {
-            q = query(q, where('warehouseId', '==', warehouseId));
-        }
+    if (warehouseId && warehouseId !== 'all') {
+        q = query(q, where('warehouseId', '==', warehouseId));
     }
+
     const alertSnapshot = await getDocs(q);
     const alertList = alertSnapshot.docs.map(doc => {
         const data = doc.data();
@@ -1607,14 +1568,7 @@ export const getAllReservations = async (warehouseId?: string): Promise<Reservat
     });
 
     if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                allReservations = allReservations.filter(r => !r.warehouseId || !otherWarehouseIds.includes(r.warehouseId));
-            }
-        } else {
-            allReservations = allReservations.filter(r => r.warehouseId === warehouseId);
-        }
+        allReservations = allReservations.filter(r => r.warehouseId === warehouseId);
     }
     
     return allReservations;
@@ -1695,10 +1649,14 @@ export const deleteReservation = async (reservationId: string) => {
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
     let q: Query = collection(db, 'staleReservationAlerts');
+    
+    if (warehouseId && warehouseId !== 'all') {
+        q = query(q, where('warehouseId', '==', warehouseId));
+    }
 
     const alertSnapshot = await getDocs(q);
     
-    let alertList = alertSnapshot.docs.map(doc => {
+    const alertList = alertSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
@@ -1708,17 +1666,6 @@ export const getStaleReservationAlerts = async (warehouseId?: string): Promise<S
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as StaleReservationAlert;
     });
-
-    if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                alertList = alertList.filter(a => !a.warehouseId || !otherWarehouseIds.includes(a.warehouseId));
-            }
-        } else {
-            alertList = alertList.filter(a => a.warehouseId === warehouseId);
-        }
-    }
 
     return alertList.sort((a, b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
 };
@@ -1808,15 +1755,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
         if (metadataSnap.exists() && !forceRegenerate) {
             let q: Query = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
             if (warehouseId && warehouseId !== 'all') {
-                const otherWarehouseIds = (await getWarehouses())
-                    .map(wh => wh.id)
-                    .filter(id => id !== warehouseId);
-
-                if (warehouseId === DEFAULT_WAREHOUSE_ID && otherWarehouseIds.length > 0) {
-                    q = query(q, where('warehouseId', 'not-in', otherWarehouseIds));
-                } else {
-                    q = query(q, where('warehouseId', '==', warehouseId));
-                }
+                q = query(q, where('warehouseId', '==', warehouseId));
             }
             const alertSnapshot = await getDocs(q);
             const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
@@ -1985,7 +1924,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
 };
 
 export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
-    let q: Query = collection(db, 'cancellationRequests');
+    const q: Query = collection(db, 'cancellationRequests');
     const requestsSnapshot = await getDocs(q);
 
     let requestList: CancellationRequest[] = requestsSnapshot.docs.map(doc => {
@@ -1999,16 +1938,10 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
         } as CancellationRequest;
     });
 
+    const allWarehouses = await getWarehouses();
+    
     if (warehouseId && warehouseId !== 'all') {
-        const allWarehouses = await getWarehouses();
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = allWarehouses.map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                requestList = requestList.filter(req => !req.warehouseId || !otherWarehouseIds.includes(req.warehouseId));
-            }
-        } else {
-            requestList = requestList.filter(req => req.warehouseId === warehouseId);
-        }
+        requestList = requestList.filter(req => req.warehouseId === warehouseId);
     }
 
     return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
@@ -2090,16 +2023,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     let filteredMovements = movementsResult.movements;
 
     if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
-            if (otherWarehouseIds.length > 0) {
-                filteredOrders = filteredOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
-                filteredMovements = filteredMovements.filter(m => !m.warehouseId || !otherWarehouseIds.includes(m.warehouseId));
-            }
-        } else {
-            filteredOrders = filteredOrders.filter(o => o.warehouseId === warehouseId);
-            filteredMovements = filteredMovements.filter(m => m.warehouseId === warehouseId);
-        }
+        filteredOrders = filteredOrders.filter(o => o.warehouseId === warehouseId);
+        filteredMovements = filteredMovements.filter(m => m.warehouseId === warehouseId);
     }
   
     
