@@ -35,6 +35,7 @@ export default async function HistoryPage({
     movementType: searchParams?.movementType as string || 'all',
     startDate: searchParams?.startDate as string,
     endDate: searchParams?.endDate as string,
+    warehouseId: searchParams?.warehouse as string | undefined,
   };
 
 
@@ -47,7 +48,7 @@ export default async function HistoryPage({
   ] = await Promise.all([
     getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
     getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
-    getProducts({ limit: 10000 }), // Fetch all for filter dropdowns
+    getProducts({ limit: 10000, filters: { warehouseId: filters.warehouseId } }), // Fetch all for filter dropdowns
     getPlatforms(),
     getCarriers(),
   ]);
