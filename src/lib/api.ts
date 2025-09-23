@@ -3,7 +3,7 @@
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, Query, DocumentSnapshot, Filter } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot, Filter } from "firebase/firestore";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, CancellationRequest, Warehouse } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
@@ -950,11 +950,11 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
     let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            q = query(q, where(Filter.or(
+            q = query(q, Filter.or(
                 where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
                 where('warehouseId', '==', null),
                 where('warehouseId', '==', '')
-            )));
+            ));
         } else {
             q = query(q, where('warehouseId', '==', warehouseId));
         }
@@ -975,11 +975,11 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
     let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            q = query(q, where(Filter.or(
+            q = query(q, Filter.or(
                 where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
                 where('warehouseId', '==', null),
                 where('warehouseId', '==', '')
-            )));
+            ));
         } else {
             q = query(q, where('warehouseId', '==', warehouseId));
         }
@@ -1970,11 +1970,11 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
     let q: Query = collection(db, 'cancellationRequests');
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            q = query(q, where(Filter.or(
+            q = query(q, Filter.or(
                 where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
                 where('warehouseId', '==', null),
                 where('warehouseId', '==', '')
-            )));
+            ));
         } else {
             q = query(q, where('warehouseId', '==', warehouseId));
         }
@@ -2326,6 +2326,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 
