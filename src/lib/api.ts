@@ -1,5 +1,4 @@
 
-
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -597,15 +596,14 @@ export const sendPasswordReset = async (email: string) => {
 
 // Inventory Movement Functions
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
-    const movementsCol = collection(db, 'inventoryMovements');
-    
-    let q: Query = movementsCol;
+    let q: Query = collection(db, 'inventoryMovements');
     
     const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId } = filters;
     
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
+    q = query(q, orderBy('date', 'desc'));
     
     const snapshot = await getDocs(q);
     const allMovements = snapshot.docs.map(doc => {
@@ -616,7 +614,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
           warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
           date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    });
 
     const filteredMovements = allMovements.filter(m => {
         const date = new Date(m.date);
@@ -870,15 +868,14 @@ const parseFirestoreDate = (dateValue: any): Date => {
   };
 
 export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
-    const ordersCol = collection(db, 'dispatchOrders');
-    
-    let q: Query = ordersCol;
+    let q: Query = collection(db, 'dispatchOrders');
     
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
     
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
+    q = query(q, orderBy('date', 'desc'));
     
     const snapshot = await getDocs(q);
     const allOrders = snapshot.docs.map(doc => {
@@ -889,7 +886,7 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(doc.data().date) 
         } as DispatchOrder
-    }).sort((a, b) => b.date.getTime() - a.date.getTime());
+    });
 
     const filteredOrders = allOrders.filter(order => {
         const date = new Date(order.date);
@@ -2258,6 +2255,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 

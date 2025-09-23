@@ -25,11 +25,12 @@ export default async function ProductsPage({
         hasPending: searchParams?.pending === 'true',
         hasReservations: searchParams?.reservations === 'true',
         onlyAudited: searchParams?.audited === 'true',
+        warehouseId: searchParams?.warehouse as string,
     };
 
     const [productsResult, allMovements, rotationCategories] = await Promise.all([
         getProducts({ page, limit, filters }),
-        getInventoryMovements({ limit: 10000, filters: { startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() } }),
+        getInventoryMovements({ limit: 10000, filters: { startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), warehouseId: filters.warehouseId } }),
         getRotationCategories(),
     ]);
 
