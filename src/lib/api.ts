@@ -4,9 +4,9 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, se
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, DashboardData } from './types';
 import {v4 as uuidv4} from 'uuid';
-import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
+import { startOfDay, endOfDay, subDays, format, isToday, eachDayOfInterval } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
 
 const storage = getStorage();
@@ -35,11 +35,12 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     let productQuery: Query = query(collection(db, 'products'));
-
+    
+    // Apply filters that can be done at the DB level
     if (filters.selectedCategory && filters.selectedCategory !== 'all') {
         productQuery = query(productQuery, where('categoryId', '==', filters.selectedCategory));
     }
-  
+
     const productSnapshot = await getDocs(productQuery);
 
     let allProducts = productSnapshot.docs.map(doc => {
@@ -47,7 +48,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         return { 
             id: doc.id, 
             ...data,
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
             purchaseDate: data.purchaseDate ? parseFirestoreDate(data.purchaseDate).toISOString() : undefined,
             lastAuditedAt: data.lastAuditedAt ? parseFirestoreDate(data.lastAuditedAt).toISOString() : undefined,
             damagedStock: data.damagedStock || 0,
@@ -55,12 +56,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         } as Product
     });
 
-    // In-memory warehouse filtering
-    if (filters.warehouseId && filters.warehouseId !== 'all') {
-        allProducts = allProducts.filter(p => p.warehouseId === filters.warehouseId);
-    }
-  
-    const allReservations = await getAllReservations(filters.warehouseId);
+    const allReservations = await getAllReservations();
     const reservationsByProductId: Record<string, Reservation[]> = {};
   
     for (const reservation of allReservations) {
@@ -75,9 +71,15 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
       reservations: reservationsByProductId[product.id] || [],
     }));
 
+    // In-memory filtering for complex logic
     const filteredProducts = productsWithData.filter(product => {
-        const { searchQuery, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited } = filters;
+        const { searchQuery, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
         
+        // Warehouse filter (now works correctly with default)
+        if (warehouseId && warehouseId !== 'all' && product.warehouseId !== warehouseId) {
+            return false;
+        }
+
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -581,7 +583,6 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     
     let movementsQuery: Query = query(collection(db, 'inventoryMovements'));
 
-    // Apply Firestore-level filters for efficiency
     if (startDate) movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
     if (endDate) movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
     if (productId && productId !== 'all') movementsQuery = query(movementsQuery, where('productId', '==', productId));
@@ -599,12 +600,12 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
           warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
           date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
+    }).filter(m => {
+        if (warehouseId && warehouseId !== 'all') {
+            return m.warehouseId === warehouseId;
+        }
+        return true;
     });
-
-    // In-memory warehouse filtering
-    if (warehouseId && warehouseId !== 'all') {
-        allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
-    }
     
     const sortedMovements = allMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -856,7 +857,6 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     if (endDate) ordersQuery = query(ordersQuery, where('date', '<=', new Date(endDate)));
     if (platformId && platformId !== 'all') ordersQuery = query(ordersQuery, where('platformId', '==', platformId));
     if (carrierId && carrierId !== 'all') ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
-    // Product ID filter needs to be applied in-memory since it's on a nested array
 
     const snapshot = await getDocs(ordersQuery);
 
@@ -868,11 +868,12 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(doc.data().date) 
         } as DispatchOrder
+    }).filter(order => {
+        if (warehouseId && warehouseId !== 'all') {
+            return order.warehouseId === warehouseId;
+        }
+        return true;
     });
-
-    if (warehouseId) {
-        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-    }
     
     const filteredOrders = allOrders.filter(order => {
         const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
@@ -905,11 +906,12 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
+    }).filter(o => {
+        if (warehouseId && warehouseId !== 'all') {
+            return o.warehouseId === warehouseId;
+        }
+        return true;
     });
-
-    if (warehouseId) {
-        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-    }
     
     return allOrders;
 }
@@ -928,11 +930,12 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
+    }).filter(o => {
+        if (warehouseId && warehouseId !== 'all') {
+            return o.warehouseId === warehouseId;
+        }
+        return true;
     });
-
-    if (warehouseId) {
-        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-    }
     
     return allOrders;
 }
@@ -1534,7 +1537,7 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 };
 
 // Reservation Functions
-export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
+export const getAllReservations = async (): Promise<Reservation[]> => {
     const reservationsCol = collection(db, 'reservations');
     const snapshot = await getDocs(reservationsCol);
     
@@ -1547,10 +1550,6 @@ export const getAllReservations = async (warehouseId?: string): Promise<Reservat
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as Reservation;
     });
-
-    if (warehouseId) {
-        allReservations = allReservations.filter(r => r.warehouseId === warehouseId);
-    }
     
     return allReservations;
 }
@@ -1630,7 +1629,7 @@ export const deleteReservation = async (reservationId: string) => {
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
     let q: Query = collection(db, 'staleReservationAlerts');
-    if (warehouseId) {
+    if (warehouseId && warehouseId !== 'all') {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
     const alertSnapshot = await getDocs(q);
@@ -1731,7 +1730,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
         const metadataSnap = await getDoc(metadataRef);
         if (metadataSnap.exists() && !forceRegenerate) {
             let q: Query = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
-            if (warehouseId) {
+            if (warehouseId && warehouseId !== 'all') {
                 q = query(q, where('warehouseId', '==', warehouseId));
             }
             const alertSnapshot = await getDocs(q);
@@ -1902,33 +1901,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
 
 export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
     let q: Query = collection(db, 'cancellationRequests');
-    if (warehouseId) {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const query1 = query(q, where('warehouseId', '==', DEFAULT_WAREHOUSE_ID));
-            const query2 = query(q, where('warehouseId', 'in', [null, '']));
-            const [snapshot1, snapshot2] = await Promise.all([getDocs(query1), getDocs(query2)]);
-            
-            const uniqueIds = new Set<string>();
-            const uniqueDocs = [...snapshot1.docs, ...snapshot2.docs].filter(doc => {
-                if (uniqueIds.has(doc.id)) return false;
-                uniqueIds.add(doc.id);
-                return true;
-            });
-
-            return uniqueDocs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    requestDate: (data.requestDate as Timestamp).toDate().toISOString(),
-                    isDispatched: !!data.isDispatched,
-                    warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
-                } as CancellationRequest;
-            }).sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
-        } else {
-            q = query(q, where('warehouseId', '==', warehouseId));
-        }
-    }
+    // Note: Cancellation requests do not have warehouseId yet. This is a potential improvement.
     const requestsSnapshot = await getDocs(q);
 
     const requestList: CancellationRequest[] = requestsSnapshot.docs.map(doc => {
@@ -1940,6 +1913,11 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
             isDispatched: !!data.isDispatched,
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as CancellationRequest;
+    }).filter(req => {
+        if (warehouseId && warehouseId !== 'all') {
+            return req.warehouseId === warehouseId;
+        }
+        return true;
     });
 
     return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
@@ -1997,15 +1975,109 @@ export const updateWarehouse = async (id: string, name: string): Promise<void> =
     await updateDoc(warehouseRef, { name });
 };
 
-export async function getDashboardData(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }) {
+export async function getDashboardSummaryData(date: Date, warehouseId?: string): Promise<DashboardData> {
+    const dayKey = format(date, 'yyyy-MM-dd');
+    const docId = `${dayKey}_${warehouseId || 'wh-bog'}`;
+    const summaryRef = doc(db, 'dailySummaries', docId);
+    const summarySnap = await getDoc(summaryRef);
+  
+    if (summarySnap.exists()) {
+      return summarySnap.data() as DashboardData;
+    }
+    
+    // Return a default empty structure if no summary exists for that day
+    return {
+        totalItemsDispatched: 0,
+        totalAnnulledItems: 0,
+        totalPendingUnits: 0,
+        totalReturns: 0,
+        totalAdjustIn: 0,
+        totalAdjustOut: 0,
+        // All other fields that are calculated live are empty/default
+        chartData: [], pendingChartData: [], returnsChartData: [],
+        annulledChartData: [], adjustInChartData: [], adjustOutChartData: [],
+        productChartData: [], categoryChartData: [], platformCarrierChartData: [],
+        allCarrierNames: [], mostUsedCarrier: { name: '', count: 0, percentage: 0 },
+        platformWithMostOrders: { name: '', count: 0, percentage: 0 },
+        dailyDispatchSummaryData: {},
+    };
+}
+
+
+export async function getDashboardData(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }): Promise<DashboardData> {
     const { from: fromDate, to: toDate } = filters.dateRange || {};
     const fromDateStart = fromDate ? startOfDay(fromDate) : null;
     const toDateEnd = toDate ? endOfDay(toDate) : null;
+  
+    // 1. Fetch pre-aggregated data for historical days
+    const historicalSummaries: DashboardData[] = [];
+    if (fromDateStart && toDateEnd) {
+      const historicalDates = eachDayOfInterval({ start: fromDateStart, end: toDateEnd }).filter(d => !isToday(d));
+      const summaryPromises = historicalDates.map(date => getDashboardSummaryData(date, filters.warehouseId));
+      historicalSummaries.push(...(await Promise.all(summaryPromises)));
+    }
+  
+    // 2. Fetch live data for today
+    const todayStart = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
+
+    let liveData: DashboardData | null = null;
+    if (!toDateEnd || toDateEnd >= todayStart) {
+        liveData = await getLiveDashboardDataForPeriod({ ...filters, dateRange: { from: todayStart, to: todayEnd } });
+    }
+
+    // 3. Combine historical and live data
+    const combinedData = historicalSummaries.reduce((acc, summary) => {
+        acc.totalItemsDispatched += summary.totalItemsDispatched;
+        acc.totalAnnulledItems += summary.totalAnnulledItems;
+        acc.totalPendingUnits += summary.totalPendingUnits;
+        acc.totalReturns += summary.totalReturns;
+        acc.totalAdjustIn += summary.totalAdjustIn;
+        acc.totalAdjustOut += summary.totalAdjustOut;
+        return acc;
+    }, { // Initial accumulator with live data if available
+        totalItemsDispatched: liveData?.totalItemsDispatched || 0,
+        totalAnnulledItems: liveData?.totalAnnulledItems || 0,
+        totalPendingUnits: liveData?.totalPendingUnits || 0,
+        totalReturns: liveData?.totalReturns || 0,
+        totalAdjustIn: liveData?.totalAdjustIn || 0,
+        totalAdjustOut: liveData?.totalAdjustOut || 0,
+    } as Omit<DashboardData, 'chartData' | 'pendingChartData' | 'returnsChartData' | 'annulledChartData' | 'adjustInChartData' | 'adjustOutChartData' | 'productChartData' | 'categoryChartData' | 'platformCarrierChartData' | 'allCarrierNames' | 'mostUsedCarrier' | 'platformWithMostOrders' | 'dailyDispatchSummaryData'>);
+    
+    // For charts and detailed lists, we still need to calculate them live over the whole period
+    // This is a trade-off: KPIs are fast, detailed charts are still computed on-demand.
+    const detailedLiveData = await getLiveDashboardDataForPeriod(filters);
+
+    return {
+        ...combinedData,
+        chartData: detailedLiveData.chartData,
+        pendingChartData: detailedLiveData.pendingChartData,
+        returnsChartData: detailedLiveData.returnsChartData,
+        annulledChartData: detailedLiveData.annulledChartData,
+        adjustInChartData: detailedLiveData.adjustInChartData,
+        adjustOutChartData: detailedLiveData.adjustOutChartData,
+        productChartData: detailedLiveData.productChartData,
+        categoryChartData: detailedLiveData.categoryChartData,
+        platformCarrierChartData: detailedLiveData.platformCarrierChartData,
+        allCarrierNames: detailedLiveData.allCarrierNames,
+        mostUsedCarrier: detailedLiveData.mostUsedCarrier,
+        platformWithMostOrders: detailedLiveData.platformWithMostOrders,
+        dailyDispatchSummaryData: detailedLiveData.dailyDispatchSummaryData,
+    };
+}
+
+
+// This function contains the original logic, now used for live calculations.
+export async function getLiveDashboardDataForPeriod(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }): Promise<DashboardData> {
+    const { from: fromDate, to: toDate } = filters.dateRange || {};
+    const fromDateStart = fromDate ? startOfDay(fromDate) : null;
+    const toDateEnd = toDate ? endOfDay(toDate) : null;
+    const warehouseId = filters.warehouseId;
 
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
-        getDispatchOrders({ fetchAll: true, filters: { warehouseId: filters.warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
-        getInventoryMovements({ fetchAll: true, filters: { warehouseId: filters.warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
-        getProducts({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }),
+        getDispatchOrders({ fetchAll: true, filters: { warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
+        getInventoryMovements({ fetchAll: true, filters: { warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
+        getProducts({ fetchAll: true, filters: { warehouseId } }),
         getCategories(),
         getPlatforms(),
         getCarriers(),
@@ -2057,14 +2129,12 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             dispatchedInOrder -= exceptionsTotal;
         }
 
-        ordersByDay[day] = (ordersByDay[day] || 0) + dispatchedInOrder;
-
-
         if (order.cancelledExceptions) {
             const cancelledTotal = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
             annulledByDay[day] = (annulledByDay[day] || 0) + cancelledTotal;
-            ordersByDay[day] = (ordersByDay[day] || 0) - cancelledTotal;
+            dispatchedInOrder -= cancelledTotal;
         }
+        ordersByDay[day] = (ordersByDay[day] || 0) + dispatchedInOrder;
     });
 
     const totalItemsDispatched = Object.values(ordersByDay).reduce((sum, count) => sum + count, 0);
@@ -2257,43 +2327,4 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
       },
       dailyDispatchSummaryData,
     };
-  }
-
-  export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
-
-
-
-    
-
-
-
-
-
-
-
-    
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
+}

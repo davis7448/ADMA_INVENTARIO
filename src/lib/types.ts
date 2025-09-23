@@ -246,6 +246,7 @@ export type StaleReservationAlert = {
     productSku: string;
     vendedorName: string;
     quantity: number;
+    warehouseId?: string;
 };
 
 export interface StockAlertItem {
@@ -258,6 +259,7 @@ export interface StockAlertItem {
     availableForSale: number;
     dailyAverageSales: number;
     alertMessage: string;
+    warehouseId?: string;
 }
 
 export interface GetStockAlertsResult {
@@ -292,6 +294,7 @@ export type CancellationRequest = {
     requestDate: string;
     status: 'pending' | 'completed' | 'rejected';
     isDispatched?: boolean;
+    warehouseId?: string;
 };
 
 export type Warehouse = {

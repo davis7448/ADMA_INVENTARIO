@@ -112,16 +112,22 @@ export default function DashboardPage() {
     const fetchData = async () => {
       if (!dateRange?.from || !dateRange?.to) return;
       setLoading(true);
-      const data = await getDashboardData({
-        warehouseId,
-        dateRange: { from: dateRange.from, to: dateRange.to },
-        platformIds: filterPlatforms,
-        carrierIds: filterCarriers,
-        categoryIds: filterCategories,
-        productIds: filterProducts,
-      });
-      setDashboardData(data);
-      setLoading(false);
+      try {
+        const data = await getDashboardData({
+          warehouseId,
+          dateRange: { from: dateRange.from, to: dateRange.to },
+          platformIds: filterPlatforms,
+          carrierIds: filterCarriers,
+          categoryIds: filterCategories,
+          productIds: filterProducts,
+        });
+        setDashboardData(data);
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+        setDashboardData(SKELETON_DASHBOARD_DATA); // Reset data on error
+      } finally {
+        setLoading(false);
+      }
     };
     fetchData();
   }, [warehouseId, dateRange, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
@@ -569,5 +575,3 @@ export default function DashboardPage() {
   );
 }
   
-
-    
