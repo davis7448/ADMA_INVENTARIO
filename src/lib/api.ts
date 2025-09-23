@@ -36,7 +36,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     const productsCol = collection(db, 'products');
     
-    let productQuery: Query = productsCol;
+    let productQuery: Query;
     
     if (filters.warehouseId) {
         if (filters.warehouseId === DEFAULT_WAREHOUSE_ID) {
@@ -52,6 +52,8 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
             // For any other warehouse, only fetch products for that specific warehouse
             productQuery = query(productsCol, where('warehouseId', '==', filters.warehouseId));
         }
+    } else {
+        productQuery = productsCol;
     }
 
     const productSnapshot = await getDocs(productQuery);
@@ -1590,18 +1592,23 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 
 // Reservation Functions
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
-    let q: Query = collection(db, 'reservations');
+    let q: Query;
+    const reservationsCol = collection(db, 'reservations');
+    
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            q = query(q, Filter.or(
+            q = query(reservationsCol, Filter.or(
                 where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
                 where('warehouseId', '==', null),
                 where('warehouseId', '==', '')
             ));
         } else {
-            q = query(q, where('warehouseId', '==', warehouseId));
+            q = query(reservationsCol, where('warehouseId', '==', warehouseId));
         }
+    } else {
+        q = reservationsCol;
     }
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
@@ -1690,15 +1697,7 @@ export const deleteReservation = async (reservationId: string) => {
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
     let q: Query = collection(db, 'staleReservationAlerts');
     if (warehouseId) {
-        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            q = query(q, where(Filter.or(
-                where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
-                where('warehouseId', '==', null),
-                where('warehouseId', '==', '')
-            )));
-        } else {
-            q = query(q, where('warehouseId', '==', warehouseId));
-        }
+        q = query(q, where('warehouseId', '==', warehouseId));
     }
     const alertSnapshot = await getDocs(q);
     const alertList = alertSnapshot.docs.map(doc => {
@@ -2327,6 +2326,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 
