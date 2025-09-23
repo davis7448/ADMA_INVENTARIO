@@ -40,22 +40,34 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     if (filters.selectedCategory && filters.selectedCategory !== 'all') {
         productQuery = query(productQuery, where('categoryId', '==', filters.selectedCategory));
     }
+    
+    // For pagination, we'll order by a consistent field, like name.
+    if (!fetchAll) {
+      productQuery = query(productQuery, orderBy('name'));
+    }
 
-    const productSnapshot = await getDocs(productQuery);
+    let allProducts: Product[];
 
-    let allProducts = productSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-            id: doc.id, 
-            ...data,
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
-            purchaseDate: data.purchaseDate ? parseFirestoreDate(data.purchaseDate).toISOString() : undefined,
-            lastAuditedAt: data.lastAuditedAt ? parseFirestoreDate(data.lastAuditedAt).toISOString() : undefined,
-            damagedStock: data.damagedStock || 0,
-            pendingStock: data.pendingStock || 0,
-        } as Product
-    });
+    if (fetchAll) {
+        const productSnapshot = await getDocs(productQuery);
+        allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
+    } else {
+        // Handle pagination with cursors
+        let paginatedQuery = query(productQuery, limit(itemsPerPage));
+        if (page > 1) {
+            const previousPageQuery = query(productQuery, limit((page - 1) * itemsPerPage));
+            const previousPageSnapshot = await getDocs(previousPageQuery);
+            if (!previousPageSnapshot.empty) {
+                const lastVisible = previousPageSnapshot.docs[previousPageSnapshot.docs.length - 1];
+                paginatedQuery = query(paginatedQuery, startAfter(lastVisible));
+            }
+        }
+        const productSnapshot = await getDocs(paginatedQuery);
+        allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
+    }
 
+
+    // In-memory processing for warehouse assignment and complex filters
     const allReservations = await getAllReservations();
     const reservationsByProductId: Record<string, Reservation[]> = {};
   
@@ -65,17 +77,23 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
       }
       reservationsByProductId[reservation.productId].push(reservation);
     }
-  
-    const productsWithData = allProducts.map(product => ({
-      ...product,
-      reservations: reservationsByProductId[product.id] || [],
-    }));
 
-    // In-memory filtering for complex logic
+    const productsWithData = allProducts.map(product => {
+        const normalizedProduct: Product = {
+            ...product,
+            warehouseId: product.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
+            purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
+            lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
+            damagedStock: product.damagedStock || 0,
+            pendingStock: product.pendingStock || 0,
+            reservations: reservationsByProductId[product.id] || [],
+        };
+        return normalizedProduct;
+    });
+
     const filteredProducts = productsWithData.filter(product => {
         const { searchQuery, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
         
-        // Warehouse filter (now works correctly with default)
         if (warehouseId && warehouseId !== 'all' && product.warehouseId !== warehouseId) {
             return false;
         }
@@ -98,16 +116,21 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
 
         return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch && vendedorMatch;
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    });
 
     if (fetchAll) {
-      return { products: filteredProducts, totalPages: 1 };
+      return { products: filteredProducts.sort((a,b) => a.name.localeCompare(b.name)), totalPages: 1 };
     }
 
-    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-    const paginatedProducts = filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+    // For total pages, we need to know the count of ALL filtered products, not just the paginated ones.
+    // This is still a performance bottleneck for large datasets as it reads many docs.
+    // A better solution for production would be to have a separate query to count documents.
+    const countQuery = query(collection(db, 'products')); // Simple count for now
+    const countSnapshot = await getDocs(countQuery);
+    const totalCount = countSnapshot.size; // This is not filtering, just a placeholder.
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-    return { products: paginatedProducts, totalPages };
+    return { products: filteredProducts, totalPages };
   };
 
 export const getProductById = async (id: string): Promise<Product | null> => {
@@ -2019,15 +2042,14 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
   
     // 2. Fetch live data for today
     const todayStart = startOfDay(new Date());
-    const todayEnd = endOfDay(new Date());
 
-    let liveData: DashboardData | null = null;
+    let liveDataForToday: DashboardData | null = null;
     if (!toDateEnd || toDateEnd >= todayStart) {
-        liveData = await getLiveDashboardDataForPeriod({ ...filters, dateRange: { from: todayStart, to: todayEnd } });
+        liveDataForToday = await getLiveDashboardDataForPeriod({ ...filters, dateRange: { from: todayStart, to: endOfDay(new Date()) } });
     }
 
-    // 3. Combine historical and live data
-    const combinedData = historicalSummaries.reduce((acc, summary) => {
+    // 3. Combine historical KPIs with today's live KPIs
+    const combinedKPIs = historicalSummaries.reduce((acc, summary) => {
         acc.totalItemsDispatched += summary.totalItemsDispatched;
         acc.totalAnnulledItems += summary.totalAnnulledItems;
         acc.totalPendingUnits += summary.totalPendingUnits;
@@ -2035,34 +2057,33 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         acc.totalAdjustIn += summary.totalAdjustIn;
         acc.totalAdjustOut += summary.totalAdjustOut;
         return acc;
-    }, { // Initial accumulator with live data if available
-        totalItemsDispatched: liveData?.totalItemsDispatched || 0,
-        totalAnnulledItems: liveData?.totalAnnulledItems || 0,
-        totalPendingUnits: liveData?.totalPendingUnits || 0,
-        totalReturns: liveData?.totalReturns || 0,
-        totalAdjustIn: liveData?.totalAdjustIn || 0,
-        totalAdjustOut: liveData?.totalAdjustOut || 0,
-    } as Omit<DashboardData, 'chartData' | 'pendingChartData' | 'returnsChartData' | 'annulledChartData' | 'adjustInChartData' | 'adjustOutChartData' | 'productChartData' | 'categoryChartData' | 'platformCarrierChartData' | 'allCarrierNames' | 'mostUsedCarrier' | 'platformWithMostOrders' | 'dailyDispatchSummaryData'>);
+    }, { 
+        totalItemsDispatched: liveDataForToday?.totalItemsDispatched || 0,
+        totalAnnulledItems: liveDataForToday?.totalAnnulledItems || 0,
+        totalPendingUnits: liveDataForToday?.totalPendingUnits || 0,
+        totalReturns: liveDataForToday?.totalReturns || 0,
+        totalAdjustIn: liveDataForToday?.totalAdjustIn || 0,
+        totalAdjustOut: liveDataForToday?.totalAdjustOut || 0,
+    });
     
     // For charts and detailed lists, we still need to calculate them live over the whole period
-    // This is a trade-off: KPIs are fast, detailed charts are still computed on-demand.
-    const detailedLiveData = await getLiveDashboardDataForPeriod(filters);
+    const detailedLiveDataForRange = await getLiveDashboardDataForPeriod(filters);
 
     return {
-        ...combinedData,
-        chartData: detailedLiveData.chartData,
-        pendingChartData: detailedLiveData.pendingChartData,
-        returnsChartData: detailedLiveData.returnsChartData,
-        annulledChartData: detailedLiveData.annulledChartData,
-        adjustInChartData: detailedLiveData.adjustInChartData,
-        adjustOutChartData: detailedLiveData.adjustOutChartData,
-        productChartData: detailedLiveData.productChartData,
-        categoryChartData: detailedLiveData.categoryChartData,
-        platformCarrierChartData: detailedLiveData.platformCarrierChartData,
-        allCarrierNames: detailedLiveData.allCarrierNames,
-        mostUsedCarrier: detailedLiveData.mostUsedCarrier,
-        platformWithMostOrders: detailedLiveData.platformWithMostOrders,
-        dailyDispatchSummaryData: detailedLiveData.dailyDispatchSummaryData,
+        ...combinedKPIs,
+        chartData: detailedLiveDataForRange.chartData,
+        pendingChartData: detailedLiveDataForRange.pendingChartData,
+        returnsChartData: detailedLiveDataForRange.returnsChartData,
+        annulledChartData: detailedLiveDataForRange.annulledChartData,
+        adjustInChartData: detailedLiveDataForRange.adjustInChartData,
+        adjustOutChartData: detailedLiveDataForRange.adjustOutChartData,
+        productChartData: detailedLiveDataForRange.productChartData,
+        categoryChartData: detailedLiveDataForRange.categoryChartData,
+        platformCarrierChartData: detailedLiveDataForRange.platformCarrierChartData,
+        allCarrierNames: detailedLiveDataForRange.allCarrierNames,
+        mostUsedCarrier: detailedLiveDataForRange.mostUsedCarrier,
+        platformWithMostOrders: detailedLiveDataForRange.platformWithMostOrders,
+        dailyDispatchSummaryData: detailedLiveDataForRange.dailyDispatchSummaryData,
     };
 }
 
