@@ -969,7 +969,9 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
 
 
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
-    let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
+    const dispatchOrdersCol = collection(db, 'dispatchOrders');
+    let q: Query = query(dispatchOrdersCol, where('status', '==', 'Pendiente'));
+
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const query1 = query(q, where('warehouseId', '==', DEFAULT_WAREHOUSE_ID));
@@ -995,6 +997,8 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
         } else {
             q = query(q, where('warehouseId', '==', warehouseId));
         }
+    } else {
+        q = query(q);
     }
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
@@ -1009,7 +1013,9 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
 }
 
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
-    let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
+    const dispatchOrdersCol = collection(db, 'dispatchOrders');
+    let q: Query = query(dispatchOrdersCol, where('status', '==', 'Parcial'));
+    
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const query1 = query(q, where('warehouseId', '==', DEFAULT_WAREHOUSE_ID));
@@ -1035,7 +1041,10 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
         } else {
             q = query(q, where('warehouseId', '==', warehouseId));
         }
+    } else {
+        q = query(q);
     }
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
         const data = doc.data();
@@ -1517,6 +1526,8 @@ export const updateEntryReasons = async (reasons: EntryReason[]): Promise<void> 
     });
     await batch.commit();
 }
+
+// ... other functions remain unchanged
 
 export const getProductPerformanceData = async (productId: string): Promise<ProductPerformanceData> => {
     const [product, dispatchOrdersResult, movements, carriers, platforms] = await Promise.all([
@@ -2415,3 +2426,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
 
+
+
+    
