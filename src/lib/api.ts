@@ -3,7 +3,7 @@
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot, Filter } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
@@ -35,14 +35,22 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     const productsCol = collection(db, 'products');
-    const productSnapshot = await getDocs(productsCol);
+    let productQuery: Query = query(productsCol);
+    
+    // Apply all filters EXCEPT warehouseId at the query level if they exist
+    if (filters.selectedCategory && filters.selectedCategory !== 'all') {
+        productQuery = query(productQuery, where('categoryId', '==', filters.selectedCategory));
+    }
+    
+    const productSnapshot = await getDocs(productQuery);
 
     let allProducts = productSnapshot.docs.map(doc => {
         const data = doc.data();
         return { 
             id: doc.id, 
             ...data,
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
+            // Ensure every product has a warehouseId for consistent filtering in code.
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             purchaseDate: data.purchaseDate ? parseFirestoreDate(data.purchaseDate).toISOString() : undefined,
             lastAuditedAt: data.lastAuditedAt ? parseFirestoreDate(data.lastAuditedAt).toISOString() : undefined,
             damagedStock: data.damagedStock || 0,
@@ -50,7 +58,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
         } as Product
     });
 
-    // Post-fetch warehouse filtering
+    // Now, apply the warehouse filter in code
     if (filters.warehouseId) {
         allProducts = allProducts.filter(p => p.warehouseId === filters.warehouseId);
     }
@@ -70,8 +78,9 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
       reservations: reservationsByProductId[product.id] || [],
     }));
 
+    // Apply remaining filters that are more complex or require fetched data
     const filteredProducts = productsWithData.filter(product => {
-        const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited } = filters;
+        const { searchQuery, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited } = filters;
         
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
@@ -83,7 +92,6 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
                   variant.sku.toLowerCase().includes(lowercasedQuery)
               ));
         
-        const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
         const rotationMatch = !selectedRotation || selectedRotation === 'all' || product.rotationCategoryName === selectedRotation;
         const stockMatch = !minStock || product.stock >= parseInt(minStock, 10);
         const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
@@ -91,7 +99,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
         const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
 
-        return searchMatch && categoryMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch && vendedorMatch;
+        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch && vendedorMatch;
     });
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
@@ -569,8 +577,19 @@ export const sendPasswordReset = async (email: string) => {
 
 // Inventory Movement Functions
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
-    const movementsCol = collection(db, 'inventoryMovements');
-    const snapshot = await getDocs(movementsCol);
+    const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId } = filters;
+    
+    let movementsQuery: Query = query(collection(db, 'inventoryMovements'));
+
+    // Apply Firestore-level filters for efficiency
+    if (startDate) movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
+    if (endDate) movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
+    if (productId && productId !== 'all') movementsQuery = query(movementsQuery, where('productId', '==', productId));
+    if (platformId && platformId !== 'all') movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
+    if (carrierId && carrierId !== 'all') movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
+    if (movementType && movementType !== 'all') movementsQuery = query(movementsQuery, where('type', '==', movementType));
+
+    const snapshot = await getDocs(movementsQuery);
 
     let allMovements = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -582,31 +601,20 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         } as InventoryMovement
     });
 
-    const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId } = filters;
-
+    // Apply warehouse filter in-memory
     if (warehouseId) {
         allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
     }
-
-    const filteredMovements = allMovements.filter(m => {
-        const date = new Date(m.date);
-        const startDateMatch = !startDate || date >= new Date(startDate);
-        const endDateMatch = !endDate || date <= new Date(endDate);
-        const productMatch = !productId || productId === 'all' || m.productId === productId;
-        const platformMatch = !platformId || platformId === 'all' || m.platformId === platformId;
-        const carrierMatch = !carrierId || carrierId === 'all' || m.carrierId === carrierId;
-        const typeMatch = !movementType || movementType === 'all' || m.type === movementType;
-
-        return startDateMatch && endDateMatch && productMatch && platformMatch && carrierMatch && typeMatch;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    const sortedMovements = allMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     if (fetchAll) {
-        return { movements: filteredMovements, totalPages: 1, totalCount: filteredMovements.length };
+        return { movements: sortedMovements, totalPages: 1, totalCount: sortedMovements.length };
     }
 
-    const totalCount = filteredMovements.length;
+    const totalCount = sortedMovements.length;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
-    const paginatedMovements = filteredMovements.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+    const paginatedMovements = sortedMovements.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
     return { movements: paginatedMovements, totalPages, totalCount };
 };
@@ -840,8 +848,17 @@ const parseFirestoreDate = (dateValue: any): Date => {
   };
 
 export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
-    const dispatchOrdersCol = collection(db, 'dispatchOrders');
-    const snapshot = await getDocs(dispatchOrdersCol);
+    const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
+
+    let ordersQuery: Query = query(collection(db, 'dispatchOrders'));
+
+    if (startDate) ordersQuery = query(ordersQuery, where('date', '>=', new Date(startDate)));
+    if (endDate) ordersQuery = query(ordersQuery, where('date', '<=', new Date(endDate)));
+    if (platformId && platformId !== 'all') ordersQuery = query(ordersQuery, where('platformId', '==', platformId));
+    if (carrierId && carrierId !== 'all') ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
+    // Product ID filter needs to be applied in-memory since it's on a nested array
+
+    const snapshot = await getDocs(ordersQuery);
 
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -853,21 +870,13 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
         } as DispatchOrder
     });
 
-    const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
-
     if (warehouseId) {
         allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
     }
-
+    
     const filteredOrders = allOrders.filter(order => {
-        const date = new Date(order.date);
-        const startDateMatch = !startDate || date >= new Date(startDate);
-        const endDateMatch = !endDate || date <= new Date(endDate);
         const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
-        const platformMatch = !platformId || platformId === 'all' || order.platformId === platformId;
-        const carrierMatch = !carrierId || carrierId === 'all' || order.carrierId === carrierId;
-
-        return startDateMatch && endDateMatch && productMatch && platformMatch && carrierMatch;
+        return productMatch;
     }).sort((a, b) => b.date.getTime() - a.date.getTime());
 
     if (fetchAll) {
@@ -2282,6 +2291,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 
