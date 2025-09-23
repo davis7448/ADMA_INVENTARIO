@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import AppHeader from '@/components/header';
 import { AuthProvider } from '@/hooks/use-auth';
 import { WarehouseProvider } from '@/hooks/use-warehouse';
 import { Suspense } from 'react';
+import MainLayout from '@/components/main-layout';
 
 export const metadata: Metadata = {
   title: 'ADMA',
@@ -26,14 +26,11 @@ export default function RootLayout({
       <body className="font-body antialiased h-full bg-background flex flex-col">
         <WarehouseProvider>
             <AuthProvider>
-                <div className="flex flex-col flex-1">
-                <AppHeader />
-                    <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
-                      <Suspense fallback={<div>Cargando...</div>}>
-                        {children}
-                      </Suspense>
-                    </main>
-                </div>
+                <Suspense fallback={<div className="flex h-screen w-full items-center justify-center">Cargando aplicación...</div>}>
+                  <MainLayout>
+                    {children}
+                  </MainLayout>
+                </Suspense>
             </AuthProvider>
         </WarehouseProvider>
         <Toaster />
