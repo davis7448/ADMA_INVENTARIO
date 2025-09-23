@@ -157,14 +157,14 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                                     value={warehouse.name}
                                     onChange={(e) => handleNameChange(warehouse.id, e.target.value)}
                                     className="text-base"
-                                    disabled={isSaving}
+                                    disabled={isSaving || warehouse.id === 'wh-bog'}
                                 />
                                 <p className="text-xs text-muted-foreground mt-1 ml-1">ID: <span className="font-mono">{warehouse.id}</span></p>
                             </div>
                             <Button 
                                 size="sm" 
                                 onClick={() => handleUpdateName(warehouse.id, warehouse.name)}
-                                disabled={isSaving || initialWarehouses.find(wh => wh.id === warehouse.id)?.name === warehouse.name}
+                                disabled={isSaving || initialWarehouses.find(wh => wh.id === warehouse.id)?.name === warehouse.name || warehouse.id === 'wh-bog'}
                             >
                                 {isSaving ? 'Guardando...' : 'Guardar'}
                             </Button>
