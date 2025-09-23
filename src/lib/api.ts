@@ -35,7 +35,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     const productsCol = collection(db, 'products');
-    let productQuery: Query = query(productsCol);
+    let productQuery: Query;
 
     const warehouseId = filters.warehouseId;
     if (warehouseId) {
@@ -52,6 +52,8 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
             // For any other warehouse, query for that specific ID
             productQuery = query(productsCol, where('warehouseId', '==', warehouseId));
         }
+    } else {
+        productQuery = query(productsCol);
     }
     
     const productSnapshot = await getDocs(productQuery);
@@ -2402,3 +2404,4 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
