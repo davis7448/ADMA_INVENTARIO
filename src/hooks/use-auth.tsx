@@ -28,10 +28,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const auth = getAuth(app);
   
-  // Use useSearchParams at a higher level to pass to the hook
   const searchParams = useSearchParams();
   const warehouseIdFromUrl = searchParams.get('warehouse');
-  const { warehouses, currentWarehouse, setWarehouse, loading: warehouseLoading } = useWarehouse(warehouseIdFromUrl);
+  const { warehouses, currentWarehouse, loading: warehouseLoading } = useWarehouse(warehouseIdFromUrl);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
@@ -39,12 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let appUser = await findUserByEmail(firebaseUser.email);
         
         if (!appUser) {
-          // If no user profile exists in Firestore, create one
           console.log(`No se encontró perfil para ${firebaseUser.email}, creando uno...`);
           const newUser: Omit<User, 'id'> = {
             name: firebaseUser.email.split('@')[0],
             email: firebaseUser.email,
-            role: 'commercial', // Default role for new sign-ups
+            role: 'commercial', 
             avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.email}`
           };
           const newUserId = await addUser(newUser);
@@ -65,21 +63,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading || warehouseLoading) return; 
 
-    // If user has a specific warehouse, force it (unless they are admin or commercial)
-    if (user?.warehouseId && warehouses.length > 0 && user.role !== 'admin' && user.role !== 'commercial') {
-      if (currentWarehouse?.id !== user.warehouseId) {
-        setWarehouse(user.warehouseId);
-      }
-    }
-
     const isLoginPage = pathname === '/login';
 
-    if (!user && !isLoginPage) {
-      router.push('/login');
-    } else if (user && isLoginPage) {
-      router.push('/');
+    if (!user) {
+      if (!isLoginPage) {
+        router.push('/login');
+      }
+      return;
     }
-  }, [user, loading, warehouseLoading, pathname, router, warehouses, currentWarehouse, setWarehouse]);
+
+    if (isLoginPage) {
+      router.push('/');
+      return;
+    }
+
+    const canChangeWarehouse = user.role === 'admin' || user.role === 'commercial';
+    if (!canChangeWarehouse && user.warehouseId) {
+      const currentUrlWarehouse = searchParams.get('warehouse');
+      if (currentUrlWarehouse !== user.warehouseId) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('warehouse', user.warehouseId);
+        router.replace(`${pathname}?${params.toString()}`);
+      }
+    }
+  }, [user, loading, warehouseLoading, pathname, router, searchParams]);
 
 
   const login = async (email: string, password: string): Promise<boolean> => {
