@@ -5,9 +5,16 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { LogisticsContent } from '@/components/logistics-content';
 import { Suspense } from 'react';
 
-export default async function LogisticsPage() {
+export default async function LogisticsPage({
+    searchParams
+  }: {
+    searchParams: { [key: string]: string | string[] | undefined }
+  }) {
+    
+    const warehouseId = searchParams?.warehouse as string | undefined;
+
     const [productsResult, carriers, platforms] = await Promise.all([
-        getProducts({ fetchAll: true }),
+        getProducts({ fetchAll: true, filters: { warehouseId } }),
         getCarriers(),
         getPlatforms(),
     ]);
