@@ -64,8 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading || warehouseLoading) return; 
 
-    // If user has a specific warehouse, force it
-    if (user?.warehouseId && warehouses.length > 0) {
+    // If user has a specific warehouse, force it (unless they are admin or commercial)
+    if (user?.warehouseId && warehouses.length > 0 && user.role !== 'admin' && user.role !== 'commercial') {
       if (currentWarehouse?.id !== user.warehouseId) {
         setWarehouse(user.warehouseId);
       }

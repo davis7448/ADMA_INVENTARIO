@@ -39,7 +39,7 @@ export default function AppHeader() {
     setWarehouse(warehouseId);
   }
 
-  const canChangeWarehouse = user.role === 'admin';
+  const canChangeWarehouse = user.role === 'admin' || user.role === 'commercial';
 
   return (
     <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6 sticky top-0 z-20">
