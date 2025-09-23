@@ -38,81 +38,23 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     let productQuery: Query = collection(db, 'products');
 
-    // Apply warehouse filter directly in the query if a specific warehouse is selected
+    // Determine which warehouse IDs to query based on the filter
+    const targetWarehouseIds: (string | null)[] = [];
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            const withWarehouseIdQuery = query(productQuery, where('warehouseId', '==', 'wh-bog'));
-            const withoutWarehouseIdQuery = query(productQuery, where('warehouseId', '==', null));
-            
-            const [withWarehouseIdSnapshot, withoutWarehouseIdSnapshot] = await Promise.all([
-                getDocs(withWarehouseIdQuery),
-                getDocs(withoutWarehouseIdQuery),
-            ]);
-
-            const combinedDocs = [...withWarehouseIdSnapshot.docs, ...withoutWarehouseIdSnapshot.docs];
-            
-            const allProductsForBog = combinedDocs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
-                } as Product;
-            });
-            
-            // Filtering in memory for wh-bog case
-            const filteredProducts = allProductsForBog.filter(product => {
-                const lowercasedQuery = searchQuery?.toLowerCase() || '';
-                const searchMatch = !searchQuery || searchQuery.length <= 2
-                    ? true
-                    : product.name.toLowerCase().includes(lowercasedQuery) || 
-                      (product.sku && product.sku.toLowerCase().includes(lowercasedQuery)) ||
-                      (product.productType === 'variable' && product.variants?.some(variant => 
-                          variant.name.toLowerCase().includes(lowercasedQuery) ||
-                          variant.sku.toLowerCase().includes(lowercasedQuery)
-                      ));
-                
-                const rotationMatch = !selectedRotation || selectedRotation === 'all' || product.rotationCategoryName === selectedRotation;
-                const stockMatch = !minStock || product.stock >= parseInt(minStock, 10);
-                const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
-                const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
-                const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
-                const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
-                const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
-
-                return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch;
-            });
-
-            const totalCount = filteredProducts.length;
-            const totalPages = Math.ceil(totalCount / itemsPerPage);
-            const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-
-            const allReservations = await getAllReservations(warehouseId);
-            const reservationsByProductId: Record<string, Reservation[]> = {};
-            for (const reservation of allReservations) {
-                if (!reservationsByProductId[reservation.productId]) {
-                    reservationsByProductId[reservation.productId] = [];
-                }
-                reservationsByProductId[reservation.productId].push(reservation);
-            }
-            
-            const productsWithData = paginatedProducts.map(product => ({
-                ...product,
-                purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
-                lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
-                damagedStock: product.damagedStock || 0,
-                pendingStock: product.pendingStock || 0,
-                reservations: reservationsByProductId[product.id] || [],
-            }));
-
-            return { products: productsWithData, totalPages };
-
-
+            // For INGENIO, include products with 'wh-bog' and those with no warehouse assigned (null)
+            targetWarehouseIds.push('wh-bog', null);
         } else {
-             productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
+            // For any other specific warehouse, only query for that one.
+            targetWarehouseIds.push(warehouseId);
         }
     }
+    // If warehouseId is 'all' or undefined, targetWarehouseIds remains empty, and we query all products.
 
+    if (targetWarehouseIds.length > 0) {
+        productQuery = query(productQuery, where('warehouseId', 'in', targetWarehouseIds));
+    }
+    
     const allProductsSnapshot = await getDocs(productQuery);
 
     let allProducts = allProductsSnapshot.docs.map(doc => {
@@ -125,11 +67,6 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     });
 
     const filteredProducts = allProducts.filter(product => {
-        if (!warehouseId && product.warehouseId !== DEFAULT_WAREHOUSE_ID) {
-            // If no warehouse is selected in URL, only show wh-bog by default.
-            return false;
-        }
-        
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -1440,7 +1377,7 @@ export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]
 
 // Pending Inventory Functions
 export const getPendingInventory = async (warehouseId?: string): Promise<PendingInventoryItem[]> => {
-    const productsResult = await getProducts({ fetchAll: true });
+    const productsResult = await getProducts({ fetchAll: true, filters: { warehouseId } });
     const productsById = new Map(productsResult.products.map(p => [p.id, p]));
 
     const dispatchOrders = await getPartialDispatchOrders(warehouseId);
