@@ -36,26 +36,25 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     let productQuery: Query = query(collection(db, 'products'));
     const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
-    
+
     // Apply server-side filters where possible
+    if (warehouseId && warehouseId !== 'all') {
+        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
+    }
     if (selectedCategory && selectedCategory !== 'all') {
         productQuery = query(productQuery, where('categoryId', '==', selectedCategory));
     }
     if (onlyAudited) {
         productQuery = query(productQuery, where('lastAuditedAt', '!=', null));
     }
-    if (warehouseId && warehouseId !== 'all') {
-        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
-    }
 
     const allProductsSnapshot = await getDocs(productQuery);
     let allProducts = allProductsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        warehouseId: doc.data().warehouseId || DEFAULT_WAREHOUSE_ID, // Ensure warehouseId for filtering
     }) as Product);
 
-    // Apply client-side (in-memory) filters
+    // Apply client-side (in-memory) filters for complex logic
     const filteredProducts = allProducts.filter(product => {
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
@@ -79,10 +78,9 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     const totalCount = filteredProducts.length;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-    // Paginate after all filtering is done
     const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
-    const allReservations = await getAllReservations();
+    const allReservations = await getAllReservations(warehouseId);
     const reservationsByProductId: Record<string, Reservation[]> = {};
   
     for (const reservation of allReservations) {
@@ -585,6 +583,9 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     if (platformId && platformId !== 'all') movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
     if (carrierId && carrierId !== 'all') movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
     if (movementType && movementType !== 'all') movementsQuery = query(movementsQuery, where('type', '==', movementType));
+    if (warehouseId && warehouseId !== 'all') {
+        movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
+    }
 
     const snapshot = await getDocs(movementsQuery);
 
@@ -593,15 +594,9 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         return { 
           id: doc.id, 
           ...data,
-          warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
           date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
     });
-    
-    // In-memory warehouse filtering
-    if (warehouseId && warehouseId !== 'all') {
-        allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
-    }
     
     const sortedMovements = allMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -853,6 +848,10 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     if (endDate) ordersQuery = query(ordersQuery, where('date', '<=', new Date(endDate)));
     if (platformId && platformId !== 'all') ordersQuery = query(ordersQuery, where('platformId', '==', platformId));
     if (carrierId && carrierId !== 'all') ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
+    if (warehouseId && warehouseId !== 'all') {
+        ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
+    }
+
 
     const snapshot = await getDocs(ordersQuery);
 
@@ -861,14 +860,9 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
         return { 
             id: doc.id,
             ...data,
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(doc.data().date) 
         } as DispatchOrder
     });
-    
-    if (warehouseId && warehouseId !== 'all') {
-        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-    }
     
     const filteredOrders = allOrders.filter(order => {
         const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
@@ -890,6 +884,10 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     
+    if (warehouseId && warehouseId !== 'all') {
+        q = query(q, where('warehouseId', '==', warehouseId));
+    }
+    
     const snapshot = await getDocs(q);
 
     let allOrders = snapshot.docs.map(doc => {
@@ -897,21 +895,20 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
         return { 
             id: doc.id,
             ...data,
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
     });
 
-    if (warehouseId && warehouseId !== 'all') {
-        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-    }
-    
     return allOrders;
 }
 
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     
+    if (warehouseId && warehouseId !== 'all') {
+        q = query(q, where('warehouseId', '==', warehouseId));
+    }
+
     const snapshot = await getDocs(q);
 
     let allOrders = snapshot.docs.map(doc => {
@@ -919,14 +916,9 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
         return { 
             id: doc.id,
             ...data,
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
     });
-    
-    if (warehouseId && warehouseId !== 'all') {
-        allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
-    }
     
     return allOrders;
 }
@@ -1533,6 +1525,10 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
     let q: Query = collection(db, 'reservations');
     
+    if (warehouseId && warehouseId !== 'all') {
+        q = query(q, where('warehouseId', '==', warehouseId));
+    }
+    
     const snapshot = await getDocs(q);
     
     let allReservations = snapshot.docs.map(doc => {
@@ -1541,13 +1537,8 @@ export const getAllReservations = async (warehouseId?: string): Promise<Reservat
             id: doc.id, 
             ...data,
             date: parseFirestoreDate(data.date).toISOString(),
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as Reservation;
     });
-
-    if (warehouseId && warehouseId !== 'all') {
-        allReservations = allReservations.filter(r => r.warehouseId === warehouseId);
-    }
     
     return allReservations;
 }
@@ -1561,7 +1552,6 @@ export const getReservationsByProductId = async (productId: string): Promise<Res
             id: doc.id, 
             ...data,
             date: parseFirestoreDate(data.date).toISOString(),
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as Reservation;
     });
 };
@@ -1641,7 +1631,6 @@ export const getStaleReservationAlerts = async (warehouseId?: string): Promise<S
             ...data,
             alertDate: parseFirestoreDate(data.alertDate).toISOString(),
             reservationDate: parseFirestoreDate(data.reservationDate).toISOString(),
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as StaleReservationAlert;
     });
 
@@ -1983,10 +1972,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const toDateEnd = toDate ? endOfDay(toDate) : null;
     const { warehouseId } = filters;
     
-    // NOTE: This approach fetches all data within the date range and then filters in-memory.
-    // This can be slow for very large datasets and may incur higher read costs.
-    // For a production environment, it's recommended to move more of the filtering
-    // logic into the Firestore query itself, which may require creating composite indexes.
+    // Pass warehouseId filter to the data fetching functions
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
         getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
@@ -1996,11 +1982,9 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         getCarriers(),
     ]);
 
-    // Apply warehouse filtering after fetching
     let filteredOrders = ordersResult.orders;
     let filteredMovements = movementsResult.movements;
   
-    
     const productIdsInCategory = filters.categoryIds.length > 0
       ? allProducts.products.filter(p => p.categoryId && filters.categoryIds.includes(p.categoryId)).map(p => p.id)
       : null;

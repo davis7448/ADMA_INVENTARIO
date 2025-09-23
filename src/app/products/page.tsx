@@ -13,9 +13,6 @@ export const revalidate = 0;
 async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
     if (!sessionCookie) return null;
     try {
-        // This part would be more robust with actual session management
-        // For now, we decode what we can. This is a simplification.
-        // A real implementation would verify the session cookie with Firebase Admin SDK.
         const decodedClaims = await getAuth(adminApp).verifySessionCookie(sessionCookie, true);
         const users = await getUsers();
         return users.find(u => u.email === decodedClaims.email) || null;
@@ -35,12 +32,7 @@ export default async function ProductsPage({
     const page = Number(searchParams?.page || '1');
     const limit = Number(searchParams?.limit || '20');
     
-    // We get the current user to apply warehouse filter by default if they have one
-    // This is a simplified way to get user data on the server.
-    // In a real app, you would get this from your session management.
-    // const user = await getCurrentUser(cookies().get('__session')?.value);
-    
-    // Use the warehouse from the URL first, then fallback to user's assigned warehouse
+    // Use the warehouse from the URL first. The useAuth hook will handle redirection if needed.
     const warehouseId = searchParams?.warehouse as string | undefined;
 
     const filters = {
