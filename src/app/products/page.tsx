@@ -4,6 +4,7 @@ import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovemen
 import type { Product, InventoryMovement, RotationCategory } from '@/lib/types';
 import { ProductsContent } from '@/components/products-content';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
+import { Suspense } from 'react';
 
 export const revalidate = 0;
 
@@ -28,14 +29,26 @@ export default async function ProductsPage({
         warehouseId: searchParams?.warehouse as string | undefined,
     };
 
-    const [productsResult, allMovements, rotationCategories] = await Promise.all([
+    const [productsResult, rotationCategories] = await Promise.all([
         getProducts({ page, limit, filters }),
-        getInventoryMovements({ limit: 10000, fetchAll: true, filters: { startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), warehouseId: filters.warehouseId } }),
         getRotationCategories(),
     ]);
 
+    // Fetch movements only for the products on the current page
+    const productIdsOnPage = productsResult.products.map(p => p.id);
+    const movementsResult = productIdsOnPage.length > 0 
+        ? await getInventoryMovements({ 
+            fetchAll: true, 
+            filters: { 
+                productIds: productIdsOnPage,
+                startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                warehouseId: filters.warehouseId 
+            } 
+        })
+        : { movements: [] };
+
     const salesByProduct: Record<string, number> = {};
-    for (const movement of allMovements.movements) {
+    for (const movement of movementsResult.movements) {
         if (movement.type === 'Salida') {
             salesByProduct[movement.productId] = (salesByProduct[movement.productId] || 0) + movement.quantity;
         }
@@ -69,14 +82,17 @@ export default async function ProductsPage({
 
 
     return (
-      <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas', 'logistics']}>
-        <ProductsContent 
-          initialProducts={productsWithRotation}
-          totalPages={productsResult.totalPages}
-          initialSupplierNames={supplierNames}
-          initialCategoryNames={categoryNames}
-          allRotationCategories={rotationCategories}
-        />
-      </AuthProviderWrapper>
+      <Suspense>
+        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas', 'logistics']}>
+          <ProductsContent 
+            initialProducts={productsWithRotation}
+            totalPages={productsResult.totalPages}
+            initialSupplierNames={supplierNames}
+            initialCategoryNames={categoryNames}
+            allRotationCategories={rotationCategories}
+          />
+        </AuthProviderWrapper>
+      </Suspense>
     );
 }
+

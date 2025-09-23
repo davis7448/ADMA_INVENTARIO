@@ -95,7 +95,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                productsWithData = productsWithData.filter(p => !otherWarehouseIds.includes(p.warehouseId!));
+                productsWithData = productsWithData.filter(p => !p.warehouseId || !otherWarehouseIds.includes(p.warehouseId));
             }
         } else {
             productsWithData = productsWithData.filter(p => p.warehouseId === warehouseId);
@@ -600,7 +600,7 @@ export const sendPasswordReset = async (email: string) => {
 
 // Inventory Movement Functions
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
-    const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId } = filters;
+    const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId, productIds } = filters;
     
     let movementsQuery: Query = query(collection(db, 'inventoryMovements'));
 
@@ -608,6 +608,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     if (startDate) movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
     if (endDate) movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
     if (productId && productId !== 'all') movementsQuery = query(movementsQuery, where('productId', '==', productId));
+    if (productIds && productIds.length > 0) movementsQuery = query(movementsQuery, where('productId', 'in', productIds));
     if (platformId && platformId !== 'all') movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
     if (carrierId && carrierId !== 'all') movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
     if (movementType && movementType !== 'all') movementsQuery = query(movementsQuery, where('type', '==', movementType));
@@ -629,7 +630,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                allMovements = allMovements.filter(m => !otherWarehouseIds.includes(m.warehouseId!));
+                allMovements = allMovements.filter(m => !m.warehouseId || !otherWarehouseIds.includes(m.warehouseId));
             }
         } else {
             allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
@@ -903,7 +904,7 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                allOrders = allOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
+                allOrders = allOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
             }
         } else {
             allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
@@ -946,7 +947,7 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                allOrders = allOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
+                allOrders = allOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
             }
         } else {
             allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
@@ -975,7 +976,7 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                allOrders = allOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
+                allOrders = allOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
             }
         } else {
             allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
@@ -1609,7 +1610,7 @@ export const getAllReservations = async (warehouseId?: string): Promise<Reservat
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                allReservations = allReservations.filter(r => !otherWarehouseIds.includes(r.warehouseId!));
+                allReservations = allReservations.filter(r => !r.warehouseId || !otherWarehouseIds.includes(r.warehouseId));
             }
         } else {
             allReservations = allReservations.filter(r => r.warehouseId === warehouseId);
@@ -1712,7 +1713,7 @@ export const getStaleReservationAlerts = async (warehouseId?: string): Promise<S
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                alertList = alertList.filter(a => !otherWarehouseIds.includes(a.warehouseId!));
+                alertList = alertList.filter(a => !a.warehouseId || !otherWarehouseIds.includes(a.warehouseId));
             }
         } else {
             alertList = alertList.filter(a => a.warehouseId === warehouseId);
@@ -2003,7 +2004,7 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = allWarehouses.map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                requestList = requestList.filter(req => !otherWarehouseIds.includes(req.warehouseId!));
+                requestList = requestList.filter(req => !req.warehouseId || !otherWarehouseIds.includes(req.warehouseId));
             }
         } else {
             requestList = requestList.filter(req => req.warehouseId === warehouseId);
@@ -2092,8 +2093,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
             const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
             if (otherWarehouseIds.length > 0) {
-                filteredOrders = filteredOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
-                filteredMovements = filteredMovements.filter(m => !otherWarehouseIds.includes(m.warehouseId!));
+                filteredOrders = filteredOrders.filter(o => !o.warehouseId || !otherWarehouseIds.includes(o.warehouseId));
+                filteredMovements = filteredMovements.filter(m => !m.warehouseId || !otherWarehouseIds.includes(m.warehouseId));
             }
         } else {
             filteredOrders = filteredOrders.filter(o => o.warehouseId === warehouseId);
@@ -2103,7 +2104,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
   
     
     const productIdsInCategory = filters.categoryIds.length > 0
-      ? allProducts.products.filter(p => filters.categoryIds.includes(p.categoryId)).map(p => p.id)
+      ? allProducts.products.filter(p => p.categoryId && filters.categoryIds.includes(p.categoryId)).map(p => p.id)
       : null;
     
     const platformNameMap = allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>);
