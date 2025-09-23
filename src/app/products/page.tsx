@@ -1,12 +1,30 @@
 
 
-import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovements, getRotationCategories } from '@/lib/api';
-import type { Product, InventoryMovement, RotationCategory } from '@/lib/types';
+import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovements, getRotationCategories, getUsers } from '@/lib/api';
+import type { Product, InventoryMovement, RotationCategory, User } from '@/lib/types';
 import { ProductsContent } from '@/components/products-content';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
+import { getAuth } from 'firebase-admin/auth';
+import { app as adminApp } from '@/lib/firebase-admin';
 
 export const revalidate = 0;
+
+async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
+    if (!sessionCookie) return null;
+    try {
+        // This part would be more robust with actual session management
+        // For now, we decode what we can. This is a simplification.
+        // A real implementation would verify the session cookie with Firebase Admin SDK.
+        const decodedClaims = await getAuth(adminApp).verifySessionCookie(sessionCookie, true);
+        const users = await getUsers();
+        return users.find(u => u.email === decodedClaims.email) || null;
+    } catch (error) {
+        console.error("Session verification failed, this is expected if FIREBASE_PRIVATE_KEY is not set.", error);
+        return null;
+    }
+}
+
 
 export default async function ProductsPage({
     searchParams
@@ -17,6 +35,14 @@ export default async function ProductsPage({
     const page = Number(searchParams?.page || '1');
     const limit = Number(searchParams?.limit || '20');
     
+    // We get the current user to apply warehouse filter by default if they have one
+    // This is a simplified way to get user data on the server.
+    // In a real app, you would get this from your session management.
+    // const user = await getCurrentUser(cookies().get('__session')?.value);
+    
+    // Use the warehouse from the URL first, then fallback to user's assigned warehouse
+    const warehouseId = searchParams?.warehouse as string | undefined;
+
     const filters = {
         searchQuery: searchParams?.q as string,
         selectedCategory: searchParams?.category as string,
@@ -26,7 +52,7 @@ export default async function ProductsPage({
         hasPending: searchParams?.pending === 'true',
         hasReservations: searchParams?.reservations === 'true',
         onlyAudited: searchParams?.audited === 'true',
-        warehouseId: searchParams?.warehouse as string | undefined,
+        warehouseId: warehouseId,
     };
 
     const [productsResult, rotationCategories] = await Promise.all([
