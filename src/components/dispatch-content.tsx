@@ -49,15 +49,29 @@ interface GroupedPendingProduct {
     }[];
 }
 
-export function DispatchContent() {
+interface DispatchContentProps {
+    initialPendingOrders: DispatchOrder[];
+    initialPartialOrders: DispatchOrder[];
+    initialProducts: Product[];
+    initialPlatforms: Platform[];
+    initialCarriers: Carrier[];
+}
+
+export function DispatchContent({ 
+    initialPendingOrders,
+    initialPartialOrders,
+    initialProducts,
+    initialPlatforms,
+    initialCarriers
+}: DispatchContentProps) {
   const { currentWarehouse } = useAuth();
-  const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>([]);
-  const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [carriers, setCarriers] = useState<Carrier[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>(initialPendingOrders);
+  const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>(initialPartialOrders);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
+  const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
   const [productsById, setProductsById] = useState<Record<string, Product>>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Filter states
   const [filterProductId, setFilterProductId] = useState<string>('');
@@ -92,8 +106,14 @@ export function DispatchContent() {
   };
   
   useEffect(() => {
-    fetchData();
-  }, [currentWarehouse]);
+    setPendingOrders(initialPendingOrders);
+    setPartialOrders(initialPartialOrders);
+    setProducts(initialProducts);
+    setPlatforms(initialPlatforms);
+    setCarriers(initialCarriers);
+    const newProductsById = initialProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>);
+    setProductsById(newProductsById);
+}, [initialPendingOrders, initialPartialOrders, initialProducts, initialPlatforms, initialCarriers]);
 
 
   const platformNames = useMemo(() => 
