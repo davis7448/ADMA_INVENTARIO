@@ -1,42 +1,87 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to get the user's role from the 'users' collection
-    function getUserRole(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isRole(role) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+    function isRoleIn(roles) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
     }
 
-    // --- Users Collection ---
-    // Allow users to read their own data.
-    // Allow admins to read any user's data.
-    match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || getUserRole(request.auth.uid) == 'admin');
-      // Writes are restricted to server-side admin SDK (e.g., seeding)
-      allow write: if false; 
-    }
-
-    // --- Products, Suppliers, Categories ---
-    // These collections can be read by any authenticated user.
-    // Writes (create, update, delete) are restricted to 'admin' and 'commercial' roles.
-    match /(products|suppliers|categories)/{docId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && (getUserRole(request.auth.uid) == 'admin' || getUserRole(request.auth.uid) == 'commercial');
-    }
-
-    // --- Inventory Movements ---
-    // Reads are restricted to 'admin' and 'logistics'.
-    // Writes (new movements) are restricted to 'admin' and 'logistics'.
-    match /inventoryMovements/{movementId} {
-      allow read, create: if request.auth != null && (getUserRole(request.auth.uid) == 'admin' || getUserRole(request.auth.uid) == 'logistics');
-      // No updates or deletes from the client for historical data integrity
-      allow update, delete: if false;
-    }
-    
-    // --- Default deny all other access ---
+    // Default deny all access
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // Allow reads for all authenticated users on most collections
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas', 'logistics']);
+    }
+    match /suppliers/{supplierId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+    }
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+    }
+    match /carriers/{carrierId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+    }
+    match /platforms/{platformId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+    }
+    match /vendedores/{vendedorId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+    }
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isRole('admin');
+    }
+    match /inventoryMovements/{movementId} {
+      allow read, write: if isSignedIn();
+    }
+    match /dispatchOrders/{orderId} {
+      allow read, write: if isSignedIn();
+    }
+    match /auditAlerts/{alertId} {
+      allow read, write: if isSignedIn();
+    }
+    match /staleReservationAlerts/{alertId} {
+      allow read, write: if isSignedIn();
+    }
+    match /stockAlertsCache/{cacheId} {
+      allow read, write: if isSignedIn();
+    }
+    match /cancellationRequests/{reqId} {
+      allow read, write: if isSignedIn();
+    }
+    match /warehouses/{warehouseId} {
+      allow read: if isSignedIn();
+      allow create, update: if isRole('admin');
+    }
+    match /counters/{counterId} {
+      allow read, write: if isSignedIn(); // Server-side access, but locked down for safety.
+    }
+    match /reservations/{reservationId} {
+      allow read, write: if isSignedIn();
+    }
+    match /rotationCategories/{catId} {
+      allow read: if isSignedIn();
+      allow update: if isRoleIn(['admin', 'plataformas']);
+    }
+     match /entryReasons/{reasonId} {
+      allow read: if isSignedIn();
+      allow create, update: if isRoleIn(['admin', 'plataformas']);
     }
   }
 }
