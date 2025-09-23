@@ -34,10 +34,17 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    const productQuery: Query = query(collection(db, 'products'));
     const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
 
+    let productQuery: Query = collection(db, 'products');
+
+    // Apply warehouse filter directly in the query if a specific warehouse is selected
+    if (warehouseId && warehouseId !== 'all') {
+        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
+    }
+
     const allProductsSnapshot = await getDocs(productQuery);
+
     let allProducts = allProductsSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -48,10 +55,15 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     });
 
     const filteredProducts = allProducts.filter(product => {
-        // Warehouse filter
-        const warehouseMatch = !warehouseId || warehouseId === 'all' || product.warehouseId === warehouseId;
-        if (!warehouseMatch) return false;
-
+        // Warehouse filter for 'all' or when no warehouseId is provided (defaults to wh-bog)
+        if (warehouseId && warehouseId !== 'all') {
+            // This is already handled by the query, but we keep it for safety.
+            if(product.warehouseId !== warehouseId) return false;
+        } else if (!warehouseId && product.warehouseId !== DEFAULT_WAREHOUSE_ID) {
+            // If no warehouse is selected in URL, only show wh-bog by default.
+            return false;
+        }
+        
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -577,7 +589,13 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     if (startDate) movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
     if (endDate) movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
     if (productId && productId !== 'all') movementsQuery = query(movementsQuery, where('productId', '==', productId));
-    if (productIds && productIds.length > 0) movementsQuery = query(movementsQuery, where('productId', 'in', productIds));
+    if (productIds && productIds.length > 0) {
+        const chunks = [];
+        for (let i = 0; i < productIds.length; i += 30) {
+            chunks.push(productIds.slice(i, i + 30));
+        }
+        movementsQuery = query(movementsQuery, where('productId', 'in', chunks.flat()));
+    }
     if (platformId && platformId !== 'all') movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
     if (carrierId && carrierId !== 'all') movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
     if (movementType && movementType !== 'all') movementsQuery = query(movementsQuery, where('type', '==', movementType));

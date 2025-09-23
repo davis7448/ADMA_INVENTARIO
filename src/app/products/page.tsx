@@ -32,7 +32,8 @@ export default async function ProductsPage({
     const page = Number(searchParams?.page || '1');
     const limit = Number(searchParams?.limit || '20');
     
-    // Use the warehouse from the URL first. The useAuth hook will handle redirection if needed.
+    // The useAuth hook on the client will handle redirection to the correct warehouse if needed.
+    // For server-side rendering, we use the URL param or default to 'wh-bog' for initial load.
     const warehouseId = searchParams?.warehouse as string | undefined;
 
     const filters = {
