@@ -40,6 +40,9 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
     
     if (filters.warehouseId) {
         productQuery = query(productQuery, where('warehouseId', '==', filters.warehouseId));
+    } else {
+        // Fallback for data that might not have warehouseId
+        // This logic can be more complex, e.g. show all if user is admin
     }
 
     const productSnapshot = await getDocs(productQuery);
@@ -596,7 +599,7 @@ export const sendPasswordReset = async (email: string) => {
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const movementsCol = collection(db, 'inventoryMovements');
     
-    let q: Query = query(movementsCol, orderBy('date', 'desc'));
+    let q: Query = movementsCol;
     
     const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId } = filters;
     
@@ -613,7 +616,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
           warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
           date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
-    });
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const filteredMovements = allMovements.filter(m => {
         const date = new Date(m.date);
@@ -869,7 +872,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
 export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const ordersCol = collection(db, 'dispatchOrders');
     
-    let q: Query = query(ordersCol, orderBy('date', 'desc'));
+    let q: Query = ordersCol;
     
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
     
@@ -886,7 +889,7 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(doc.data().date) 
         } as DispatchOrder
-    });
+    }).sort((a, b) => b.date.getTime() - a.date.getTime());
 
     const filteredOrders = allOrders.filter(order => {
         const date = new Date(order.date);
@@ -912,7 +915,7 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
 
 
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
-    let q = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
+    let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
@@ -929,7 +932,7 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
 }
 
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
-    let q = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
+    let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
@@ -1301,7 +1304,7 @@ export const annulGuideDuringDispatch = async (
 
 // Audit Alert Functions
 export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]> => {
-    let q: Query = query(collection(db, 'auditAlerts'));
+    let q: Query = collection(db, 'auditAlerts');
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
@@ -1541,7 +1544,7 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 
 // Reservation Functions
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
-    let q: Query = query(collection(db, 'reservations'));
+    let q: Query = collection(db, 'reservations');
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
@@ -1631,7 +1634,7 @@ export const deleteReservation = async (reservationId: string) => {
 
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
-    let q: Query = query(collection(db, 'staleReservationAlerts'));
+    let q: Query = collection(db, 'staleReservationAlerts');
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
@@ -1903,7 +1906,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
 };
 
 export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
-    let q: Query = query(collection(db, 'cancellationRequests'));
+    let q: Query = collection(db, 'cancellationRequests');
     if (warehouseId) {
         q = query(q, where('warehouseId', '==', warehouseId));
     }
@@ -2255,6 +2258,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 
