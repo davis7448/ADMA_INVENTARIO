@@ -83,14 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (currentUrlWarehouse !== user.warehouseId) {
         const params = new URLSearchParams(searchParams.toString());
         params.set('warehouse', user.warehouseId);
-        // Use replace to avoid adding to browser history
         router.replace(`${pathname}?${params.toString()}`);
       }
-    } else if (!searchParams.has('warehouse') && user.warehouseId && !canChangeWarehouse) {
-        // If no warehouse is in the URL, but the user has one assigned, redirect
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('warehouse', user.warehouseId);
-        router.replace(`${pathname}?${params.toString()}`);
     }
 
   }, [user, loading, warehouseLoading, pathname, router, searchParams]);
