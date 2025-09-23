@@ -6,7 +6,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, DashboardData } from './types';
 import {v4 as uuidv4} from 'uuid';
-import { startOfDay, endOfDay, subDays, format, isToday, eachDayOfInterval } from 'date-fns';
+import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
 
 const storage = getStorage();
@@ -35,15 +35,14 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     let productQuery: Query = query(collection(db, 'products'));
+    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
     
     // Apply filters that can be done at the DB level
-    if (filters.selectedCategory && filters.selectedCategory !== 'all') {
-        productQuery = query(productQuery, where('categoryId', '==', filters.selectedCategory));
+    if (selectedCategory && selectedCategory !== 'all') {
+        productQuery = query(productQuery, where('categoryId', '==', selectedCategory));
     }
-    
-    // For pagination, we'll order by a consistent field, like name.
-    if (!fetchAll) {
-      productQuery = query(productQuery, orderBy('name'));
+    if (onlyAudited) {
+        productQuery = query(productQuery, where('lastAuditedAt', '!=', null));
     }
 
     let allProducts: Product[];
@@ -52,10 +51,13 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         const productSnapshot = await getDocs(productQuery);
         allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
     } else {
-        // Handle pagination with cursors
-        let paginatedQuery = query(productQuery, limit(itemsPerPage));
+        const countQuery = query(collection(db, 'products'));
+        const countSnapshot = await getDocs(countQuery);
+        const totalCount = countSnapshot.size;
+        
+        let paginatedQuery = query(productQuery, orderBy('name'), limit(itemsPerPage));
         if (page > 1) {
-            const previousPageQuery = query(productQuery, limit((page - 1) * itemsPerPage));
+            const previousPageQuery = query(productQuery, orderBy('name'), limit((page - 1) * itemsPerPage));
             const previousPageSnapshot = await getDocs(previousPageQuery);
             if (!previousPageSnapshot.empty) {
                 const lastVisible = previousPageSnapshot.docs[previousPageSnapshot.docs.length - 1];
@@ -66,8 +68,6 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
     }
 
-
-    // In-memory processing for warehouse assignment and complex filters
     const allReservations = await getAllReservations();
     const reservationsByProductId: Record<string, Reservation[]> = {};
   
@@ -77,11 +77,11 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
       }
       reservationsByProductId[reservation.productId].push(reservation);
     }
-
-    const productsWithData = allProducts.map(product => {
+    
+    let productsWithData = allProducts.map(product => {
         const normalizedProduct: Product = {
             ...product,
-            warehouseId: product.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
+            warehouseId: product.warehouseId || DEFAULT_WAREHOUSE_ID,
             purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
             lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
             damagedStock: product.damagedStock || 0,
@@ -91,13 +91,19 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         return normalizedProduct;
     });
 
-    const filteredProducts = productsWithData.filter(product => {
-        const { searchQuery, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
-        
-        if (warehouseId && warehouseId !== 'all' && product.warehouseId !== warehouseId) {
-            return false;
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                productsWithData = productsWithData.filter(p => !otherWarehouseIds.includes(p.warehouseId!));
+            }
+        } else {
+            productsWithData = productsWithData.filter(p => p.warehouseId === warehouseId);
         }
+    }
 
+
+    const filteredProducts = productsWithData.filter(product => {
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -112,22 +118,14 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         const stockMatch = !minStock || product.stock >= parseInt(minStock, 10);
         const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
         const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
-        const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
 
-        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch && vendedorMatch;
+        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch;
     });
 
-    if (fetchAll) {
-      return { products: filteredProducts.sort((a,b) => a.name.localeCompare(b.name)), totalPages: 1 };
-    }
-
-    // For total pages, we need to know the count of ALL filtered products, not just the paginated ones.
-    // This is still a performance bottleneck for large datasets as it reads many docs.
-    // A better solution for production would be to have a separate query to count documents.
-    const countQuery = query(collection(db, 'products')); // Simple count for now
+    const countQuery = query(collection(db, 'products'));
     const countSnapshot = await getDocs(countQuery);
-    const totalCount = countSnapshot.size; // This is not filtering, just a placeholder.
+    const totalCount = countSnapshot.size;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
 
     return { products: filteredProducts, totalPages };
@@ -606,6 +604,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     
     let movementsQuery: Query = query(collection(db, 'inventoryMovements'));
 
+    // Apply query-able filters first
     if (startDate) movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
     if (endDate) movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
     if (productId && productId !== 'all') movementsQuery = query(movementsQuery, where('productId', '==', productId));
@@ -623,12 +622,19 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
           warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
           date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
-    }).filter(m => {
-        if (warehouseId && warehouseId !== 'all') {
-            return m.warehouseId === warehouseId;
-        }
-        return true;
     });
+    
+    // In-memory warehouse filtering
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                allMovements = allMovements.filter(m => !otherWarehouseIds.includes(m.warehouseId!));
+            }
+        } else {
+            allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
+        }
+    }
     
     const sortedMovements = allMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -891,12 +897,18 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(doc.data().date) 
         } as DispatchOrder
-    }).filter(order => {
-        if (warehouseId && warehouseId !== 'all') {
-            return order.warehouseId === warehouseId;
-        }
-        return true;
     });
+    
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                allOrders = allOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
+            }
+        } else {
+            allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
+        }
+    }
     
     const filteredOrders = allOrders.filter(order => {
         const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
@@ -916,8 +928,7 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
 
 
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
-    const dispatchOrdersCol = collection(db, 'dispatchOrders');
-    let q: Query = query(dispatchOrdersCol, where('status', '==', 'Pendiente'));
+    let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     
     const snapshot = await getDocs(q);
 
@@ -929,19 +940,24 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
-    }).filter(o => {
-        if (warehouseId && warehouseId !== 'all') {
-            return o.warehouseId === warehouseId;
-        }
-        return true;
     });
+
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                allOrders = allOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
+            }
+        } else {
+            allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
+        }
+    }
     
     return allOrders;
 }
 
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
-    const dispatchOrdersCol = collection(db, 'dispatchOrders');
-    let q: Query = query(dispatchOrdersCol, where('status', '==', 'Parcial'));
+    let q: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     
     const snapshot = await getDocs(q);
 
@@ -953,12 +969,18 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             date: parseFirestoreDate(data.date),
         } as DispatchOrder
-    }).filter(o => {
-        if (warehouseId && warehouseId !== 'all') {
-            return o.warehouseId === warehouseId;
-        }
-        return true;
     });
+    
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                allOrders = allOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
+            }
+        } else {
+            allOrders = allOrders.filter(o => o.warehouseId === warehouseId);
+        }
+    }
     
     return allOrders;
 }
@@ -1320,8 +1342,16 @@ export const annulGuideDuringDispatch = async (
 // Audit Alert Functions
 export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]> => {
     let q: Query = collection(db, 'auditAlerts');
-    if (warehouseId) {
-        q = query(q, where('warehouseId', '==', warehouseId));
+    if (warehouseId && warehouseId !== 'all') {
+        const otherWarehouseIds = (await getWarehouses())
+            .map(wh => wh.id)
+            .filter(id => id !== warehouseId);
+
+        if (warehouseId === DEFAULT_WAREHOUSE_ID && otherWarehouseIds.length > 0) {
+            q = query(q, where('warehouseId', 'not-in', otherWarehouseIds));
+        } else {
+            q = query(q, where('warehouseId', '==', warehouseId));
+        }
     }
     const alertSnapshot = await getDocs(q);
     const alertList = alertSnapshot.docs.map(doc => {
@@ -1560,9 +1590,10 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 };
 
 // Reservation Functions
-export const getAllReservations = async (): Promise<Reservation[]> => {
-    const reservationsCol = collection(db, 'reservations');
-    const snapshot = await getDocs(reservationsCol);
+export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
+    let q: Query = collection(db, 'reservations');
+    
+    const snapshot = await getDocs(q);
     
     let allReservations = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -1573,6 +1604,17 @@ export const getAllReservations = async (): Promise<Reservation[]> => {
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as Reservation;
     });
+
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                allReservations = allReservations.filter(r => !otherWarehouseIds.includes(r.warehouseId!));
+            }
+        } else {
+            allReservations = allReservations.filter(r => r.warehouseId === warehouseId);
+        }
+    }
     
     return allReservations;
 }
@@ -1652,11 +1694,10 @@ export const deleteReservation = async (reservationId: string) => {
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
     let q: Query = collection(db, 'staleReservationAlerts');
-    if (warehouseId && warehouseId !== 'all') {
-        q = query(q, where('warehouseId', '==', warehouseId));
-    }
+
     const alertSnapshot = await getDocs(q);
-    const alertList = alertSnapshot.docs.map(doc => {
+    
+    let alertList = alertSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
@@ -1666,6 +1707,18 @@ export const getStaleReservationAlerts = async (warehouseId?: string): Promise<S
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as StaleReservationAlert;
     });
+
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                alertList = alertList.filter(a => !otherWarehouseIds.includes(a.warehouseId!));
+            }
+        } else {
+            alertList = alertList.filter(a => a.warehouseId === warehouseId);
+        }
+    }
+
     return alertList.sort((a, b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
 };
 
@@ -1754,7 +1807,15 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
         if (metadataSnap.exists() && !forceRegenerate) {
             let q: Query = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
             if (warehouseId && warehouseId !== 'all') {
-                q = query(q, where('warehouseId', '==', warehouseId));
+                const otherWarehouseIds = (await getWarehouses())
+                    .map(wh => wh.id)
+                    .filter(id => id !== warehouseId);
+
+                if (warehouseId === DEFAULT_WAREHOUSE_ID && otherWarehouseIds.length > 0) {
+                    q = query(q, where('warehouseId', 'not-in', otherWarehouseIds));
+                } else {
+                    q = query(q, where('warehouseId', '==', warehouseId));
+                }
             }
             const alertSnapshot = await getDocs(q);
             const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
@@ -1924,10 +1985,9 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
 
 export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
     let q: Query = collection(db, 'cancellationRequests');
-    // Note: Cancellation requests do not have warehouseId yet. This is a potential improvement.
     const requestsSnapshot = await getDocs(q);
 
-    const requestList: CancellationRequest[] = requestsSnapshot.docs.map(doc => {
+    let requestList: CancellationRequest[] = requestsSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
@@ -1936,12 +1996,19 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
             isDispatched: !!data.isDispatched,
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as CancellationRequest;
-    }).filter(req => {
-        if (warehouseId && warehouseId !== 'all') {
-            return req.warehouseId === warehouseId;
-        }
-        return true;
     });
+
+    if (warehouseId && warehouseId !== 'all') {
+        const allWarehouses = await getWarehouses();
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = allWarehouses.map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                requestList = requestList.filter(req => !otherWarehouseIds.includes(req.warehouseId!));
+            }
+        } else {
+            requestList = requestList.filter(req => req.warehouseId === warehouseId);
+        }
+    }
 
     return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
 };
@@ -1998,111 +2065,41 @@ export const updateWarehouse = async (id: string, name: string): Promise<void> =
     await updateDoc(warehouseRef, { name });
 };
 
-export async function getDashboardSummaryData(date: Date, warehouseId?: string): Promise<DashboardData> {
-    const dayKey = format(date, 'yyyy-MM-dd');
-    const docId = `${dayKey}_${warehouseId || 'wh-bog'}`;
-    const summaryRef = doc(db, 'dailySummaries', docId);
-    const summarySnap = await getDoc(summaryRef);
-  
-    if (summarySnap.exists()) {
-      return summarySnap.data() as DashboardData;
-    }
-    
-    // Return a default empty structure if no summary exists for that day
-    return {
-        totalItemsDispatched: 0,
-        totalAnnulledItems: 0,
-        totalPendingUnits: 0,
-        totalReturns: 0,
-        totalAdjustIn: 0,
-        totalAdjustOut: 0,
-        // All other fields that are calculated live are empty/default
-        chartData: [], pendingChartData: [], returnsChartData: [],
-        annulledChartData: [], adjustInChartData: [], adjustOutChartData: [],
-        productChartData: [], categoryChartData: [], platformCarrierChartData: [],
-        allCarrierNames: [], mostUsedCarrier: { name: '', count: 0, percentage: 0 },
-        platformWithMostOrders: { name: '', count: 0, percentage: 0 },
-        dailyDispatchSummaryData: {},
-    };
-}
-
-
 export async function getDashboardData(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }): Promise<DashboardData> {
     const { from: fromDate, to: toDate } = filters.dateRange || {};
     const fromDateStart = fromDate ? startOfDay(fromDate) : null;
     const toDateEnd = toDate ? endOfDay(toDate) : null;
-  
-    // 1. Fetch pre-aggregated data for historical days
-    const historicalSummaries: DashboardData[] = [];
-    if (fromDateStart && toDateEnd) {
-      const historicalDates = eachDayOfInterval({ start: fromDateStart, end: toDateEnd }).filter(d => !isToday(d));
-      const summaryPromises = historicalDates.map(date => getDashboardSummaryData(date, filters.warehouseId));
-      historicalSummaries.push(...(await Promise.all(summaryPromises)));
-    }
-  
-    // 2. Fetch live data for today
-    const todayStart = startOfDay(new Date());
-
-    let liveDataForToday: DashboardData | null = null;
-    if (!toDateEnd || toDateEnd >= todayStart) {
-        liveDataForToday = await getLiveDashboardDataForPeriod({ ...filters, dateRange: { from: todayStart, to: endOfDay(new Date()) } });
-    }
-
-    // 3. Combine historical KPIs with today's live KPIs
-    const combinedKPIs = historicalSummaries.reduce((acc, summary) => {
-        acc.totalItemsDispatched += summary.totalItemsDispatched;
-        acc.totalAnnulledItems += summary.totalAnnulledItems;
-        acc.totalPendingUnits += summary.totalPendingUnits;
-        acc.totalReturns += summary.totalReturns;
-        acc.totalAdjustIn += summary.totalAdjustIn;
-        acc.totalAdjustOut += summary.totalAdjustOut;
-        return acc;
-    }, { 
-        totalItemsDispatched: liveDataForToday?.totalItemsDispatched || 0,
-        totalAnnulledItems: liveDataForToday?.totalAnnulledItems || 0,
-        totalPendingUnits: liveDataForToday?.totalPendingUnits || 0,
-        totalReturns: liveDataForToday?.totalReturns || 0,
-        totalAdjustIn: liveDataForToday?.totalAdjustIn || 0,
-        totalAdjustOut: liveDataForToday?.totalAdjustOut || 0,
-    });
     
-    // For charts and detailed lists, we still need to calculate them live over the whole period
-    const detailedLiveDataForRange = await getLiveDashboardDataForPeriod(filters);
-
-    return {
-        ...combinedKPIs,
-        chartData: detailedLiveDataForRange.chartData,
-        pendingChartData: detailedLiveDataForRange.pendingChartData,
-        returnsChartData: detailedLiveDataForRange.returnsChartData,
-        annulledChartData: detailedLiveDataForRange.annulledChartData,
-        adjustInChartData: detailedLiveDataForRange.adjustInChartData,
-        adjustOutChartData: detailedLiveDataForRange.adjustOutChartData,
-        productChartData: detailedLiveDataForRange.productChartData,
-        categoryChartData: detailedLiveDataForRange.categoryChartData,
-        platformCarrierChartData: detailedLiveDataForRange.platformCarrierChartData,
-        allCarrierNames: detailedLiveDataForRange.allCarrierNames,
-        mostUsedCarrier: detailedLiveDataForRange.mostUsedCarrier,
-        platformWithMostOrders: detailedLiveDataForRange.platformWithMostOrders,
-        dailyDispatchSummaryData: detailedLiveDataForRange.dailyDispatchSummaryData,
-    };
-}
-
-
-// This function contains the original logic, now used for live calculations.
-export async function getLiveDashboardDataForPeriod(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }): Promise<DashboardData> {
-    const { from: fromDate, to: toDate } = filters.dateRange || {};
-    const fromDateStart = fromDate ? startOfDay(fromDate) : null;
-    const toDateEnd = toDate ? endOfDay(toDate) : null;
-    const warehouseId = filters.warehouseId;
-
+    // NOTE: This approach fetches all data within the date range and then filters in-memory.
+    // This can be slow for very large datasets and may incur higher read costs.
+    // For a production environment, it's recommended to move more of the filtering
+    // logic into the Firestore query itself, which may require creating composite indexes.
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
-        getDispatchOrders({ fetchAll: true, filters: { warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
-        getInventoryMovements({ fetchAll: true, filters: { warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
-        getProducts({ fetchAll: true, filters: { warehouseId } }),
+        getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
+        getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
+        getProducts({ fetchAll: true }),
         getCategories(),
         getPlatforms(),
         getCarriers(),
     ]);
+
+    // Apply warehouse filtering after fetching
+    const warehouseId = filters.warehouseId;
+    let filteredOrders = ordersResult.orders;
+    let filteredMovements = movementsResult.movements;
+
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            const otherWarehouseIds = (await getWarehouses()).map(wh => wh.id).filter(id => id !== DEFAULT_WAREHOUSE_ID);
+            if (otherWarehouseIds.length > 0) {
+                filteredOrders = filteredOrders.filter(o => !otherWarehouseIds.includes(o.warehouseId!));
+                filteredMovements = filteredMovements.filter(m => !otherWarehouseIds.includes(m.warehouseId!));
+            }
+        } else {
+            filteredOrders = filteredOrders.filter(o => o.warehouseId === warehouseId);
+            filteredMovements = filteredMovements.filter(m => m.warehouseId === warehouseId);
+        }
+    }
   
     
     const productIdsInCategory = filters.categoryIds.length > 0
@@ -2113,7 +2110,7 @@ export async function getLiveDashboardDataForPeriod(filters: { dateRange?: { fro
     const carrierNameMap = allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>);
     const allCarrierNames = allCarriers.map(c => c.name);
     
-    const ordersInPeriod = ordersResult.orders.filter(order => {
+    const ordersInPeriod = filteredOrders.filter(order => {
         const platformMatch = filters.platformIds.length === 0 || filters.platformIds.includes(order.platformId);
         const carrierMatch = filters.carrierIds.length === 0 || filters.carrierIds.includes(order.carrierId);
         
@@ -2127,7 +2124,7 @@ export async function getLiveDashboardDataForPeriod(filters: { dateRange?: { fro
         return platformMatch && carrierMatch && productMatch;
     });
 
-    const movementsInPeriod = movementsResult.movements.filter(m => {
+    const movementsInPeriod = filteredMovements.filter(m => {
         let productMatch = true;
         if (filters.productIds.length > 0) {
             productMatch = filters.productIds.includes(m.productId);
