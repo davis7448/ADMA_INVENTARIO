@@ -57,8 +57,9 @@ export default function AppHeader() {
     router.push(`${pathname}?${params.toString()}`);
   }
 
+  const isAdmin = user.role === 'admin';
   const isFromIngenio = user.warehouseId === 'wh-bog';
-  const canSelectAll = user.role === 'admin' || user.role === 'commercial';
+  const canSelectAll = isAdmin || user.role === 'commercial';
 
   return (
     <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6 sticky top-0 z-20">
@@ -110,7 +111,7 @@ export default function AppHeader() {
                         <SelectItem 
                             key={wh.id} 
                             value={wh.id}
-                            disabled={!isFromIngenio && wh.id === 'wh-bog'}
+                            disabled={!isAdmin && !isFromIngenio && wh.id === 'wh-bog'}
                         >
                             {wh.name}
                         </SelectItem>
