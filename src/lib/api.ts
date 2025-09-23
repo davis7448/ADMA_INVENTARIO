@@ -1,6 +1,5 @@
 
 
-
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -41,7 +40,77 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     // Apply warehouse filter directly in the query if a specific warehouse is selected
     if (warehouseId && warehouseId !== 'all') {
-        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
+        if (warehouseId === 'wh-bog') {
+            const withWarehouseIdQuery = query(productQuery, where('warehouseId', '==', 'wh-bog'));
+            const withoutWarehouseIdQuery = query(productQuery, where('warehouseId', '==', null));
+            
+            const [withWarehouseIdSnapshot, withoutWarehouseIdSnapshot] = await Promise.all([
+                getDocs(withWarehouseIdQuery),
+                getDocs(withoutWarehouseIdQuery),
+            ]);
+
+            const combinedDocs = [...withWarehouseIdSnapshot.docs, ...withoutWarehouseIdSnapshot.docs];
+            
+            const allProductsForBog = combinedDocs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
+                } as Product;
+            });
+            
+            // Filtering in memory for wh-bog case
+            const filteredProducts = allProductsForBog.filter(product => {
+                const lowercasedQuery = searchQuery?.toLowerCase() || '';
+                const searchMatch = !searchQuery || searchQuery.length <= 2
+                    ? true
+                    : product.name.toLowerCase().includes(lowercasedQuery) || 
+                      (product.sku && product.sku.toLowerCase().includes(lowercasedQuery)) ||
+                      (product.productType === 'variable' && product.variants?.some(variant => 
+                          variant.name.toLowerCase().includes(lowercasedQuery) ||
+                          variant.sku.toLowerCase().includes(lowercasedQuery)
+                      ));
+                
+                const rotationMatch = !selectedRotation || selectedRotation === 'all' || product.rotationCategoryName === selectedRotation;
+                const stockMatch = !minStock || product.stock >= parseInt(minStock, 10);
+                const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
+                const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
+                const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
+                const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
+                const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
+
+                return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch;
+            });
+
+            const totalCount = filteredProducts.length;
+            const totalPages = Math.ceil(totalCount / itemsPerPage);
+            const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+            const allReservations = await getAllReservations(warehouseId);
+            const reservationsByProductId: Record<string, Reservation[]> = {};
+            for (const reservation of allReservations) {
+                if (!reservationsByProductId[reservation.productId]) {
+                    reservationsByProductId[reservation.productId] = [];
+                }
+                reservationsByProductId[reservation.productId].push(reservation);
+            }
+            
+            const productsWithData = paginatedProducts.map(product => ({
+                ...product,
+                purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
+                lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
+                damagedStock: product.damagedStock || 0,
+                pendingStock: product.pendingStock || 0,
+                reservations: reservationsByProductId[product.id] || [],
+            }));
+
+            return { products: productsWithData, totalPages };
+
+
+        } else {
+             productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
+        }
     }
 
     const allProductsSnapshot = await getDocs(productQuery);
@@ -56,11 +125,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     });
 
     const filteredProducts = allProducts.filter(product => {
-        // Warehouse filter for 'all' or when no warehouseId is provided (defaults to wh-bog)
-        if (warehouseId && warehouseId !== 'all') {
-            // This is already handled by the query, but we keep it for safety.
-            if(product.warehouseId !== warehouseId) return false;
-        } else if (!warehouseId && product.warehouseId !== DEFAULT_WAREHOUSE_ID) {
+        if (!warehouseId && product.warehouseId !== DEFAULT_WAREHOUSE_ID) {
             // If no warehouse is selected in URL, only show wh-bog by default.
             return false;
         }
@@ -585,28 +650,63 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId, productIds } = filters;
     
     let movementsQuery: Query = query(collection(db, 'inventoryMovements'));
+    let movementsQueryNoWarehouse: Query | null = null;
+    
+    if (warehouseId && warehouseId !== 'all') {
+        if (warehouseId === 'wh-bog') {
+            movementsQuery = query(movementsQuery, where('warehouseId', '==', 'wh-bog'));
+            movementsQueryNoWarehouse = query(collection(db, 'inventoryMovements'), where('warehouseId', '==', null));
+        } else {
+            movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
+        }
+    }
 
-    // Apply query-able filters first
-    if (startDate) movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
-    if (endDate) movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
-    if (productId && productId !== 'all') movementsQuery = query(movementsQuery, where('productId', '==', productId));
+    if (startDate) {
+        movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
+        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('date', '>=', new Date(startDate)));
+    }
+    if (endDate) {
+        movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
+        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('date', '<=', new Date(endDate)));
+    }
+    if (productId && productId !== 'all') {
+        movementsQuery = query(movementsQuery, where('productId', '==', productId));
+        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('productId', '==', productId));
+    }
     if (productIds && productIds.length > 0) {
         const chunks = [];
         for (let i = 0; i < productIds.length; i += 30) {
             chunks.push(productIds.slice(i, i + 30));
         }
         movementsQuery = query(movementsQuery, where('productId', 'in', chunks.flat()));
+        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('productId', 'in', chunks.flat()));
     }
-    if (platformId && platformId !== 'all') movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
-    if (carrierId && carrierId !== 'all') movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
-    if (movementType && movementType !== 'all') movementsQuery = query(movementsQuery, where('type', '==', movementType));
-    if (warehouseId && warehouseId !== 'all') {
-        movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
+    if (platformId && platformId !== 'all') {
+        movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
+        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('platformId', '==', platformId));
     }
-
-    const snapshot = await getDocs(movementsQuery);
-
-    let allMovements = snapshot.docs.map(doc => {
+    if (carrierId && carrierId !== 'all') {
+        movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
+        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('carrierId', '==', carrierId));
+    }
+    if (movementType && movementType !== 'all') {
+        movementsQuery = query(movementsQuery, where('type', '==', movementType));
+        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('type', '==', movementType));
+    }
+    
+    let combinedDocs: DocumentSnapshot[] = [];
+    if (movementsQueryNoWarehouse) {
+        const [snapshot, snapshotNoWarehouse] = await Promise.all([
+            getDocs(movementsQuery),
+            getDocs(movementsQueryNoWarehouse)
+        ]);
+        combinedDocs = [...snapshot.docs, ...snapshotNoWarehouse.docs];
+    } else {
+        const snapshot = await getDocs(movementsQuery);
+        combinedDocs = snapshot.docs;
+    }
+    
+    let allMovements = combinedDocs.map(doc => {
         const data = doc.data();
         return { 
           id: doc.id, 
@@ -856,31 +956,55 @@ const parseFirestoreDate = (dateValue: any): Date => {
     return new Date();
   };
 
-export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
+  export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
-
     let ordersQuery: Query = query(collection(db, 'dispatchOrders'));
+    let ordersQueryNoWarehouse: Query | null = null;
 
-    if (startDate) ordersQuery = query(ordersQuery, where('date', '>=', new Date(startDate)));
-    if (endDate) ordersQuery = query(ordersQuery, where('date', '<=', new Date(endDate)));
-    if (platformId && platformId !== 'all') ordersQuery = query(ordersQuery, where('platformId', '==', platformId));
-    if (carrierId && carrierId !== 'all') ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
     if (warehouseId && warehouseId !== 'all') {
-        ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
+        if (warehouseId === 'wh-bog') {
+            ordersQuery = query(ordersQuery, where('warehouseId', '==', 'wh-bog'));
+            ordersQueryNoWarehouse = query(collection(db, 'dispatchOrders'), where('warehouseId', '==', null));
+        } else {
+            ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
+        }
     }
 
+    if (startDate) {
+        ordersQuery = query(ordersQuery, where('date', '>=', new Date(startDate)));
+        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('date', '>=', new Date(startDate)));
+    }
+    if (endDate) {
+        ordersQuery = query(ordersQuery, where('date', '<=', new Date(endDate)));
+        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('date', '<=', new Date(endDate)));
+    }
+    if (platformId && platformId !== 'all') {
+        ordersQuery = query(ordersQuery, where('platformId', '==', platformId));
+        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('platformId', '==', platformId));
+    }
+    if (carrierId && carrierId !== 'all') {
+        ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
+        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('carrierId', '==', carrierId));
+    }
 
-    const snapshot = await getDocs(ordersQuery);
+    let combinedDocs: DocumentSnapshot[] = [];
+    if (ordersQueryNoWarehouse) {
+        const [snapshot, snapshotNoWarehouse] = await Promise.all([
+            getDocs(ordersQuery),
+            getDocs(ordersQueryNoWarehouse)
+        ]);
+        combinedDocs = [...snapshot.docs, ...snapshotNoWarehouse.docs];
+    } else {
+        const snapshot = await getDocs(ordersQuery);
+        combinedDocs = snapshot.docs;
+    }
 
-    let allOrders = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-            id: doc.id,
-            ...data,
-            date: parseFirestoreDate(doc.data().date) 
-        } as DispatchOrder
-    });
-    
+    let allOrders = combinedDocs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: parseFirestoreDate(doc.data().date)
+    } as DispatchOrder));
+
     const filteredOrders = allOrders.filter(order => {
         const productMatch = !productId || productId === 'all' || order.products.some(p => p.productId === productId);
         return productMatch;
@@ -895,7 +1019,7 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     const paginatedOrders = filteredOrders.slice((page - 1) * itemsPerPage, page * itemsPerPage);
     
     return { orders: paginatedOrders, totalPages };
-}
+};
 
 
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
