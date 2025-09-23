@@ -38,19 +38,15 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     let productQuery: Query = collection(db, 'products');
 
-    // Determine the warehouse IDs to query based on the filter
-    const targetWarehouseIds: (string | null | undefined)[] = [];
-    if (warehouseId) {
+    // Apply warehouse filter directly to the query
+    if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined); // Include 'wh-bog' and documents without warehouseId
+            // For INGENIO, get its own products AND products with no warehouse assigned
+            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
         } else {
-            targetWarehouseIds.push(warehouseId); // Strict filtering for other warehouses
+            // For any other warehouse, get only its own products
+            productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
         }
-    }
-    // If no warehouseId is provided, we don't add a warehouse filter, effectively getting all products for roles like admin.
-
-    if (targetWarehouseIds.length > 0) {
-        productQuery = query(productQuery, where('warehouseId', 'in', targetWarehouseIds));
     }
     
     const allProductsSnapshot = await getDocs(productQuery);
@@ -587,20 +583,15 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     
     let baseQuery: Query = collection(db, 'inventoryMovements');
 
-    const targetWarehouseIds: (string | null | undefined)[] = [];
-    if (warehouseId) {
+    if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined); 
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
         } else {
-            targetWarehouseIds.push(warehouseId);
+            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
     }
     
     let movementsQuery = baseQuery;
-    if (targetWarehouseIds.length > 0) {
-        movementsQuery = query(movementsQuery, where('warehouseId', 'in', targetWarehouseIds));
-    }
-
 
     if (startDate) {
         movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
@@ -612,11 +603,14 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         movementsQuery = query(movementsQuery, where('productId', '==', productId));
     }
     if (productIds && productIds.length > 0) {
+        // Firestore 'in' queries are limited to 30 elements. Chunk if necessary.
         const chunks = [];
         for (let i = 0; i < productIds.length; i += 30) {
             chunks.push(productIds.slice(i, i + 30));
         }
-        movementsQuery = query(movementsQuery, where('productId', 'in', chunks.flat()));
+        // This assumes we only need one chunk for the product page, which is reasonable.
+        // For a more robust solution, multiple queries would be needed and results merged.
+        movementsQuery = query(movementsQuery, where('productId', 'in', chunks[0]));
     }
     if (platformId && platformId !== 'all') {
         movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
@@ -828,7 +822,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             exceptions: [],
             cancelledExceptions: [],
             createdBy,
-            warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID, // Use provided warehouseId or default
+            warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID,
         };
     
         const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; 
@@ -886,20 +880,15 @@ const parseFirestoreDate = (dateValue: any): Date => {
     
     let baseQuery: Query = collection(db, 'dispatchOrders');
 
-    const targetWarehouseIds: (string | null | undefined)[] = [];
-    if (warehouseId) {
+    if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined);
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
         } else {
-            targetWarehouseIds.push(warehouseId);
+            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
     }
-    
-    let ordersQuery = baseQuery;
-    if (targetWarehouseIds.length > 0) {
-        ordersQuery = query(ordersQuery, where('warehouseId', 'in', targetWarehouseIds));
-    }
 
+    let ordersQuery = baseQuery;
 
     if (startDate) {
         ordersQuery = query(ordersQuery, where('date', '>=', new Date(startDate)));
@@ -942,21 +931,15 @@ const parseFirestoreDate = (dateValue: any): Date => {
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     
-    const targetWarehouseIds: (string | null | undefined)[] = [];
-    if (warehouseId) {
+    if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined);
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
         } else {
-            targetWarehouseIds.push(warehouseId);
+            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
     }
-
-    let q = baseQuery;
-    if (targetWarehouseIds.length > 0) {
-        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
-    }
     
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(baseQuery);
 
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -973,22 +956,15 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     
-    const targetWarehouseIds: (string | null | undefined)[] = [];
-    if (warehouseId) {
+    if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined);
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
         } else {
-            targetWarehouseIds.push(warehouseId);
+            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
     }
-    
-    let q = baseQuery;
-    if (targetWarehouseIds.length > 0) {
-        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
-    }
 
-
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(baseQuery);
 
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -1361,7 +1337,13 @@ export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]
     let q: Query = query(collection(db, 'auditAlerts'));
 
     if (warehouseId && warehouseId !== 'all') {
-        q = query(q, where('warehouseId', '==', warehouseId));
+        const targetWarehouseIds: (string | null | undefined)[] = [];
+        if (warehouseId === 'wh-bog') {
+            targetWarehouseIds.push('wh-bog', null, undefined);
+        } else {
+            targetWarehouseIds.push(warehouseId);
+        }
+        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
     }
 
     const alertSnapshot = await getDocs(q);
@@ -2069,7 +2051,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const toDateEnd = toDate ? endOfDay(toDate) : null;
     const { warehouseId } = filters;
     
-    // Pass warehouseId filter to the data fetching functions
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
         getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
