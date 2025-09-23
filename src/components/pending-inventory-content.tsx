@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { PendingInventoryItem, Product } from '@/lib/types';
 import {
     Card,
@@ -36,6 +36,8 @@ import type { DateRange } from 'react-day-picker';
 import { cn, formatToTimeZone } from '@/lib/utils';
 import { Check, ChevronsUpDown, Calendar as CalendarIcon, X } from 'lucide-react';
 import { Label } from './ui/label';
+import { getPendingInventory } from '@/lib/api';
+import { useAuth } from '@/hooks/use-auth';
 
 interface PendingInventoryContentProps {
     initialPendingItems: PendingInventoryItem[];
@@ -59,7 +61,16 @@ interface GroupedByProduct {
 
 
 export function PendingInventoryContent({ initialPendingItems, allProducts }: PendingInventoryContentProps) {
-    const [pendingItems] = useState<PendingInventoryItem[]>(initialPendingItems);
+    const { currentWarehouse } = useAuth();
+    const [pendingItems, setPendingItems] = useState<PendingInventoryItem[]>(initialPendingItems);
+
+    useEffect(() => {
+        async function fetchItems() {
+            const items = await getPendingInventory(currentWarehouse?.id);
+            setPendingItems(items);
+        }
+        fetchItems();
+    }, [currentWarehouse]);
 
     // Filter states
     const [filterProductId, setFilterProductId] = useState<string>('');
@@ -297,3 +308,4 @@ export function PendingInventoryContent({ initialPendingItems, allProducts }: Pe
         </div>
     );
 }
+

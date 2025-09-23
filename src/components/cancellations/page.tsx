@@ -45,7 +45,7 @@ interface AnnulmentItem {
 }
 
 function CancellationsContent() {
-    const { user } = useAuth();
+    const { user, currentWarehouse } = useAuth();
     const { toast } = useToast();
     const [requests, setRequests] = useState<CancellationRequest[]>([]);
     const [loading, setLoading] = useState(true);
@@ -65,14 +65,14 @@ function CancellationsContent() {
 
     const fetchRequests = async () => {
         setLoading(true);
-        const fetchedRequests = await getCancellationRequests();
+        const fetchedRequests = await getCancellationRequests(currentWarehouse?.id);
         setRequests(fetchedRequests);
         setLoading(false);
     }
 
     useEffect(() => {
         fetchRequests();
-    }, []);
+    }, [currentWarehouse]);
 
     const handleSubmit = () => {
         if (!user) return;
@@ -117,7 +117,7 @@ function CancellationsContent() {
 
     const handleOpenCancelDialog = async (request: CancellationRequest) => {
         setRequestToUpdate(request);
-        const { orders: allOrders } = await getDispatchOrders({ fetchAll: true });
+        const { orders: allOrders } = await getDispatchOrders({ fetchAll: true, filters: { warehouseId: currentWarehouse?.id } });
         
         // A guide can be in `trackingNumbers` (dispatched) or `exceptions` (not dispatched)
         const targetOrder = allOrders.find(order => 
@@ -408,9 +408,3 @@ export default function CancellationsPage() {
         </AuthProviderWrapper>
     )
 }
-
-    
-
-
-
-    

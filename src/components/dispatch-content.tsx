@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
@@ -37,6 +38,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/hooks/use-auth';
 
 interface GroupedPendingProduct {
     product: Product;
@@ -48,6 +50,7 @@ interface GroupedPendingProduct {
 }
 
 export function DispatchContent() {
+  const { currentWarehouse } = useAuth();
   const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>([]);
   const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -68,10 +71,11 @@ export function DispatchContent() {
 
   const fetchData = async () => {
     setLoading(true);
+    const warehouseId = currentWarehouse?.id;
     const [fetchedPendingOrders, fetchedPartialOrders, fetchedProductsResult, fetchedPlatforms, fetchedCarriers] = await Promise.all([
-      getPendingDispatchOrders(),
-      getPartialDispatchOrders(),
-      getProducts({ limit: 10000 }),
+      getPendingDispatchOrders(warehouseId),
+      getPartialDispatchOrders(warehouseId),
+      getProducts({ limit: 10000, filters: { warehouseId } }),
       getPlatforms(),
       getCarriers(),
     ]);
@@ -89,7 +93,7 @@ export function DispatchContent() {
   
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentWarehouse]);
 
 
   const platformNames = useMemo(() => 
