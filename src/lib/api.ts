@@ -38,18 +38,14 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     let productQuery: Query = collection(db, 'products');
 
-    // Determine which warehouse IDs to query based on the filter
     const targetWarehouseIds: (string | null)[] = [];
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            // For INGENIO, include products with 'wh-bog' and those with no warehouse assigned (null)
             targetWarehouseIds.push('wh-bog', null);
         } else {
-            // For any other specific warehouse, only query for that one.
             targetWarehouseIds.push(warehouseId);
         }
     }
-    // If warehouseId is 'all' or undefined, targetWarehouseIds remains empty, and we query all products.
 
     if (targetWarehouseIds.length > 0) {
         productQuery = query(productQuery, where('warehouseId', 'in', targetWarehouseIds));
@@ -62,7 +58,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         return {
             id: doc.id,
             ...doc.data(),
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as Product
     });
 
@@ -586,29 +582,31 @@ export const sendPasswordReset = async (email: string) => {
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId, productIds } = filters;
     
-    let movementsQuery: Query = query(collection(db, 'inventoryMovements'));
-    let movementsQueryNoWarehouse: Query | null = null;
-    
+    let baseQuery: Query = query(collection(db, 'inventoryMovements'));
+
+    const targetWarehouseIds: (string | null)[] = [];
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            movementsQuery = query(movementsQuery, where('warehouseId', '==', 'wh-bog'));
-            movementsQueryNoWarehouse = query(collection(db, 'inventoryMovements'), where('warehouseId', '==', null));
+            targetWarehouseIds.push('wh-bog', null);
         } else {
-            movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
+            targetWarehouseIds.push(warehouseId);
         }
     }
 
+    if (targetWarehouseIds.length > 0) {
+        baseQuery = query(baseQuery, where('warehouseId', 'in', targetWarehouseIds));
+    }
+
+    let movementsQuery = baseQuery;
+
     if (startDate) {
         movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
-        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('date', '>=', new Date(startDate)));
     }
     if (endDate) {
         movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
-        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('date', '<=', new Date(endDate)));
     }
     if (productId && productId !== 'all') {
         movementsQuery = query(movementsQuery, where('productId', '==', productId));
-        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('productId', '==', productId));
     }
     if (productIds && productIds.length > 0) {
         const chunks = [];
@@ -616,34 +614,20 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
             chunks.push(productIds.slice(i, i + 30));
         }
         movementsQuery = query(movementsQuery, where('productId', 'in', chunks.flat()));
-        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('productId', 'in', chunks.flat()));
     }
     if (platformId && platformId !== 'all') {
         movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
-        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('platformId', '==', platformId));
     }
     if (carrierId && carrierId !== 'all') {
         movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
-        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('carrierId', '==', carrierId));
     }
     if (movementType && movementType !== 'all') {
         movementsQuery = query(movementsQuery, where('type', '==', movementType));
-        if (movementsQueryNoWarehouse) movementsQueryNoWarehouse = query(movementsQueryNoWarehouse, where('type', '==', movementType));
     }
     
-    let combinedDocs: DocumentSnapshot[] = [];
-    if (movementsQueryNoWarehouse) {
-        const [snapshot, snapshotNoWarehouse] = await Promise.all([
-            getDocs(movementsQuery),
-            getDocs(movementsQueryNoWarehouse)
-        ]);
-        combinedDocs = [...snapshot.docs, ...snapshotNoWarehouse.docs];
-    } else {
-        const snapshot = await getDocs(movementsQuery);
-        combinedDocs = snapshot.docs;
-    }
+    const snapshot = await getDocs(movementsQuery);
     
-    let allMovements = combinedDocs.map(doc => {
+    let allMovements = snapshot.docs.map(doc => {
         const data = doc.data();
         return { 
           id: doc.id, 
@@ -895,48 +879,40 @@ const parseFirestoreDate = (dateValue: any): Date => {
 
   export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
-    let ordersQuery: Query = query(collection(db, 'dispatchOrders'));
-    let ordersQueryNoWarehouse: Query | null = null;
+    
+    let baseQuery: Query = query(collection(db, 'dispatchOrders'));
 
+    const targetWarehouseIds: (string | null)[] = [];
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            ordersQuery = query(ordersQuery, where('warehouseId', '==', 'wh-bog'));
-            ordersQueryNoWarehouse = query(collection(db, 'dispatchOrders'), where('warehouseId', '==', null));
+            targetWarehouseIds.push('wh-bog', null);
         } else {
-            ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
+            targetWarehouseIds.push(warehouseId);
         }
     }
 
+    if (targetWarehouseIds.length > 0) {
+        baseQuery = query(baseQuery, where('warehouseId', 'in', targetWarehouseIds));
+    }
+    
+    let ordersQuery = baseQuery;
+
     if (startDate) {
         ordersQuery = query(ordersQuery, where('date', '>=', new Date(startDate)));
-        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('date', '>=', new Date(startDate)));
     }
     if (endDate) {
         ordersQuery = query(ordersQuery, where('date', '<=', new Date(endDate)));
-        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('date', '<=', new Date(endDate)));
     }
     if (platformId && platformId !== 'all') {
         ordersQuery = query(ordersQuery, where('platformId', '==', platformId));
-        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('platformId', '==', platformId));
     }
     if (carrierId && carrierId !== 'all') {
         ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
-        if (ordersQueryNoWarehouse) ordersQueryNoWarehouse = query(ordersQueryNoWarehouse, where('carrierId', '==', carrierId));
     }
 
-    let combinedDocs: DocumentSnapshot[] = [];
-    if (ordersQueryNoWarehouse) {
-        const [snapshot, snapshotNoWarehouse] = await Promise.all([
-            getDocs(ordersQuery),
-            getDocs(ordersQueryNoWarehouse)
-        ]);
-        combinedDocs = [...snapshot.docs, ...snapshotNoWarehouse.docs];
-    } else {
-        const snapshot = await getDocs(ordersQuery);
-        combinedDocs = snapshot.docs;
-    }
+    const snapshot = await getDocs(ordersQuery);
 
-    let allOrders = combinedDocs.map(doc => ({
+    let allOrders = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         date: parseFirestoreDate(doc.data().date)
@@ -1694,7 +1670,7 @@ export const deleteReservation = async (reservationId: string) => {
 
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
-    let q: Query = collection(db, 'staleReservationAlerts');
+    let q: Query = query(collection(db, 'staleReservationAlerts'));
     
     if (warehouseId && warehouseId !== 'all') {
         q = query(q, where('warehouseId', '==', warehouseId));
