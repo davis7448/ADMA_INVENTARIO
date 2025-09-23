@@ -38,13 +38,10 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     let productQuery: Query = collection(db, 'products');
 
-    // Apply warehouse filter directly to the query
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            // For INGENIO, get its own products AND products with no warehouse assigned
-            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
+            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
-            // For any other warehouse, get only its own products
             productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
         }
     }
@@ -585,7 +582,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
 
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
             baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
@@ -603,13 +600,10 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         movementsQuery = query(movementsQuery, where('productId', '==', productId));
     }
     if (productIds && productIds.length > 0) {
-        // Firestore 'in' queries are limited to 30 elements. Chunk if necessary.
         const chunks = [];
         for (let i = 0; i < productIds.length; i += 30) {
             chunks.push(productIds.slice(i, i + 30));
         }
-        // This assumes we only need one chunk for the product page, which is reasonable.
-        // For a more robust solution, multiple queries would be needed and results merged.
         movementsQuery = query(movementsQuery, where('productId', 'in', chunks[0]));
     }
     if (platformId && platformId !== 'all') {
@@ -822,7 +816,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             exceptions: [],
             cancelledExceptions: [],
             createdBy,
-            warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID,
+            warehouseId, // Use the provided warehouseId
         };
     
         const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; 
@@ -852,7 +846,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             dispatchId,
             userId: createdBy?.id,
             userName: createdBy?.name,
-            warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID,
+            warehouseId,
         });
     }
 
@@ -882,7 +876,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
 
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
             baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
@@ -933,7 +927,7 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
     
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
             baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
@@ -958,7 +952,7 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
     
     if (warehouseId && warehouseId !== 'all') {
         if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
+            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
             baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
         }
@@ -1337,13 +1331,11 @@ export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]
     let q: Query = query(collection(db, 'auditAlerts'));
 
     if (warehouseId && warehouseId !== 'all') {
-        const targetWarehouseIds: (string | null | undefined)[] = [];
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined);
+            q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
-            targetWarehouseIds.push(warehouseId);
+            q = query(q, where('warehouseId', '==', warehouseId));
         }
-        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
     }
 
     const alertSnapshot = await getDocs(q);
@@ -1587,13 +1579,11 @@ export const getAllReservations = async (warehouseId?: string): Promise<Reservat
     let q: Query = collection(db, 'reservations');
     
     if (warehouseId && warehouseId !== 'all') {
-        const targetWarehouseIds: (string | null | undefined)[] = [];
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined);
+            q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
-            targetWarehouseIds.push(warehouseId);
+            q = query(q, where('warehouseId', '==', warehouseId));
         }
-        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
     }
     
     const snapshot = await getDocs(q);
@@ -1686,13 +1676,11 @@ export const getStaleReservationAlerts = async (warehouseId?: string): Promise<S
     let q: Query = query(collection(db, 'staleReservationAlerts'));
     
     if (warehouseId && warehouseId !== 'all') {
-        const targetWarehouseIds: (string | null | undefined)[] = [];
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null, undefined);
+            q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
-            targetWarehouseIds.push(warehouseId);
+            q = query(q, where('warehouseId', '==', warehouseId));
         }
-        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
     }
 
     const alertSnapshot = await getDocs(q);
@@ -1795,13 +1783,11 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
         if (metadataSnap.exists() && !forceRegenerate) {
             let q: Query = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
             if (warehouseId && warehouseId !== 'all') {
-                const targetWarehouseIds: (string | null | undefined)[] = [];
                 if (warehouseId === 'wh-bog') {
-                    targetWarehouseIds.push('wh-bog', null, undefined);
+                    q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
                 } else {
-                    targetWarehouseIds.push(warehouseId);
+                    q = query(q, where('warehouseId', '==', warehouseId));
                 }
-                q = query(q, where('warehouseId', 'in', targetWarehouseIds));
             }
             const alertSnapshot = await getDocs(q);
             const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
@@ -2081,8 +2067,14 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         } else if (productIdsInCategory) {
             productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
         }
+
+        const warehouseMatch = !warehouseId || warehouseId === 'all'
+            ? true
+            : warehouseId === 'wh-bog'
+                ? (order.warehouseId === 'wh-bog' || !order.warehouseId)
+                : order.warehouseId === warehouseId;
     
-        return platformMatch && carrierMatch && productMatch;
+        return platformMatch && carrierMatch && productMatch && warehouseMatch;
     });
 
     const movementsInPeriod = filteredMovements.filter(m => {
