@@ -1981,29 +1981,24 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const { from: fromDate, to: toDate } = filters.dateRange || {};
     const fromDateStart = fromDate ? startOfDay(fromDate) : null;
     const toDateEnd = toDate ? endOfDay(toDate) : null;
+    const { warehouseId } = filters;
     
     // NOTE: This approach fetches all data within the date range and then filters in-memory.
     // This can be slow for very large datasets and may incur higher read costs.
     // For a production environment, it's recommended to move more of the filtering
     // logic into the Firestore query itself, which may require creating composite indexes.
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
-        getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
-        getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
-        getProducts({ fetchAll: true }),
+        getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
+        getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
+        getProducts({ fetchAll: true, filters: { warehouseId } }),
         getCategories(),
         getPlatforms(),
         getCarriers(),
     ]);
 
     // Apply warehouse filtering after fetching
-    const warehouseId = filters.warehouseId;
     let filteredOrders = ordersResult.orders;
     let filteredMovements = movementsResult.movements;
-
-    if (warehouseId && warehouseId !== 'all') {
-        filteredOrders = filteredOrders.filter(o => o.warehouseId === warehouseId);
-        filteredMovements = filteredMovements.filter(m => m.warehouseId === warehouseId);
-    }
   
     
     const productIdsInCategory = filters.categoryIds.length > 0
