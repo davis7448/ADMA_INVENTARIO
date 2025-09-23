@@ -24,6 +24,7 @@ const ProductFormSchemaBase = z.object({
   }),
   categoryId: z.string().min(1, 'La categoría es requerida.'),
   vendorId: z.string().min(1, 'El proveedor es requerido.'),
+  warehouseId: z.string().min(1, 'La bodega es requerida.'),
   priceDropshipping: z.preprocess(
     (val) => (String(val).trim() === '' ? undefined : val),
     z.coerce.number({ invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser un número no negativo.').optional()

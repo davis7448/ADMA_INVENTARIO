@@ -39,7 +39,7 @@ import { addProductAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import type { AddProductFormValues } from '@/lib/definitions';
 import { AddProductFormSchema } from '@/lib/definitions';
-import type { Supplier, Category } from '@/lib/types';
+import type { Supplier, Category, Warehouse } from '@/lib/types';
 import { CalendarIcon, Trash2, Upload, Camera } from 'lucide-react';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Label } from '@/components/ui/label';
@@ -55,9 +55,11 @@ interface AddProductFormProps {
   onProductAdded: () => void;
 }
 
+const DEFAULT_WAREHOUSE_ID = 'wh-bog';
+
 export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, warehouses } = useAuth();
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -82,6 +84,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       productType: 'simple',
       categoryId: '',
       vendorId: '',
+      warehouseId: DEFAULT_WAREHOUSE_ID,
       priceDropshipping: undefined,
       priceWholesale: undefined,
       cost: undefined,
@@ -246,7 +249,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   
   useEffect(() => {
     if (!open) {
-      form.reset();
+      form.reset({ warehouseId: DEFAULT_WAREHOUSE_ID });
       setImagePreview(null);
     }
   }, [open, form]);
@@ -395,7 +398,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                       )}
                   />
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
                           control={form.control}
                           name="categoryId"
@@ -433,6 +436,28 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                                       <SelectContent>
                                           {suppliers.map(supplier => (
                                           <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                       <FormField
+                          control={form.control}
+                          name="warehouseId"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Bodega</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value}>
+                                      <FormControl>
+                                          <SelectTrigger>
+                                          <SelectValue placeholder="Seleccionar Bodega" />
+                                          </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                          {warehouses.map(warehouse => (
+                                          <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>
                                           ))}
                                       </SelectContent>
                                   </Select>

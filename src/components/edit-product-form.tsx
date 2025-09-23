@@ -59,7 +59,7 @@ interface EditProductFormProps {
 
 export function EditProductForm({ product, onProductUpdated, children }: EditProductFormProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, warehouses } = useAuth();
   const [open, setOpen] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -84,6 +84,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         productType: product.productType || 'simple',
         categoryId: product.categoryId,
         vendorId: product.vendorId,
+        warehouseId: product.warehouseId,
         priceDropshipping: product.priceDropshipping,
         priceWholesale: product.priceWholesale,
         cost: product.cost,
@@ -123,6 +124,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
             productType: product.productType || 'simple',
             categoryId: product.categoryId,
             vendorId: product.vendorId,
+            warehouseId: product.warehouseId,
             priceDropshipping: product.priceDropshipping,
             priceWholesale: product.priceWholesale,
             cost: product.cost,
@@ -402,7 +404,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                           </FormItem>
                       )}
                   />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <FormField
                           control={form.control}
                           name="categoryId"
@@ -440,6 +442,28 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                                       <SelectContent>
                                           {suppliers.map(supplier => (
                                           <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                              </FormItem>
+                          )}
+                      />
+                       <FormField
+                          control={form.control}
+                          name="warehouseId"
+                          render={({ field }) => (
+                              <FormItem>
+                                  <FormLabel>Bodega</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value} disabled>
+                                      <FormControl>
+                                          <SelectTrigger>
+                                          <SelectValue placeholder="Seleccionar Bodega" />
+                                          </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                          {warehouses.map(warehouse => (
+                                          <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>
                                           ))}
                                       </SelectContent>
                                   </Select>

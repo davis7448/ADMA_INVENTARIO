@@ -78,7 +78,7 @@ interface ProductsContentProps {
 
 export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
     const [loading, setLoading] = useState(false);
-    const { user } = useAuth();
+    const { user, warehouses } = useAuth();
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -443,6 +443,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                         <TableRow>
                             <TableHead className="w-[80px] hidden sm:table-cell" />
                             <TableHead>Nombre</TableHead>
+                            <TableHead>Bodega</TableHead>
                             <TableHead>Rotación</TableHead>
                             <TableHead>Auditoría</TableHead>
                             <TableHead>SKU</TableHead>
@@ -461,7 +462,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <>
                             {Array.from({ length: 5 }).map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={13}>
+                                    <TableCell colSpan={14}>
                                         <Skeleton className="h-16 w-full" />
                                     </TableCell>
                                 </TableRow>
@@ -484,6 +485,9 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                             />
                                         </TableCell>
                                         <TableCell className="font-medium">{product.name}</TableCell>
+                                        <TableCell>
+                                            {warehouses.find(w => w.id === product.warehouseId)?.name || 'N/A'}
+                                        </TableCell>
                                         <TableCell>
                                             <Tooltip>
                                                 <TooltipTrigger>
@@ -630,7 +634,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                     </TableRow>
                                     {product.productType === 'variable' && expandedRow === product.id && (
                                         <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                            <TableCell colSpan={13}>
+                                            <TableCell colSpan={14}>
                                                 <div className="p-4">
                                                     <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
                                                     <Table>
@@ -665,7 +669,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={13} className="text-center h-24">
+                                <TableCell colSpan={14} className="text-center h-24">
                                     No se encontraron productos con los filtros actuales.
                                 </TableCell>
                             </TableRow>
@@ -753,5 +757,4 @@ function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPag
         </div>
     );
 };
-
     
