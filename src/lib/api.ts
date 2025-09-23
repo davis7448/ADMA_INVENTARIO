@@ -33,15 +33,13 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 
 // Product Functions
-export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    const productsCol = collection(db, 'products');
-    let productQuery: Query = query(productsCol);
-    
-    // Apply all filters EXCEPT warehouseId at the query level if they exist
+export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
+    let productQuery: Query = query(collection(db, 'products'));
+
     if (filters.selectedCategory && filters.selectedCategory !== 'all') {
         productQuery = query(productQuery, where('categoryId', '==', filters.selectedCategory));
     }
-    
+  
     const productSnapshot = await getDocs(productQuery);
 
     let allProducts = productSnapshot.docs.map(doc => {
@@ -49,7 +47,6 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
         return { 
             id: doc.id, 
             ...data,
-            // Ensure every product has a warehouseId for consistent filtering in code.
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
             purchaseDate: data.purchaseDate ? parseFirestoreDate(data.purchaseDate).toISOString() : undefined,
             lastAuditedAt: data.lastAuditedAt ? parseFirestoreDate(data.lastAuditedAt).toISOString() : undefined,
@@ -58,8 +55,8 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
         } as Product
     });
 
-    // Now, apply the warehouse filter in code
-    if (filters.warehouseId) {
+    // In-memory warehouse filtering
+    if (filters.warehouseId && filters.warehouseId !== 'all') {
         allProducts = allProducts.filter(p => p.warehouseId === filters.warehouseId);
     }
   
@@ -78,7 +75,6 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
       reservations: reservationsByProductId[product.id] || [],
     }));
 
-    // Apply remaining filters that are more complex or require fetched data
     const filteredProducts = productsWithData.filter(product => {
         const { searchQuery, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited } = filters;
         
@@ -100,7 +96,11 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters 
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
 
         return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && auditedMatch && vendedorMatch;
-    });
+    }).sort((a,b) => a.name.localeCompare(b.name));
+
+    if (fetchAll) {
+      return { products: filteredProducts, totalPages: 1 };
+    }
 
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     const paginatedProducts = filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
@@ -601,8 +601,8 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         } as InventoryMovement
     });
 
-    // Apply warehouse filter in-memory
-    if (warehouseId) {
+    // In-memory warehouse filtering
+    if (warehouseId && warehouseId !== 'all') {
         allMovements = allMovements.filter(m => m.warehouseId === warehouseId);
     }
     
@@ -1311,7 +1311,7 @@ export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]
 
 // Pending Inventory Functions
 export const getPendingInventory = async (warehouseId?: string): Promise<PendingInventoryItem[]> => {
-    const productsResult = await getProducts({ limit: 10000 });
+    const productsResult = await getProducts({ fetchAll: true });
     const productsById = new Map(productsResult.products.map(p => [p.id, p]));
 
     const dispatchOrders = await getPartialDispatchOrders(warehouseId);
@@ -1750,8 +1750,8 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
 export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise<GetStockAlertsResult> => {
     try {
         const [productsResult, allMovementsResult] = await Promise.all([
-            getProducts({ limit: 10000, filters: { warehouseId } }),
-            getInventoryMovements({ limit: 10000, fetchAll: true, filters: { warehouseId, startDate: subDays(new Date(), 7).toISOString() } }),
+            getProducts({ fetchAll: true, filters: { warehouseId } }),
+            getInventoryMovements({ fetchAll: true, filters: { warehouseId, startDate: subDays(new Date(), 7).toISOString() } }),
         ]);
 
         const salesByProductId: Record<string, number[]> = {};
@@ -2005,7 +2005,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { warehouseId: filters.warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
         getInventoryMovements({ fetchAll: true, filters: { warehouseId: filters.warehouseId, startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString() } }),
-        getProducts({ limit: 10000, filters: { warehouseId: filters.warehouseId } }),
+        getProducts({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }),
         getCategories(),
         getPlatforms(),
         getCarriers(),
@@ -2291,6 +2291,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
 
 
     
+
 
 
 
