@@ -15,8 +15,7 @@ export default async function ProductsPage({
 
     const page = Number(searchParams?.page || '1');
     const limit = Number(searchParams?.limit || '20');
-    const warehouseId = searchParams?.warehouse as string | undefined;
-
+    
     const filters = {
         searchQuery: searchParams?.q as string,
         selectedCategory: searchParams?.category as string,
@@ -26,10 +25,9 @@ export default async function ProductsPage({
         hasPending: searchParams?.pending === 'true',
         hasReservations: searchParams?.reservations === 'true',
         onlyAudited: searchParams?.audited === 'true',
-        warehouseId: warehouseId,
+        warehouseId: searchParams?.warehouse as string | undefined,
     };
 
-    // The warehouseId from searchParams is now directly used in getProducts and getInventoryMovements
     const [productsResult, allMovements, rotationCategories] = await Promise.all([
         getProducts({ page, limit, filters }),
         getInventoryMovements({ limit: 10000, fetchAll: true, filters: { startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), warehouseId: filters.warehouseId } }),
