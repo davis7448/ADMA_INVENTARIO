@@ -784,7 +784,7 @@ export const registerInventoryEntry = async (items: (LogisticItem & { trackingNu
 
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId' | 'warehouseId'>): Promise<{ id: string, dispatchId: string, date: Date }> => {
+export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy, warehouseId }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'>): Promise<{ id: string, dispatchId: string, date: Date }> => {
     const allPlatforms = await getPlatforms();
     const allCarriers = await getCarriers();
     const platformName = allPlatforms.find(p => p.id === platformId)?.name || 'N/A';
@@ -828,16 +828,14 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             exceptions: [],
             cancelledExceptions: [],
             createdBy,
-            warehouseId: createdBy?.warehouseId, // Assign warehouseId from the user
+            warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID, // Use provided warehouseId or default
         };
     
         const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; 
         if (!dataToSet.createdBy) {
           delete dataToSet.createdBy;
         }
-        if (!dataToSet.warehouseId) { // Default to INGENIO if user has no warehouse
-            dataToSet.warehouseId = DEFAULT_WAREHOUSE_ID;
-        }
+       
         transaction.set(newDispatchOrderRef, dataToSet);
         
         return newDispatchId;
@@ -860,7 +858,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             dispatchId,
             userId: createdBy?.id,
             userName: createdBy?.name,
-            warehouseId: createdBy?.warehouseId || DEFAULT_WAREHOUSE_ID,
+            warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID,
         });
     }
 

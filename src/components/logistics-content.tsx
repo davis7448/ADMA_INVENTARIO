@@ -72,7 +72,7 @@ interface LogisticsContentProps {
 }
 
 export function LogisticsContent({ initialProducts, initialCarriers, initialPlatforms }: LogisticsContentProps) {
-    const { user } = useAuth();
+    const { user, currentWarehouse } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
     const [allProductsList, setAllProductsList] = useState<Product[]>(initialProducts);
@@ -324,7 +324,8 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                     platformId: platform,
                     carrierId: carrier,
                     products: productsForDispatch,
-                    createdBy: user ? { id: user.id, name: user.name } : undefined,
+                    createdBy: user,
+                    warehouseId: currentWarehouse?.id
                 });
 
                 const pdfProducts = dispatchedProducts.map(p => ({
