@@ -1,8 +1,4 @@
-
-
-"use client";
-
-import { CancellationsContent } from "@/components/cancellations/page";
+import { CancellationsContent } from "@/components/cancellations-content";
 import { AuthProviderWrapper } from "@/components/auth-provider-wrapper";
 import { Suspense } from "react";
 

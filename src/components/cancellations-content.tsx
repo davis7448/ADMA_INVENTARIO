@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import { useState, useEffect, useTransition } from 'react';
@@ -71,8 +69,10 @@ export function CancellationsContent() {
     }
 
     useEffect(() => {
-        fetchRequests();
-    }, [currentWarehouse]);
+        if(user) {
+            fetchRequests();
+        }
+    }, [currentWarehouse, user]);
 
     const handleSubmit = () => {
         if (!user) return;
