@@ -3,7 +3,7 @@
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot, Filter } from "firebase/firestore";
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, CancellationRequest, Warehouse } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format, isToday } from 'date-fns';
@@ -35,70 +35,66 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, filters = {} }: { page?: number, limit?: number, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     const productsCol = collection(db, 'products');
-    
-    let productDocs: DocumentSnapshot[] = [];
+    let productQuery: Query = query(productsCol);
 
-    if (filters.warehouseId) {
-        if (filters.warehouseId === DEFAULT_WAREHOUSE_ID) {
-            // Query for default warehouse and for items with no warehouse set, then merge
-            const query1 = query(productsCol, where('warehouseId', '==', DEFAULT_WAREHOUSE_ID));
-            const query2 = query(productsCol, where('warehouseId', 'in', [null, '']));
-            const [snapshot1, snapshot2] = await Promise.all([getDocs(query1), getDocs(query2)]);
-            productDocs = [...snapshot1.docs, ...snapshot2.docs];
+    const warehouseId = filters.warehouseId;
+    if (warehouseId) {
+        if (warehouseId === DEFAULT_WAREHOUSE_ID) {
+            // If it's the default warehouse, include products where warehouseId is 'wh-bog' OR where the field doesn't exist
+            productQuery = query(productsCol, 
+                Filter.or(
+                    where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
+                    where('warehouseId', '==', null),
+                    where('warehouseId', '==', '')
+                )
+            );
         } else {
-            const productQuery = query(productsCol, where('warehouseId', '==', filters.warehouseId));
-            const productSnapshot = await getDocs(productQuery);
-            productDocs = productSnapshot.docs;
+            // For any other warehouse, query for that specific ID
+            productQuery = query(productsCol, where('warehouseId', '==', warehouseId));
         }
-    } else {
-        const productSnapshot = await getDocs(productsCol);
-        productDocs = productSnapshot.docs;
     }
     
-    const uniqueIds = new Set<string>();
-    const uniqueProductDocs = productDocs.filter(doc => {
-        if (uniqueIds.has(doc.id)) {
-            return false;
+    const productSnapshot = await getDocs(productQuery);
+    let productList = productSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const purchaseDate = data.purchaseDate;
+        let formattedPurchaseDate: string | undefined = undefined;
+        if (purchaseDate) {
+            if (purchaseDate instanceof Timestamp) {
+                formattedPurchaseDate = purchaseDate.toDate().toISOString();
+            } else if (typeof purchaseDate === 'string' || purchaseDate instanceof Date) {
+                const d = new Date(purchaseDate);
+                if (!isNaN(d.getTime())) {
+                    formattedPurchaseDate = d.toISOString();
+                }
+            }
         }
-        uniqueIds.add(doc.id);
-        return true;
-    });
+        const lastAuditedAt = data.lastAuditedAt;
+        let formattedLastAuditedAt: string | undefined = undefined;
+        if (lastAuditedAt) {
+          if (lastAuditedAt instanceof Timestamp) {
+            formattedLastAuditedAt = lastAuditedAt.toDate().toISOString();
+          } else if (typeof lastAuditedAt === 'string' || lastAuditedAt instanceof Date) {
+            const d = new Date(lastAuditedAt);
+            if (!isNaN(d.getTime())) {
+              formattedLastAuditedAt = d.toISOString();
+            }
+          }
+        }
+        
+        // **CRITICAL FIX HERE**
+        // Explicitly assign the default warehouse ID if the product's warehouseId is missing.
+        const productWarehouseId = data.warehouseId || DEFAULT_WAREHOUSE_ID;
 
-    let productList = uniqueProductDocs.map(doc => {
-      const data = doc.data();
-      const purchaseDate = data.purchaseDate;
-      let formattedPurchaseDate: string | undefined = undefined;
-      if (purchaseDate) {
-          if (purchaseDate instanceof Timestamp) {
-              formattedPurchaseDate = purchaseDate.toDate().toISOString();
-          } else if (typeof purchaseDate === 'string' || purchaseDate instanceof Date) {
-              const d = new Date(purchaseDate);
-              if (!isNaN(d.getTime())) {
-                  formattedPurchaseDate = d.toISOString();
-              }
-          }
-      }
-      const lastAuditedAt = data.lastAuditedAt;
-      let formattedLastAuditedAt: string | undefined = undefined;
-      if (lastAuditedAt) {
-        if (lastAuditedAt instanceof Timestamp) {
-          formattedLastAuditedAt = lastAuditedAt.toDate().toISOString();
-        } else if (typeof lastAuditedAt === 'string' || lastAuditedAt instanceof Date) {
-          const d = new Date(lastAuditedAt);
-          if (!isNaN(d.getTime())) {
-            formattedLastAuditedAt = d.toISOString();
-          }
-        }
-      }
-      return { 
-          id: doc.id, 
-          ...data,
-          warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
-          purchaseDate: formattedPurchaseDate,
-          lastAuditedAt: formattedLastAuditedAt,
-          damagedStock: data.damagedStock || 0,
-          pendingStock: data.pendingStock || 0,
-      } as Product
+        return { 
+            id: doc.id, 
+            ...data,
+            warehouseId: productWarehouseId, // Use the corrected warehouseId
+            purchaseDate: formattedPurchaseDate,
+            lastAuditedAt: formattedLastAuditedAt,
+            damagedStock: data.damagedStock || 0,
+            pendingStock: data.pendingStock || 0,
+        } as Product
     });
   
     const allReservations = await getAllReservations(filters.warehouseId);
@@ -618,32 +614,25 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     const movementsCol = collection(db, 'inventoryMovements');
     const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId } = filters;
 
-    let movementDocs: DocumentSnapshot[] = [];
+    let q: Query;
 
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const query1 = query(movementsCol, where('warehouseId', '==', DEFAULT_WAREHOUSE_ID));
-            const query2 = query(movementsCol, where('warehouseId', 'in', [null, '']));
-            const [snapshot1, snapshot2] = await Promise.all([getDocs(query1), getDocs(query2)]);
-            movementDocs = [...snapshot1.docs, ...snapshot2.docs];
+            q = query(movementsCol, Filter.or(
+                where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
+                where('warehouseId', '==', null),
+                where('warehouseId', '==', '')
+            ));
         } else {
-            const q = query(movementsCol, where('warehouseId', '==', warehouseId));
-            const snapshot = await getDocs(q);
-            movementDocs = snapshot.docs;
+            q = query(movementsCol, where('warehouseId', '==', warehouseId));
         }
     } else {
-        const snapshot = await getDocs(movementsCol);
-        movementDocs = snapshot.docs;
+        q = query(movementsCol);
     }
+    
+    const movementSnapshot = await getDocs(q);
 
-    const uniqueIds = new Set<string>();
-    const uniqueMovementDocs = movementDocs.filter(doc => {
-        if (uniqueIds.has(doc.id)) return false;
-        uniqueIds.add(doc.id);
-        return true;
-    });
-
-    let allMovements = uniqueMovementDocs.map(doc => {
+    let allMovements = movementSnapshot.docs.map(doc => {
         const data = doc.data();
         return { 
           id: doc.id, 
@@ -910,32 +899,24 @@ export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fe
     const dispatchOrdersCol = collection(db, 'dispatchOrders');
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
 
-    let orderDocs: DocumentSnapshot[] = [];
-
+    let q: Query;
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const query1 = query(dispatchOrdersCol, where('warehouseId', '==', DEFAULT_WAREHOUSE_ID));
-            const query2 = query(dispatchOrdersCol, where('warehouseId', 'in', [null, '']));
-            const [snapshot1, snapshot2] = await Promise.all([getDocs(query1), getDocs(query2)]);
-            orderDocs = [...snapshot1.docs, ...snapshot2.docs];
+            q = query(dispatchOrdersCol, Filter.or(
+                where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
+                where('warehouseId', '==', null),
+                where('warehouseId', '==', '')
+            ));
         } else {
-            const q = query(dispatchOrdersCol, where('warehouseId', '==', warehouseId));
-            const snapshot = await getDocs(q);
-            orderDocs = snapshot.docs;
+            q = query(dispatchOrdersCol, where('warehouseId', '==', warehouseId));
         }
     } else {
-        const snapshot = await getDocs(dispatchOrdersCol);
-        orderDocs = snapshot.docs;
+        q = query(dispatchOrdersCol);
     }
     
-    const uniqueIds = new Set<string>();
-    const uniqueOrderDocs = orderDocs.filter(doc => {
-        if (uniqueIds.has(doc.id)) return false;
-        uniqueIds.add(doc.id);
-        return true;
-    });
+    const orderSnapshot = await getDocs(q);
 
-    const allOrders = uniqueOrderDocs.map(doc => {
+    const allOrders = orderSnapshot.docs.map(doc => {
         const data = doc.data();
         return { 
             id: doc.id,
@@ -1657,32 +1638,24 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
     const reservationsCol = collection(db, 'reservations');
     
-    let reservationDocs: DocumentSnapshot[] = [];
-
+    let q: Query;
     if (warehouseId) {
         if (warehouseId === DEFAULT_WAREHOUSE_ID) {
-            const query1 = query(reservationsCol, where('warehouseId', '==', DEFAULT_WAREHOUSE_ID));
-            const query2 = query(reservationsCol, where('warehouseId', 'in', [null, '']));
-            const [snapshot1, snapshot2] = await Promise.all([getDocs(query1), getDocs(query2)]);
-            reservationDocs = [...snapshot1.docs, ...snapshot2.docs];
+            q = query(reservationsCol, Filter.or(
+                where('warehouseId', '==', DEFAULT_WAREHOUSE_ID),
+                where('warehouseId', '==', null),
+                where('warehouseId', '==', '')
+            ));
         } else {
-            const q = query(reservationsCol, where('warehouseId', '==', warehouseId));
-            const snapshot = await getDocs(q);
-            reservationDocs = snapshot.docs;
+            q = query(reservationsCol, where('warehouseId', '==', warehouseId));
         }
     } else {
-        const snapshot = await getDocs(reservationsCol);
-        reservationDocs = snapshot.docs;
+        q = query(reservationsCol);
     }
+    
+    const reservationSnapshot = await getDocs(q);
 
-    const uniqueIds = new Set<string>();
-    const uniqueReservationDocs = reservationDocs.filter(doc => {
-        if (uniqueIds.has(doc.id)) return false;
-        uniqueIds.add(doc.id);
-        return true;
-    });
-
-    return uniqueReservationDocs.map(doc => {
+    return reservationSnapshot.docs.map(doc => {
         const data = doc.data();
         return { 
             id: doc.id, 
