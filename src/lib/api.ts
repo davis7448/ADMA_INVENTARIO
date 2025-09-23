@@ -37,68 +37,26 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     let productQuery: Query = query(collection(db, 'products'));
     const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
     
-    // Apply filters that can be done at the DB level
+    // Apply server-side filters where possible
     if (selectedCategory && selectedCategory !== 'all') {
         productQuery = query(productQuery, where('categoryId', '==', selectedCategory));
     }
     if (onlyAudited) {
         productQuery = query(productQuery, where('lastAuditedAt', '!=', null));
     }
-
-    let allProducts: Product[];
-
-    if (fetchAll) {
-        const productSnapshot = await getDocs(productQuery);
-        allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
-    } else {
-        const countQuery = query(collection(db, 'products'));
-        const countSnapshot = await getDocs(countQuery);
-        // This count is not fully accurate with filters, but gives a rough idea for pagination.
-        // A more accurate solution would involve a separate count query with all filters.
-        const totalCount = countSnapshot.size;
-        
-        let paginatedQuery = query(productQuery, orderBy('name'), limit(itemsPerPage));
-        if (page > 1) {
-            // This is a simplified pagination. For large datasets, a more robust cursor-based pagination is needed.
-            const previousPageQuery = query(productQuery, orderBy('name'), limit((page - 1) * itemsPerPage));
-            const previousPageSnapshot = await getDocs(previousPageQuery);
-            if (!previousPageSnapshot.empty) {
-                const lastVisible = previousPageSnapshot.docs[previousPageSnapshot.docs.length - 1];
-                paginatedQuery = query(paginatedQuery, startAfter(lastVisible));
-            }
-        }
-        const productSnapshot = await getDocs(paginatedQuery);
-        allProducts = productSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Product);
-    }
-
-    const allReservations = await getAllReservations();
-    const reservationsByProductId: Record<string, Reservation[]> = {};
-  
-    for (const reservation of allReservations) {
-      if (!reservationsByProductId[reservation.productId]) {
-          reservationsByProductId[reservation.productId] = [];
-      }
-      reservationsByProductId[reservation.productId].push(reservation);
-    }
-    
-    // First, map and normalize data, ensuring warehouseId is set.
-    let productsWithData = allProducts.map(product => ({
-        ...product,
-        warehouseId: product.warehouseId || DEFAULT_WAREHOUSE_ID, // Assign default if missing
-        purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
-        lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
-        damagedStock: product.damagedStock || 0,
-        pendingStock: product.pendingStock || 0,
-        reservations: reservationsByProductId[product.id] || [],
-    }));
-
-    // Then, apply in-memory filtering.
     if (warehouseId && warehouseId !== 'all') {
-        productsWithData = productsWithData.filter(p => p.warehouseId === warehouseId);
+        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
     }
 
+    const allProductsSnapshot = await getDocs(productQuery);
+    let allProducts = allProductsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        warehouseId: doc.data().warehouseId || DEFAULT_WAREHOUSE_ID, // Ensure warehouseId for filtering
+    }) as Product);
 
-    const filteredProducts = productsWithData.filter(product => {
+    // Apply client-side (in-memory) filters
+    const filteredProducts = allProducts.filter(product => {
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -118,12 +76,32 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch;
     });
 
-    const countQuery = query(collection(db, 'products'));
-    const countSnapshot = await getDocs(countQuery);
-    const totalCount = countSnapshot.size;
+    const totalCount = filteredProducts.length;
     const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-    return { products: filteredProducts, totalPages };
+    // Paginate after all filtering is done
+    const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    const allReservations = await getAllReservations();
+    const reservationsByProductId: Record<string, Reservation[]> = {};
+  
+    for (const reservation of allReservations) {
+      if (!reservationsByProductId[reservation.productId]) {
+          reservationsByProductId[reservation.productId] = [];
+      }
+      reservationsByProductId[reservation.productId].push(reservation);
+    }
+    
+    const productsWithData = paginatedProducts.map(product => ({
+        ...product,
+        purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
+        lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
+        damagedStock: product.damagedStock || 0,
+        pendingStock: product.pendingStock || 0,
+        reservations: reservationsByProductId[product.id] || [],
+    }));
+
+    return { products: productsWithData, totalPages };
   };
 
 export const getProductById = async (id: string): Promise<Product | null> => {
@@ -1924,7 +1902,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
 };
 
 export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
-    const q: Query = collection(db, 'cancellationRequests');
+    const q: Query = query(collection(db, 'cancellationRequests'));
     const requestsSnapshot = await getDocs(q);
 
     let requestList: CancellationRequest[] = requestsSnapshot.docs.map(doc => {

@@ -34,7 +34,6 @@ export default async function ProductsPage({
         getRotationCategories(),
     ]);
 
-    // Fetch movements only for the products on the current page
     const productIdsOnPage = productsResult.products.map(p => p.id);
     const movementsResult = productIdsOnPage.length > 0 
         ? await getInventoryMovements({ 
@@ -42,11 +41,10 @@ export default async function ProductsPage({
             filters: { 
                 productIds: productIdsOnPage,
                 startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-                warehouseId: filters.warehouseId 
             } 
         })
         : { movements: [] };
-
+        
     const salesByProduct: Record<string, number> = {};
     for (const movement of movementsResult.movements) {
         if (movement.type === 'Salida') {
@@ -71,7 +69,6 @@ export default async function ProductsPage({
         rotationCategoryName: getRotationCategoryName(product.id),
     }));
 
-    // Fetch names only for the products on the current page to optimize
     const uniqueVendorIds = [...new Set(productsWithRotation.map(p => p.vendorId).filter(Boolean))];
     const uniqueCategoryIds = [...new Set(productsWithRotation.map(p => p.categoryId).filter(Boolean))];
     
@@ -95,4 +92,3 @@ export default async function ProductsPage({
       </Suspense>
     );
 }
-
