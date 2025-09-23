@@ -67,7 +67,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const warehouseId = searchParams.get('warehouse') || undefined;
+  const warehouseId = searchParams.get('warehouse') || 'wh-bog';
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
@@ -113,7 +113,7 @@ function DashboardContent() {
       setLoading(true);
       try {
         const data = await getDashboardData({
-          warehouseId,
+          warehouseId: warehouseId === 'all' ? undefined : warehouseId,
           dateRange: { from: dateRange.from, to: dateRange.to },
           platformIds: filterPlatforms,
           carrierIds: filterCarriers,
