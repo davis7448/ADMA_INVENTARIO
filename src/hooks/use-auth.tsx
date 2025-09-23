@@ -77,14 +77,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     
-    const canChangeWarehouse = user.role === 'admin' || user.role === 'commercial';
-    if (!canChangeWarehouse && user.warehouseId) {
-      const currentUrlWarehouse = searchParams.get('warehouse');
-      if (currentUrlWarehouse !== user.warehouseId) {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('warehouse', user.warehouseId);
-        router.replace(`${pathname}?${params.toString()}`);
-      }
+    // Only force warehouse redirection for specific roles with an assigned warehouse
+    const shouldEnforceWarehouse = user.role === 'logistics' || user.role === 'plataformas';
+    
+    if (shouldEnforceWarehouse && user.warehouseId) {
+        const currentUrlWarehouse = searchParams.get('warehouse');
+        if (currentUrlWarehouse !== user.warehouseId) {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('warehouse', user.warehouseId);
+            router.replace(`${pathname}?${params.toString()}`);
+        }
     }
 
   }, [user, loading, warehouseLoading, pathname, router, searchParams]);
