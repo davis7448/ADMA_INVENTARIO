@@ -44,7 +44,7 @@ interface AnnulmentItem {
     sku: string;
 }
 
-function CancellationsContent() {
+export function CancellationsContent() {
     const { user, currentWarehouse } = useAuth();
     const { toast } = useToast();
     const [requests, setRequests] = useState<CancellationRequest[]>([]);
@@ -399,12 +399,4 @@ function CancellationsContent() {
         </div>
         </>
     );
-}
-
-export default function CancellationsPage() {
-    return (
-        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'logistics']}>
-            <CancellationsContent />
-        </AuthProviderWrapper>
-    )
 }

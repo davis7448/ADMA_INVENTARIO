@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/toaster';
 import AppHeader from '@/components/header';
 import { AuthProvider } from '@/hooks/use-auth';
 import { WarehouseProvider } from '@/hooks/use-warehouse';
+import { Suspense } from 'react';
 
 export const metadata: Metadata = {
   title: 'ADMA',
@@ -28,7 +29,9 @@ export default function RootLayout({
                 <div className="flex flex-col flex-1">
                 <AppHeader />
                     <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
-                    {children}
+                      <Suspense fallback={<div>Cargando...</div>}>
+                        {children}
+                      </Suspense>
                     </main>
                 </div>
             </AuthProvider>
