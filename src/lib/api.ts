@@ -38,14 +38,16 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     let productQuery: Query = collection(db, 'products');
 
-    const targetWarehouseIds: (string | null)[] = [];
+    // Determine the warehouse IDs to query based on the filter
+    const targetWarehouseIds: (string | null | undefined)[] = [];
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null); 
+            targetWarehouseIds.push('wh-bog', null, undefined); // Include 'wh-bog' and documents without warehouseId
         } else {
-            targetWarehouseIds.push(warehouseId);
+            targetWarehouseIds.push(warehouseId); // Strict filtering for other warehouses
         }
     }
+    // If no warehouseId is provided, we don't add a warehouse filter, effectively getting all products for roles like admin.
 
     if (targetWarehouseIds.length > 0) {
         productQuery = query(productQuery, where('warehouseId', 'in', targetWarehouseIds));
@@ -62,6 +64,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         } as Product
     });
 
+    // Apply remaining client-side filters
     const filteredProducts = allProducts.filter(product => {
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
@@ -584,10 +587,10 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     
     let baseQuery: Query = collection(db, 'inventoryMovements');
 
-    const targetWarehouseIds: (string | null)[] = [];
+    const targetWarehouseIds: (string | null | undefined)[] = [];
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null); 
+            targetWarehouseIds.push('wh-bog', null, undefined); 
         } else {
             targetWarehouseIds.push(warehouseId);
         }
@@ -721,7 +724,7 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
         ...movementData,
         movementId: newId,
         date: Timestamp.now(),
-        warehouseId: movementData.warehouseId || DEFAULT_WAREHOUSE_ID,
+        warehouseId: movementData.warehouseId,
       };
       
       Object.keys(dataToSet).forEach(key => dataToSet[key] === undefined && delete dataToSet[key]);
@@ -825,12 +828,15 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             exceptions: [],
             cancelledExceptions: [],
             createdBy,
-            warehouseId: createdBy?.warehouseId || DEFAULT_WAREHOUSE_ID,
+            warehouseId: createdBy?.warehouseId, // Assign warehouseId from the user
         };
     
         const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; 
         if (!dataToSet.createdBy) {
           delete dataToSet.createdBy;
+        }
+        if (!dataToSet.warehouseId) { // Default to INGENIO if user has no warehouse
+            dataToSet.warehouseId = DEFAULT_WAREHOUSE_ID;
         }
         transaction.set(newDispatchOrderRef, dataToSet);
         
@@ -881,15 +887,16 @@ const parseFirestoreDate = (dateValue: any): Date => {
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
     
     let baseQuery: Query = collection(db, 'dispatchOrders');
-    const targetWarehouseIds: (string | null)[] = [];
+
+    const targetWarehouseIds: (string | null | undefined)[] = [];
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null);
+            targetWarehouseIds.push('wh-bog', null, undefined);
         } else {
             targetWarehouseIds.push(warehouseId);
         }
     }
-
+    
     let ordersQuery = baseQuery;
     if (targetWarehouseIds.length > 0) {
         ordersQuery = query(ordersQuery, where('warehouseId', 'in', targetWarehouseIds));
@@ -937,10 +944,10 @@ const parseFirestoreDate = (dateValue: any): Date => {
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     
-    const targetWarehouseIds: (string | null)[] = [];
+    const targetWarehouseIds: (string | null | undefined)[] = [];
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null);
+            targetWarehouseIds.push('wh-bog', null, undefined);
         } else {
             targetWarehouseIds.push(warehouseId);
         }
@@ -968,10 +975,10 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     
-    const targetWarehouseIds: (string | null)[] = [];
+    const targetWarehouseIds: (string | null | undefined)[] = [];
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            targetWarehouseIds.push('wh-bog', null);
+            targetWarehouseIds.push('wh-bog', null, undefined);
         } else {
             targetWarehouseIds.push(warehouseId);
         }
@@ -1600,7 +1607,13 @@ export const getAllReservations = async (warehouseId?: string): Promise<Reservat
     let q: Query = collection(db, 'reservations');
     
     if (warehouseId && warehouseId !== 'all') {
-        q = query(q, where('warehouseId', '==', warehouseId));
+        const targetWarehouseIds: (string | null | undefined)[] = [];
+        if (warehouseId === 'wh-bog') {
+            targetWarehouseIds.push('wh-bog', null, undefined);
+        } else {
+            targetWarehouseIds.push(warehouseId);
+        }
+        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
     }
     
     const snapshot = await getDocs(q);
@@ -1693,7 +1706,13 @@ export const getStaleReservationAlerts = async (warehouseId?: string): Promise<S
     let q: Query = query(collection(db, 'staleReservationAlerts'));
     
     if (warehouseId && warehouseId !== 'all') {
-        q = query(q, where('warehouseId', '==', warehouseId));
+        const targetWarehouseIds: (string | null | undefined)[] = [];
+        if (warehouseId === 'wh-bog') {
+            targetWarehouseIds.push('wh-bog', null, undefined);
+        } else {
+            targetWarehouseIds.push(warehouseId);
+        }
+        q = query(q, where('warehouseId', 'in', targetWarehouseIds));
     }
 
     const alertSnapshot = await getDocs(q);
@@ -1796,7 +1815,13 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
         if (metadataSnap.exists() && !forceRegenerate) {
             let q: Query = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
             if (warehouseId && warehouseId !== 'all') {
-                q = query(q, where('warehouseId', '==', warehouseId));
+                const targetWarehouseIds: (string | null | undefined)[] = [];
+                if (warehouseId === 'wh-bog') {
+                    targetWarehouseIds.push('wh-bog', null, undefined);
+                } else {
+                    targetWarehouseIds.push(warehouseId);
+                }
+                q = query(q, where('warehouseId', 'in', targetWarehouseIds));
             }
             const alertSnapshot = await getDocs(q);
             const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
