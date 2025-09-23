@@ -28,6 +28,7 @@ export default async function ProductsPage({
         warehouseId: searchParams?.warehouse as string,
     };
 
+    // The warehouseId from searchParams is now directly used in getProducts and getInventoryMovements
     const [productsResult, allMovements, rotationCategories] = await Promise.all([
         getProducts({ page, limit, filters }),
         getInventoryMovements({ limit: 10000, filters: { startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), warehouseId: filters.warehouseId } }),
