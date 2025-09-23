@@ -30,8 +30,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = getAuth(app);
   
   const searchParams = useSearchParams();
-  const warehouseIdFromUrl = searchParams.get('warehouse');
-  const { warehouses, currentWarehouse, loading: warehouseLoading } = useWarehouse(warehouseIdFromUrl);
+  
+  // Determine the effective warehouseId for data fetching
+  const getEffectiveWarehouseId = (user: User | null): string | null => {
+      const urlWarehouseId = searchParams.get('warehouse');
+      if (user?.role === 'logistics' && user.warehouseId) {
+          return user.warehouseId;
+      }
+      return urlWarehouseId;
+  };
+  
+  const warehouseIdForHook = getEffectiveWarehouseId(user);
+  const { warehouses, currentWarehouse, loading: warehouseLoading } = useWarehouse(warehouseIdForHook);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
