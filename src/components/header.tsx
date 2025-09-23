@@ -57,10 +57,6 @@ export default function AppHeader() {
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  const isAdmin = user.role === 'admin';
-  const isFromIngenio = user.warehouseId === 'wh-bog';
-  const canSelectAll = isAdmin || user.role === 'commercial';
-
   return (
     <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6 sticky top-0 z-20">
       <div className="flex items-center gap-4 md:hidden">
@@ -106,12 +102,11 @@ export default function AppHeader() {
                     <SelectValue placeholder="Seleccionar bodega" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="all" disabled={!canSelectAll}>Todas las Bodegas</SelectItem>
+                    <SelectItem value="all">Todas las Bodegas</SelectItem>
                     {warehouses.map(wh => (
                         <SelectItem 
                             key={wh.id} 
                             value={wh.id}
-                            disabled={!isAdmin && !isFromIngenio && wh.id === 'wh-bog'}
                         >
                             {wh.name}
                         </SelectItem>

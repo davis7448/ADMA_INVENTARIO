@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
@@ -33,11 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   // Determine the effective warehouseId for data fetching
   const getEffectiveWarehouseId = (user: User | null): string | null => {
-      const urlWarehouseId = searchParams.get('warehouse');
-      if (user?.role === 'logistics' && user.warehouseId) {
-          return user.warehouseId;
-      }
-      return urlWarehouseId;
+      return searchParams.get('warehouse');
   };
   
   const warehouseIdForHook = getEffectiveWarehouseId(user);
@@ -85,22 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (isLoginPage) {
       router.push('/');
-      return;
-    }
-    
-    // Only force warehouse redirection for specific roles with an assigned warehouse
-    const shouldEnforceWarehouse = user.role === 'logistics' || user.role === 'plataformas';
-    
-    if (shouldEnforceWarehouse && user.warehouseId) {
-        const currentUrlWarehouse = searchParams.get('warehouse');
-        if (currentUrlWarehouse !== user.warehouseId) {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set('warehouse', user.warehouseId);
-            router.replace(`${pathname}?${params.toString()}`);
-        }
     }
 
-  }, [user, loading, warehouseLoading, pathname, router, searchParams]);
+  }, [user, loading, warehouseLoading, pathname, router]);
 
 
   const login = async (email: string, password: string): Promise<boolean> => {

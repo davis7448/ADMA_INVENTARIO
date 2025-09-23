@@ -191,9 +191,6 @@ function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdat
         });
     }
 
-    const canChangeWarehouse = user.role === 'logistics' || user.role === 'plataformas';
-
-
     return (
          <TableRow>
             <TableCell>
@@ -223,7 +220,7 @@ function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdat
                  <Select 
                     onValueChange={handleWarehouseChange} 
                     defaultValue={user.warehouseId || 'none'}
-                    disabled={isWarehousePending || !canChangeWarehouse}
+                    disabled={isWarehousePending}
                  >
                     <SelectTrigger className="w-[200px]">
                         <SelectValue />
