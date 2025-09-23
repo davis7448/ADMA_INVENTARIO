@@ -95,7 +95,7 @@ function DashboardContent() {
   useEffect(() => {
     // Fetch static filter options once
     Promise.all([
-      getProducts({ fetchAll: true, filters: { warehouseId } }),
+      getProducts({ limit: 10000, filters: { warehouseId } }),
       getCarriers(),
       getCategories(),
       getPlatforms()
