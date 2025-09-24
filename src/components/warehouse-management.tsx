@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition, useEffect, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -37,6 +37,7 @@ import {
     FormLabel,
     FormMessage,
 } from '@/components/ui/form';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface WarehouseManagementProps {
     initialWarehouses: Warehouse[];
@@ -49,11 +50,14 @@ const AddWarehouseSchema = z.object({
 });
 type AddWarehouseValues = z.infer<typeof AddWarehouseSchema>;
 
+const ITEMS_PER_PAGE = 5;
+
 export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUpdate }: WarehouseManagementProps) {
     const [warehouses, setWarehouses] = useState<Warehouse[]>(initialWarehouses);
     const [isSaving, startTransition] = useTransition();
     const { toast } = useToast();
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         setWarehouses(initialWarehouses);
@@ -65,6 +69,12 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
             name: '',
         },
     });
+
+    const totalPages = Math.ceil(warehouses.length / ITEMS_PER_PAGE);
+    const paginatedWarehouses = useMemo(() => {
+        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+        return warehouses.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    }, [warehouses, currentPage]);
 
     const handleNameChange = (id: string, value: string) => {
         setWarehouses(prev => prev.map(wh => wh.id === id ? { ...wh, name: value } : wh));
@@ -150,7 +160,7 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                 <div className="grid gap-4">
                     {loading ? (
                         Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)
-                    ) : warehouses.map((warehouse) => (
+                    ) : paginatedWarehouses.map((warehouse) => (
                         <div key={warehouse.id} className="flex items-center justify-between gap-4 p-2 border rounded-md">
                             <div className="flex-1">
                                 <Input
@@ -170,8 +180,36 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                             </Button>
                         </div>
                     ))}
+                     {warehouses.length === 0 && !loading && (
+                        <p className="text-center text-muted-foreground py-4">No hay bodegas creadas.</p>
+                     )}
                 </div>
             </CardContent>
+            {totalPages > 1 && (
+                <CardFooter className="flex items-center justify-end space-x-2 pt-4">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                    >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Anterior
+                    </Button>
+                    <span className="text-sm font-medium">
+                        Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                    >
+                        Siguiente
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                </CardFooter>
+            )}
         </Card>
     );
 }
