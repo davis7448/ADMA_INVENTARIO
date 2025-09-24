@@ -40,7 +40,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
+            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
             productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
         }
@@ -1976,7 +1976,7 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
         requestList = requestList.filter(req => req.warehouseId === warehouseId);
     }
 
-    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.date).getTime());
 };
     
 export const updateCancellationRequestStatus = async (requestId: string, status: 'completed' | 'rejected', user: User | null): Promise<void> => {
@@ -2036,12 +2036,6 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const fromDateStart = fromDate ? startOfDay(fromDate) : null;
     const toDateEnd = toDate ? endOfDay(toDate) : null;
     let { warehouseId } = filters;
-    
-    // If warehouseId is null or undefined, fetch from all warehouses.
-    if (warehouseId === null || warehouseId === undefined) {
-        const allWarehouses = await getWarehouses();
-        warehouseId = allWarehouses.map(wh => wh.id).join(',');
-    }
     
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),

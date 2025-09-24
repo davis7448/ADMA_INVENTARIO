@@ -326,7 +326,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                     carrierId: carrier,
                     products: productsForDispatch,
                     createdBy: user,
-                    warehouseId: currentWarehouse?.id
+                    warehouseId: currentWarehouse?.id || 'wh-bog'
                 });
 
                 const pdfProducts = dispatchedProducts.map(p => ({
