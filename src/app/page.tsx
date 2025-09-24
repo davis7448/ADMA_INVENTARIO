@@ -20,7 +20,8 @@ import {
     TableRow,
   } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms, type DashboardData } from '@/lib/api';
+import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms } from '@/lib/api';
+import type { DashboardData } from '@/lib/types';
 import type { Product, Carrier, Category, Platform, ProductVariant } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown, ArchiveX, Settings, Edit } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';

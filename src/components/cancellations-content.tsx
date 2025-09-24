@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
-import { getCancellationRequests, createCancellationRequests, updateCancellationRequestStatus, getDispatchOrders, cancelPendingDispatchItems, getProducts } from '@/lib/api';
+import { getCancellationRequests, createCancellationRequests, updateCancellationRequestStatus, getDispatchOrders, cancelPendingDispatchItems,annulDispatchedGuideItems, getProducts } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatToTimeZone } from '@/lib/utils';
@@ -167,42 +167,48 @@ export function CancellationsContent() {
     };
 
     const handleConfirmCancellation = () => {
-        if (!orderToCancel || !user || !requestToUpdate) return;
-    
-        const itemsToCancelForApi = Object.entries(itemsToAnnul)
-            .filter(([, val]) => val.selected && val.quantity > 0)
-            .map(([key, val]) => {
-                const ids = key.split('|');
-                return {
-                    productId: ids[0],
-                    variantId: ids.length > 1 ? ids[1] : undefined,
-                    quantity: val.quantity,
-                };
-            });
-        
-        if (itemsToCancelForApi.length === 0) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto e indicar una cantidad mayor a 0.' });
-            return;
-        }
+    if (!orderToCancel || !user || !requestToUpdate) return;
 
-        startUpdatingTransition(async () => {
-            try {
-                await cancelPendingDispatchItems(orderToCancel.id, itemsToCancelForApi, user, [guideToCancelInDialog]);
-                // The status of the request is now handled inside cancelPendingDispatchItems
-                // await updateCancellationRequestStatus(requestToUpdate.id, 'completed', user);
-
-                toast({
-                    title: '¡Anulación Exitosa!',
-                    description: 'La guía ha sido marcada como anulada y el stock ha sido restaurado/ajustado.'
-                });
-                setIsCancelDialogOpen(false);
-                fetchRequests();
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
-                toast({ variant: 'destructive', title: 'Error al Anular', description: errorMessage });
-            }
+    const itemsToProcess = Object.entries(itemsToAnnul)
+        .filter(([, val]) => val.selected && val.quantity > 0)
+        .map(([key, val]) => {
+            const ids = key.split('|');
+            return {
+                productId: ids[0],
+                variantId: ids.length > 1 ? ids[1] : undefined,
+                sku: val.sku,
+                quantity: val.quantity,
+            };
         });
-    };
+    
+    if (itemsToProcess.length === 0) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Debes seleccionar al menos un producto e indicar una cantidad mayor a 0.' });
+        return;
+    }
+
+    startUpdatingTransition(async () => {
+        try {
+            const isDispatched = requestToUpdate.isDispatched || false;
+
+            if (isDispatched) {
+                await annulDispatchedGuideItems(requestToUpdate.id, orderToCancel.id, itemsToProcess, user, guideToCancelInDialog);
+            } else {
+                const itemsForPending = itemsToProcess.map(p => ({...p, trackingNumber: guideToCancelInDialog}));
+                await cancelPendingDispatchItems(orderToCancel.id, itemsForPending, user, [guideToCancelInDialog]);
+            }
+            
+            toast({
+                title: '¡Anulación Exitosa!',
+                description: 'La guía ha sido procesada y el stock ha sido ajustado.'
+            });
+            setIsCancelDialogOpen(false);
+            fetchRequests();
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+            toast({ variant: 'destructive', title: 'Error al Anular', description: errorMessage });
+        }
+    });
+};
     
     const handleRejectCancellation = async (requestId: string) => {
         startUpdatingTransition(async () => {

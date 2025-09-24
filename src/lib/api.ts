@@ -1,10 +1,10 @@
-
+"use server";
 
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -973,7 +973,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 
     if (trackingNumbers.length > 0) {
         const cancellationRequestsCol = collection(db, 'cancellationRequests');
-        const CHUNK_SIZE = 30; // Firestore 'in' query limit
+        const CHUNK_SIZE = 30;
 
         for (let i = 0; i < trackingNumbers.length; i += CHUNK_SIZE) {
             const chunk = trackingNumbers.slice(i, i + CHUNK_SIZE);
@@ -983,14 +983,12 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             if (!cancellationSnapshot.empty) {
                 const cancelledGuide = cancellationSnapshot.docs[0].data().trackingNumber;
                 const cancellationRequestId = cancellationSnapshot.docs[0].id;
-                // Throw a specific error that includes the request ID
                 const error = new Error(`La guía ${cancelledGuide} tiene una solicitud de anulación pendiente y no puede ser despachada.`);
                 (error as any).cancellationRequestId = cancellationRequestId;
                 throw error;
             }
         }
     }
-
 
     await runTransaction(db, async (transaction) => {
         const orderSnap = await transaction.get(orderRef);
@@ -1041,7 +1039,7 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
 
                     const alertRef = doc(collection(db, 'auditAlerts'));
                     const newAlert: Omit<AuditAlert, 'id'> = {
-                        date: Timestamp.now(),
+                        date: Timestamp.now().toDate().toISOString(),
                         productId: exProd.productId,
                         productName: productData.name,
                         productSku: exProd.variantSku || productData.sku || 'N/A',
@@ -1737,9 +1735,9 @@ export const checkForStaleReservations = async (): Promise<void> => {
                 if (productInfo) {
                     const alertRef = doc(collection(db, 'staleReservationAlerts'));
                     const newAlert: Omit<StaleReservationAlert, 'id'> = {
-                        alertDate: Timestamp.now(),
+                        alertDate: Timestamp.now().toDate().toISOString(),
                         reservationId: reservation.id,
-                        reservationDate: Timestamp.fromDate(new Date(reservation.date)),
+                        reservationDate: new Date(reservation.date).toISOString(),
                         productId: reservation.productId,
                         productName: productInfo.name,
                         productSku: productInfo.sku!,
@@ -1939,7 +1937,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
         const newRequest: Omit<CancellationRequest, 'id'> = {
             trackingNumber: tn,
             requestedBy: { id: user.id, name: user.name },
-            requestDate: Timestamp.now(),
+            requestDate: Timestamp.now().toDate().toISOString(),
             status: 'pending',
             isDispatched,
         };
@@ -1960,7 +1958,7 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
         return {
             id: doc.id,
             ...data,
-            requestDate: (data.requestDate as Timestamp).toDate().toISOString(),
+            requestDate: parseFirestoreDate(data.requestDate).toISOString(),
             isDispatched: !!data.isDispatched,
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as CancellationRequest;
@@ -1972,7 +1970,7 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
         requestList = requestList.filter(req => req.warehouseId === warehouseId);
     }
 
-    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.date).getTime());
+    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
 };
     
 export const updateCancellationRequestStatus = async (requestId: string, status: 'completed' | 'rejected', user: User | null): Promise<void> => {
@@ -2316,9 +2314,10 @@ export const updateLocation = async (id: string, name: string): Promise<void> =>
     await updateDoc(locationRef, { name });
 };
 
+
 export const updateProductLocation = async (productId: string, locationId: string | null): Promise<void> => {
     const productRef = doc(db, 'products', productId);
     await updateDoc(productRef, { locationId });
 }
 
-    
+
