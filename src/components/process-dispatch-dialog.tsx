@@ -1,9 +1,7 @@
-
-
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { DispatchOrder, Product, DispatchException, CancellationRequest, User } from '@/lib/types';
+import type { DispatchOrder, Product, DispatchException, CancellationRequest, User, DispatchOrderProduct } from '@/lib/types';
 import {
   Dialog,
   DialogContent,
@@ -155,33 +153,34 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
     const trackingList = trackingNumbers.split('\n').map(t => t.trim()).filter(t => t);
     
     try {
-        await processDispatch(order.id, trackingList, exceptions);
-        toast({ title: '¡Éxito!', description: 'La orden ha sido despachada correctamente.' });
-        onDispatchProcessed();
-        setOpen(false);
-        setTrackingNumbers('');
-        setExceptions([]);
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
-        
-        const cancellationMatch = errorMessage.match(/La guía (.*) tiene una solicitud de anulación pendiente/);
-        const cancellationRequestId = (error as any).cancellationRequestId;
+        const response = await processDispatch(order.id, trackingList, exceptions);
 
-        if (cancellationMatch && cancellationRequestId) {
-            const blockedGuide = cancellationMatch[1];
-            
+        if (response.success) {
+            toast({ title: '¡Éxito!', description: 'La orden ha sido despachada correctamente.' });
+            onDispatchProcessed();
+            setOpen(false);
+            setTrackingNumbers('');
+            setExceptions([]);
+        } else if (response.requiresAnnulment) {
             const initialItems = order.products.reduce((acc, p) => {
                 const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
-                acc[key] = { selected: false, quantity: p.quantity, maxQuantity: p.quantity };
+                acc[key] = { selected: true, quantity: p.quantity, maxQuantity: p.quantity };
                 return acc;
             }, {} as Record<string, AnnulmentItem>);
             
             setItemsToAnnul(initialItems);
-            setAnnulmentDialog({ isOpen: true, guide: blockedGuide, request: { id: cancellationRequestId } });
-
+            setAnnulmentDialog({ 
+                isOpen: true, 
+                guide: response.guide!, 
+                request: { id: response.cancellationRequestId! } 
+            });
         } else {
-            toast({ variant: 'destructive', title: 'Error al procesar', description: errorMessage });
+            toast({ variant: 'destructive', title: 'Error al procesar', description: response.error || 'Ocurrió un error inesperado.' });
         }
+    } catch (error) {
+        // Catching potential network errors or other unexpected issues
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error de red o inesperado.';
+        toast({ variant: 'destructive', title: 'Error Crítico', description: errorMessage });
     } finally {
         setIsProcessing(false);
     }
@@ -299,7 +298,7 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
                                 checked={item.selected || false}
                                 onCheckedChange={(checked) => setItemsToAnnul(prev => ({
                                     ...prev,
-                                    [key]: { ...prev[key], selected: !!checked }
+                                    [key]: { ...prev[key], selected: !!checked, quantity: !!checked ? prev[key].maxQuantity : 0 }
                                 }))}
                             />
                             <Label htmlFor={key} className="text-sm font-medium flex-1">
