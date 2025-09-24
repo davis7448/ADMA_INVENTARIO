@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { getVendedores } from '@/lib/api';
-import type { Product, RotationCategory, Vendedor } from '@/lib/types';
+import type { Product, RotationCategory, Vendedor, Location } from '@/lib/types';
 import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
@@ -63,7 +63,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { auditProductStockAction, clearProductAuditAction, deleteProductAction } from '@/app/actions/products';
+import { auditProductStockAction, clearProductAuditAction, deleteProductAction, updateProductLocationAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import { formatToTimeZone } from '@/lib/utils';
 import { AlertDialogTrigger } from './ui/alert-dialog';
@@ -74,9 +74,10 @@ interface ProductsContentProps {
     initialSupplierNames: Record<string, string>;
     initialCategoryNames: Record<string, string>;
     allRotationCategories: RotationCategory[];
+    allLocations: Location[];
 }
 
-export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories }: ProductsContentProps) {
+export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories, allLocations }: ProductsContentProps) {
     const [loading, setLoading] = useState(false);
     const { user, warehouses } = useAuth();
     const router = useRouter();
@@ -194,6 +195,26 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
             }
         });
     };
+
+    const handleLocationChange = (productId: string, locationId: string) => {
+        startTransition(async () => {
+            const finalLocationId = locationId === 'none' ? null : locationId;
+            const result = await updateProductLocationAction(productId, finalLocationId);
+            if (result.success) {
+                toast({
+                    title: '¡Éxito!',
+                    description: result.message,
+                });
+                refreshProducts();
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: result.message,
+                });
+            }
+        });
+    }
 
     const handlePaginationChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -444,6 +465,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <TableHead className="w-[80px] hidden sm:table-cell" />
                             <TableHead>Nombre</TableHead>
                             <TableHead>Bodega</TableHead>
+                            <TableHead>Ubicación</TableHead>
                             <TableHead>Rotación</TableHead>
                             <TableHead>Auditoría</TableHead>
                             <TableHead>SKU</TableHead>
@@ -462,7 +484,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <>
                             {Array.from({ length: 5 }).map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={14}>
+                                    <TableCell colSpan={15}>
                                         <Skeleton className="h-16 w-full" />
                                     </TableCell>
                                 </TableRow>
@@ -487,6 +509,23 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                         <TableCell className="font-medium">{product.name}</TableCell>
                                         <TableCell>
                                             {warehouses.find(w => w.id === product.warehouseId)?.name || 'N/A'}
+                                        </TableCell>
+                                        <TableCell onClick={(e) => e.stopPropagation()}>
+                                            <Select
+                                                defaultValue={product.locationId || 'none'}
+                                                onValueChange={(value) => handleLocationChange(product.id, value)}
+                                                disabled={isProcessing}
+                                            >
+                                                <SelectTrigger className="w-[150px] text-xs h-8">
+                                                    <SelectValue placeholder="Sin Ubicación" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">Sin Ubicación</SelectItem>
+                                                    {allLocations.map(loc => (
+                                                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell>
                                             <Tooltip>
@@ -634,7 +673,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                     </TableRow>
                                     {product.productType === 'variable' && expandedRow === product.id && (
                                         <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                            <TableCell colSpan={14}>
+                                            <TableCell colSpan={15}>
                                                 <div className="p-4">
                                                     <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
                                                     <Table>
@@ -645,6 +684,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                                 <TableHead>Precio</TableHead>
                                                                 <TableHead>Stock Físico</TableHead>
                                                                 <TableHead>Stock Disponible</TableHead>
+                                                                <TableHead>Ubicación</TableHead>
                                                             </TableRow>
                                                         </TableHeader>
                                                         <TableBody>
@@ -656,6 +696,9 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                                 <TableCell>{variant.stock}</TableCell>
                                                                 <TableCell className="font-semibold text-green-600">
                                                                     {calculateAvailableStock(product, variant.id)}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {/* This could be a separate field in the future */}
                                                                 </TableCell>
                                                             </TableRow>
                                                         ))}
@@ -669,7 +712,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={14} className="text-center h-24">
+                                <TableCell colSpan={15} className="text-center h-24">
                                     No se encontraron productos con los filtros actuales.
                                 </TableCell>
                             </TableRow>

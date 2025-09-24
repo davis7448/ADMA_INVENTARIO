@@ -1,13 +1,13 @@
 
 
-import { getRotationCategories, getUsers, getEntryReasons, getWarehouses } from '@/lib/api';
-import type { RotationCategory, User, EntryReason, Warehouse } from '@/lib/types';
+import { getRotationCategories, getUsers, getEntryReasons, getWarehouses, getLocations } from '@/lib/api';
+import type { RotationCategory, User, EntryReason, Warehouse, Location } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { SettingsContent } from '@/components/settings-content';
 import { Suspense } from 'react';
 
 export default async function SettingsPage() {
-    const [rotationCategories, users, entryReasons, warehouses] = await Promise.all([
+    const [rotationCategories, users, entryReasons, warehouses, locations] = await Promise.all([
         getRotationCategories(),
         getUsers().catch(err => {
             console.warn("Could not fetch users. This is expected in the prototype environment if admin SDK is not configured.");
@@ -15,6 +15,7 @@ export default async function SettingsPage() {
         }),
         getEntryReasons(),
         getWarehouses(),
+        getLocations(),
     ]);
 
     return (
@@ -25,6 +26,7 @@ export default async function SettingsPage() {
               initialUsers={users}
               initialEntryReasons={entryReasons}
               initialWarehouses={warehouses}
+              initialLocations={locations}
           />
         </AuthProviderWrapper>
       </Suspense>

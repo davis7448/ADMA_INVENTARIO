@@ -14,8 +14,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { getRotationCategories, updateRotationCategories, getUsers, getWarehouses } from '@/lib/api';
-import type { RotationCategory, User, EntryReason, Warehouse } from '@/lib/types';
+import { getRotationCategories, updateRotationCategories, getUsers, getWarehouses, getLocations } from '@/lib/api';
+import type { RotationCategory, User, EntryReason, Warehouse, Location } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,18 +23,21 @@ import { UserManagement } from './user-management';
 import { ProfileManagement } from './profile-management';
 import { EntryReasonsManagement } from './entry-reasons-management';
 import { WarehouseManagement } from './warehouse-management';
+import { LocationManagement } from './location-management';
 
 interface SettingsContentProps {
     initialRotationCategories: RotationCategory[];
     initialUsers: User[];
     initialEntryReasons: EntryReason[];
     initialWarehouses: Warehouse[];
+    initialLocations: Location[];
 }
 
-export function SettingsContent({ initialRotationCategories, initialUsers, initialEntryReasons, initialWarehouses }: SettingsContentProps) {
+export function SettingsContent({ initialRotationCategories, initialUsers, initialEntryReasons, initialWarehouses, initialLocations }: SettingsContentProps) {
     const [rotationCategories, setRotationCategories] = useState<RotationCategory[]>(initialRotationCategories);
     const [users, setUsers] = useState<User[]>(initialUsers);
     const [warehouses, setWarehouses] = useState<Warehouse[]>(initialWarehouses);
+    const [locations, setLocations] = useState<Location[]>(initialLocations);
     const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const { user } = useAuth();
@@ -58,6 +61,13 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
         setLoading(false);
     };
 
+    const refreshLocations = async () => {
+        setLoading(true);
+        const fetchedLocations = await getLocations();
+        setLocations(fetchedLocations);
+        setLoading(false);
+    };
+
     useEffect(() => {
         setUsers(initialUsers);
     }, [initialUsers]);
@@ -65,6 +75,10 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
     useEffect(() => {
         setWarehouses(initialWarehouses);
     }, [initialWarehouses]);
+    
+    useEffect(() => {
+        setLocations(initialLocations);
+    }, [initialLocations]);
 
 
     const handleThresholdChange = (id: string, value: string) => {
@@ -116,6 +130,10 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
 
           {isAdmin && (
             <WarehouseManagement initialWarehouses={warehouses} onWarehousesUpdate={refreshWarehouses} loading={loading} />
+          )}
+
+          {isAdmin && (
+            <LocationManagement initialLocations={locations} onLocationsUpdate={refreshLocations} loading={loading} />
           )}
           
           {canManageSettings && (

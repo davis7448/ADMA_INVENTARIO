@@ -1,7 +1,7 @@
 
 
-import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovements, getRotationCategories, getUsers } from '@/lib/api';
-import type { Product, InventoryMovement, RotationCategory, User } from '@/lib/types';
+import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovements, getRotationCategories, getUsers, getLocations } from '@/lib/api';
+import type { Product, InventoryMovement, RotationCategory, User, Location } from '@/lib/types';
 import { ProductsContent } from '@/components/products-content';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
@@ -46,9 +46,10 @@ export default async function ProductsPage({
         warehouseId: warehouseId,
     };
 
-    const [productsResult, rotationCategories] = await Promise.all([
+    const [productsResult, rotationCategories, locations] = await Promise.all([
         getProducts({ page, limit, filters }),
         getRotationCategories(),
+        getLocations(),
     ]);
 
     const productIdsOnPage = productsResult.products.map(p => p.id);
@@ -104,6 +105,7 @@ export default async function ProductsPage({
             initialSupplierNames={supplierNames}
             initialCategoryNames={categoryNames}
             allRotationCategories={rotationCategories}
+            allLocations={locations}
           />
         </AuthProviderWrapper>
       </Suspense>

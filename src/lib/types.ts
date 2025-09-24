@@ -37,6 +37,7 @@ export type Product = {
   lastAuditedAt?: string;
   lastAuditedBy?: string;
   warehouseId?: string; // New field
+  locationId?: string; // New field for location
 };
 
 export type Reservation = {
@@ -298,6 +299,11 @@ export type CancellationRequest = {
 };
 
 export type Warehouse = {
+    id: string;
+    name: string;
+};
+
+export type Location = {
     id: string;
     name: string;
 };

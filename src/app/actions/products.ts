@@ -2,7 +2,7 @@
 "use server";
 
 import { z } from 'zod';
-import { addProduct, updateProduct, uploadImageAndGetURL, createReservation, addMultipleProducts, auditProductStock, clearProductAudit, deleteProduct } from '@/lib/api';
+import { addProduct, updateProduct, uploadImageAndGetURL, createReservation, addMultipleProducts, auditProductStock, clearProductAudit, deleteProduct, updateProductLocation } from '@/lib/api';
 import { revalidatePath } from 'next/cache';
 import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
@@ -366,5 +366,16 @@ export async function clearProductAuditAction(productId: string): Promise<{ succ
             message: errorMessage,
             success: false,
         };
+    }
+}
+
+export async function updateProductLocationAction(productId: string, locationId: string | null): Promise<{ success: boolean; message: string }> {
+    try {
+        await updateProductLocation(productId, locationId);
+        revalidatePath('/products');
+        return { success: true, message: 'Ubicación del producto actualizada.' };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'No se pudo actualizar la ubicación.';
+        return { success: false, message: errorMessage };
     }
 }
