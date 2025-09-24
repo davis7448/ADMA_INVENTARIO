@@ -186,7 +186,7 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                 </div>
             </CardContent>
             {totalPages > 1 && (
-                <CardFooter className="flex items-center justify-end space-x-2 pt-4">
+                <CardFooter className="flex items-center justify-end space-x-2 pt-4 border-t">
                     <Button
                         variant="outline"
                         size="sm"
@@ -213,5 +213,3 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
         </Card>
     );
 }
-
-    
