@@ -1,0 +1,50 @@
+[debug] [2025-09-19T03:51:30.544Z] ----------------------------------------------------------------------
+[debug] [2025-09-19T03:51:30.548Z] Command:       /nix/store/ws50yvm6vzlzf7jzz6n7xh4szddrack1-nodejs-20.19.1/bin/node /home/user/.global_modules/bin/firebase init hosting
+[debug] [2025-09-19T03:51:30.548Z] CLI Version:   14.17.0
+[debug] [2025-09-19T03:51:30.549Z] Platform:      linux
+[debug] [2025-09-19T03:51:30.549Z] Node Version:  v20.19.1
+[debug] [2025-09-19T03:51:30.549Z] Time:          Fri Sep 19 2025 03:51:30 GMT+0000 (Coordinated Universal Time)
+[debug] [2025-09-19T03:51:30.549Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-09-19T03:51:30.552Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2025-09-19T03:51:31.179Z] No OAuth tokens found
+[debug] [2025-09-19T03:51:31.180Z] No OAuth tokens found
+[error] Failed to fetch Firebase Project from current Studio Workspace: Unable to refresh auth: not yet authenticated.
+[debug] [2025-09-19T03:51:31.191Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform","https://www.googleapis.com/auth/userinfo.email"]
+[debug] [2025-09-19T03:51:31.316Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2025-09-19T03:51:31.318Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2025-09-19T03:51:40.446Z] Running auto auth
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /home/user/studio
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] but for now we'll just set up a default project.
+[info] 
+[debug] [2025-09-19T03:51:40.496Z] Using project from CLI flag: studio-9748962172-82b35
+[debug] [2025-09-19T03:51:40.496Z] No OAuth tokens found
+[debug] [2025-09-19T03:51:40.497Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/studio-9748962172-82b35 [none]
+[debug] [2025-09-19T03:51:40.715Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/studio-9748962172-82b35 200
+[debug] [2025-09-19T03:51:40.715Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/studio-9748962172-82b35 {"projectId":"studio-9748962172-82b35","projectNumber":"607501701912","displayName":"ADMA INVENTARIO","name":"projects/studio-9748962172-82b35","resources":{"hostingSite":"studio-9748962172-82b35","realtimeDatabaseInstance":"studio-9748962172-82b35-default-rtdb"},"state":"ACTIVE","etag":"1_2c5ed06a-61bb-438c-bfdb-1309d5f57d93"}
+[info] i  Using project studio-9748962172-82b35 (ADMA INVENTARIO) 
+[info] 
+=== Hosting Setup
+[debug] [2025-09-19T03:51:40.732Z] No OAuth tokens found
+[debug] [2025-09-19T03:51:40.732Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/studio-9748962172-82b35 [none]
+[debug] [2025-09-19T03:51:41.003Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/studio-9748962172-82b35 200
+[debug] [2025-09-19T03:51:41.003Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/studio-9748962172-82b35 {"projectId":"studio-9748962172-82b35","projectNumber":"607501701912","displayName":"ADMA INVENTARIO","name":"projects/studio-9748962172-82b35","resources":{"hostingSite":"studio-9748962172-82b35","realtimeDatabaseInstance":"studio-9748962172-82b35-default-rtdb"},"state":"ACTIVE","etag":"1_2c5ed06a-61bb-438c-bfdb-1309d5f57d93"}
