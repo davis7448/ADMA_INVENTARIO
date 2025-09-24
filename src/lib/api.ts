@@ -1,5 +1,4 @@
 
-
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -578,18 +577,16 @@ export const sendPasswordReset = async (email: string) => {
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId, productIds } = filters;
     
-    let baseQuery: Query = collection(db, 'inventoryMovements');
+    let movementsQuery: Query = collection(db, 'inventoryMovements');
 
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
+            movementsQuery = query(movementsQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
-            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
+            movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
         }
     }
     
-    let movementsQuery = baseQuery;
-
     if (startDate) {
         movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
     }
@@ -872,17 +869,15 @@ const parseFirestoreDate = (dateValue: any): Date => {
   export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
     
-    let baseQuery: Query = collection(db, 'dispatchOrders');
+    let ordersQuery: Query = collection(db, 'dispatchOrders');
 
     if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
+            ordersQuery = query(ordersQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
-            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
+            ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
         }
     }
-
-    let ordersQuery = baseQuery;
 
     if (startDate) {
         ordersQuery = query(ordersQuery, where('date', '>=', new Date(startDate)));
@@ -2037,6 +2032,10 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const toDateEnd = toDate ? endOfDay(toDate) : null;
     let { warehouseId } = filters;
     
+    if (warehouseId === 'all') {
+        warehouseId = undefined;
+    }
+
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
         getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
@@ -2293,3 +2292,5 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
       dailyDispatchSummaryData,
     };
 }
+
+    
