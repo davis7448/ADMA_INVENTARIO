@@ -38,9 +38,9 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     let productQuery: Query = collection(db, 'products');
 
-    if (warehouseId && warehouseId !== 'all') {
+    if (warehouseId) {
         if (warehouseId === 'wh-bog') {
-            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null]));
+            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null, undefined]));
         } else {
             productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
         }
@@ -580,7 +580,7 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     
     let baseQuery: Query = collection(db, 'inventoryMovements');
 
-    if (warehouseId && warehouseId !== 'all') {
+    if (warehouseId) {
         if (warehouseId === 'wh-bog') {
             baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
@@ -816,7 +816,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             exceptions: [],
             cancelledExceptions: [],
             createdBy,
-            warehouseId, // Use the provided warehouseId
+            warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID,
         };
     
         const dataToSet: Record<string, any> = { ...newDispatchOrder, date: orderDate }; 
@@ -874,7 +874,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
     
     let baseQuery: Query = collection(db, 'dispatchOrders');
 
-    if (warehouseId && warehouseId !== 'all') {
+    if (warehouseId) {
         if (warehouseId === 'wh-bog') {
             baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
@@ -925,7 +925,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
     
-    if (warehouseId && warehouseId !== 'all') {
+    if (warehouseId) {
         if (warehouseId === 'wh-bog') {
             baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
@@ -950,7 +950,7 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
     
-    if (warehouseId && warehouseId !== 'all') {
+    if (warehouseId) {
         if (warehouseId === 'wh-bog') {
             baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
@@ -1578,7 +1578,7 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
     let q: Query = collection(db, 'reservations');
     
-    if (warehouseId && warehouseId !== 'all') {
+    if (warehouseId) {
         if (warehouseId === 'wh-bog') {
             q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
@@ -1675,7 +1675,7 @@ export const deleteReservation = async (reservationId: string) => {
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
     let q: Query = query(collection(db, 'staleReservationAlerts'));
     
-    if (warehouseId && warehouseId !== 'all') {
+    if (warehouseId) {
         if (warehouseId === 'wh-bog') {
             q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
         } else {
@@ -1782,7 +1782,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
         const metadataSnap = await getDoc(metadataRef);
         if (metadataSnap.exists() && !forceRegenerate) {
             let q: Query = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
-            if (warehouseId && warehouseId !== 'all') {
+            if (warehouseId) {
                 if (warehouseId === 'wh-bog') {
                     q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
                 } else {
@@ -2031,11 +2031,17 @@ export const updateWarehouse = async (id: string, name: string): Promise<void> =
     await updateDoc(warehouseRef, { name });
 };
 
-export async function getDashboardData(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }): Promise<DashboardData> {
+export async function getDashboardData(filters: { dateRange?: { from?: Date; to?: Date }; warehouseId?: string | null; platformIds: string[]; carrierIds: string[]; categoryIds: string[]; productIds: string[] }): Promise<DashboardData> {
     const { from: fromDate, to: toDate } = filters.dateRange || {};
     const fromDateStart = fromDate ? startOfDay(fromDate) : null;
     const toDateEnd = toDate ? endOfDay(toDate) : null;
-    const { warehouseId } = filters;
+    let { warehouseId } = filters;
+    
+    // If warehouseId is null or undefined, fetch from all warehouses.
+    if (warehouseId === null || warehouseId === undefined) {
+        const allWarehouses = await getWarehouses();
+        warehouseId = allWarehouses.map(wh => wh.id).join(',');
+    }
     
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
@@ -2067,14 +2073,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         } else if (productIdsInCategory) {
             productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
         }
-
-        const warehouseMatch = !warehouseId || warehouseId === 'all'
-            ? true
-            : warehouseId === 'wh-bog'
-                ? (order.warehouseId === 'wh-bog' || !order.warehouseId)
-                : order.warehouseId === warehouseId;
-    
-        return platformMatch && carrierMatch && productMatch && warehouseMatch;
+        
+        return platformMatch && carrierMatch && productMatch;
     });
 
     const movementsInPeriod = filteredMovements.filter(m => {
