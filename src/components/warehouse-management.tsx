@@ -213,3 +213,5 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
         </Card>
     );
 }
+
+    
