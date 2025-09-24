@@ -1,9 +1,10 @@
 
+
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, DashboardData } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -2291,6 +2292,33 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
       },
       dailyDispatchSummaryData,
     };
+}
+
+
+// Location Management
+export const getLocations = async (): Promise<Location[]> => {
+    const locationsCol = collection(db, 'locations');
+    const snapshot = await getDocs(locationsCol);
+    if (snapshot.empty) {
+        return [];
+    }
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
+};
+
+export const addLocation = async (name: string): Promise<string> => {
+    const locationsCol = collection(db, 'locations');
+    const docRef = await addDoc(locationsCol, { name });
+    return docRef.id;
+};
+
+export const updateLocation = async (id: string, name: string): Promise<void> => {
+    const locationRef = doc(db, 'locations', id);
+    await updateDoc(locationRef, { name });
+};
+
+export const updateProductLocation = async (productId: string, locationId: string | null): Promise<void> => {
+    const productRef = doc(db, 'products', productId);
+    await updateDoc(productRef, { locationId });
 }
 
     
