@@ -61,7 +61,7 @@ async function initializeAdminApp() {
     const serviceAccount = {
         projectId: "studio-9748962172-82b35",
         privateKey: privateKey,
-        clientEmail: "firebase-app-hosting-compute@studio-9748962172-82b35.iam.gserviceaccount.com",
+        clientEmail: "firebase-adminsdk-fbsvc@studio-9748962172-82b35.iam.gserviceaccount.com",
     };
 
     try {
