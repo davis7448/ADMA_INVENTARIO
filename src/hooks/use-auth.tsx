@@ -32,14 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   
   // Determine the effective warehouseId for data fetching
-  const getEffectiveWarehouseId = (user: User | null): string | null => {
+  const getEffectiveWarehouseId = (user: User | null, searchParams: URLSearchParams): string | null => {
       if (user?.role === 'logistics') {
           return user.warehouseId || null;
       }
       return searchParams.get('warehouse');
   };
 
-  const effectiveWarehouseId = getEffectiveWarehouseId(user);
+  const effectiveWarehouseId = getEffectiveWarehouseId(user, searchParams);
   const { warehouses, currentWarehouse, loading: warehouseLoading } = useWarehouse(effectiveWarehouseId);
 
   useEffect(() => {
