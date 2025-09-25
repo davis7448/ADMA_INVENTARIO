@@ -90,16 +90,21 @@ export function CancellationsContent() {
         startSubmittingTransition(async () => {
             setSubmissionWarnings([]);
             try {
-                const { alreadyDispatched } = await createCancellationRequests(trackingNumbers, user);
+                const { alreadyDispatched, pendingOrders } = await createCancellationRequests(trackingNumbers, user);
 
                 toast({
                     title: 'Solicitud Enviada',
                     description: `Se han procesado ${trackingNumbers.length} guías.`
                 });
                 
+                const warnings = [];
                 if (alreadyDispatched.length > 0) {
-                    setSubmissionWarnings(alreadyDispatched);
+                    warnings.push(...alreadyDispatched.map(tn => `La guía ${tn} ya está despachada.`));
                 }
+                if (pendingOrders.length > 0) {
+                    warnings.push(...pendingOrders.map(tn => `La guía ${tn} pertenece a un pedido con excepciones.`));
+                }
+                setSubmissionWarnings(warnings);
 
                 setGuidesToCancel('');
                 fetchRequests(); // Refresh the list
@@ -196,7 +201,9 @@ export function CancellationsContent() {
                 const itemsForPending = itemsToProcess.map(p => ({...p, trackingNumber: guideToCancelInDialog}));
                 await cancelPendingDispatchItems(orderToCancel.id, itemsForPending, user, [guideToCancelInDialog]);
             }
-            
+
+            await updateCancellationRequestStatus(requestToUpdate!.id, 'completed', user);
+
             toast({
                 title: '¡Anulación Exitosa!',
                 description: 'La guía ha sido procesada y el stock ha sido ajustado.'
@@ -236,9 +243,13 @@ export function CancellationsContent() {
         }
       }
 
-    const getStatusBadge = (status: 'pending' | 'completed' | 'rejected', isDispatched?: boolean) => {
+    const getStatusBadge = (status: 'pending' | 'completed' | 'rejected', isDispatched?: boolean, isPendingOrder?: boolean) => {
         const badges = [];
         
+        if (isPendingOrder) {
+            return <Badge variant="outline">Pedido con Excepción</Badge>;
+        }
+
         switch (status) {
             case 'pending':
                 badges.push(<Badge key="status" variant="secondary">Pendiente</Badge>);
@@ -380,7 +391,7 @@ export function CancellationsContent() {
                                         <TableCell>{formatToTimeZone(new Date(req.requestDate), 'dd/MM/yyyy HH:mm')}</TableCell>
                                         <TableCell className="font-mono">{req.trackingNumber}</TableCell>
                                         <TableCell>{req.requestedBy.name}</TableCell>
-                                        <TableCell>{getStatusBadge(req.status, req.isDispatched)}</TableCell>
+                                        <TableCell>{getStatusBadge(req.status, req.isDispatched, req.isPendingOrder)}</TableCell>
                                         {canManageRequests && (
                                             <TableCell className="text-right">
                                                 {req.status === 'pending' && (

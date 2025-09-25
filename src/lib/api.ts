@@ -34,31 +34,36 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
+    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId, userRole } = filters;
 
-    const baseQuery = collection(db, 'products');
-    let allProductsSnapshot;
+    let productQuery: Query = collection(db, 'products');
 
-    if (warehouseId && warehouseId === 'wh-bog') {
-        const q1 = query(baseQuery, where('warehouseId', '==', 'wh-bog'));
-        const q2 = query(baseQuery, where('warehouseId', '==', null));
-        const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        allProductsSnapshot = { docs: [...snapshot1.docs, ...snapshot2.docs] };
-    } else if (warehouseId) {
-        const q = query(baseQuery, where('warehouseId', '==', warehouseId));
-        allProductsSnapshot = await getDocs(q);
-    } else {
-        allProductsSnapshot = await getDocs(baseQuery);
+    // For logistics in wh-bog, we need to fetch all to filter unassigned + assigned
+    // For others, filter in query
+    if (warehouseId && warehouseId !== 'all' && !(userRole === 'logistics' && warehouseId === 'wh-bog')) {
+        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
     }
-    
+
+    const allProductsSnapshot = await getDocs(productQuery);
+
     let allProducts = allProductsSnapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
             ...doc.data(),
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
+            warehouseId: data.warehouseId, // keep null for unassigned
         } as Product
     });
+
+    // Apply warehouse filter in memory for logistics in wh-bog
+    if (warehouseId && warehouseId !== 'all') {
+        if (userRole === 'logistics' && warehouseId === 'wh-bog') {
+            allProducts = allProducts.filter(p => p.warehouseId === 'wh-bog' || p.warehouseId == null);
+        } else if (userRole !== 'logistics') {
+            allProducts = allProducts.filter(p => p.warehouseId === warehouseId);
+        }
+        // For logistics in other warehouses, already filtered in query
+    }
 
     // Apply remaining client-side filters
     const filteredProducts = allProducts.filter(product => {
@@ -581,48 +586,55 @@ export const sendPasswordReset = async (email: string) => {
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
     const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId, productIds } = filters;
     
-    let baseQuery: Query = collection(db, 'inventoryMovements');
-    let finalQuery: Query = baseQuery;
+    let movementsQuery: Query = collection(db, 'inventoryMovements');
 
-    if (warehouseId && warehouseId !== 'wh-bog') {
-        finalQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
+    if (warehouseId && warehouseId !== 'all') {
+        movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
     }
     
     if (startDate) {
-        finalQuery = query(finalQuery, where('date', '>=', new Date(startDate)));
+        movementsQuery = query(movementsQuery, where('date', '>=', new Date(startDate)));
     }
     if (endDate) {
-        finalQuery = query(finalQuery, where('date', '<=', new Date(endDate)));
+        movementsQuery = query(movementsQuery, where('date', '<=', new Date(endDate)));
     }
     if (productId && productId !== 'all') {
-        finalQuery = query(finalQuery, where('productId', '==', productId));
+        movementsQuery = query(movementsQuery, where('productId', '==', productId));
     }
     if (productIds && productIds.length > 0) {
         const chunks = [];
         for (let i = 0; i < productIds.length; i += 30) {
             chunks.push(productIds.slice(i, i + 30));
         }
-        finalQuery = query(finalQuery, where('productId', 'in', chunks[0]));
+        movementsQuery = query(movementsQuery, where('productId', 'in', chunks[0]));
     }
     if (platformId && platformId !== 'all') {
-        finalQuery = query(finalQuery, where('platformId', '==', platformId));
+        movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
     }
     if (carrierId && carrierId !== 'all') {
-        finalQuery = query(finalQuery, where('carrierId', '==', carrierId));
+        movementsQuery = query(movementsQuery, where('carrierId', '==', carrierId));
     }
     if (movementType && movementType !== 'all') {
-        finalQuery = query(finalQuery, where('type', '==', movementType));
+        movementsQuery = query(movementsQuery, where('type', '==', movementType));
+    }
+
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') { // 1. Todas las bodegas
+        queries.push(movementsQuery);
+    } else if (warehouseId === 'wh-bog') { // 2. Bodega INGENIO
+        // Excluye 'wh-med' pero también debemos incluir explícitamente los nulos
+        queries.push(query(movementsQuery, where('warehouseId', '!=', 'wh-med')));
+        // Firestore's '!=' operator only includes documents where the field exists.
+        // So, we need a separate query for documents where warehouseId is null.
+        const nullQueryBase = collection(db, 'inventoryMovements'); // Re-base for OR condition
+        queries.push(query(nullQueryBase, where('warehouseId', '==', null)));
+    } else { // 3. Bodega Laboratorio (o cualquier otra específica)
+        queries.push(query(movementsQuery, where('warehouseId', '==', warehouseId)));
     }
     
-    let snapshot;
-    if (warehouseId === 'wh-bog') {
-        const q1 = query(finalQuery, where('warehouseId', '==', 'wh-bog'));
-        const q2 = query(finalQuery, where('warehouseId', '==', null));
-        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        snapshot = { docs: [...snap1.docs, ...snap2.docs] };
-    } else {
-        snapshot = await getDocs(finalQuery);
-    }
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
     
     let allMovements = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -734,51 +746,10 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
-    let operation: 'add' | 'subtract' = 'add';
-    let movementType: InventoryMovement['type'] = 'Entrada';
-    let notes = reasonLabel;
-
-    if (reasonLabel === 'Ajuste de Salida') {
-        operation = 'subtract';
-        movementType = 'Ajuste de Salida';
-        notes = 'Ajuste de Salida manual';
-    } else if (reasonLabel === 'Ajuste de Entrada') {
-        movementType = 'Ajuste de Entrada';
-        notes = 'Ajuste de Entrada manual';
-    } else if (reasonLabel === 'Devolución de Cliente') {
-        movementType = 'Entrada';
-    } else { // Recepción de Proveedor
-        const supplier = await getSupplierById(supplierId!);
-        notes = `Recepción de Proveedor: ${supplier?.name || 'Desconocido'}`;
-    }
-
-    for (const item of items) {
-        if (reasonLabel === 'Devolución de Cliente') {
-            notes = `Devolución de cliente. Guía: ${item.trackingNumber}`;
-        }
-        
-        await runTransaction(db, async (transaction) => {
-            await updateProductStock(transaction, item.productId, item.quantity, operation, item.sku);
-        });
-        
-        await addInventoryMovement({
-            type: movementType,
-            productId: item.productId,
-            productName: item.name,
-            quantity: item.quantity,
-            notes: notes,
-            userId: user?.id,
-            userName: user?.name,
-            carrierId,
-            warehouseId: user?.warehouseId || DEFAULT_WAREHOUSE_ID, // Use user's warehouse
-        });
-    }
-};
 
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy, warehouseId }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'>): Promise<{ id: string, dispatchId: string, date: Date }> => {
+export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy, warehouseId }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'> & { warehouseId?: string | null }): Promise<{ id: string, dispatchId: string, date: Date }> => {
     const allPlatforms = await getPlatforms();
     const allCarriers = await getCarriers();
     const platformName = allPlatforms.find(p => p.id === platformId)?.name || 'N/A';
@@ -878,40 +849,45 @@ const parseFirestoreDate = (dateValue: any): Date => {
   export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
     
-    let baseQuery: Query = collection(db, 'dispatchOrders');
-    let finalQuery: Query = baseQuery;
+    let ordersQuery: Query = collection(db, 'dispatchOrders');
 
-    if (warehouseId && warehouseId !== 'wh-bog') {
-        finalQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
+    if (warehouseId && warehouseId !== 'all') {
+        ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
     }
 
     if (startDate) {
-        finalQuery = query(finalQuery, where('date', '>=', new Date(startDate)));
+        ordersQuery = query(ordersQuery, where('date', '>=', new Date(startDate)));
     }
     if (endDate) {
-        finalQuery = query(finalQuery, where('date', '<=', new Date(endDate)));
+        ordersQuery = query(ordersQuery, where('date', '<=', new Date(endDate)));
     }
     if (platformId && platformId !== 'all') {
-        finalQuery = query(finalQuery, where('platformId', '==', platformId));
+        ordersQuery = query(ordersQuery, where('platformId', '==', platformId));
     }
     if (carrierId && carrierId !== 'all') {
-        finalQuery = query(finalQuery, where('carrierId', '==', carrierId));
+        ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
     }
 
-    let snapshot;
-    if (warehouseId === 'wh-bog') {
-        const q1 = query(finalQuery, where('warehouseId', '==', 'wh-bog'));
-        const q2 = query(finalQuery, where('warehouseId', '==', null));
-        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        snapshot = { docs: [...snap1.docs, ...snap2.docs] };
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(ordersQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(ordersQuery, where('warehouseId', '!=', 'wh-med')));
+        const nullQueryBase = collection(db, 'dispatchOrders');
+        queries.push(query(nullQueryBase, where('warehouseId', '==', null)));
     } else {
-        snapshot = await getDocs(finalQuery);
+        queries.push(query(ordersQuery, where('warehouseId', '==', warehouseId)));
     }
+
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
 
     let allOrders = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        date: parseFirestoreDate(doc.data().date)
+        date: parseFirestoreDate(doc.data().date),
+        warehouseId: doc.data().warehouseId || DEFAULT_WAREHOUSE_ID
     } as DispatchOrder));
 
     const filteredOrders = allOrders.filter(order => {
@@ -933,58 +909,66 @@ const parseFirestoreDate = (dateValue: any): Date => {
 
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
-    let snapshot;
-    
-    if (warehouseId && warehouseId === 'wh-bog') {
-        const q1 = query(baseQuery, where('warehouseId', '==', 'wh-bog'));
-        const q2 = query(baseQuery, where('warehouseId', '==', null));
-        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        snapshot = { docs: [...snap1.docs, ...snap2.docs] };
-    } else if (warehouseId) {
-        const q = query(baseQuery, where('warehouseId', '==', warehouseId));
-        snapshot = await getDocs(q);
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(baseQuery); // fetch all to include missing warehouseId
     } else {
-        snapshot = await getDocs(baseQuery);
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
+    
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
     
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { 
+        return {
             id: doc.id,
             ...data,
             date: parseFirestoreDate(data.date),
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as DispatchOrder
     });
 
-    return allOrders;
+    if (warehouseId === 'wh-bog') {
+        allOrders = allOrders.filter(o => o.warehouseId === 'wh-bog');
+    }
+
+    return allOrders.sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
-    let snapshot;
+    let queries: Query[] = [];
 
-    if (warehouseId && warehouseId === 'wh-bog') {
-        const q1 = query(baseQuery, where('warehouseId', '==', 'wh-bog'));
-        const q2 = query(baseQuery, where('warehouseId', '==', null));
-        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        snapshot = { docs: [...snap1.docs, ...snap2.docs] };
-    } else if (warehouseId) {
-        const q = query(baseQuery, where('warehouseId', '==', warehouseId));
-        snapshot = await getDocs(q);
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(baseQuery); // fetch all to include missing warehouseId
     } else {
-        snapshot = await getDocs(baseQuery);
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
+
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
 
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { 
+        return {
             id: doc.id,
             ...data,
             date: parseFirestoreDate(data.date),
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as DispatchOrder
     });
-    
-    return allOrders;
+
+    if (warehouseId === 'wh-bog') {
+        allOrders = allOrders.filter(o => o.warehouseId === 'wh-bog');
+    }
+
+    return allOrders.sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 
 export const processDispatch = async (
@@ -1179,12 +1163,12 @@ export const cancelPendingDispatchItems = async (
             ...updatePayload,
         };
     });
-    
+
     // --- 3. POST-TRANSACTION OPERATIONS ---
     for (const movement of movementsToCreate) {
         await addInventoryMovement(movement);
     }
-    
+
     return updatedOrderData;
 };
 
@@ -1359,21 +1343,19 @@ export const annulGuideDuringDispatch = async (
 // Audit Alert Functions
 export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]> => {
     let baseQuery: Query = collection(db, 'auditAlerts');
-    let snapshot;
+    let queries: Query[] = [];
 
-    if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === 'wh-bog') {
-            const q1 = query(baseQuery, where('warehouseId', '==', 'wh-bog'));
-            const q2 = query(baseQuery, where('warehouseId', '==', null));
-            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-            snapshot = { docs: [...snap1.docs, ...snap2.docs] };
-        } else {
-            const q = query(baseQuery, where('warehouseId', '==', warehouseId));
-            snapshot = await getDocs(q);
-        }
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+        queries.push(query(collection(db, 'auditAlerts'), where('warehouseId', '==', null)));
     } else {
-        snapshot = await getDocs(baseQuery);
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
+
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
 
     const alertList = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -1388,7 +1370,7 @@ export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]
 
 // Pending Inventory Functions
 export const getPendingInventory = async (warehouseId?: string): Promise<PendingInventoryItem[]> => {
-    const productsResult = await getProducts({ fetchAll: true, filters: { warehouseId } });
+    const productsResult = await getProducts({ fetchAll: true, filters: { warehouseId: warehouseId === 'wh-bog' ? undefined : warehouseId } });
     const productsById = new Map(productsResult.products.map(p => [p.id, p]));
 
     const dispatchOrders = await getPartialDispatchOrders(warehouseId);
@@ -1613,19 +1595,19 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 // Reservation Functions
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
     let baseQuery: Query = collection(db, 'reservations');
-    let snapshot;
+    let queries: Query[] = [];
     
-    if (warehouseId && warehouseId === 'wh-bog') {
-        const q1 = query(baseQuery, where('warehouseId', '==', 'wh-bog'));
-        const q2 = query(baseQuery, where('warehouseId', '==', null));
-        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        snapshot = { docs: [...snap1.docs, ...snap2.docs] };
-    } else if (warehouseId) {
-        const q = query(baseQuery, where('warehouseId', '==', warehouseId));
-        snapshot = await getDocs(q);
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+        queries.push(query(collection(db, 'reservations'), where('warehouseId', '==', null)));
     } else {
-        snapshot = await getDocs(baseQuery);
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
+    
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
     
     let allReservations = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -1713,19 +1695,19 @@ export const deleteReservation = async (reservationId: string) => {
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
     let baseQuery: Query = query(collection(db, 'staleReservationAlerts'));
-    let snapshot;
+    let queries: Query[] = [];
     
-    if (warehouseId && warehouseId === 'wh-bog') {
-        const q1 = query(baseQuery, where('warehouseId', '==', 'wh-bog'));
-        const q2 = query(baseQuery, where('warehouseId', '==', null));
-        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        snapshot = { docs: [...snap1.docs, ...snap2.docs] };
-    } else if (warehouseId) {
-        const q = query(baseQuery, where('warehouseId', '==', warehouseId));
-        snapshot = await getDocs(q);
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+        queries.push(query(collection(db, 'staleReservationAlerts'), where('warehouseId', '==', null)));
     } else {
-        snapshot = await getDocs(baseQuery);
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
+
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
 
     const alertList = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -1780,6 +1762,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
                 const productInfo = productMap.get(reservation.productId);
                 const vendedorName = vendedorMap.get(reservation.vendedorId) || 'Desconocido';
 
+
                 if (productInfo) {
                     const alertRef = doc(collection(db, 'staleReservationAlerts'));
                     const newAlert: Omit<StaleReservationAlert, 'id'> = {
@@ -1824,20 +1807,20 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
     try {
         const metadataSnap = await getDoc(metadataRef);
         if (metadataSnap.exists() && !forceRegenerate) {
-            let alertSnapshot;
             const baseQuery = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
+            let queries: Query[] = [];
 
-            if (warehouseId && warehouseId === 'wh-bog') {
-                const q1 = query(baseQuery, where('warehouseId', '==', 'wh-bog'));
-                const q2 = query(baseQuery, where('warehouseId', '==', null));
-                const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-                alertSnapshot = { docs: [...snap1.docs, ...snap2.docs] };
-            } else if (warehouseId) {
-                const q = query(baseQuery, where('warehouseId', '==', warehouseId));
-                alertSnapshot = await getDocs(q);
+            if (!warehouseId || warehouseId === 'all') {
+                queries.push(baseQuery);
+            } else if (warehouseId === 'wh-bog') {
+                queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+                queries.push(query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'), where('warehouseId', '==', null)));
             } else {
-                alertSnapshot = await getDocs(baseQuery);
+                queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
             }
+            
+            const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+            const alertSnapshot = { docs: snapshots.flatMap(snap => snap.docs) };
             
             const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
             return { alerts, lastGenerated: (metadataSnap.data().lastGenerated as Timestamp).toDate().toISOString() };
@@ -1959,7 +1942,7 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
 }
 
 // Cancellation Request Functions
-export const createCancellationRequests = async (trackingNumbers: string[], user: User): Promise<{ alreadyDispatched: string[] }> => {
+export const createCancellationRequests = async (trackingNumbers: string[], user: User): Promise<{ alreadyDispatched: string[]; pendingOrders: string[] }> => {
     const batch = writeBatch(db);
     const requestsCol = collection(db, 'cancellationRequests');
     const dispatchOrdersCol = collection(db, 'dispatchOrders');
@@ -1967,24 +1950,45 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     const alreadyDispatched: string[] = [];
 
     if (trackingNumbers.length === 0) {
-        return { alreadyDispatched: [] };
+        return { alreadyDispatched: [], pendingOrders: [] };
     }
     
     const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', trackingNumbers));
     const dispatchedSnapshot = await getDocs(dispatchedQuery);
 
+    const partialQuery = query(dispatchOrdersCol, where('status', '==', 'Parcial'));
+    const partialSnapshot = await getDocs(partialQuery);
+
     const dispatchedGuides = new Set<string>();
+    const exceptionGuides = new Set<string>();
     dispatchedSnapshot.forEach(doc => {
         const order = doc.data() as DispatchOrder;
         order.trackingNumbers?.forEach(tn => {
             if (trackingNumbers.includes(tn)) {
-                dispatchedGuides.add(tn);
+                if (order.status === 'Despachada') {
+                    dispatchedGuides.add(tn);
+                } else if (order.status === 'Parcial') {
+                    exceptionGuides.add(tn);
+                } else if (order.status === 'Pendiente') {
+                    exceptionGuides.add(tn);
+                }
+            }
+        });
+    });
+
+    // Check exceptions in partial orders
+    partialSnapshot.forEach(doc => {
+        const order = doc.data() as DispatchOrder;
+        order.exceptions?.forEach(ex => {
+            if (trackingNumbers.includes(ex.trackingNumber)) {
+                exceptionGuides.add(ex.trackingNumber);
             }
         });
     });
 
     for (const tn of trackingNumbers) {
         const isDispatched = dispatchedGuides.has(tn);
+        const isPendingOrder = exceptionGuides.has(tn);
         if (isDispatched) {
             alreadyDispatched.push(tn);
         }
@@ -1994,13 +1998,14 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
             requestDate: Timestamp.now().toDate().toISOString(),
             status: 'pending',
             isDispatched,
+            isPendingOrder,
         };
         const docRef = doc(requestsCol);
         batch.set(docRef, newRequest);
     }
 
     await batch.commit();
-    return { alreadyDispatched };
+    return { alreadyDispatched, pendingOrders: Array.from(exceptionGuides) };
 };
 
 export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
@@ -2085,21 +2090,26 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const toDateEnd = toDate ? endOfDay(toDate) : null;
     let { warehouseId } = filters;
     
-    if (warehouseId === 'all') {
-        warehouseId = undefined;
-    }
+    // Si es INGENIO, traemos todo para filtrar en memoria. Si es otra, filtramos en DB.
+    const fetchWarehouseId = warehouseId === 'wh-bog' ? undefined : warehouseId;
 
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
-        getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
-        getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
-        getProducts({ fetchAll: true, filters: { warehouseId } }),
+        getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId: fetchWarehouseId } }),
+        getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId: fetchWarehouseId } }),
+        getProducts({ fetchAll: true, filters: { warehouseId: fetchWarehouseId } }),
         getCategories(),
         getPlatforms(),
         getCarriers(),
     ]);
 
-    let filteredOrders = ordersResult.orders;
-    let filteredMovements = movementsResult.movements;
+    // Lógica de filtrado en memoria para INGENIO
+    let filteredOrders = (warehouseId === 'wh-bog')
+        ? ordersResult.orders.filter(o => o.warehouseId !== 'wh-med')
+        : ordersResult.orders;
+
+    let filteredMovements = (warehouseId === 'wh-bog')
+        ? movementsResult.movements.filter(m => m.warehouseId !== 'wh-med')
+        : movementsResult.movements;
   
     const productIdsInCategory = filters.categoryIds.length > 0
       ? allProducts.products.filter(p => p.categoryId && filters.categoryIds.includes(p.categoryId)).map(p => p.id)
@@ -2146,7 +2156,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             dispatchedInOrder -= exceptionsTotal;
         }
 
-        if (order.cancelledExceptions) {
+            if (order.cancelledExceptions) {
             const cancelledTotal = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
             annulledByDay[day] = (annulledByDay[day] || 0) + cancelledTotal;
             dispatchedInOrder -= cancelledTotal;
@@ -2371,6 +2381,41 @@ export const updateLocation = async (id: string, name: string): Promise<void> =>
 export const updateProductLocation = async (productId: string, locationId: string | null): Promise<void> => {
     const productRef = doc(db, 'products', productId);
     await updateDoc(productRef, { locationId });
+}
+
+export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string, warehouseId?: string | null): Promise<void> => {
+    const warehouse = warehouseId || user?.warehouseId || DEFAULT_WAREHOUSE_ID;
+
+    for (const item of items) {
+        let type: InventoryMovement['type'];
+        if (reasonLabel === 'reception') {
+            type = 'Entrada';
+        } else if (reasonLabel === 'Ajuste de Entrada') {
+            type = 'Ajuste de Entrada';
+        } else if (reasonLabel === 'Ajuste de Salida') {
+            type = 'Ajuste de Salida';
+        } else if (reasonLabel === 'Devolución de Cliente') {
+            type = 'Entrada';
+        } else {
+            type = 'Entrada'; // default
+        }
+
+        await addInventoryMovement({
+            type,
+            productId: item.productId,
+            productName: item.name,
+            quantity: item.quantity,
+            notes: `${reasonLabel}${supplierId ? ` - Proveedor: ${supplierId}` : ''}${carrierId ? ` - Transportadora: ${carrierId}` : ''}${item.trackingNumber ? ` - Guía: ${item.trackingNumber}` : ''}`,
+            platformId: undefined,
+            carrierId: carrierId,
+            userId: user?.id,
+            userName: user?.name,
+            warehouseId: warehouse,
+        });
+
+        // Update stock
+        await updateProductStock(null, item.productId, item.quantity, type === 'Entrada' || type === 'Ajuste de Entrada' ? 'add' : 'subtract', item.variantId ? undefined : undefined); // variantSku not passed, but for simple products it's ok
+    }
 }
 
 

@@ -295,6 +295,7 @@ export type CancellationRequest = {
     requestDate: string;
     status: 'pending' | 'completed' | 'rejected';
     isDispatched?: boolean;
+    isPendingOrder?: boolean;
     warehouseId?: string;
 };
 

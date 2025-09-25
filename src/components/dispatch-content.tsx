@@ -53,14 +53,16 @@ interface DispatchContentProps {
     initialPendingOrders: DispatchOrder[];
     initialPartialOrders: DispatchOrder[];
     initialProducts: Product[];
+    initialAllProducts: Product[];
     initialPlatforms: Platform[];
     initialCarriers: Carrier[];
 }
 
-export function DispatchContent({ 
+export function DispatchContent({
     initialPendingOrders,
     initialPartialOrders,
     initialProducts,
+    initialAllProducts,
     initialPlatforms,
     initialCarriers
 }: DispatchContentProps) {
@@ -111,7 +113,7 @@ export function DispatchContent({
     setProducts(initialProducts);
     setPlatforms(initialPlatforms);
     setCarriers(initialCarriers);
-    const newProductsById = initialProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>);
+    const newProductsById = initialAllProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>);
     setProductsById(newProductsById);
 }, [initialPendingOrders, initialPartialOrders, initialProducts, initialPlatforms, initialCarriers]);
 

@@ -149,9 +149,37 @@ export function ProcessDispatchDialog({ order: initialOrder, productsById, child
 
   const handleSubmit = async () => {
     setIsProcessing(true);
-    
+
     const trackingList = trackingNumbers.split('\n').map(t => t.trim()).filter(t => t);
-    
+
+    // Validation: Exception quantities cannot exceed order quantities
+    const productQuantitiesUsed = new Map<string, number>();
+    for (const ex of exceptions) {
+        for (const prod of ex.products) {
+            const key = prod.variantId ? `${prod.productId}|${prod.variantId}` : prod.productId;
+            productQuantitiesUsed.set(key, (productQuantitiesUsed.get(key) || 0) + prod.quantity);
+        }
+    }
+
+    for (const p of order.products) {
+        const key = p.variantId ? `${p.productId}|${p.variantId}` : p.productId;
+        const used = productQuantitiesUsed.get(key) || 0;
+        if (used > p.quantity) {
+            toast({ variant: 'destructive', title: 'Error', description: `La cantidad en excepciones para ${p.name} excede la cantidad en la orden.` });
+            setIsProcessing(false);
+            return;
+        }
+    }
+
+    // Validation: Dispatched guides <= total items - exception quantities
+    const totalExceptionQuantities = exceptions.reduce((sum, ex) => sum + ex.products.reduce((s, p) => s + p.quantity, 0), 0);
+    const maxGuides = order.totalItems - totalExceptionQuantities;
+    if (trackingList.length > maxGuides) {
+        toast({ variant: 'destructive', title: 'Error', description: `El número de guías despachadas (${trackingList.length}) no puede superar las unidades restantes después de excepciones (${maxGuides}).` });
+        setIsProcessing(false);
+        return;
+    }
+
     try {
         const response = await processDispatch(order.id, trackingList, exceptions);
 

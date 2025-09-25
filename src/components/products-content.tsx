@@ -62,6 +62,7 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
+import { UpdateProductsDialog } from './update-products-dialog';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { auditProductStockAction, clearProductAuditAction, deleteProductAction, updateProductLocationAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
@@ -259,6 +260,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const canEdit = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
     const canDelete = user?.role === 'admin';
     const canAudit = user?.role === 'admin' || user?.role === 'logistics';
+    const canBulkUpdate = user?.role === 'admin';
 
     const getRotationIcon = (categoryName?: string) => {
         if (!categoryName) return null;
@@ -450,6 +452,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={!canEdit}>
                                 <ImportProductsDialog onImportSuccess={refreshProducts} />
                             </DropdownMenuItem>
+                            <UpdateProductsDialog onUpdateSuccess={refreshProducts} disabled={!canBulkUpdate} />
                                 <DropdownMenuItem onClick={handleExportExcel}>
                                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                                 Exportar a Excel

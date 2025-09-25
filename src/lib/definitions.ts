@@ -260,9 +260,29 @@ export const ImportProductSchema = z.object({
     stock: z.coerce.number({ required_error: "La columna 'stock' es obligatoria.", invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.'),
     categoryid: z.string({ required_error: "La columna 'categoryid' es obligatoria." }).min(1, "La columna 'categoryid' no puede estar vacía."),
     vendorid: z.string({ required_error: "La columna 'vendorid' es obligatoria." }).min(1, "La columna 'vendorid' no puede estar vacía."),
+    warehouseid: z.string().optional(),
     purchasedate: z.date({ invalid_type_error: 'Formato de fecha inválido. Asegúrese de que esté en formato YYYY-MM-DD.'}).nullable().optional(),
 });
 
+
+export const UpdateProductSchema = z.object({
+    sku: z.coerce.string({ required_error: "La columna 'sku' es obligatoria." }).min(1, "La columna 'sku' no puede estar vacía."),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    pricedropshipping: z.coerce.number({ invalid_type_error: 'El precio debe ser un número.' }).min(0, 'El precio debe ser un número no negativo.').optional(),
+    pricewholesale: z.coerce.number({ invalid_type_error: 'El precio mayorista debe ser un número.' }).min(0, 'El precio mayorista debe ser un número no negativo.').optional(),
+    cost: z.coerce.number({ invalid_type_error: 'El costo debe ser un número.' }).min(0, 'El costo debe ser un número no negativo.').optional().nullable(),
+    stock: z.coerce.number({ invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.').optional(),
+    categoryid: z.string().optional(),
+    vendorid: z.string().optional(),
+    warehouseid: z.string().optional(),
+    purchasedate: z.date({ invalid_type_error: 'Formato de fecha inválido. Asegúrese de que esté en formato YYYY-MM-DD.'}).nullable().optional(),
+    // Variant fields
+    variantname: z.string().optional(),
+    variantpricedropshipping: z.coerce.number({ invalid_type_error: 'El precio de variante debe ser un número.' }).min(0, 'El precio de variante debe ser un número no negativo.').optional(),
+    variantpricewholesale: z.coerce.number({ invalid_type_error: 'El precio mayorista de variante debe ser un número.' }).min(0, 'El precio mayorista de variante debe ser un número no negativo.').optional(),
+    variantstock: z.coerce.number({ invalid_type_error: 'El stock de variante debe ser un número.' }).int('El stock de variante debe ser un número entero.').min(0, 'El stock de variante debe ser un número no negativo.').optional(),
+});
 
 export type ImportProductsFormState = {
     message: string;

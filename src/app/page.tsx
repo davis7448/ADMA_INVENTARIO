@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Card,
   CardContent,
@@ -68,7 +69,8 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const warehouseId = searchParams.get('warehouse') || undefined;
+  const { effectiveWarehouseId } = useAuth();
+  const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
