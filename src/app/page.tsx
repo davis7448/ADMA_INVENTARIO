@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import {
   Card,
@@ -71,6 +71,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { user } = useAuth();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -108,6 +109,13 @@ function DashboardContent() {
     effectiveWarehouseId,
     finalWarehouseId: warehouseId
   });
+
+  // Auto-redirect logistics users to their warehouse URL
+  useEffect(() => {
+    if (user?.role === 'logistics' && user.warehouseId && !searchParams.get('warehouse')) {
+      router.push(`/?warehouse=${user.warehouseId}`);
+    }
+  }, [user, searchParams, router]);
 
 
   useEffect(() => {
