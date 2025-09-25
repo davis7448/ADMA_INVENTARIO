@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { User, Warehouse } from '@/lib/types';
 import { findUserByEmail, addUser } from '@/lib/api';
@@ -17,6 +17,7 @@ interface AuthContextType {
   loading: boolean;
   warehouses: Warehouse[];
   currentWarehouse: Warehouse | null;
+  effectiveWarehouseId: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -31,12 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   
   // Determine the effective warehouseId for data fetching
-  const getEffectiveWarehouseId = (user: User | null): string | null => {
+  const effectiveWarehouseId = useMemo(() => {
+      if (user?.role === 'logistics') {
+          return user.warehouseId || 'wh-bog';
+      }
       return searchParams.get('warehouse');
-  };
-  
-  const warehouseIdForHook = getEffectiveWarehouseId(user);
-  const { warehouses, currentWarehouse, loading: warehouseLoading } = useWarehouse(warehouseIdForHook);
+  }, [user, searchParams]);
+  const { warehouses, currentWarehouse, loading: warehouseLoading } = useWarehouse(effectiveWarehouseId);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
@@ -87,7 +89,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-        await signInWithEmailAndPassword(auth, email, password);
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        const idToken = await result.user.getIdToken();
+
+        // Set session cookie
+        const response = await fetch('/api/set-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken }),
+        });
+        if (!response.ok) {
+            throw new Error('Failed to set session');
+        }
+
+        console.log('Login successful');
         return true;
     } catch (error) {
         console.error("Falló el inicio de sesión:", error);
@@ -101,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
-  const value = { user, login, logout, loading: loading || warehouseLoading, warehouses, currentWarehouse };
+  const value = { user, login, logout, loading: loading || warehouseLoading, warehouses, currentWarehouse, effectiveWarehouseId };
 
   if (loading || warehouseLoading) {
     return (

@@ -15,6 +15,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Button } from './ui/button';
+import { Label } from './ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { importProductsAction } from '@/app/actions/products';
 import { Upload, FileDown, FileSpreadsheet } from 'lucide-react';
@@ -30,6 +31,13 @@ import {
 import { DropdownMenuItem } from './ui/dropdown-menu';
 import { format } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 
 interface ImportProductsDialogProps {
   onImportSuccess: () => void;
@@ -51,6 +59,8 @@ const sanitizeHeaders = (products: ProductToImport[]): ProductToImport[] => {
     });
 };
 
+const DEFAULT_WAREHOUSE_ID = 'wh-bog';
+
 export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogProps) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -58,7 +68,8 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
   const [products, setProducts] = useState<ProductToImport[]>([]);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, warehouses } = useAuth();
+  const [selectedWarehouse, setSelectedWarehouse] = useState(DEFAULT_WAREHOUSE_ID);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -146,7 +157,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
     }
 
     startTransition(async () => {
-        const result = await importProductsAction(products, user);
+        const result = await importProductsAction(products, user, selectedWarehouse);
         if (result.success) {
             toast({
                 title: '¡Importación Exitosa!',
@@ -169,20 +180,25 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
   
   const handleDownloadTemplate = () => {
     const templateHeaders = [
-        'name', 'sku', 'description', 
-        'pricedropshipping', 'pricewholesale', 'cost', 'stock', 
-        'categoryid', 'vendorid',
+        'name', 'sku', 'description',
+        'pricedropshipping', 'pricewholesale', 'cost', 'stock',
+        'categoryid', 'vendorid', 'warehouseid',
         'purchasedate'
     ];
-    const data = [templateHeaders.reduce((acc, h) => ({ ...acc, [h]: ''}), {})];
+    const data = [templateHeaders.reduce((acc, h) => {
+        if (h === 'warehouseid') {
+            return { ...acc, [h]: selectedWarehouse };
+        }
+        return { ...acc, [h]: '' };
+    }, {})];
     const worksheet = XLSX.utils.json_to_sheet(data);
-    
-    if(worksheet['J1']) {
-        worksheet['J2'] = { t: 'd', v: new Date() };
+
+    if(worksheet['K1']) {
+        worksheet['K2'] = { t: 'd', v: new Date() };
         worksheet['!cols'] = worksheet['!cols'] || [];
-        worksheet['!cols'][9] = { wch: 12 }; 
+        worksheet['!cols'][10] = { wch: 12 };
     }
-    
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Productos");
     XLSX.writeFile(workbook, "plantilla_productos_simples.xlsx");
@@ -230,6 +246,20 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
                     <FileDown className="mr-2 h-4 w-4" />
                     Descargar Plantilla
                 </Button>
+            </div>
+
+            <div className="flex items-center gap-4">
+                <Label htmlFor="warehouse-select">Bodega Destino</Label>
+                <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                    <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Seleccionar Bodega" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {warehouses.map(warehouse => (
+                            <SelectItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
             {error && (

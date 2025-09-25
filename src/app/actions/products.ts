@@ -3,10 +3,12 @@
 
 import { z } from 'zod';
 import { addProduct, updateProduct, uploadImageAndGetURL, createReservation, addMultipleProducts, auditProductStock, clearProductAudit, deleteProduct, updateProductLocation } from '@/lib/api';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { revalidatePath } from 'next/cache';
 import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
-import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema, ImportProductSchema } from '@/lib/definitions';
+import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema, ImportProductSchema, UpdateProductSchema } from '@/lib/definitions';
 import { v4 as uuidv4 } from 'uuid';
 
 
@@ -78,6 +80,8 @@ export async function addProductAction(
       purchaseDate: productData.purchaseDate?.toISOString(),
       imageUrl: imageUrl || `https://picsum.photos/seed/${productData.sku || uuidv4()}/600/400`,
       imageHint: 'nuevo producto', // This could be improved with AI
+      pendingStock: 0,
+      damagedStock: 0,
     };
     
     const newProductId = await addProduct(newProduct);
@@ -260,7 +264,8 @@ export async function createReservationAction(
 
 export async function importProductsAction(
     products: unknown[],
-    user: User | null
+    user: User | null,
+    warehouseId?: string
 ): Promise<ImportProductsFormState> {
     
     const validatedProducts = z.array(ImportProductSchema).safeParse(products);
@@ -282,16 +287,17 @@ export async function importProductsAction(
 
     try {
         const productsToAdd: Omit<Product, 'id'>[] = validatedProducts.data.map(p => {
-            const product: Partial<Omit<Product, 'id'>> = {
+            const product: Omit<Product, 'id'> = {
                 name: p.name,
                 sku: p.sku,
                 description: p.description,
                 priceDropshipping: p.pricedropshipping,
                 priceWholesale: p.pricewholesale ?? 0,
-                cost: p.cost,
+                cost: p.cost ?? undefined,
                 stock: p.stock,
                 categoryId: p.categoryid,
                 vendorId: p.vendorid,
+                warehouseId: p.warehouseid || warehouseId || 'wh-bog',
                 productType: 'simple',
                 variants: [],
                 pendingStock: 0,
@@ -299,14 +305,9 @@ export async function importProductsAction(
                 purchaseDate: p.purchasedate ? new Date(p.purchasedate).toISOString() : undefined,
                 imageUrl: `https://picsum.photos/seed/${p.sku || uuidv4()}/600/400`,
                 imageHint: 'producto',
+                createdBy: user ? { id: user.id, name: user.name } : undefined,
             };
-            if (user) {
-              product.createdBy = { id: user.id, name: user.name };
-            }
-            if (product.cost === undefined || product.cost === null) {
-                delete product.cost;
-            }
-            return product as Omit<Product, 'id'>;
+            return product;
         });
 
         await addMultipleProducts(productsToAdd);
@@ -377,5 +378,149 @@ export async function updateProductLocationAction(productId: string, locationId:
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'No se pudo actualizar la ubicación.';
         return { success: false, message: errorMessage };
+    }
+}
+
+export async function updateProductsAction(
+    products: unknown[],
+    user: User | null
+): Promise<ImportProductsFormState> {
+    if (!user || user.role !== 'admin') {
+        return {
+            message: 'No tienes permiso para realizar actualizaciones masivas de productos.',
+            success: false,
+            count: 0
+        };
+    }
+
+    const validatedProducts = z.array(UpdateProductSchema).safeParse(products);
+
+    if (!validatedProducts.success) {
+        const errorMessages = validatedProducts.error.issues.map(issue => {
+            const row = issue.path[0] as number + 2; // +2 to account for 0-based index and header row
+            const field = issue.path[1];
+            return `Fila ${row}, Columna '${field}': ${issue.message}`;
+        });
+
+        return {
+          message: 'La validación de datos falló. Por favor, revisa los errores.',
+          errors: errorMessages.join(' | '),
+          success: false,
+          count: 0
+        };
+    }
+
+    try {
+        const updates = [];
+        for (const p of validatedProducts.data) {
+            let productId: string | null = null;
+            let isVariantUpdate = false;
+            let variantIndex = -1;
+
+            // First, try to find a product with the exact SKU (simple product or parent)
+            const productQuery = query(collection(db, 'products'), where('sku', '==', p.sku));
+            let productSnapshot = await getDocs(productQuery);
+
+            if (productSnapshot.empty) {
+                // If not found, search for products that have variants with this SKU
+                const allProductsQuery = query(collection(db, 'products'));
+                const allProductsSnapshot = await getDocs(allProductsQuery);
+
+                for (const doc of allProductsSnapshot.docs) {
+                    const productData = doc.data() as Product;
+                    if (productData.variants) {
+                        const variantIdx = productData.variants.findIndex(v => v.sku === p.sku);
+                        if (variantIdx !== -1) {
+                            productId = doc.id;
+                            isVariantUpdate = true;
+                            variantIndex = variantIdx;
+                            break;
+                        }
+                    }
+                }
+
+                if (!productId) {
+                    return {
+                        message: `Producto o variante con SKU ${p.sku} no encontrado.`,
+                        success: false,
+                        count: 0
+                    };
+                }
+            } else {
+                productId = productSnapshot.docs[0].id;
+            }
+
+            // Get the product document
+            const productDoc = await getDoc(doc(db, 'products', productId));
+            if (!productDoc.exists()) {
+                return {
+                    message: `Producto con ID ${productId} no encontrado.`,
+                    success: false,
+                    count: 0
+                };
+            }
+
+            const productData = productDoc.data() as Product;
+
+            if (isVariantUpdate) {
+                // Update specific variant
+                if (!productData.variants || variantIndex === -1) {
+                    return {
+                        message: `Variante con SKU ${p.sku} no encontrada en el producto.`,
+                        success: false,
+                        count: 0
+                    };
+                }
+
+                const updatedVariants = [...productData.variants];
+                const variantUpdate: Partial<ProductVariant> = {};
+
+                if (p.variantname !== undefined) variantUpdate.name = p.variantname;
+                if (p.variantpricedropshipping !== undefined) variantUpdate.priceDropshipping = p.variantpricedropshipping;
+                if (p.variantpricewholesale !== undefined) variantUpdate.priceWholesale = p.variantpricewholesale;
+                if (p.variantstock !== undefined) variantUpdate.stock = p.variantstock;
+
+                updatedVariants[variantIndex] = { ...updatedVariants[variantIndex], ...variantUpdate };
+
+                updates.push(updateProduct(productId, { variants: updatedVariants }));
+            } else {
+                // Update parent product
+                const updateData: Partial<Product> = {};
+                if (p.name !== undefined) updateData.name = p.name;
+                if (p.description !== undefined) updateData.description = p.description;
+                if (p.pricedropshipping !== undefined) updateData.priceDropshipping = p.pricedropshipping;
+                if (p.pricewholesale !== undefined) updateData.priceWholesale = p.pricewholesale;
+                if (p.cost !== undefined && p.cost !== null) updateData.cost = p.cost;
+                if (p.stock !== undefined) updateData.stock = p.stock;
+                if (p.categoryid !== undefined) updateData.categoryId = p.categoryid;
+                if (p.vendorid !== undefined) updateData.vendorId = p.vendorid;
+                if (p.warehouseid !== undefined) updateData.warehouseId = p.warehouseid;
+                if (p.purchasedate !== undefined && p.purchasedate !== null) updateData.purchaseDate = p.purchasedate.toISOString();
+
+                // Keep existing pendingStock and damagedStock
+                updateData.pendingStock = productData.pendingStock || 0;
+                updateData.damagedStock = productData.damagedStock || 0;
+
+                updates.push(updateProduct(productId, updateData));
+            }
+        }
+
+        await Promise.all(updates);
+        revalidatePath('/products');
+
+        return {
+            message: 'Productos y variantes actualizados exitosamente.',
+            success: true,
+            count: updates.length
+        };
+
+    } catch(error) {
+        console.error(error);
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
+        return {
+            message: errorMessage,
+            success: false,
+            count: 0
+        };
     }
 }

@@ -6,18 +6,19 @@ import type { LogisticItem, User } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 
 export async function registerInventoryEntryAction(
-    items: (LogisticItem & { trackingNumber?: string })[], 
+    items: (LogisticItem & { trackingNumber?: string })[],
     user: User | null,
     reasonLabel: string,
     supplierId?: string,
     carrierId?: string,
+    warehouseId?: string | null,
 ): Promise<{ success: boolean; message: string, count: number }> {
     if (!items || items.length === 0) {
         return { success: false, message: "No hay items para registrar.", count: 0 };
     }
 
     try {
-        await registerInventoryEntry(items, user, reasonLabel, supplierId, carrierId);
+        await registerInventoryEntry(items, user, reasonLabel, supplierId, carrierId, warehouseId);
         revalidatePath('/logistics');
         revalidatePath('/products');
         revalidatePath('/history');

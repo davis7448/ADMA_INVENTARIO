@@ -6,18 +6,24 @@ import { ProductsContent } from '@/components/products-content';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
 import { getAuth } from 'firebase-admin/auth';
-import { app as adminApp } from '@/lib/firebase-admin';
+import { getApp } from '@/lib/firebase-admin';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export const revalidate = 0;
 
 async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
-    if (!sessionCookie) return null;
+    if (!sessionCookie) {
+        console.log('No session cookie');
+        return null;
+    }
     try {
-        const decodedClaims = await getAuth(adminApp).verifySessionCookie(sessionCookie, true);
+        const app = await getApp();
+        const decodedClaims = await getAuth(app).verifySessionCookie(sessionCookie, true);
         const users = await getUsers();
         return users.find(u => u.email === decodedClaims.email) || null;
     } catch (error) {
-        console.error("Session verification failed, this is expected if FIREBASE_PRIVATE_KEY is not set.", error);
+        console.error("Session verification failed:", error);
         return null;
     }
 }
@@ -32,7 +38,16 @@ export default async function ProductsPage({
     const page = Number(searchParams?.page || '1');
     const limit = Number(searchParams?.limit || '20');
     
-    const warehouseId = searchParams?.warehouse as string | undefined;
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('__session')?.value;
+    const user = await getCurrentUser(sessionCookie);
+    const effectiveWarehouseId = user && user.role !== 'admin' ? (user.warehouseId || 'wh-bog') : undefined;
+    const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
+
+    // Server-side redirect for logistics users
+    if (user?.role === 'logistics' && !searchParams?.warehouse) {
+        redirect(`?warehouse=${warehouseId}`);
+    }
 
     const filters = {
         searchQuery: searchParams?.q as string,
@@ -44,6 +59,7 @@ export default async function ProductsPage({
         hasReservations: searchParams?.reservations === 'true',
         onlyAudited: searchParams?.audited === 'true',
         warehouseId: warehouseId,
+        userRole: user?.role,
     };
 
     const [productsResult, rotationCategories, locations] = await Promise.all([
