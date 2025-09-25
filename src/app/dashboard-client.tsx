@@ -100,6 +100,16 @@ function DashboardContent() {
   const effectiveWarehouseId = user?.role === 'admin' ? selectedWarehouse : authEffectiveWarehouseId;
   const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
 
+  // Debug logging for warehouse filtering
+  console.log('Dashboard Auth Debug:', {
+    user: user ? { id: user.id, role: user.role, warehouseId: user.warehouseId } : null,
+    authEffectiveWarehouseId,
+    selectedWarehouse,
+    effectiveWarehouseId,
+    warehouseId,
+    searchParamsWarehouse: searchParams.get('warehouse')
+  });
+
   // Debug logging
   console.log('Dashboard Debug:', {
     userRole: user?.role,
@@ -113,9 +123,13 @@ function DashboardContent() {
   useEffect(() => {
     if (!redirectedRef.current && user?.role === 'logistics' && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
       const warehouse = user.warehouseId || 'wh-bog';
-      console.log('Redirecting logistics user to warehouse URL:', warehouse);
+      console.log('Dashboard: Redirecting logistics user to warehouse URL:', warehouse);
+      console.log('Dashboard: Current user state:', { user, searchParamsWarehouse: searchParams.get('warehouse') });
       redirectedRef.current = true;
-      router.push(`/?warehouse=${warehouse}`);
+      // Use setTimeout to ensure this runs after initial render
+      setTimeout(() => {
+        router.push(`/?warehouse=${warehouse}`);
+      }, 100);
     }
   }, [user, searchParams, router]);
 

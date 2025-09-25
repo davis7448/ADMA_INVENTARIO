@@ -28,11 +28,8 @@ export default async function DashboardPage({
     const sessionCookie = cookieStore.get('__session')?.value;
     const user = await getCurrentUser(sessionCookie);
 
-    // Server-side redirect for logistics users
-    if (user?.role === 'logistics' && !searchParams?.warehouse) {
-        const warehouse = user.warehouseId || 'wh-bog';
-        redirect(`/?warehouse=${warehouse}`);
-    }
+    // Note: Warehouse redirect is now handled client-side in DashboardClient
+    // to ensure it works properly in Firebase production environment
 
     return (
         <Suspense>
