@@ -1765,7 +1765,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
                         productSku: productInfo.sku || 'N/A',
                         vendedorName: vendedorName,
                         quantity: reservation.quantity,
-                        warehouseId: productInfo.warehouseId,
+                        warehouseId: productInfo.warehouseId || DEFAULT_WAREHOUSE_ID,
 
                     };
                     batch.set(alertRef, newAlert);
