@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { User, Warehouse } from '@/lib/types';
 import { findUserByEmail, addUser } from '@/lib/api';
@@ -32,14 +32,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   
   // Determine the effective warehouseId for data fetching
-  const getEffectiveWarehouseId = (user: User | null, searchParams: URLSearchParams): string | null => {
+  const effectiveWarehouseId = useMemo(() => {
       if (user?.role === 'logistics') {
           return user.warehouseId || null;
       }
       return searchParams.get('warehouse');
-  };
-
-  const effectiveWarehouseId = getEffectiveWarehouseId(user, searchParams);
+  }, [user, searchParams]);
   const { warehouses, currentWarehouse, loading: warehouseLoading } = useWarehouse(effectiveWarehouseId);
 
   useEffect(() => {
