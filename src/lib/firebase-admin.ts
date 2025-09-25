@@ -11,12 +11,27 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 async function getPrivateKey(): Promise<string | undefined> {
     try {
-        // In Firebase App Hosting, the secret is injected as an environment variable
+        // First try environment variable (Firebase App Hosting injection)
         if (process.env.FIREBASE_PRIVATE_KEY) {
             return process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
         }
 
-        // Fallback to Secret Manager if explicitly configured
+        // Fallback: Try to access secret directly from Secret Manager
+        try {
+            const client = new SecretManagerServiceClient();
+            const [version] = await client.accessSecretVersion({
+                name: 'projects/studio-9748962172-82b35/secrets/firebase-private-key/versions/latest',
+            });
+            const privateKey = version.payload?.data?.toString();
+            if (privateKey) {
+                console.log('Successfully retrieved private key from Secret Manager');
+                return privateKey;
+            }
+        } catch (secretError) {
+            console.warn('Could not access secret from Secret Manager:', secretError instanceof Error ? secretError.message : String(secretError));
+        }
+
+        // Last fallback: Check for explicit secret name
         if (process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME) {
             const client = new SecretManagerServiceClient();
             const [version] = await client.accessSecretVersion({
