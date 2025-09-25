@@ -22,10 +22,16 @@ async function getPrivateKey(): Promise<string | undefined> {
             const [version] = await client.accessSecretVersion({
                 name: 'projects/studio-9748962172-82b35/secrets/firebase-private-key/versions/latest',
             });
-            const privateKey = version.payload?.data?.toString();
-            if (privateKey) {
+            const secretData = version.payload?.data?.toString();
+            if (secretData) {
                 console.log('Successfully retrieved private key from Secret Manager');
-                return privateKey;
+                // Parse the JSON and extract the private_key field
+                const keyData = JSON.parse(secretData);
+                const privateKey = keyData.private_key;
+                if (privateKey) {
+                    // Convert escape sequences to actual newlines
+                    return privateKey.replace(/\\n/g, '\n');
+                }
             }
         } catch (secretError) {
             console.warn('Could not access secret from Secret Manager:', secretError instanceof Error ? secretError.message : String(secretError));
