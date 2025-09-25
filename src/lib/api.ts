@@ -2407,7 +2407,9 @@ export const registerInventoryEntry = async (items: (LogisticItem & { trackingNu
         });
 
         // Update stock
-        await updateProductStock(null, item.productId, item.quantity, type === 'Entrada' || type === 'Ajuste de Entrada' ? 'add' : 'subtract', item.variantId ? undefined : undefined); // variantSku not passed, but for simple products it's ok
+        await runTransaction(db, async (transaction) => {
+            await updateProductStock(transaction, item.productId, item.quantity, type === 'Entrada' || type === 'Ajuste de Entrada' ? 'add' : 'subtract', item.variantId ? item.sku : undefined);
+        });
     }
 }
 
