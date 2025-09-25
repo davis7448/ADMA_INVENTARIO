@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -73,6 +73,7 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user } = useAuth();
+  const redirectedRef = useRef(false);
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
@@ -112,7 +113,9 @@ function DashboardContent() {
 
   // Auto-redirect logistics users to their warehouse URL
   useEffect(() => {
-    if (user?.role === 'logistics' && user.warehouseId && !searchParams.get('warehouse')) {
+    if (!redirectedRef.current && user?.role === 'logistics' && user.warehouseId && !searchParams.get('warehouse')) {
+      console.log('Redirecting logistics user to warehouse URL:', user.warehouseId);
+      redirectedRef.current = true;
       router.push(`/?warehouse=${user.warehouseId}`);
     }
   }, [user, searchParams, router]);
