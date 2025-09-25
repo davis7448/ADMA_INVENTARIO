@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useTransition, useEffect } from 'react';
+import React, { useState, useMemo, useTransition, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -88,6 +88,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+    const redirectedRef = useRef(false);
 
     // Filter states from URL
     const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
@@ -106,6 +107,16 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     useEffect(() => {
         getVendedores().then(setVendedores);
     }, []);
+
+    // Auto-redirect logistics users to their warehouse URL
+    useEffect(() => {
+        if (!redirectedRef.current && user?.role === 'logistics' && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
+            const warehouse = user.warehouseId || 'wh-bog';
+            console.log('Redirecting logistics user to products warehouse URL:', warehouse);
+            redirectedRef.current = true;
+            router.push(`${pathname}?warehouse=${warehouse}`);
+        }
+    }, [user, searchParams, router, pathname]);
 
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
@@ -220,6 +231,12 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const handlePaginationChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set('page', String(newPage));
+
+        // Asegurar que warehouse esté presente para usuarios de logística
+        if (user?.role === 'logistics' && !params.get('warehouse')) {
+            params.set('warehouse', user.warehouseId || 'wh-bog');
+        }
+
         router.push(`${pathname}?${params.toString()}`);
     }
 

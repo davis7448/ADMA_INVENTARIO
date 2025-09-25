@@ -58,7 +58,7 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
     // Apply warehouse filter in memory for logistics in wh-bog
     if (warehouseId && warehouseId !== 'all') {
         if (userRole === 'logistics' && warehouseId === 'wh-bog') {
-            allProducts = allProducts.filter(p => p.warehouseId === 'wh-bog' || p.warehouseId == null);
+            allProducts = allProducts.filter(p => p.warehouseId === 'wh-bog');
         } else if (userRole !== 'logistics') {
             allProducts = allProducts.filter(p => p.warehouseId === warehouseId);
         }
@@ -911,14 +911,15 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
     if (!warehouseId || warehouseId === 'all') {
         queries.push(baseQuery);
     } else if (warehouseId === 'wh-bog') {
-        queries.push(baseQuery); // fetch all to include missing warehouseId
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+        queries.push(query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'), where('warehouseId', '==', null)));
     } else {
         queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
-    
+
     const snapshots = await Promise.all(queries.map(q => getDocs(q)));
     const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
-    
+
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -928,10 +929,6 @@ export const getPendingDispatchOrders = async (warehouseId?: string): Promise<Di
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as DispatchOrder
     });
-
-    if (warehouseId === 'wh-bog') {
-        allOrders = allOrders.filter(o => o.warehouseId === 'wh-bog');
-    }
 
     return allOrders.sort((a, b) => b.date.getTime() - a.date.getTime());
 }
@@ -943,7 +940,8 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
     if (!warehouseId || warehouseId === 'all') {
         queries.push(baseQuery);
     } else if (warehouseId === 'wh-bog') {
-        queries.push(baseQuery); // fetch all to include missing warehouseId
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+        queries.push(query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'), where('warehouseId', '==', null)));
     } else {
         queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
@@ -960,10 +958,6 @@ export const getPartialDispatchOrders = async (warehouseId?: string): Promise<Di
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as DispatchOrder
     });
-
-    if (warehouseId === 'wh-bog') {
-        allOrders = allOrders.filter(o => o.warehouseId === 'wh-bog');
-    }
 
     return allOrders.sort((a, b) => b.date.getTime() - a.date.getTime());
 }
@@ -1345,7 +1339,7 @@ export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]
     if (!warehouseId || warehouseId === 'all') {
         queries.push(baseQuery);
     } else if (warehouseId === 'wh-bog') {
-        queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
         queries.push(query(collection(db, 'auditAlerts'), where('warehouseId', '==', null)));
     } else {
         queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
@@ -1593,28 +1587,28 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
     let baseQuery: Query = collection(db, 'reservations');
     let queries: Query[] = [];
-    
+
     if (!warehouseId || warehouseId === 'all') {
         queries.push(baseQuery);
     } else if (warehouseId === 'wh-bog') {
-        queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
         queries.push(query(collection(db, 'reservations'), where('warehouseId', '==', null)));
     } else {
         queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
-    
+
     const snapshots = await Promise.all(queries.map(q => getDocs(q)));
     const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
-    
+
     let allReservations = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { 
-            id: doc.id, 
-            ...data,
-            date: parseFirestoreDate(data.date).toISOString(),
+        return {
+          id: doc.id,
+          ...data,
+          date: parseFirestoreDate(data.date).toISOString(),
         } as Reservation;
     });
-    
+
     return allReservations;
 }
 
@@ -1693,11 +1687,11 @@ export const deleteReservation = async (reservationId: string) => {
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
     let baseQuery: Query = query(collection(db, 'staleReservationAlerts'));
     let queries: Query[] = [];
-    
+
     if (!warehouseId || warehouseId === 'all') {
         queries.push(baseQuery);
     } else if (warehouseId === 'wh-bog') {
-        queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
         queries.push(query(collection(db, 'staleReservationAlerts'), where('warehouseId', '==', null)));
     } else {
         queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
@@ -1810,7 +1804,7 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
             if (!warehouseId || warehouseId === 'all') {
                 queries.push(baseQuery);
             } else if (warehouseId === 'wh-bog') {
-                queries.push(query(baseQuery, where('warehouseId', '!=', 'wh-med')));
+                queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
                 queries.push(query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'), where('warehouseId', '==', null)));
             } else {
                 queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));

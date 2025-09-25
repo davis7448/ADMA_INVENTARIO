@@ -9,6 +9,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getApp } from '@/lib/firebase-admin';
 import { getUsers } from '@/lib/api';
 import type { User } from '@/lib/types';
+import { redirect } from 'next/navigation';
 
 async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
     if (!sessionCookie) return null;
@@ -31,8 +32,13 @@ export default async function PendingInventoryPage({
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
     const user = await getCurrentUser(sessionCookie);
-    const effectiveWarehouseId = user && user.role !== 'admin' ? user.warehouseId : undefined;
+    const effectiveWarehouseId = user && user.role !== 'admin' ? (user.warehouseId || 'wh-bog') : undefined;
     const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
+
+    // Server-side redirect for logistics users
+    if (user?.role === 'logistics' && !searchParams?.warehouse) {
+        redirect(`?warehouse=${warehouseId}`);
+    }
     const [pendingItems, productsResult] = await Promise.all([
         getPendingInventory(warehouseId),
         getProducts({ filters: { warehouseId } })

@@ -31,7 +31,7 @@ export default async function LogisticsPage({
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
     const user = await getCurrentUser(sessionCookie);
-    const effectiveWarehouseId = user && user.role !== 'admin' ? user.warehouseId : undefined;
+    const effectiveWarehouseId = user && user.role !== 'admin' ? (user.warehouseId || 'wh-bog') : undefined;
     const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
 
     const filters = {
