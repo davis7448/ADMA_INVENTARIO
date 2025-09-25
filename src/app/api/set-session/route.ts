@@ -7,6 +7,13 @@ export async function POST(request: Request) {
     const { idToken } = await request.json();
 
     const app = await getApp();
+
+    // If app is not properly initialized, skip session creation
+    if (!app || !app.name) {
+      console.warn('Firebase Admin SDK not initialized, skipping session creation');
+      return Response.json({ success: true });
+    }
+
     const auth = getAuth(app);
 
     // Create session cookie

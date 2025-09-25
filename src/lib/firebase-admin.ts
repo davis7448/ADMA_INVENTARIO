@@ -10,14 +10,19 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 // Do not commit service account keys to your repository.
 
 async function getPrivateKey(): Promise<string | undefined> {
-    if (process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME) {
-        const client = new SecretManagerServiceClient();
-        const [version] = await client.accessSecretVersion({
-            name: `projects/${process.env.GCP_PROJECT_ID || 'studio-9748962172-82b35'}/secrets/${process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME}/versions/latest`,
-        });
-        return version.payload?.data?.toString();
+    try {
+        if (process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME) {
+            const client = new SecretManagerServiceClient();
+            const [version] = await client.accessSecretVersion({
+                name: `projects/${process.env.GCP_PROJECT_ID || 'studio-9748962172-82b35'}/secrets/${process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME}/versions/latest`,
+            });
+            return version.payload?.data?.toString();
+        }
+        return process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    } catch (error) {
+        console.error('Error getting Firebase private key:', error);
+        return undefined;
     }
-    return process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 }
 
 let app: App;
