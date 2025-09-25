@@ -44,6 +44,8 @@ import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 import { es } from 'date-fns/locale';
 import DashboardAnnulledChart from '@/components/dashboard-annulled-chart';
 import DashboardAdjustChart from '@/components/dashboard-adjust-chart';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getWarehouses } from '@/lib/api';
 
 const SKELETON_DASHBOARD_DATA: DashboardData = {
     totalItemsDispatched: 0,
@@ -70,8 +72,6 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 function DashboardContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const effectiveWarehouseId = user && user.role !== 'admin' ? user.warehouseId : undefined;
-  const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
@@ -88,12 +88,26 @@ function DashboardContent() {
   const [filterCarriers, setFilterCarriers] = useState<string[]>([]);
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterProducts, setFilterProducts] = useState<string[]>([]);
-  
+
   // Static filter options
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [allCarriers, setAllCarriers] = useState<Carrier[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
+  const [allWarehouses, setAllWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string | undefined>(searchParams.get('warehouse') || undefined);
+
+  const effectiveWarehouseId = user && user.role !== 'admin' ? user.warehouseId : selectedWarehouse;
+  const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
+
+  // Debug logging
+  console.log('Dashboard Debug:', {
+    userRole: user?.role,
+    userWarehouseId: user?.warehouseId,
+    searchParamsWarehouse: searchParams.get('warehouse'),
+    effectiveWarehouseId,
+    finalWarehouseId: warehouseId
+  });
 
 
   useEffect(() => {
@@ -102,12 +116,14 @@ function DashboardContent() {
       getProducts({ limit: 10000, filters: { warehouseId } }),
       getCarriers(),
       getCategories(),
-      getPlatforms()
-    ]).then(([productsResult, carriers, categories, platforms]) => {
+      getPlatforms(),
+      getWarehouses()
+    ]).then(([productsResult, carriers, categories, platforms, warehouses]) => {
       setAllProducts(productsResult.products);
       setAllCarriers(carriers);
       setAllCategories(categories);
       setAllPlatforms(platforms);
+      setAllWarehouses(warehouses);
     });
   }, [warehouseId]);
 
@@ -226,43 +242,58 @@ function DashboardContent() {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <h1 className="text-3xl font-bold font-headline tracking-tight">Dashboard Operativo</h1>
-        <Popover>
-            <PopoverTrigger asChild>
-                <Button
-                    id="date"
-                    variant={"outline"}
-                    className={cn(
-                        "w-full sm:w-[260px] justify-start text-left font-normal",
-                        !dateRange && "text-muted-foreground"
-                    )}
-                >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange?.from ? (
-                        dateRange.to ? (
-                            <>
-                                {format(dateRange.from, "LLL dd, y", { locale: es })} -{" "}
-                                {format(dateRange.to, "LLL dd, y", { locale: es })}
-                            </>
-                        ) : (
-                            format(dateRange.from, "LLL dd, y", { locale: es })
-                        )
-                    ) : (
-                        <span>Seleccionar rango</span>
-                    )}
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                    initialFocus
-                    mode="range"
-                    defaultMonth={dateRange?.from}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    numberOfMonths={2}
-                    locale={es}
-                />
-            </PopoverContent>
-        </Popover>
+        <div className="flex gap-2">
+          {user?.role === 'admin' && (
+            <Select value={selectedWarehouse || ''} onValueChange={(value) => setSelectedWarehouse(value === 'all' ? undefined : value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Seleccionar bodega" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las bodegas</SelectItem>
+                {allWarehouses.map(wh => (
+                  <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Popover>
+              <PopoverTrigger asChild>
+                  <Button
+                      id="date"
+                      variant={"outline"}
+                      className={cn(
+                          "w-full sm:w-[260px] justify-start text-left font-normal",
+                          !dateRange && "text-muted-foreground"
+                      )}
+                  >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange?.from ? (
+                          dateRange.to ? (
+                              <>
+                                  {format(dateRange.from, "LLL dd, y", { locale: es })} -{" "}
+                                  {format(dateRange.to, "LLL dd, y", { locale: es })}
+                              </>
+                          ) : (
+                              format(dateRange.from, "LLL dd, y", { locale: es })
+                          )
+                      ) : (
+                          <span>Seleccionar rango</span>
+                      )}
+                  </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange?.from}
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                      locale={es}
+                  />
+              </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <div className="p-4 border rounded-lg bg-muted/50">

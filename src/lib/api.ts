@@ -623,11 +623,8 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     if (!warehouseId || warehouseId === 'all') { // 1. Todas las bodegas
         queries.push(movementsQuery);
     } else if (warehouseId === 'wh-bog') { // 2. Bodega INGENIO
-        // Excluye 'wh-med' pero también debemos incluir explícitamente los nulos
-        queries.push(query(movementsQuery, where('warehouseId', '!=', 'wh-med')));
-        // Firestore's '!=' operator only includes documents where the field exists.
-        // So, we need a separate query for documents where warehouseId is null.
-        const nullQueryBase = collection(db, 'inventoryMovements'); // Re-base for OR condition
+        queries.push(query(movementsQuery, where('warehouseId', '==', 'wh-bog')));
+        const nullQueryBase = collection(db, 'inventoryMovements');
         queries.push(query(nullQueryBase, where('warehouseId', '==', null)));
     } else { // 3. Bodega Laboratorio (o cualquier otra específica)
         queries.push(query(movementsQuery, where('warehouseId', '==', warehouseId)));
@@ -873,7 +870,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
     if (!warehouseId || warehouseId === 'all') {
         queries.push(ordersQuery);
     } else if (warehouseId === 'wh-bog') {
-        queries.push(query(ordersQuery, where('warehouseId', '!=', 'wh-med')));
+        queries.push(query(ordersQuery, where('warehouseId', '==', 'wh-bog')));
         const nullQueryBase = collection(db, 'dispatchOrders');
         queries.push(query(nullQueryBase, where('warehouseId', '==', null)));
     } else {
@@ -2103,13 +2100,9 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     ]);
 
     // Lógica de filtrado en memoria para INGENIO
-    let filteredOrders = (warehouseId === 'wh-bog')
-        ? ordersResult.orders.filter(o => o.warehouseId !== 'wh-med')
-        : ordersResult.orders;
+    let filteredOrders = ordersResult.orders;
 
-    let filteredMovements = (warehouseId === 'wh-bog')
-        ? movementsResult.movements.filter(m => m.warehouseId !== 'wh-med')
-        : movementsResult.movements;
+    let filteredMovements = movementsResult.movements;
   
     const productIdsInCategory = filters.categoryIds.length > 0
       ? allProducts.products.filter(p => p.categoryId && filters.categoryIds.includes(p.categoryId)).map(p => p.id)
