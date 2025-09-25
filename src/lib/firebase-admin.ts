@@ -52,6 +52,7 @@ async function initializeAdminApp() {
     try {
         app = getApps().find(app => app.name === 'admin') || initializeApp({
             credential: cert(serviceAccount),
+            databaseURL: "https://studio-9748962172-82b35-default-rtdb.firebaseio.com"
         }, 'admin');
         console.log('Firebase Admin app initialized');
     } catch(e: any) {
