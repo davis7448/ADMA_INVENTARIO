@@ -69,7 +69,8 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const { effectiveWarehouseId } = useAuth();
+  const { user } = useAuth();
+  const effectiveWarehouseId = user && user.role !== 'admin' ? user.warehouseId : undefined;
   const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
