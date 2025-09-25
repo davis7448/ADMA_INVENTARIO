@@ -11,6 +11,12 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 async function getPrivateKey(): Promise<string | undefined> {
     try {
+        // In Firebase App Hosting, the secret is injected as an environment variable
+        if (process.env.FIREBASE_PRIVATE_KEY) {
+            return process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+        }
+
+        // Fallback to Secret Manager if explicitly configured
         if (process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME) {
             const client = new SecretManagerServiceClient();
             const [version] = await client.accessSecretVersion({
@@ -18,7 +24,8 @@ async function getPrivateKey(): Promise<string | undefined> {
             });
             return version.payload?.data?.toString();
         }
-        return process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+        return undefined;
     } catch (error) {
         console.error('Error getting Firebase private key:', error);
         return undefined;
@@ -39,7 +46,7 @@ async function initializeAdminApp() {
     const serviceAccount = {
         projectId: "studio-9748962172-82b35",
         privateKey: privateKey,
-        clientEmail: "firebase-adminsdk-fbsvc@studio-9748962172-82b35.iam.gserviceaccount.com",
+        clientEmail: "firebase-app-hosting-compute@studio-9748962172-82b35.iam.gserviceaccount.com",
     };
 
     try {
