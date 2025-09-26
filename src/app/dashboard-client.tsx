@@ -81,6 +81,7 @@ function DashboardContent() {
 
   const [dashboardData, setDashboardData] = useState<DashboardData>(SKELETON_DASHBOARD_DATA);
   const [loading, setLoading] = useState(true);
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
   const [expandedDashboardRow, setExpandedDashboardRow] = useState<string | null>(null);
 
   // Filter states
@@ -135,9 +136,10 @@ function DashboardContent() {
 
 
   useEffect(() => {
-    // Fetch static filter options once
+    // Fetch static filter options once - reduced limit for better performance
+    setFilterOptionsLoading(true);
     Promise.all([
-      getProducts({ limit: 10000, filters: { warehouseId } }),
+      getProducts({ limit: 2000, filters: { warehouseId } }),
       getCarriers(),
       getCategories(),
       getPlatforms(),
@@ -148,6 +150,7 @@ function DashboardContent() {
       setAllCategories(categories);
       setAllPlatforms(platforms);
       setAllWarehouses(warehouses);
+      setFilterOptionsLoading(false);
     });
   }, [warehouseId]);
 
@@ -187,7 +190,10 @@ function DashboardContent() {
     setFilterProducts([]);
   };
 
-  const hasActiveFilters = filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0;
+  const hasActiveFilters = useMemo(() =>
+    filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0,
+    [filterPlatforms, filterCarriers, filterCategories, filterProducts]
+  );
 
 
   interface MultiSelectFilterProps<T extends { id: string; name: string }> {
@@ -197,12 +203,12 @@ function DashboardContent() {
     onSelectedChange: (selected: string[]) => void;
   }
 
-  function MultiSelectFilter<T extends { id: string; name: string }>({
+  const MultiSelectFilter = React.memo(<T extends { id: string; name: string }>({
     title,
     options,
     selected,
     onSelectedChange,
-  }: MultiSelectFilterProps<T>) {
+  }: MultiSelectFilterProps<T>) => {
     const [open, setOpen] = useState(false);
 
     const handleSelect = (id: string) => {
@@ -259,7 +265,7 @@ function DashboardContent() {
         </PopoverContent>
       </Popover>
     );
-  }
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -320,19 +326,27 @@ function DashboardContent() {
       </div>
 
       <div className="p-4 border rounded-lg bg-muted/50">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-            <MultiSelectFilter title="Plataformas" options={allPlatforms} selected={filterPlatforms} onSelectedChange={setFilterPlatforms} />
-            <MultiSelectFilter title="Transportadoras" options={allCarriers} selected={filterCarriers} onSelectedChange={setFilterCarriers} />
-            <MultiSelectFilter title="Categorías" options={allCategories} selected={filterCategories} onSelectedChange={setFilterCategories} />
-            <MultiSelectFilter title="Productos" options={allProducts} selected={filterProducts} onSelectedChange={setFilterProducts} />
+        {filterOptionsLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+              <MultiSelectFilter title="Plataformas" options={allPlatforms} selected={filterPlatforms} onSelectedChange={setFilterPlatforms} />
+              <MultiSelectFilter title="Transportadoras" options={allCarriers} selected={filterCarriers} onSelectedChange={setFilterCarriers} />
+              <MultiSelectFilter title="Categorías" options={allCategories} selected={filterCategories} onSelectedChange={setFilterCategories} />
+              <MultiSelectFilter title="Productos" options={allProducts} selected={filterProducts} onSelectedChange={setFilterProducts} />
 
-            {hasActiveFilters && (
-                <Button variant="ghost" onClick={clearFilters} className="text-sm">
-                    <X className="mr-2 h-4 w-4" />
-                    Limpiar Filtros
-                </Button>
-            )}
-        </div>
+              {hasActiveFilters && (
+                  <Button variant="ghost" onClick={clearFilters} className="text-sm">
+                      <X className="mr-2 h-4 w-4" />
+                      Limpiar Filtros
+                  </Button>
+              )}
+          </div>
+        )}
       </div>
 
 
