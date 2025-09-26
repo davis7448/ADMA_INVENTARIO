@@ -884,7 +884,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
         id: doc.id,
         ...doc.data(),
         date: parseFirestoreDate(doc.data().date),
-        warehouseId: doc.data().warehouseId || DEFAULT_WAREHOUSE_ID
+        warehouseId: doc.data().warehouseId // Keep null if originally null
     } as DispatchOrder));
 
     const filteredOrders = allOrders.filter(order => {

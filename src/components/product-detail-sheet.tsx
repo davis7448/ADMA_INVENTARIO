@@ -79,7 +79,9 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
             returns: returnsByDay[dayKey] || 0,
         };
     }).reverse();
-}, [performanceData]);
+
+    return data;
+  }, [performanceData]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -131,7 +133,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                                     <CardDescription>Price</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-2xl font-bold">${product.price.toLocaleString('en-US')}</p>
+                                    <p className="text-2xl font-bold">${product.priceDropshipping.toLocaleString('en-US')}</p>
                                 </CardContent>
                             </Card>
                             <Card>
