@@ -70,8 +70,16 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
+  const { user, loading: authLoading, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
   const redirectedRef = useRef(false);
+
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div>Cargando dashboard...</div>
+      </div>
+    );
+  }
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
