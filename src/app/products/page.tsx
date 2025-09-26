@@ -8,6 +8,7 @@ import { Suspense } from 'react';
 import { getAuth } from 'firebase-admin/auth';
 import { getApp } from '@/lib/firebase-admin';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export const revalidate = 0;
 
@@ -40,8 +41,13 @@ export default async function ProductsPage({
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
     const user = await getCurrentUser(sessionCookie);
-    const effectiveWarehouseId = user && user.role !== 'admin' ? user.warehouseId : undefined;
+    const effectiveWarehouseId = user && user.role !== 'admin' ? (user.warehouseId || 'wh-bog') : undefined;
     const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
+
+    // Server-side redirect for logistics users
+    if (user?.role === 'logistics' && !searchParams?.warehouse) {
+        redirect(`?warehouse=${warehouseId}`);
+    }
 
     const filters = {
         searchQuery: searchParams?.q as string,

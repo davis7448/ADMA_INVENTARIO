@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders } from '@/lib/api';
 import type { DispatchOrder, Product, Platform, Carrier } from '@/lib/types';
@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 interface GroupedPendingProduct {
     product: Product;
@@ -59,21 +60,21 @@ interface DispatchContentProps {
 }
 
 export function DispatchContent({
-    initialPendingOrders,
-    initialPartialOrders,
-    initialProducts,
-    initialAllProducts,
-    initialPlatforms,
-    initialCarriers
-}: DispatchContentProps) {
-  const { currentWarehouse } = useAuth();
-  const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>(initialPendingOrders);
-  const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>(initialPartialOrders);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
-  const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
-  const [productsById, setProductsById] = useState<Record<string, Product>>({});
-  const [loading, setLoading] = useState(false);
+     initialPendingOrders,
+     initialPartialOrders,
+     initialProducts,
+     initialAllProducts,
+     initialPlatforms,
+     initialCarriers
+ }: DispatchContentProps) {
+   const { currentWarehouse } = useAuth();
+   const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>(initialPendingOrders);
+   const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>(initialPartialOrders);
+   const [products, setProducts] = useState<Product[]>(initialProducts);
+   const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
+   const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
+   const [productsById, setProductsById] = useState<Record<string, Product>>({});
+   const [loading, setLoading] = useState(false);
 
   // Filter states
   const [filterProductId, setFilterProductId] = useState<string>('');
@@ -168,7 +169,7 @@ export function DispatchContent({
     fetchData(); // Refresh both lists after an order is processed
   }
 
-  const getStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial') => {
+  const getStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial' | 'Anulada') => {
     switch (status) {
       case 'Pendiente':
         return <Badge variant="destructive">Pendiente</Badge>;
@@ -176,6 +177,8 @@ export function DispatchContent({
         return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Despachada</Badge>;
       case 'Parcial':
         return <Badge variant="secondary">Parcial</Badge>;
+      case 'Anulada':
+        return <Badge variant="outline">Anulada</Badge>;
       default:
         return <Badge variant="outline">Desconocido</Badge>;
     }
