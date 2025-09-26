@@ -2089,6 +2089,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     
     // Si es INGENIO, traemos todo para filtrar en memoria. Si es otra, filtramos en DB.
     const fetchWarehouseId = warehouseId === 'wh-bog' ? undefined : warehouseId;
+    const warehouseIdParam = warehouseId || undefined;
 
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId: fetchWarehouseId } }),
@@ -2115,15 +2116,17 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const ordersInPeriod = filteredOrders.filter(order => {
         const platformMatch = filters.platformIds.length === 0 || filters.platformIds.includes(order.platformId);
         const carrierMatch = filters.carrierIds.length === 0 || filters.carrierIds.includes(order.carrierId);
-        
+
         let productMatch = true;
         if (filters.productIds.length > 0) {
             productMatch = order.products.some(p => filters.productIds.includes(p.productId));
         } else if (productIdsInCategory) {
             productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
         }
-        
-        return platformMatch && carrierMatch && productMatch;
+
+        const warehouseMatch = !warehouseId || warehouseId === 'all' || (warehouseId === 'wh-bog' && (order.warehouseId === 'wh-bog' || order.warehouseId == null)) || order.warehouseId === warehouseId;
+
+        return platformMatch && carrierMatch && productMatch && warehouseMatch;
     });
 
     const movementsInPeriod = filteredMovements.filter(m => {
@@ -2133,7 +2136,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         } else if (productIdsInCategory) {
             productMatch = productIdsInCategory.includes(m.productId);
         }
-        return productMatch;
+        const warehouseMatch = !warehouseId || warehouseId === 'all' || (warehouseId === 'wh-bog' && (m.warehouseId === 'wh-bog' || m.warehouseId == null)) || m.warehouseId === warehouseId;
+        return productMatch && warehouseMatch;
     });
   
     const ordersByDay: Record<string, number> = {};
@@ -2190,7 +2194,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             }
             totalPendingUnits += unitsInOrder;
             pendingUnitsByDay[day] = (pendingUnitsByDay[day] || 0) + unitsInOrder;
-    });
+        });
   
     const returnsByDay: Record<string, number> = {};
     const totalReturns = movementsInPeriod
