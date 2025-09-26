@@ -135,10 +135,7 @@ function DashboardContent() {
       console.log('Dashboard: Redirecting logistics user to warehouse URL:', warehouse);
       console.log('Dashboard: Current user state:', { user, searchParamsWarehouse: searchParams.get('warehouse') });
       redirectedRef.current = true;
-      // Use setTimeout to ensure this runs after initial render
-      setTimeout(() => {
-        router.push(`/?warehouse=${warehouse}`);
-      }, 100);
+      router.push(`/?warehouse=${warehouse}`);
     }
   }, [user, searchParams, router]);
 
