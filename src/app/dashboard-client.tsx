@@ -70,16 +70,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, loading: authLoading, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
-  const redirectedRef = useRef(false);
-
-  if (authLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div>Cargando dashboard...</div>
-      </div>
-    );
-  }
+  const { user, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
@@ -128,16 +119,6 @@ function DashboardContent() {
     finalWarehouseId: warehouseId
   });
 
-  // Auto-redirect logistics users to their warehouse URL
-  useEffect(() => {
-    if (!redirectedRef.current && user?.role === 'logistics' && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
-      const warehouse = user.warehouseId || 'wh-bog';
-      console.log('Dashboard: Redirecting logistics user to warehouse URL:', warehouse);
-      console.log('Dashboard: Current user state:', { user, searchParamsWarehouse: searchParams.get('warehouse') });
-      redirectedRef.current = true;
-      router.push(`/?warehouse=${warehouse}`);
-    }
-  }, [user, searchParams, router]);
 
 
   useEffect(() => {
