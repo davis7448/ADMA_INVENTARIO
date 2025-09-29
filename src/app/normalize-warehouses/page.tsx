@@ -48,9 +48,12 @@ function NormalizeWarehousesContent() {
           getCarriers()
         ]);
 
-        // Filter movements and orders without warehouseId
-        const movementsWithoutWarehouse = movementsResult.movements.filter(m => !m.warehouseId);
-        const ordersWithoutWarehouse = ordersResult.orders.filter(o => !o.warehouseId);
+        // Filter movements and orders from the last 30 days (since there are no more records without warehouses)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const movementsWithoutWarehouse = movementsResult.movements.filter(m => new Date(m.date) >= thirtyDaysAgo);
+        const ordersWithoutWarehouse = ordersResult.orders.filter(o => new Date(o.date) >= thirtyDaysAgo);
 
         setMovements(movementsWithoutWarehouse);
         setOrders(ordersWithoutWarehouse);
@@ -209,26 +212,27 @@ function NormalizeWarehousesContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Normalizar Bodegas</h1>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Revisar Bodegas Recientes</h1>
         <p className="text-muted-foreground">
-          Asigna bodegas a movimientos de inventario y órdenes de despacho que no tienen una asignada.
+          Revisa y corrige asignaciones de bodega en movimientos y órdenes de los últimos 30 días.
         </p>
       </div>
 
       <Tabs defaultValue="movements" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="movements">
-            Movimientos de Inventario ({movements.length})
+            Movimientos Recientes ({movements.length})
           </TabsTrigger>
           <TabsTrigger value="orders">
-            Órdenes de Despacho ({orders.length})
+            Órdenes Recientes ({orders.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="movements">
           <Card>
             <CardHeader>
-              <CardTitle>Movimientos sin Bodega Asignada</CardTitle>
+              <CardTitle>Movimientos de Inventario Recientes</CardTitle>
+              <p className="text-sm text-muted-foreground">Movimientos de los últimos 30 días</p>
             </CardHeader>
             {selectedMovements.length > 0 && (
               <div className="px-6 py-4 border-b bg-muted/50">
@@ -269,7 +273,7 @@ function NormalizeWarehousesContent() {
               ) : movements.length === 0 ? (
                 <Alert>
                   <AlertDescription>
-                    No hay movimientos de inventario sin bodega asignada.
+                    No hay movimientos de inventario en los últimos 30 días.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -337,7 +341,8 @@ function NormalizeWarehousesContent() {
         <TabsContent value="orders">
           <Card>
             <CardHeader>
-              <CardTitle>Órdenes sin Bodega Asignada</CardTitle>
+              <CardTitle>Órdenes de Despacho Recientes</CardTitle>
+              <p className="text-sm text-muted-foreground">Órdenes de los últimos 30 días</p>
             </CardHeader>
             {selectedOrders.length > 0 && (
               <div className="px-6 py-4 border-b bg-muted/50">
@@ -378,7 +383,7 @@ function NormalizeWarehousesContent() {
               ) : orders.length === 0 ? (
                 <Alert>
                   <AlertDescription>
-                    No hay órdenes de despacho sin bodega asignada.
+                    No hay órdenes de despacho en los últimos 30 días.
                   </AlertDescription>
                 </Alert>
               ) : (

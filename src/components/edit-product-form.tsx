@@ -455,7 +455,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                           render={({ field }) => (
                               <FormItem>
                                   <FormLabel>Bodega</FormLabel>
-                                  <Select onValueChange={field.onChange} value={field.value} disabled>
+                                  <Select onValueChange={field.onChange} value={field.value} disabled={!canEditSensitiveData}>
                                       <FormControl>
                                           <SelectTrigger>
                                           <SelectValue placeholder="Seleccionar Bodega" />
