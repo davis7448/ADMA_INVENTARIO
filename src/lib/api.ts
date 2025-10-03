@@ -1997,6 +1997,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
             status: 'pending',
             isDispatched,
             isPendingOrder,
+            warehouseId: user.warehouseId || DEFAULT_WAREHOUSE_ID,
         };
         const docRef = doc(requestsCol);
         batch.set(docRef, newRequest);
