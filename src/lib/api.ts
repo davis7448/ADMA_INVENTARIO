@@ -1142,7 +1142,22 @@ export const cancelPendingDispatchItems = async (
         }
         
         const updatedExceptions = (orderData.exceptions || []).filter(ex => !guidesSet.has(ex.trackingNumber));
-        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...exceptionsToCancel];
+
+        // Clean exceptions to avoid undefined fields in Firestore
+        const cleanedExceptionsToCancel = exceptionsToCancel.map(ex => ({
+            trackingNumber: ex.trackingNumber,
+            products: ex.products.map(p => {
+                const cleanProduct: Partial<DispatchExceptionProduct> = {
+                    productId: p.productId,
+                    quantity: p.quantity,
+                };
+                if (p.variantId) cleanProduct.variantId = p.variantId;
+                if (p.variantSku) cleanProduct.variantSku = p.variantSku;
+                return cleanProduct as DispatchExceptionProduct;
+            })
+        }));
+
+        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...cleanedExceptionsToCancel];
         
         const updatePayload: Record<string, any> = {
             exceptions: updatedExceptions,
