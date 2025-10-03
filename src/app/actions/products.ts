@@ -496,6 +496,7 @@ export async function updateProductsAction(
                 if (p.vendorid !== undefined) updateData.vendorId = p.vendorid;
                 if (p.warehouseid !== undefined) updateData.warehouseId = p.warehouseid;
                 if (p.purchasedate !== undefined && p.purchasedate !== null) updateData.purchaseDate = p.purchasedate.toISOString();
+                if (p.codigoerp !== undefined) updateData.codigoERP = p.codigoerp;
 
                 // Keep existing pendingStock and damagedStock
                 updateData.pendingStock = productData.pendingStock || 0;

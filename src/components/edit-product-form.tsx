@@ -92,6 +92,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
         stock: product.stock,
         image: undefined,
         contentLink: product.contentLink || '',
+        codigoERP: product.codigoERP || '',
         variants: product.variants || [],
       },
   });
@@ -132,6 +133,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
             stock: product.stock,
             image: undefined,
             contentLink: product.contentLink || '',
+            codigoERP: product.codigoERP || '',
             variants: product.variants?.map(v => ({...v, id: v.id || uuidv4()})) || [],
         });
         setImagePreview(product.imageUrl);
@@ -327,9 +329,9 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                               <FormItem>
                                   <FormLabel>SKU</FormLabel>
                                   <FormControl>
-                                      <Input 
-                                          placeholder="e.g., WM-ERGO-01" 
-                                          {...field} 
+                                      <Input
+                                          placeholder="e.g., WM-ERGO-01"
+                                          {...field}
                                           disabled={productType === 'variable'}
                                           value={productType === 'variable' ? '' : field.value || ''}
                                       />
@@ -339,6 +341,19 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                           )}
                       />
                   </div>
+                  <FormField
+                      control={form.control}
+                      name="codigoERP"
+                      render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Código ERP</FormLabel>
+                              <FormControl>
+                                  <Input placeholder="e.g., ERP-001" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
                   <FormField
                       control={form.control}
                       name="description"

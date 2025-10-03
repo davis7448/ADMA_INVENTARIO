@@ -43,6 +43,7 @@ const ProductFormSchemaBase = z.object({
     z.coerce.number({ invalid_type_error: 'El stock debe ser un número.' }).int('El stock debe ser un número entero.').min(0, 'El stock debe ser un número no negativo.').optional()
   ),
   contentLink: z.string().url({ message: "Por favor, introduce una URL válida." }).optional().or(z.literal('')),
+  codigoERP: z.string().optional(),
   variants: z.array(ProductVariantSchema).optional(),
 });
 
@@ -256,6 +257,7 @@ export const ImportProductSchema = z.object({
     vendorid: z.string({ required_error: "La columna 'vendorid' es obligatoria." }).min(1, "La columna 'vendorid' no puede estar vacía."),
     warehouseid: z.string().optional(),
     purchasedate: z.date({ invalid_type_error: 'Formato de fecha inválido. Asegúrese de que esté en formato YYYY-MM-DD.'}).nullable().optional(),
+    codigoerp: z.string().optional(),
 });
 
 
@@ -271,6 +273,7 @@ export const UpdateProductSchema = z.object({
     vendorid: z.string().optional(),
     warehouseid: z.string().optional(),
     purchasedate: z.date({ invalid_type_error: 'Formato de fecha inválido. Asegúrese de que esté en formato YYYY-MM-DD.'}).nullable().optional(),
+    codigoerp: z.string().optional(),
     // Variant fields
     variantname: z.string().optional(),
     variantpricedropshipping: z.coerce.number({ invalid_type_error: 'El precio de variante debe ser un número.' }).min(0, 'El precio de variante debe ser un número no negativo.').optional(),

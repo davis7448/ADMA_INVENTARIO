@@ -183,7 +183,7 @@ export function ImportProductsDialog({ onImportSuccess }: ImportProductsDialogPr
         'name', 'sku', 'description',
         'pricedropshipping', 'pricewholesale', 'cost', 'stock',
         'categoryid', 'vendorid', 'warehouseid',
-        'purchasedate'
+        'purchasedate', 'codigoerp'
     ];
     const data = [templateHeaders.reduce((acc, h) => {
         if (h === 'warehouseid') {
