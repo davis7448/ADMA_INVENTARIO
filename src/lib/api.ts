@@ -1966,7 +1966,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
                 if (order.status === 'Despachada') {
                     dispatchedGuides.add(tn);
                 } else if (order.status === 'Parcial') {
-                    exceptionGuides.add(tn);
+                    dispatchedGuides.add(tn);
                 } else if (order.status === 'Pendiente') {
                     exceptionGuides.add(tn);
                 }
