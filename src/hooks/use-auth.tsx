@@ -8,6 +8,7 @@ import { findUserByEmail, addUser } from '@/lib/api';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type User as FirebaseUser } from "firebase/auth";
 import { app } from '@/lib/firebase';
 import { useWarehouse } from '@/hooks/use-warehouse';
+import { Loader2 } from 'lucide-react';
 
 
 interface AuthContextType {
@@ -121,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (loading || warehouseLoading) {
     return (
         <div className="flex h-screen items-center justify-center">
-            <div>Cargando...</div>
+            <Loader2 className="h-8 w-8 animate-spin" />
         </div>
     );
   }

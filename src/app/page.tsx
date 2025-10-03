@@ -4,6 +4,7 @@ import DashboardClient from './dashboard-client';
 import { useAuth } from '@/hooks/use-auth';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
     const { user, loading: authLoading } = useAuth();
@@ -23,7 +24,7 @@ export default function DashboardPage() {
     if (authLoading) {
         return (
             <div className="flex h-screen items-center justify-center">
-                <div>Cargando dashboard...</div>
+                <Loader2 className="h-8 w-8 animate-spin" />
             </div>
         );
     }
