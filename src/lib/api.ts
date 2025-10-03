@@ -65,8 +65,24 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         // For logistics in other warehouses, already filtered in query
     }
 
+    // Fetch and attach reservations before filtering
+    const allReservations = await getAllReservations(warehouseId);
+    const reservationsByProductId: Record<string, Reservation[]> = {};
+
+    for (const reservation of allReservations) {
+      if (!reservationsByProductId[reservation.productId]) {
+          reservationsByProductId[reservation.productId] = [];
+      }
+      reservationsByProductId[reservation.productId].push(reservation);
+    }
+
+    const allProductsWithReservations = allProducts.map(product => ({
+      ...product,
+      reservations: reservationsByProductId[product.id] || [],
+    }));
+
     // Apply remaining client-side filters
-    const filteredProducts = allProducts.filter(product => {
+    const filteredProducts = allProductsWithReservations.filter(product => {
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -93,23 +109,12 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
-    const allReservations = await getAllReservations(warehouseId);
-    const reservationsByProductId: Record<string, Reservation[]> = {};
-  
-    for (const reservation of allReservations) {
-      if (!reservationsByProductId[reservation.productId]) {
-          reservationsByProductId[reservation.productId] = [];
-      }
-      reservationsByProductId[reservation.productId].push(reservation);
-    }
-    
     const productsWithData = paginatedProducts.map(product => ({
         ...product,
         purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
         lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
         damagedStock: product.damagedStock || 0,
         pendingStock: product.pendingStock || 0,
-        reservations: reservationsByProductId[product.id] || [],
     }));
 
     return { products: productsWithData, totalPages };
