@@ -52,6 +52,7 @@ type NavItem = {
             { href: '/carriers', label: 'Transportadoras', roles: ['admin', 'plataformas'] },
             { href: '/platforms', label: 'Plataformas', roles: ['admin', 'plataformas'] },
             { href: '/vendedores', label: 'Vendedores', roles: ['admin', 'plataformas'] },
+            { href: '/normalize-warehouses', label: 'Normalizar Bodegas', roles: ['admin'] },
         ],
     },
     {

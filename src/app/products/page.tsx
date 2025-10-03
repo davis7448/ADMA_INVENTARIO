@@ -58,6 +58,8 @@ export default async function ProductsPage({
         hasPending: searchParams?.pending === 'true',
         hasReservations: searchParams?.reservations === 'true',
         onlyAudited: searchParams?.audited === 'true',
+        onlyVariable: searchParams?.variable === 'true',
+        noWarehouse: searchParams?.noWarehouse === 'true',
         warehouseId: warehouseId,
         userRole: user?.role,
     };

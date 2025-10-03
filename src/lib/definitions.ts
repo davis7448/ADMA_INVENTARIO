@@ -139,10 +139,7 @@ export type AddSupplierFormState = {
   errors?: {
     _form?: string[];
     name?: string[];
-    contact?: {
-        email?: string[];
-        phone?: string[];
-    };
+    contact?: string[];
     shippingPolicy?: string[];
     returnPolicy?: string[];
   };
@@ -182,10 +179,7 @@ export type AddVendedorFormState = {
   errors?: {
     _form?: string[];
     name?: string[];
-    contact?: {
-      email?: string[];
-      phone?: string[];
-    };
+    contact?: string[];
   };
   success: boolean;
 };

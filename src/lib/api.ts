@@ -34,7 +34,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId, userRole } = filters;
+    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse, warehouseId, userRole } = filters;
 
     let productQuery: Query = collection(db, 'products');
 
@@ -100,8 +100,10 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
         const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
         const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
+        const variableMatch = !onlyVariable || product.productType === 'variable';
+        const noWarehouseMatch = !noWarehouse || !product.warehouseId;
 
-        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch;
+        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch && variableMatch && noWarehouseMatch;
     });
 
     const totalCount = filteredProducts.length;
@@ -889,7 +891,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
         id: doc.id,
         ...doc.data(),
         date: parseFirestoreDate(doc.data().date),
-        warehouseId: doc.data().warehouseId || DEFAULT_WAREHOUSE_ID
+        warehouseId: doc.data().warehouseId // Keep null if originally null
     } as DispatchOrder));
 
     const filteredOrders = allOrders.filter(order => {
