@@ -56,7 +56,7 @@ export default async function DispatchPage({
 
     return (
       <Suspense>
-        <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'commercial', 'plataformas']}>
             <DispatchContent
                 initialPendingOrders={fetchedPendingOrders}
                 initialPartialOrders={fetchedPartialOrders}
