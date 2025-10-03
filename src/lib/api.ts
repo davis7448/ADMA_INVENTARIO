@@ -283,15 +283,25 @@ export const deleteProduct = async (productId: string, user: User | null): Promi
     await batch.commit();
 };
 
-export const updateProductStock = async (transaction: any, productId: string, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
-    const productRef = doc(db, 'products', productId);
-    const productSnap = await transaction.get(productRef);
+export const updateProductStock = async (transaction: any, productOrId: string | Product, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
+    let productData: Product;
+    let productRef: any;
 
-    if (!productSnap.exists()) {
-        throw new Error(`Producto con ID ${productId} no existe.`);
+    if (typeof productOrId === 'string') {
+        // productOrId is productId, need to read
+        productRef = doc(db, 'products', productOrId);
+        const productSnap = await transaction.get(productRef);
+
+        if (!productSnap.exists()) {
+            throw new Error(`Producto con ID ${productOrId} no existe.`);
+        }
+
+        productData = { id: productSnap.id, ...productSnap.data() } as Product;
+    } else {
+        // productOrId is Product object
+        productData = productOrId;
+        productRef = doc(db, 'products', productData.id);
     }
-  
-    const productData = productSnap.data() as Product;
   
     if (operation === 'subtract-pending') {
         const currentPendingStock = productData.pendingStock || 0;
@@ -1123,7 +1133,7 @@ export const cancelPendingDispatchItems = async (
                 }
 
                 // Logic to reduce pending stock
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantSku);
+                await updateProductStock(transaction, productData, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantSku);
 
                 movementsToCreate.push({
                     type: 'Anulado',
@@ -1222,8 +1232,8 @@ export const annulDispatchedGuideItems = async (
                 console.warn(`Producto ${item.productId} no encontrado durante la anulación. Se omitirá la actualización de stock.`);
                 continue;
             }
-            
-            await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+
+            await updateProductStock(transaction, productData, item.quantity, 'add', item.sku);
 
             movementsToCreate.push({
                 type: 'Anulado',
@@ -1297,11 +1307,11 @@ export const annulGuideDuringDispatch = async (
 
         // Now, prepare all writes.
         const updatedProducts: DispatchOrderProduct[] = [...order.products];
-        
+
         for (const item of itemsToAnnul) {
             const productData = productDataMap.get(item.productId);
             if (productData) {
-                await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+                await updateProductStock(transaction, productData, item.quantity, 'add', item.sku);
 
                 movementsToCreate.push({
                     type: 'Anulado',
