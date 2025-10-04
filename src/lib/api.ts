@@ -1976,28 +1976,33 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
         return { alreadyDispatched: [], pendingOrders: [] };
     }
     
-    const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', trackingNumbers));
-    const dispatchedSnapshot = await getDocs(dispatchedQuery);
+    const CHUNK_SIZE = 30;
+    const dispatchedGuides = new Set<string>();
+    const exceptionGuides = new Set<string>();
+
+    // Query dispatched orders in chunks
+    for (let i = 0; i < trackingNumbers.length; i += CHUNK_SIZE) {
+        const chunk = trackingNumbers.slice(i, i + CHUNK_SIZE);
+        const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', chunk));
+        const dispatchedSnapshot = await getDocs(dispatchedQuery);
+        dispatchedSnapshot.forEach(doc => {
+            const order = doc.data() as DispatchOrder;
+            order.trackingNumbers?.forEach(tn => {
+                if (trackingNumbers.includes(tn)) {
+                    if (order.status === 'Despachada') {
+                        dispatchedGuides.add(tn);
+                    } else if (order.status === 'Parcial') {
+                        dispatchedGuides.add(tn);
+                    } else if (order.status === 'Pendiente') {
+                        exceptionGuides.add(tn);
+                    }
+                }
+            });
+        });
+    }
 
     const partialQuery = query(dispatchOrdersCol, where('status', '==', 'Parcial'));
     const partialSnapshot = await getDocs(partialQuery);
-
-    const dispatchedGuides = new Set<string>();
-    const exceptionGuides = new Set<string>();
-    dispatchedSnapshot.forEach(doc => {
-        const order = doc.data() as DispatchOrder;
-        order.trackingNumbers?.forEach(tn => {
-            if (trackingNumbers.includes(tn)) {
-                if (order.status === 'Despachada') {
-                    dispatchedGuides.add(tn);
-                } else if (order.status === 'Parcial') {
-                    dispatchedGuides.add(tn);
-                } else if (order.status === 'Pendiente') {
-                    exceptionGuides.add(tn);
-                }
-            }
-        });
-    });
 
     // Check exceptions in partial orders
     partialSnapshot.forEach(doc => {
