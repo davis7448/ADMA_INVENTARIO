@@ -71,7 +71,6 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
-  const redirectedRef = useRef(false);
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
@@ -81,6 +80,7 @@ function DashboardContent() {
 
   const [dashboardData, setDashboardData] = useState<DashboardData>(SKELETON_DASHBOARD_DATA);
   const [loading, setLoading] = useState(true);
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
   const [expandedDashboardRow, setExpandedDashboardRow] = useState<string | null>(null);
 
   // Filter states
@@ -100,6 +100,16 @@ function DashboardContent() {
   const effectiveWarehouseId = user?.role === 'admin' ? selectedWarehouse : authEffectiveWarehouseId;
   const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
 
+  // Debug logging for warehouse filtering
+  console.log('Dashboard Auth Debug:', {
+    user: user ? { id: user.id, role: user.role, warehouseId: user.warehouseId } : null,
+    authEffectiveWarehouseId,
+    selectedWarehouse,
+    effectiveWarehouseId,
+    warehouseId,
+    searchParamsWarehouse: searchParams.get('warehouse')
+  });
+
   // Debug logging
   console.log('Dashboard Debug:', {
     userRole: user?.role,
@@ -109,21 +119,13 @@ function DashboardContent() {
     finalWarehouseId: warehouseId
   });
 
-  // Auto-redirect logistics users to their warehouse URL
-  useEffect(() => {
-    if (!redirectedRef.current && user?.role === 'logistics' && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
-      const warehouse = user.warehouseId || 'wh-bog';
-      console.log('Redirecting logistics user to warehouse URL:', warehouse);
-      redirectedRef.current = true;
-      router.push(`/?warehouse=${warehouse}`);
-    }
-  }, [user, searchParams, router]);
 
 
   useEffect(() => {
-    // Fetch static filter options once
+    // Fetch static filter options once - reduced limit for better performance
+    setFilterOptionsLoading(true);
     Promise.all([
-      getProducts({ limit: 10000, filters: { warehouseId } }),
+      getProducts({ limit: 2000, filters: { warehouseId } }),
       getCarriers(),
       getCategories(),
       getPlatforms(),
@@ -134,6 +136,7 @@ function DashboardContent() {
       setAllCategories(categories);
       setAllPlatforms(platforms);
       setAllWarehouses(warehouses);
+      setFilterOptionsLoading(false);
     });
   }, [warehouseId]);
 
@@ -173,7 +176,10 @@ function DashboardContent() {
     setFilterProducts([]);
   };
 
-  const hasActiveFilters = filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0;
+  const hasActiveFilters = useMemo(() =>
+    filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0,
+    [filterPlatforms, filterCarriers, filterCategories, filterProducts]
+  );
 
 
   interface MultiSelectFilterProps<T extends { id: string; name: string }> {
@@ -183,12 +189,12 @@ function DashboardContent() {
     onSelectedChange: (selected: string[]) => void;
   }
 
-  function MultiSelectFilter<T extends { id: string; name: string }>({
+  const MultiSelectFilter = React.memo(<T extends { id: string; name: string }>({
     title,
     options,
     selected,
     onSelectedChange,
-  }: MultiSelectFilterProps<T>) {
+  }: MultiSelectFilterProps<T>) => {
     const [open, setOpen] = useState(false);
 
     const handleSelect = (id: string) => {
@@ -245,7 +251,7 @@ function DashboardContent() {
         </PopoverContent>
       </Popover>
     );
-  }
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -306,19 +312,27 @@ function DashboardContent() {
       </div>
 
       <div className="p-4 border rounded-lg bg-muted/50">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-            <MultiSelectFilter title="Plataformas" options={allPlatforms} selected={filterPlatforms} onSelectedChange={setFilterPlatforms} />
-            <MultiSelectFilter title="Transportadoras" options={allCarriers} selected={filterCarriers} onSelectedChange={setFilterCarriers} />
-            <MultiSelectFilter title="Categorías" options={allCategories} selected={filterCategories} onSelectedChange={setFilterCategories} />
-            <MultiSelectFilter title="Productos" options={allProducts} selected={filterProducts} onSelectedChange={setFilterProducts} />
+        {filterOptionsLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+              <MultiSelectFilter title="Plataformas" options={allPlatforms} selected={filterPlatforms} onSelectedChange={setFilterPlatforms} />
+              <MultiSelectFilter title="Transportadoras" options={allCarriers} selected={filterCarriers} onSelectedChange={setFilterCarriers} />
+              <MultiSelectFilter title="Categorías" options={allCategories} selected={filterCategories} onSelectedChange={setFilterCategories} />
+              <MultiSelectFilter title="Productos" options={allProducts} selected={filterProducts} onSelectedChange={setFilterProducts} />
 
-            {hasActiveFilters && (
-                <Button variant="ghost" onClick={clearFilters} className="text-sm">
-                    <X className="mr-2 h-4 w-4" />
-                    Limpiar Filtros
-                </Button>
-            )}
-        </div>
+              {hasActiveFilters && (
+                  <Button variant="ghost" onClick={clearFilters} className="text-sm">
+                      <X className="mr-2 h-4 w-4" />
+                      Limpiar Filtros
+                  </Button>
+              )}
+          </div>
+        )}
       </div>
 
 

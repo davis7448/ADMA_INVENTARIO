@@ -34,7 +34,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId, userRole } = filters;
+    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse, warehouseId, userRole } = filters;
 
     let productQuery: Query = collection(db, 'products');
 
@@ -65,8 +65,24 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         // For logistics in other warehouses, already filtered in query
     }
 
+    // Fetch and attach reservations before filtering
+    const allReservations = await getAllReservations(warehouseId);
+    const reservationsByProductId: Record<string, Reservation[]> = {};
+
+    for (const reservation of allReservations) {
+      if (!reservationsByProductId[reservation.productId]) {
+          reservationsByProductId[reservation.productId] = [];
+      }
+      reservationsByProductId[reservation.productId].push(reservation);
+    }
+
+    const allProductsWithReservations = allProducts.map(product => ({
+      ...product,
+      reservations: reservationsByProductId[product.id] || [],
+    }));
+
     // Apply remaining client-side filters
-    const filteredProducts = allProducts.filter(product => {
+    const filteredProducts = allProductsWithReservations.filter(product => {
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -84,8 +100,10 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
         const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
         const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
+        const variableMatch = !onlyVariable || product.productType === 'variable';
+        const noWarehouseMatch = !noWarehouse || !product.warehouseId;
 
-        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch;
+        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch && variableMatch && noWarehouseMatch;
     });
 
     const totalCount = filteredProducts.length;
@@ -93,23 +111,12 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
-    const allReservations = await getAllReservations(warehouseId);
-    const reservationsByProductId: Record<string, Reservation[]> = {};
-  
-    for (const reservation of allReservations) {
-      if (!reservationsByProductId[reservation.productId]) {
-          reservationsByProductId[reservation.productId] = [];
-      }
-      reservationsByProductId[reservation.productId].push(reservation);
-    }
-    
     const productsWithData = paginatedProducts.map(product => ({
         ...product,
         purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
         lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
         damagedStock: product.damagedStock || 0,
         pendingStock: product.pendingStock || 0,
-        reservations: reservationsByProductId[product.id] || [],
     }));
 
     return { products: productsWithData, totalPages };
@@ -276,15 +283,25 @@ export const deleteProduct = async (productId: string, user: User | null): Promi
     await batch.commit();
 };
 
-export const updateProductStock = async (transaction: any, productId: string, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
-    const productRef = doc(db, 'products', productId);
-    const productSnap = await transaction.get(productRef);
+export const updateProductStock = async (transaction: any, productOrId: string | Product, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
+    let productData: Product;
+    let productRef: any;
 
-    if (!productSnap.exists()) {
-        throw new Error(`Producto con ID ${productId} no existe.`);
+    if (typeof productOrId === 'string') {
+        // productOrId is productId, need to read
+        productRef = doc(db, 'products', productOrId);
+        const productSnap = await transaction.get(productRef);
+
+        if (!productSnap.exists()) {
+            throw new Error(`Producto con ID ${productOrId} no existe.`);
+        }
+
+        productData = { id: productSnap.id, ...productSnap.data() } as Product;
+    } else {
+        // productOrId is Product object
+        productData = productOrId;
+        productRef = doc(db, 'products', productData.id);
     }
-  
-    const productData = productSnap.data() as Product;
   
     if (operation === 'subtract-pending') {
         const currentPendingStock = productData.pendingStock || 0;
@@ -884,7 +901,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
         id: doc.id,
         ...doc.data(),
         date: parseFirestoreDate(doc.data().date),
-        warehouseId: doc.data().warehouseId || DEFAULT_WAREHOUSE_ID
+        warehouseId: doc.data().warehouseId // Keep null if originally null
     } as DispatchOrder));
 
     const filteredOrders = allOrders.filter(order => {
@@ -1116,7 +1133,7 @@ export const cancelPendingDispatchItems = async (
                 }
 
                 // Logic to reduce pending stock
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantSku);
+                await updateProductStock(transaction, productData, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantSku);
 
                 movementsToCreate.push({
                     type: 'Anulado',
@@ -1135,7 +1152,22 @@ export const cancelPendingDispatchItems = async (
         }
         
         const updatedExceptions = (orderData.exceptions || []).filter(ex => !guidesSet.has(ex.trackingNumber));
-        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...exceptionsToCancel];
+
+        // Clean exceptions to avoid undefined fields in Firestore
+        const cleanedExceptionsToCancel = exceptionsToCancel.map(ex => ({
+            trackingNumber: ex.trackingNumber,
+            products: ex.products.map(p => {
+                const cleanProduct: Partial<DispatchExceptionProduct> = {
+                    productId: p.productId,
+                    quantity: p.quantity,
+                };
+                if (p.variantId) cleanProduct.variantId = p.variantId;
+                if (p.variantSku) cleanProduct.variantSku = p.variantSku;
+                return cleanProduct as DispatchExceptionProduct;
+            })
+        }));
+
+        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...cleanedExceptionsToCancel];
         
         const updatePayload: Record<string, any> = {
             exceptions: updatedExceptions,
@@ -1200,8 +1232,8 @@ export const annulDispatchedGuideItems = async (
                 console.warn(`Producto ${item.productId} no encontrado durante la anulación. Se omitirá la actualización de stock.`);
                 continue;
             }
-            
-            await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+
+            await updateProductStock(transaction, productData, item.quantity, 'add', item.sku);
 
             movementsToCreate.push({
                 type: 'Anulado',
@@ -1275,11 +1307,11 @@ export const annulGuideDuringDispatch = async (
 
         // Now, prepare all writes.
         const updatedProducts: DispatchOrderProduct[] = [...order.products];
-        
+
         for (const item of itemsToAnnul) {
             const productData = productDataMap.get(item.productId);
             if (productData) {
-                await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+                await updateProductStock(transaction, productData, item.quantity, 'add', item.sku);
 
                 movementsToCreate.push({
                     type: 'Anulado',
@@ -1765,7 +1797,7 @@ export const checkForStaleReservations = async (): Promise<void> => {
                         productSku: productInfo.sku || 'N/A',
                         vendedorName: vendedorName,
                         quantity: reservation.quantity,
-                        warehouseId: productInfo.warehouseId,
+                        warehouseId: productInfo.warehouseId || DEFAULT_WAREHOUSE_ID,
 
                     };
                     batch.set(alertRef, newAlert);
@@ -1944,28 +1976,33 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
         return { alreadyDispatched: [], pendingOrders: [] };
     }
     
-    const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', trackingNumbers));
-    const dispatchedSnapshot = await getDocs(dispatchedQuery);
+    const CHUNK_SIZE = 30;
+    const dispatchedGuides = new Set<string>();
+    const exceptionGuides = new Set<string>();
+
+    // Query dispatched orders in chunks
+    for (let i = 0; i < trackingNumbers.length; i += CHUNK_SIZE) {
+        const chunk = trackingNumbers.slice(i, i + CHUNK_SIZE);
+        const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', chunk));
+        const dispatchedSnapshot = await getDocs(dispatchedQuery);
+        dispatchedSnapshot.forEach(doc => {
+            const order = doc.data() as DispatchOrder;
+            order.trackingNumbers?.forEach(tn => {
+                if (trackingNumbers.includes(tn)) {
+                    if (order.status === 'Despachada') {
+                        dispatchedGuides.add(tn);
+                    } else if (order.status === 'Parcial') {
+                        dispatchedGuides.add(tn);
+                    } else if (order.status === 'Pendiente') {
+                        exceptionGuides.add(tn);
+                    }
+                }
+            });
+        });
+    }
 
     const partialQuery = query(dispatchOrdersCol, where('status', '==', 'Parcial'));
     const partialSnapshot = await getDocs(partialQuery);
-
-    const dispatchedGuides = new Set<string>();
-    const exceptionGuides = new Set<string>();
-    dispatchedSnapshot.forEach(doc => {
-        const order = doc.data() as DispatchOrder;
-        order.trackingNumbers?.forEach(tn => {
-            if (trackingNumbers.includes(tn)) {
-                if (order.status === 'Despachada') {
-                    dispatchedGuides.add(tn);
-                } else if (order.status === 'Parcial') {
-                    exceptionGuides.add(tn);
-                } else if (order.status === 'Pendiente') {
-                    exceptionGuides.add(tn);
-                }
-            }
-        });
-    });
 
     // Check exceptions in partial orders
     partialSnapshot.forEach(doc => {
@@ -1990,6 +2027,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
             status: 'pending',
             isDispatched,
             isPendingOrder,
+            warehouseId: user.warehouseId || DEFAULT_WAREHOUSE_ID,
         };
         const docRef = doc(requestsCol);
         batch.set(docRef, newRequest);
@@ -1999,7 +2037,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     return { alreadyDispatched, pendingOrders: Array.from(exceptionGuides) };
 };
 
-export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
+export const getCancellationRequests = async ({ page = 1, limit: itemsPerPage = 20, warehouseId }: { page?: number, limit?: number, warehouseId?: string } = {}): Promise<{ requests: CancellationRequest[], totalPages: number, totalCount: number }> => {
     const q: Query = query(collection(db, 'cancellationRequests'));
     const requestsSnapshot = await getDocs(q);
 
@@ -2015,12 +2053,18 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
     });
 
     const allWarehouses = await getWarehouses();
-    
+
     if (warehouseId && warehouseId !== 'all') {
         requestList = requestList.filter(req => req.warehouseId === warehouseId);
     }
 
-    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+    const sortedRequests = requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+
+    const totalCount = sortedRequests.length;
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+    const paginatedRequests = sortedRequests.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    return { requests: paginatedRequests, totalPages, totalCount };
 };
     
 export const updateCancellationRequestStatus = async (requestId: string, status: 'completed' | 'rejected', user: User | null): Promise<void> => {
@@ -2083,6 +2127,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     
     // Si es INGENIO, traemos todo para filtrar en memoria. Si es otra, filtramos en DB.
     const fetchWarehouseId = warehouseId === 'wh-bog' ? undefined : warehouseId;
+    const warehouseIdParam = warehouseId || undefined;
 
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
         getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId: fetchWarehouseId } }),
@@ -2109,15 +2154,17 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const ordersInPeriod = filteredOrders.filter(order => {
         const platformMatch = filters.platformIds.length === 0 || filters.platformIds.includes(order.platformId);
         const carrierMatch = filters.carrierIds.length === 0 || filters.carrierIds.includes(order.carrierId);
-        
+
         let productMatch = true;
         if (filters.productIds.length > 0) {
             productMatch = order.products.some(p => filters.productIds.includes(p.productId));
         } else if (productIdsInCategory) {
             productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
         }
-        
-        return platformMatch && carrierMatch && productMatch;
+
+        const warehouseMatch = !warehouseId || warehouseId === 'all' || (warehouseId === 'wh-bog' && (order.warehouseId === 'wh-bog' || order.warehouseId == null)) || order.warehouseId === warehouseId;
+
+        return platformMatch && carrierMatch && productMatch && warehouseMatch;
     });
 
     const movementsInPeriod = filteredMovements.filter(m => {
@@ -2127,7 +2174,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         } else if (productIdsInCategory) {
             productMatch = productIdsInCategory.includes(m.productId);
         }
-        return productMatch;
+        const warehouseMatch = !warehouseId || warehouseId === 'all' || (warehouseId === 'wh-bog' && (m.warehouseId === 'wh-bog' || m.warehouseId == null)) || m.warehouseId === warehouseId;
+        return productMatch && warehouseMatch;
     });
   
     const ordersByDay: Record<string, number> = {};
@@ -2184,7 +2232,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             }
             totalPendingUnits += unitsInOrder;
             pendingUnitsByDay[day] = (pendingUnitsByDay[day] || 0) + unitsInOrder;
-    });
+        });
   
     const returnsByDay: Record<string, number> = {};
     const totalReturns = movementsInPeriod

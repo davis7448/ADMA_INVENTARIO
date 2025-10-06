@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { getAuth } from 'firebase-admin/auth';
 // We are re-importing the app here to ensure environment variables are loaded before initialization.
-import { app as adminApp } from '@/lib/firebase-admin';
+import { getApp } from '@/lib/firebase-admin';
 import { revalidatePath } from 'next/cache';
 import { findUserByEmail, addUser, updateUserProfile, updateUserRoleInDb, sendPasswordReset, uploadImageAndGetURL, updateUserWarehouseInDb } from '@/lib/api';
 import type { CreateUserFormState, CreateUserFormValues, UpdateProfileFormValues, UpdateProfileFormState } from '@/lib/definitions';
@@ -34,6 +34,7 @@ export async function createUserAction(
   const { name, email, password, role } = validatedFields.data;
 
   try {
+    const adminApp = await getApp();
     const auth = getAuth(adminApp);
     // Create user in Firebase Auth
     await auth.createUser({

@@ -116,6 +116,7 @@ export function UpdateProductsDialog({ onUpdateSuccess, disabled }: UpdateProduc
         vendorid: 'vendor-id',
         warehouseid: 'wh-bog',
         purchasedate: '2024-01-01',
+        codigoerp: 'ERP-001',
       },
       {
         sku: 'VARIANT-SKU456',

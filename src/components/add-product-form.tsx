@@ -92,6 +92,7 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       stock: undefined,
       image: undefined,
       contentLink: '',
+      codigoERP: '',
       variants: [],
     },
   });
@@ -320,9 +321,9 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               <FormItem>
                                   <FormLabel>SKU</FormLabel>
                                   <FormControl>
-                                      <Input 
-                                          placeholder="e.g., WM-ERGO-01" 
-                                          {...field} 
+                                      <Input
+                                          placeholder="e.g., WM-ERGO-01"
+                                          {...field}
                                           disabled={productType === 'variable'}
                                           value={productType === 'variable' ? '' : field.value}
                                       />
@@ -332,6 +333,19 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                           )}
                       />
                   </div>
+                  <FormField
+                      control={form.control}
+                      name="codigoERP"
+                      render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Código ERP</FormLabel>
+                              <FormControl>
+                                  <Input placeholder="e.g., ERP-001" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}
+                  />
                   <FormField
                       control={form.control}
                       name="description"

@@ -29,10 +29,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatToTimeZone } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Trash2 } from 'lucide-react';
+import { AlertCircle, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 interface AnnulmentItem {
     selected: boolean;
@@ -45,12 +47,21 @@ interface AnnulmentItem {
 export function CancellationsContent() {
     const { user, currentWarehouse } = useAuth();
     const { toast } = useToast();
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [requests, setRequests] = useState<CancellationRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSubmitting, startSubmittingTransition] = useTransition();
     const [isUpdating, startUpdatingTransition] = useTransition();
     const [guidesToCancel, setGuidesToCancel] = useState('');
     const [submissionWarnings, setSubmissionWarnings] = useState<string[]>([]);
+
+    // Pagination states
+    const [page, setPage] = useState(Number(searchParams.get('page') || '1'));
+    const [limit, setLimit] = useState(Number(searchParams.get('limit') || '20'));
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
 
     // State for the cancellation dialog
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
@@ -61,11 +72,13 @@ export function CancellationsContent() {
     
     const canManageRequests = user?.role === 'admin' || user?.role === 'logistics';
 
-    const fetchRequests = async () => {
+    const fetchRequests = async (currentPage = page, currentLimit = limit) => {
         setLoading(true);
         if (user) {
-            const fetchedRequests = await getCancellationRequests(currentWarehouse?.id);
-            setRequests(fetchedRequests);
+            const result = await getCancellationRequests({ page: currentPage, limit: currentLimit, warehouseId: currentWarehouse?.id });
+            setRequests(result.requests);
+            setTotalPages(result.totalPages);
+            setTotalCount(result.totalCount);
         }
         setLoading(false);
     }
@@ -73,6 +86,24 @@ export function CancellationsContent() {
     useEffect(() => {
         fetchRequests();
     }, [currentWarehouse, user]);
+
+    const handlePaginationChange = (newPage: number) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('page', String(newPage));
+        router.push(`${pathname}?${params.toString()}`);
+        setPage(newPage);
+        fetchRequests(newPage, limit);
+    };
+
+    const handleItemsPerPageChange = (value: number) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('limit', String(value));
+        params.set('page', '1'); // Reset to first page
+        router.push(`${pathname}?${params.toString()}`);
+        setLimit(value);
+        setPage(1);
+        fetchRequests(1, value);
+    };
 
     const handleSubmit = () => {
         if (!user) return;
@@ -412,8 +443,75 @@ export function CancellationsContent() {
                         </TableBody>
                     </Table>
                 </CardContent>
+                <CardFooter>
+                    <PaginationControls
+                        currentPage={page}
+                        totalPages={totalPages}
+                        onPageChange={handlePaginationChange}
+                        itemsPerPage={limit}
+                        onItemsPerPageChange={handleItemsPerPageChange}
+                    />
+                </CardFooter>
             </Card>
         </div>
         </>
+    );
+}
+
+interface PaginationControlsProps {
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+    itemsPerPage: number;
+    onItemsPerPageChange: (value: number) => void;
+}
+
+function PaginationControls({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange }: PaginationControlsProps) {
+    if (totalPages <= 1 && currentPage === 1) return null;
+
+    return (
+        <div className="flex items-center justify-end space-x-6 lg:space-x-8 w-full">
+            <div className="flex items-center space-x-2">
+                <p className="text-sm font-medium">Filas por página</p>
+                <Select
+                    value={`${itemsPerPage}`}
+                    onValueChange={(value) => onItemsPerPageChange(Number(value))}
+                >
+                    <SelectTrigger className="h-8 w-[70px]">
+                        <SelectValue placeholder={itemsPerPage} />
+                    </SelectTrigger>
+                    <SelectContent side="top">
+                        {[10, 20, 50, 100].map((pageSize) => (
+                        <SelectItem key={pageSize} value={`${pageSize}`}>
+                            {pageSize}
+                        </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+                Página {currentPage} de {totalPages > 0 ? totalPages : 1}
+            </div>
+            <div className="flex items-center space-x-2">
+                <Button
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    onClick={() => onPageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                >
+                    <span className="sr-only">Ir a la página anterior</span>
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                    variant="outline"
+                    className="h-8 w-8 p-0"
+                    onClick={() => onPageChange(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                >
+                    <span className="sr-only">Ir a la página siguiente</span>
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+            </div>
+        </div>
     );
 }

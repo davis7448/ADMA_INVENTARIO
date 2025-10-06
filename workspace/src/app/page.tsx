@@ -20,7 +20,8 @@ import {
     TableRow,
   } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms, type DashboardData } from '@/lib/api';
+import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms } from '@/lib/api';
+import type { DashboardData } from '@/lib/types';
 import type { Product, Carrier, Category, Platform, ProductVariant } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown, ArchiveX, Settings, Edit } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
@@ -408,7 +409,7 @@ function DashboardContent() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {dashboardData.productChartData.slice(0, 20).map(prod => (
+                                    {dashboardData.productChartData.slice(0, 20).map((prod: any) => (
                                         <React.Fragment key={prod.id}>
                                         <TableRow>
                                             <TableCell className="font-medium">{prod.name}</TableCell>
@@ -448,7 +449,7 @@ function DashboardContent() {
                                                                 </TableRow>
                                                             </TableHeader>
                                                             <TableBody>
-                                                            {prod.variants.map((variant) => (
+                                                            {prod.variants.map((variant: any) => (
                                                                 <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
                                                                     <TableCell>{variant.name}</TableCell>
                                                                     <TableCell>{variant.sku}</TableCell>
@@ -498,7 +499,7 @@ function DashboardContent() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {dashboardData.categoryChartData.map(cat => (
+                                    {dashboardData.categoryChartData.map((cat: any) => (
                                         <TableRow key={cat.name}>
                                             <TableCell className="font-medium">{cat.name}</TableCell>
                                             <TableCell className="text-right">{cat.value}</TableCell>

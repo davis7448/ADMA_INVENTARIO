@@ -99,6 +99,8 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const [hasPending, setHasPending] = useState(searchParams.get('pending') === 'true');
     const [hasReservations, setHasReservations] = useState(searchParams.get('reservations') === 'true');
     const [onlyAudited, setOnlyAudited] = useState(searchParams.get('audited') === 'true');
+    const [onlyVariable, setOnlyVariable] = useState(searchParams.get('variable') === 'true');
+    const [noWarehouse, setNoWarehouse] = useState(searchParams.get('noWarehouse') === 'true');
 
     // Pagination states from URL
     const currentPage = Number(searchParams.get('page') || '1');
@@ -128,11 +130,13 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         if (hasPending) params.set('pending', 'true'); else params.delete('pending');
         if (hasReservations) params.set('reservations', 'true'); else params.delete('reservations');
         if (onlyAudited) params.set('audited', 'true'); else params.delete('audited');
-        
+        if (onlyVariable) params.set('variable', 'true'); else params.delete('variable');
+        if (noWarehouse) params.set('noWarehouse', 'true'); else params.delete('noWarehouse');
+
         // When filters change, always go back to page 1
         params.set('page', '1');
         router.replace(`${pathname}?${params.toString()}`);
-    }, [searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited]);
+    }, [searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse]);
 
     const refreshProducts = () => {
         setLoading(true);
@@ -262,7 +266,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         params.set('page', '1');
         params.set('limit', String(itemsPerPage));
         router.push(`${pathname}?${params.toString()}`);
-        
+
         // Reset local state
         setSearchQuery('');
         setSelectedCategory('all');
@@ -272,6 +276,8 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         setHasPending(false);
         setHasReservations(false);
         setOnlyAudited(false);
+        setOnlyVariable(false);
+        setNoWarehouse(false);
     };
 
     const canEdit = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
@@ -434,20 +440,28 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                     <Input id="min-stock" type="number" placeholder="Ej: 10" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
                 </div>
             </div>
-             <div className="flex items-center gap-6 pt-4">
-                <div className="flex items-center space-x-2">
-                    <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
-                    <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Switch id="reserved-stock" checked={hasReservations} onCheckedChange={setHasReservations} />
-                    <Label htmlFor="reserved-stock">Mostrar solo con stock reservado</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Switch id="audited-filter" checked={onlyAudited} onCheckedChange={setOnlyAudited} />
-                    <Label htmlFor="audited-filter">Mostrar solo auditados</Label>
-                </div>
-            </div>
+             <div className="flex flex-wrap items-center gap-6 pt-4">
+               <div className="flex items-center space-x-2">
+                   <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
+                   <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="reserved-stock" checked={hasReservations} onCheckedChange={setHasReservations} />
+                   <Label htmlFor="reserved-stock">Mostrar solo con stock reservado</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="audited-filter" checked={onlyAudited} onCheckedChange={setOnlyAudited} />
+                   <Label htmlFor="audited-filter">Mostrar solo auditados</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="variable-filter" checked={onlyVariable} onCheckedChange={setOnlyVariable} />
+                   <Label htmlFor="variable-filter">Mostrar solo productos variables</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="no-warehouse-filter" checked={noWarehouse} onCheckedChange={setNoWarehouse} />
+                   <Label htmlFor="no-warehouse-filter">Mostrar solo sin bodega asignada</Label>
+               </div>
+           </div>
           </div>
 
 

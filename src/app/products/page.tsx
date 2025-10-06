@@ -41,7 +41,7 @@ export default async function ProductsPage({
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
     const user = await getCurrentUser(sessionCookie);
-    const effectiveWarehouseId = user && user.role !== 'admin' ? (user.warehouseId || 'wh-bog') : undefined;
+    const effectiveWarehouseId = user && user.role === 'logistics' ? (user.warehouseId || 'wh-bog') : undefined;
     const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
 
     // Server-side redirect for logistics users
@@ -58,6 +58,8 @@ export default async function ProductsPage({
         hasPending: searchParams?.pending === 'true',
         hasReservations: searchParams?.reservations === 'true',
         onlyAudited: searchParams?.audited === 'true',
+        onlyVariable: searchParams?.variable === 'true',
+        noWarehouse: searchParams?.noWarehouse === 'true',
         warehouseId: warehouseId,
         userRole: user?.role,
     };
