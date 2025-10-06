@@ -2037,7 +2037,7 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     return { alreadyDispatched, pendingOrders: Array.from(exceptionGuides) };
 };
 
-export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
+export const getCancellationRequests = async ({ page = 1, limit: itemsPerPage = 20, warehouseId }: { page?: number, limit?: number, warehouseId?: string } = {}): Promise<{ requests: CancellationRequest[], totalPages: number, totalCount: number }> => {
     const q: Query = query(collection(db, 'cancellationRequests'));
     const requestsSnapshot = await getDocs(q);
 
@@ -2053,12 +2053,18 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
     });
 
     const allWarehouses = await getWarehouses();
-    
+
     if (warehouseId && warehouseId !== 'all') {
         requestList = requestList.filter(req => req.warehouseId === warehouseId);
     }
 
-    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+    const sortedRequests = requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+
+    const totalCount = sortedRequests.length;
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+    const paginatedRequests = sortedRequests.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    return { requests: paginatedRequests, totalPages, totalCount };
 };
     
 export const updateCancellationRequestStatus = async (requestId: string, status: 'completed' | 'rejected', user: User | null): Promise<void> => {
