@@ -2287,6 +2287,25 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         });
     });
 
+    // Subtract cancelled exceptions
+    ordersInPeriod.forEach(order => {
+        if (order.cancelledExceptions) {
+            order.cancelledExceptions.forEach(ex => {
+                ex.products.forEach(p => {
+                    if (salesByProduct[p.productId]) {
+                        salesByProduct[p.productId].total -= p.quantity;
+                        if (p.variantId && salesByProduct[p.productId].variants[p.variantId] !== undefined) {
+                            salesByProduct[p.productId].variants[p.variantId] -= p.quantity;
+                        }
+                    }
+                });
+            });
+        }
+    });
+
+    // Recalculate totalItemsSold as net sold
+    totalItemsSold = Object.values(salesByProduct).reduce((sum, p) => sum + Math.max(0, p.total), 0);
+
     const productChartData = Object.entries(salesByProduct).map(([productId, salesData]) => {
         const product = productInfoMap[productId];
         return {
