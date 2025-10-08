@@ -446,14 +446,14 @@ function DashboardContent() {
             <CardHeader>
                 <CardTitle>Rendimiento por Producto</CardTitle>
                 <CardDescription>
-                    Top 20 productos más vendidos en el período seleccionado.
+                    Productos más vendidos en el período seleccionado.
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 {loading ? <Skeleton className="h-64" /> : dashboardData.productChartData.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
                         <div className="h-64">
-                            <DashboardCategoryChart data={dashboardData.productChartData.slice(0, 20)} />
+                            <DashboardCategoryChart data={dashboardData.productChartData} />
                         </div>
                         <div className="max-h-64 overflow-y-auto">
                             <Table>
@@ -466,7 +466,7 @@ function DashboardContent() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {dashboardData.productChartData.slice(0, 20).map(prod => (
+                                    {dashboardData.productChartData.map(prod => (
                                         <React.Fragment key={prod.id}>
                                         <TableRow>
                                             <TableCell className="font-medium">{prod.name}</TableCell>
