@@ -649,15 +649,19 @@ function DashboardContent() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {Object.entries(dashboardData.dailyProductDispatch || {}).map(([day, products]) =>
-                                Object.entries(products).map(([productId, { name, quantity }]) => (
-                                    <TableRow key={`${day}-${productId}`}>
-                                        <TableCell>{day}</TableCell>
-                                        <TableCell>{name}</TableCell>
-                                        <TableCell className="text-right">{quantity}</TableCell>
-                                    </TableRow>
-                                ))
-                            )}
+                            {Object.entries(dashboardData.dailyProductDispatch || {})
+                                .sort(([a], [b]) => b.localeCompare(a))
+                                .map(([day, products]) =>
+                                    Object.entries(products)
+                                        .sort(([, a], [, b]) => b.quantity - a.quantity)
+                                        .map(([productId, { name, quantity }]) => (
+                                            <TableRow key={`${day}-${productId}`}>
+                                                <TableCell>{day}</TableCell>
+                                                <TableCell>{name}</TableCell>
+                                                <TableCell className="text-right">{quantity}</TableCell>
+                                            </TableRow>
+                                        ))
+                                )}
                         </TableBody>
                     </Table>
                 </div>
