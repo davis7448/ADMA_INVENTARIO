@@ -1,9 +1,8 @@
-
-
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 import {
   Card,
   CardContent,
@@ -43,6 +42,8 @@ import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 import { es } from 'date-fns/locale';
 import DashboardAnnulledChart from '@/components/dashboard-annulled-chart';
 import DashboardAdjustChart from '@/components/dashboard-adjust-chart';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getWarehouses } from '@/lib/api';
 
 const SKELETON_DASHBOARD_DATA: DashboardData = {
     totalItemsDispatched: 0,
@@ -68,7 +69,8 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
 
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const warehouseId = searchParams.get('warehouse') || 'wh-bog';
+  const router = useRouter();
+  const { user, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const to = new Date();
@@ -78,6 +80,7 @@ function DashboardContent() {
 
   const [dashboardData, setDashboardData] = useState<DashboardData>(SKELETON_DASHBOARD_DATA);
   const [loading, setLoading] = useState(true);
+  const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
   const [expandedDashboardRow, setExpandedDashboardRow] = useState<string | null>(null);
 
   // Filter states
@@ -85,26 +88,55 @@ function DashboardContent() {
   const [filterCarriers, setFilterCarriers] = useState<string[]>([]);
   const [filterCategories, setFilterCategories] = useState<string[]>([]);
   const [filterProducts, setFilterProducts] = useState<string[]>([]);
-  
+
   // Static filter options
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [allCarriers, setAllCarriers] = useState<Carrier[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
+  const [allWarehouses, setAllWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string | undefined>(searchParams.get('warehouse') || undefined);
+
+  const effectiveWarehouseId = user?.role === 'admin' ? selectedWarehouse : authEffectiveWarehouseId;
+  const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
+
+  // Debug logging for warehouse filtering
+  console.log('Dashboard Auth Debug:', {
+    user: user ? { id: user.id, role: user.role, warehouseId: user.warehouseId } : null,
+    authEffectiveWarehouseId,
+    selectedWarehouse,
+    effectiveWarehouseId,
+    warehouseId,
+    searchParamsWarehouse: searchParams.get('warehouse')
+  });
+
+  // Debug logging
+  console.log('Dashboard Debug:', {
+    userRole: user?.role,
+    userWarehouseId: user?.warehouseId,
+    searchParamsWarehouse: searchParams.get('warehouse'),
+    effectiveWarehouseId,
+    finalWarehouseId: warehouseId
+  });
+
 
 
   useEffect(() => {
-    // Fetch static filter options once
+    // Fetch static filter options once - reduced limit for better performance
+    setFilterOptionsLoading(true);
     Promise.all([
-      getProducts({ limit: 10000, filters: { warehouseId } }),
+      getProducts({ limit: 2000, filters: { warehouseId } }),
       getCarriers(),
       getCategories(),
-      getPlatforms()
-    ]).then(([productsResult, carriers, categories, platforms]) => {
+      getPlatforms(),
+      getWarehouses()
+    ]).then(([productsResult, carriers, categories, platforms, warehouses]) => {
       setAllProducts(productsResult.products);
       setAllCarriers(carriers);
       setAllCategories(categories);
       setAllPlatforms(platforms);
+      setAllWarehouses(warehouses);
+      setFilterOptionsLoading(false);
     });
   }, [warehouseId]);
 
@@ -131,7 +163,7 @@ function DashboardContent() {
     };
     fetchData();
   }, [warehouseId, dateRange, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
-  
+
   const handleToggleDashboardRow = (productId: string) => {
     setExpandedDashboardRow(prev => (prev === productId ? null : productId));
   };
@@ -144,7 +176,10 @@ function DashboardContent() {
     setFilterProducts([]);
   };
 
-  const hasActiveFilters = filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0;
+  const hasActiveFilters = useMemo(() =>
+    filterPlatforms.length > 0 || filterCarriers.length > 0 || filterCategories.length > 0 || filterProducts.length > 0,
+    [filterPlatforms, filterCarriers, filterCategories, filterProducts]
+  );
 
 
   interface MultiSelectFilterProps<T extends { id: string; name: string }> {
@@ -153,13 +188,13 @@ function DashboardContent() {
     selected: string[];
     onSelectedChange: (selected: string[]) => void;
   }
-  
-  function MultiSelectFilter<T extends { id: string; name: string }>({
+
+  const MultiSelectFilter = React.memo(<T extends { id: string; name: string }>({
     title,
     options,
     selected,
     onSelectedChange,
-  }: MultiSelectFilterProps<T>) {
+  }: MultiSelectFilterProps<T>) => {
     const [open, setOpen] = useState(false);
 
     const handleSelect = (id: string) => {
@@ -170,7 +205,7 @@ function DashboardContent() {
         onSelectedChange([...selected, id]);
       }
     };
-  
+
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -186,7 +221,6 @@ function DashboardContent() {
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <Command>
-            <CommandInput placeholder={`Buscar ${title.toLowerCase()}...`} />
             <CommandList>
               <CommandEmpty>No se encontraron resultados.</CommandEmpty>
               <CommandGroup>
@@ -217,77 +251,100 @@ function DashboardContent() {
         </PopoverContent>
       </Popover>
     );
-  }
+  });
 
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <h1 className="text-3xl font-bold font-headline tracking-tight">Dashboard Operativo</h1>
-        <Popover>
-            <PopoverTrigger asChild>
-                <Button
-                    id="date"
-                    variant={"outline"}
-                    className={cn(
-                        "w-full sm:w-[260px] justify-start text-left font-normal",
-                        !dateRange && "text-muted-foreground"
-                    )}
-                >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange?.from ? (
-                        dateRange.to ? (
-                            <>
-                                {format(dateRange.from, "LLL dd, y", { locale: es })} -{" "}
-                                {format(dateRange.to, "LLL dd, y", { locale: es })}
-                            </>
-                        ) : (
-                            format(dateRange.from, "LLL dd, y", { locale: es })
-                        )
-                    ) : (
-                        <span>Seleccionar rango</span>
-                    )}
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                    initialFocus
-                    mode="range"
-                    defaultMonth={dateRange?.from}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    numberOfMonths={2}
-                    locale={es}
-                />
-            </PopoverContent>
-        </Popover>
+        <div className="flex gap-2">
+          {user?.role === 'admin' && (
+            <Select value={selectedWarehouse || ''} onValueChange={(value) => setSelectedWarehouse(value === 'all' ? undefined : value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Seleccionar bodega" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las bodegas</SelectItem>
+                {allWarehouses.map(wh => (
+                  <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Popover>
+              <PopoverTrigger asChild>
+                  <Button
+                      id="date"
+                      variant={"outline"}
+                      className={cn(
+                          "w-full sm:w-[260px] justify-start text-left font-normal",
+                          !dateRange && "text-muted-foreground"
+                      )}
+                  >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateRange?.from ? (
+                          dateRange.to ? (
+                              <>
+                                  {format(dateRange.from, "LLL dd, y", { locale: es })} -{" "}
+                                  {format(dateRange.to, "LLL dd, y", { locale: es })}
+                              </>
+                          ) : (
+                              format(dateRange.from, "LLL dd, y", { locale: es })
+                          )
+                      ) : (
+                          <span>Seleccionar rango</span>
+                      )}
+                  </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange?.from}
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                      locale={es}
+                  />
+              </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <div className="p-4 border rounded-lg bg-muted/50">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-            <MultiSelectFilter title="Plataformas" options={allPlatforms} selected={filterPlatforms} onSelectedChange={setFilterPlatforms} />
-            <MultiSelectFilter title="Transportadoras" options={allCarriers} selected={filterCarriers} onSelectedChange={setFilterCarriers} />
-            <MultiSelectFilter title="Categorías" options={allCategories} selected={filterCategories} onSelectedChange={setFilterCategories} />
-            <MultiSelectFilter title="Productos" options={allProducts} selected={filterProducts} onSelectedChange={setFilterProducts} />
-            
-            {hasActiveFilters && (
-                <Button variant="ghost" onClick={clearFilters} className="text-sm">
-                    <X className="mr-2 h-4 w-4" />
-                    Limpiar Filtros
-                </Button>
-            )}
-        </div>
+        {filterOptionsLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+              <MultiSelectFilter title="Plataformas" options={allPlatforms} selected={filterPlatforms} onSelectedChange={setFilterPlatforms} />
+              <MultiSelectFilter title="Transportadoras" options={allCarriers} selected={filterCarriers} onSelectedChange={setFilterCarriers} />
+              <MultiSelectFilter title="Categorías" options={allCategories} selected={filterCategories} onSelectedChange={setFilterCategories} />
+              <MultiSelectFilter title="Productos" options={allProducts} selected={filterProducts} onSelectedChange={setFilterProducts} />
+
+              {hasActiveFilters && (
+                  <Button variant="ghost" onClick={clearFilters} className="text-sm">
+                      <X className="mr-2 h-4 w-4" />
+                      Limpiar Filtros
+                  </Button>
+              )}
+          </div>
+        )}
       </div>
 
 
       {loading ? (
-         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
-         </div>
+          </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card className="col-span-1">
@@ -328,7 +385,7 @@ function DashboardContent() {
             <CardContent>
                 <div className="text-2xl font-bold">{dashboardData.totalPendingUnits}</div>
                 <p className="text-xs text-muted-foreground">Unidades en espera de procesamiento.</p>
-                 <div className="h-32 mt-4">
+                  <div className="h-32 mt-4">
                     <DashboardPendingChart data={dashboardData.pendingChartData} />
                 </div>
             </CardContent>
@@ -380,7 +437,7 @@ function DashboardContent() {
             </Card>
         </div>
       )}
-      
+
       {loading ? null : (
         <DailyDispatchSummary data={dashboardData.dailyDispatchSummaryData} />
       )}
@@ -389,14 +446,14 @@ function DashboardContent() {
             <CardHeader>
                 <CardTitle>Rendimiento por Producto</CardTitle>
                 <CardDescription>
-                    Top 20 productos más vendidos en el período seleccionado.
+                    Productos más vendidos en el período seleccionado.
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 {loading ? <Skeleton className="h-64" /> : dashboardData.productChartData.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
                         <div className="h-64">
-                            <DashboardCategoryChart data={dashboardData.productChartData.slice(0, 20)} />
+                            <DashboardCategoryChart data={dashboardData.productChartData} />
                         </div>
                         <div className="max-h-64 overflow-y-auto">
                             <Table>
@@ -409,7 +466,7 @@ function DashboardContent() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {dashboardData.productChartData.slice(0, 20).map((prod: any) => (
+                                    {dashboardData.productChartData.map(prod => (
                                         <React.Fragment key={prod.id}>
                                         <TableRow>
                                             <TableCell className="font-medium">{prod.name}</TableCell>
@@ -435,7 +492,7 @@ function DashboardContent() {
                                                 )}
                                             </TableCell>
                                         </TableRow>
-                                         {prod.productType === 'variable' && expandedDashboardRow === prod.id && (
+                                          {prod.productType === 'variable' && expandedDashboardRow === prod.id && (
                                             <TableRow className="bg-muted/20 hover:bg-muted/30">
                                                 <TableCell colSpan={4}>
                                                     <div className="p-4">
@@ -449,7 +506,7 @@ function DashboardContent() {
                                                                 </TableRow>
                                                             </TableHeader>
                                                             <TableBody>
-                                                            {prod.variants.map((variant: any) => (
+                                                            {prod.variants.map((variant) => (
                                                                 <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
                                                                     <TableCell>{variant.name}</TableCell>
                                                                     <TableCell>{variant.sku}</TableCell>
@@ -499,7 +556,7 @@ function DashboardContent() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {dashboardData.categoryChartData.map((cat: any) => (
+                                    {dashboardData.categoryChartData.map(cat => (
                                         <TableRow key={cat.name}>
                                             <TableCell className="font-medium">{cat.name}</TableCell>
                                             <TableCell className="text-right">{cat.value}</TableCell>
@@ -534,12 +591,12 @@ function DashboardContent() {
                 {loading ? <Skeleton className="h-80" /> : dashboardData.platformCarrierChartData.length > 0 ? (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
                         <div className="lg:col-span-2 h-80">
-                           <DashboardPlatformCarrierChart 
-                                data={dashboardData.platformCarrierChartData} 
+                           <DashboardPlatformCarrierChart
+                                data={dashboardData.platformCarrierChartData}
                                 carriers={dashboardData.allCarrierNames}
                             />
                         </div>
-                         <div className="lg:col-span-1 space-y-4 text-center lg:text-left">
+                          <div className="lg:col-span-1 space-y-4 text-center lg:text-left">
                             <h4 className="font-semibold text-lg">Resumen Técnico</h4>
                             <div className="text-sm text-muted-foreground space-y-4">
                                 <div>
@@ -556,7 +613,7 @@ function DashboardContent() {
                                     <strong className="block text-xl text-foreground">
                                         {dashboardData.platformWithMostOrders.name}
                                     </strong>
-                                     <p className="text-xs">
+                                      <p className="text-xs">
                                         con {dashboardData.platformWithMostOrders.count} órdenes ({dashboardData.platformWithMostOrders.percentage.toFixed(1)}% del total).
                                     </p>
                                 </div>
@@ -574,11 +631,9 @@ function DashboardContent() {
     </div>
   );
 }
-  
-export default function DashboardPage() {
+
+export default function DashboardClient() {
     return (
-        <Suspense>
-            <DashboardContent />
-        </Suspense>
-    )
+        <DashboardContent />
+    );
 }

@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useTransition, useEffect } from 'react';
+import React, { useState, useMemo, useTransition, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import {
   Card,
@@ -62,6 +62,7 @@ import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
+import { UpdateProductsDialog } from './update-products-dialog';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { auditProductStockAction, clearProductAuditAction, deleteProductAction, updateProductLocationAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
@@ -87,6 +88,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+    const redirectedRef = useRef(false);
 
     // Filter states from URL
     const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
@@ -97,6 +99,8 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const [hasPending, setHasPending] = useState(searchParams.get('pending') === 'true');
     const [hasReservations, setHasReservations] = useState(searchParams.get('reservations') === 'true');
     const [onlyAudited, setOnlyAudited] = useState(searchParams.get('audited') === 'true');
+    const [onlyVariable, setOnlyVariable] = useState(searchParams.get('variable') === 'true');
+    const [noWarehouse, setNoWarehouse] = useState(searchParams.get('noWarehouse') === 'true');
 
     // Pagination states from URL
     const currentPage = Number(searchParams.get('page') || '1');
@@ -105,6 +109,16 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     useEffect(() => {
         getVendedores().then(setVendedores);
     }, []);
+
+    // Auto-redirect logistics users to their warehouse URL
+    useEffect(() => {
+        if (!redirectedRef.current && user?.role === 'logistics' && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
+            const warehouse = user.warehouseId || 'wh-bog';
+            console.log('Redirecting logistics user to products warehouse URL:', warehouse);
+            redirectedRef.current = true;
+            router.push(`${pathname}?warehouse=${warehouse}`);
+        }
+    }, [user, searchParams, router, pathname]);
 
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
@@ -116,11 +130,13 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         if (hasPending) params.set('pending', 'true'); else params.delete('pending');
         if (hasReservations) params.set('reservations', 'true'); else params.delete('reservations');
         if (onlyAudited) params.set('audited', 'true'); else params.delete('audited');
-        
+        if (onlyVariable) params.set('variable', 'true'); else params.delete('variable');
+        if (noWarehouse) params.set('noWarehouse', 'true'); else params.delete('noWarehouse');
+
         // When filters change, always go back to page 1
         params.set('page', '1');
         router.replace(`${pathname}?${params.toString()}`);
-    }, [searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited]);
+    }, [searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse]);
 
     const refreshProducts = () => {
         setLoading(true);
@@ -219,6 +235,12 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const handlePaginationChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
         params.set('page', String(newPage));
+
+        // Asegurar que warehouse esté presente para usuarios de logística
+        if (user?.role === 'logistics' && !params.get('warehouse')) {
+            params.set('warehouse', user.warehouseId || 'wh-bog');
+        }
+
         router.push(`${pathname}?${params.toString()}`);
     }
 
@@ -244,7 +266,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         params.set('page', '1');
         params.set('limit', String(itemsPerPage));
         router.push(`${pathname}?${params.toString()}`);
-        
+
         // Reset local state
         setSearchQuery('');
         setSelectedCategory('all');
@@ -254,11 +276,14 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         setHasPending(false);
         setHasReservations(false);
         setOnlyAudited(false);
+        setOnlyVariable(false);
+        setNoWarehouse(false);
     };
 
     const canEdit = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
     const canDelete = user?.role === 'admin';
     const canAudit = user?.role === 'admin' || user?.role === 'logistics';
+    const canBulkUpdate = user?.role === 'admin';
 
     const getRotationIcon = (categoryName?: string) => {
         if (!categoryName) return null;
@@ -415,20 +440,28 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                     <Input id="min-stock" type="number" placeholder="Ej: 10" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
                 </div>
             </div>
-             <div className="flex items-center gap-6 pt-4">
-                <div className="flex items-center space-x-2">
-                    <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
-                    <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Switch id="reserved-stock" checked={hasReservations} onCheckedChange={setHasReservations} />
-                    <Label htmlFor="reserved-stock">Mostrar solo con stock reservado</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Switch id="audited-filter" checked={onlyAudited} onCheckedChange={setOnlyAudited} />
-                    <Label htmlFor="audited-filter">Mostrar solo auditados</Label>
-                </div>
-            </div>
+             <div className="flex flex-wrap items-center gap-6 pt-4">
+               <div className="flex items-center space-x-2">
+                   <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
+                   <Label htmlFor="pending-stock">Mostrar solo con stock pendiente</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="reserved-stock" checked={hasReservations} onCheckedChange={setHasReservations} />
+                   <Label htmlFor="reserved-stock">Mostrar solo con stock reservado</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="audited-filter" checked={onlyAudited} onCheckedChange={setOnlyAudited} />
+                   <Label htmlFor="audited-filter">Mostrar solo auditados</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="variable-filter" checked={onlyVariable} onCheckedChange={setOnlyVariable} />
+                   <Label htmlFor="variable-filter">Mostrar solo productos variables</Label>
+               </div>
+               <div className="flex items-center space-x-2">
+                   <Switch id="no-warehouse-filter" checked={noWarehouse} onCheckedChange={setNoWarehouse} />
+                   <Label htmlFor="no-warehouse-filter">Mostrar solo sin bodega asignada</Label>
+               </div>
+           </div>
           </div>
 
 
@@ -450,6 +483,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <DropdownMenuItem onSelect={(e) => e.preventDefault()} disabled={!canEdit}>
                                 <ImportProductsDialog onImportSuccess={refreshProducts} />
                             </DropdownMenuItem>
+                            <UpdateProductsDialog onUpdateSuccess={refreshProducts} disabled={!canBulkUpdate} />
                                 <DropdownMenuItem onClick={handleExportExcel}>
                                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                                 Exportar a Excel

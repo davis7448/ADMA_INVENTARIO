@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import type { PendingInventoryItem, Product } from '@/lib/types';
 import {
     Card,
@@ -38,6 +38,7 @@ import { Check, ChevronsUpDown, Calendar as CalendarIcon, X } from 'lucide-react
 import { Label } from './ui/label';
 import { getPendingInventory } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 interface PendingInventoryContentProps {
     initialPendingItems: PendingInventoryItem[];

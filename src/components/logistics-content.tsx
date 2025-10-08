@@ -73,7 +73,7 @@ interface LogisticsContentProps {
 }
 
 export function LogisticsContent({ initialProducts, initialCarriers, initialPlatforms }: LogisticsContentProps) {
-    const { user, currentWarehouse } = useAuth();
+    const { user, currentWarehouse, effectiveWarehouseId } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
     const [allProductsList, setAllProductsList] = useState<Product[]>(initialProducts);
@@ -325,8 +325,8 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                     platformId: platform,
                     carrierId: carrier,
                     products: productsForDispatch,
-                    createdBy: user,
-                    warehouseId: currentWarehouse?.id || 'wh-bog'
+                    createdBy: user ? { id: user.id, name: user.name } : undefined,
+                    warehouseId: effectiveWarehouseId || undefined
                 });
 
                 const pdfProducts = dispatchedProducts.map(p => ({
@@ -426,7 +426,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
         }
 
         startEntryTransition(async () => {
-            const result = await registerInventoryEntryAction(receivedProducts, user, entryReason, entrySupplier);
+            const result = await registerInventoryEntryAction(receivedProducts, user, entryReason, entrySupplier, undefined, effectiveWarehouseId);
             if (result.success) {
                 toast({
                     title: '¡Éxito!',
@@ -465,7 +465,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
         const reasonLabel = adjustmentType === 'in' ? 'Ajuste de Entrada' : 'Ajuste de Salida';
 
         startEntryTransition(async () => {
-            const result = await registerInventoryEntryAction(adjustmentProducts, user, reasonLabel);
+            const result = await registerInventoryEntryAction(adjustmentProducts, user, reasonLabel, undefined, undefined, effectiveWarehouseId);
             if (result.success) {
                 toast({
                     title: '¡Éxito!',
@@ -561,7 +561,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
         }
         
         startReturnTransition(async () => {
-            const result = await registerInventoryEntryAction(returnedProducts, user, 'Devolución de Cliente', undefined, returnCarrier);
+            const result = await registerInventoryEntryAction(returnedProducts, user, 'Devolución de Cliente', undefined, returnCarrier, effectiveWarehouseId);
             if (result.success) {
                 toast({
                     title: '¡Devolución Procesada!',
@@ -593,7 +593,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
 
         startDamageTransition(async () => {
             try {
-                const parentId = damagedProduct.parentId || (damagedProduct as Product).id;
+                const parentId = 'parentId' in damagedProduct ? damagedProduct.parentId! : damagedProduct.id;
                 await registerDamagedProduct(
                     parentId,
                     1, // For now, we handle one damaged product at a time from this UI
@@ -661,7 +661,7 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                 {damagedProduct && (
                     <div className="flex flex-col items-center justify-center gap-4 my-4">
                         <Image
-                            src={damagedProduct.parentImageUrl || (damagedProduct as Product).imageUrl}
+                            src={'parentImageUrl' in damagedProduct ? damagedProduct.parentImageUrl || '' : (damagedProduct as Product).imageUrl}
                             alt={damagedProduct.name}
                             width={128}
                             height={128}

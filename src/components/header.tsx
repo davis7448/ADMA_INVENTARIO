@@ -92,28 +92,36 @@ export default function AppHeader() {
       </div>
 
       <div className="flex items-center gap-4 ml-auto">
-        <div className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-muted-foreground" />
-            <Select 
-                value={currentWarehouse?.id || 'all'} 
-                onValueChange={handleWarehouseChange}
-            >
-                <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Seleccionar bodega" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Todas las Bodegas</SelectItem>
-                    {warehouses.map(wh => (
-                        <SelectItem 
-                            key={wh.id} 
-                            value={wh.id}
-                        >
-                            {wh.name}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-        </div>
+        {user.role !== 'logistics' && (
+          <div className="flex items-center gap-2">
+              <Building className="h-5 w-5 text-muted-foreground" />
+              <Select
+                  value={currentWarehouse?.id || 'all'}
+                  onValueChange={handleWarehouseChange}
+              >
+                  <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Seleccionar bodega" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="all">Todas las Bodegas</SelectItem>
+                      {warehouses.map(wh => (
+                          <SelectItem
+                              key={wh.id}
+                              value={wh.id}
+                          >
+                              {wh.name}
+                          </SelectItem>
+                      ))}
+                  </SelectContent>
+              </Select>
+          </div>
+        )}
+        {user.role === 'logistics' && currentWarehouse && (
+          <div className="flex items-center gap-2">
+              <Building className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">{currentWarehouse.name}</span>
+          </div>
+        )}
 
         <Button variant="ghost" size="icon" className="rounded-full">
             <Bell className="h-4 w-4" />

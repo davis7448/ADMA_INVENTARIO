@@ -24,6 +24,7 @@ import { ProfileManagement } from './profile-management';
 import { EntryReasonsManagement } from './entry-reasons-management';
 import { WarehouseManagement } from './warehouse-management';
 import { LocationManagement } from './location-management';
+import { reconcileCancelledExceptions } from '@/app/actions/data-reconciliation';
 
 interface SettingsContentProps {
     initialRotationCategories: RotationCategory[];
@@ -40,6 +41,7 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
     const [locations, setLocations] = useState<Location[]>(initialLocations);
     const [loading, setLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isReconciling, setIsReconciling] = useState(false);
     const { user } = useAuth();
     const { toast } = useToast();
 
@@ -107,6 +109,34 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
             });
         } finally {
             setIsSaving(false);
+        }
+    }
+
+    const handleReconcileData = async () => {
+        setIsReconciling(true);
+        try {
+            const result = await reconcileCancelledExceptions();
+            if (result.errors.length > 0) {
+                toast({
+                    title: 'Conciliación completada con errores',
+                    description: `Se conciliaron ${result.reconciled} órdenes. Errores: ${result.errors.join(', ')}`,
+                    variant: 'destructive',
+                });
+            } else {
+                toast({
+                    title: '¡Éxito!',
+                    description: `Se conciliaron ${result.reconciled} órdenes correctamente.`,
+                });
+            }
+        } catch (error) {
+            console.error(error);
+            toast({
+                title: 'Error',
+                description: 'No se pudo completar la conciliación. Inténtalo de nuevo.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsReconciling(false);
         }
     }
 
@@ -192,6 +222,29 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
                 </CardFooter>
             )}
           </Card>
+
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                  <CardTitle>Conciliación de Datos</CardTitle>
+                  <CardDescription>
+                      Corrige inconsistencias entre órdenes de despacho y movimientos de inventario.
+                      Útil cuando se eliminan movimientos manualmente y los datos quedan desactualizados.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                      Esta acción revisará las órdenes con anulaciones y eliminará las excepciones canceladas
+                      que no tengan movimientos de inventario correspondientes.
+                  </p>
+              </CardContent>
+              <CardFooter className="border-t px-6 py-4">
+                  <Button onClick={handleReconcileData} disabled={isReconciling}>
+                      {isReconciling ? 'Conciliando...' : 'Conciliar Datos'}
+                  </Button>
+              </CardFooter>
+            </Card>
+          )}
         </div>
     )
 }

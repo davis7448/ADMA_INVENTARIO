@@ -14,3 +14,5 @@ runConfig:
 secretEnvironmentVariables:
   - key: FIREBASE_PRIVATE_KEY
     secret: firebase-private-key
+  - key: GEMINI_API_KEY
+    secret: gemini-api-key

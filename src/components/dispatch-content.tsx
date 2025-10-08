@@ -2,9 +2,9 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Image from 'next/image';
-import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders } from '@/lib/api';
+import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders, getDispatchOrders } from '@/lib/api';
 import type { DispatchOrder, Product, Platform, Carrier } from '@/lib/types';
 import {
   Card,
@@ -33,12 +33,14 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '
 import { Calendar } from '@/components/ui/calendar';
 import type { DateRange } from 'react-day-picker';
 import { format, startOfDay, endOfDay } from 'date-fns';
-import { Check, ChevronsUpDown, Calendar as CalendarIcon, X, Search } from 'lucide-react';
+import { Check, ChevronsUpDown, Calendar as CalendarIcon, X, Search, Download } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import * as XLSX from 'xlsx';
 
 interface GroupedPendingProduct {
     product: Product;
@@ -53,34 +55,42 @@ interface DispatchContentProps {
     initialPendingOrders: DispatchOrder[];
     initialPartialOrders: DispatchOrder[];
     initialProducts: Product[];
+    initialAllProducts: Product[];
     initialPlatforms: Platform[];
     initialCarriers: Carrier[];
 }
 
-export function DispatchContent({ 
-    initialPendingOrders,
-    initialPartialOrders,
-    initialProducts,
-    initialPlatforms,
-    initialCarriers
-}: DispatchContentProps) {
-  const { currentWarehouse } = useAuth();
-  const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>(initialPendingOrders);
-  const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>(initialPartialOrders);
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
-  const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
-  const [productsById, setProductsById] = useState<Record<string, Product>>({});
-  const [loading, setLoading] = useState(false);
+export function DispatchContent({
+     initialPendingOrders,
+     initialPartialOrders,
+     initialProducts,
+     initialAllProducts,
+     initialPlatforms,
+     initialCarriers
+ }: DispatchContentProps) {
+   const { currentWarehouse } = useAuth();
+   const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>(initialPendingOrders);
+   const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>(initialPartialOrders);
+   const [products, setProducts] = useState<Product[]>(initialProducts);
+   const [platforms, setPlatforms] = useState<Platform[]>(initialPlatforms);
+   const [carriers, setCarriers] = useState<Carrier[]>(initialCarriers);
+   const [productsById, setProductsById] = useState<Record<string, Product>>({});
+   const [loading, setLoading] = useState(false);
 
   // Filter states
   const [filterProductId, setFilterProductId] = useState<string>('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [filterTrackingNumbers, setFilterTrackingNumbers] = useState('');
-  
+
   // Search Dialog State
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Tracking Search States
+  const [searchTrackingNumbers, setSearchTrackingNumbers] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchProgress, setSearchProgress] = useState({ current: 0, total: 0 });
 
 
   const fetchData = async () => {
@@ -111,7 +121,7 @@ export function DispatchContent({
     setProducts(initialProducts);
     setPlatforms(initialPlatforms);
     setCarriers(initialCarriers);
-    const newProductsById = initialProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>);
+    const newProductsById = initialAllProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>);
     setProductsById(newProductsById);
 }, [initialPendingOrders, initialPartialOrders, initialProducts, initialPlatforms, initialCarriers]);
 
@@ -166,7 +176,120 @@ export function DispatchContent({
     fetchData(); // Refresh both lists after an order is processed
   }
 
-  const getStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial') => {
+  const normalizeTrackingNumber = (trackingNumber: string): string => {
+    // If starts with '24' and has 11 digits, add '0' at the beginning (Interrapidisimo/Envía)
+    if (trackingNumber.startsWith('24') && trackingNumber.length === 11) {
+      return '0' + trackingNumber;
+    }
+    // If starts with '3' and has 11 digits, prepend '7' and append '001' (for 15-digit guides starting with 7)
+    if (trackingNumber.startsWith('3') && trackingNumber.length === 11) {
+      return '7' + trackingNumber + '001';
+    }
+    return trackingNumber;
+  };
+
+  const processTrackingBatch = (batch: string[], allOrders: any[]): any[] => {
+    return batch.map(originalTrackingNumber => {
+      const normalizedTrackingNumber = normalizeTrackingNumber(originalTrackingNumber);
+      const foundOrder = allOrders.find(order =>
+        order.trackingNumbers?.includes(normalizedTrackingNumber) ||
+        order.exceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber) ||
+        order.cancelledExceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)
+      );
+
+      if (foundOrder) {
+        let status: string;
+        if (foundOrder.trackingNumbers?.includes(normalizedTrackingNumber)) {
+          status = foundOrder.status;
+        } else if (foundOrder.exceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)) {
+          status = 'Pendiente/Excepción';
+        } else if (foundOrder.cancelledExceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)) {
+          status = 'Anulada';
+        } else {
+          status = 'Desconocido';
+        }
+
+        return {
+          trackingNumber: originalTrackingNumber,
+          status,
+          dispatchId: foundOrder.dispatchId,
+          date: foundOrder.date.toISOString(),
+          platformName: platformNames[foundOrder.platformId],
+          carrierName: carrierNames[foundOrder.carrierId],
+        };
+      } else {
+        return {
+          trackingNumber: originalTrackingNumber,
+          status: 'No despachada',
+          dispatchId: null,
+          date: null,
+          platformName: null,
+          carrierName: null,
+        };
+      }
+    });
+  };
+
+  const handleSearchTrackingNumbers = async () => {
+    const trackingList = searchTrackingNumbers.split('\n').map(t => t.trim()).filter(Boolean);
+    if (trackingList.length === 0) return;
+
+    setIsSearching(true);
+    setSearchResults([]);
+    setSearchProgress({ current: 0, total: trackingList.length });
+
+    try {
+      const warehouseId = currentWarehouse?.id;
+      const { orders: allOrders } = await getDispatchOrders({ fetchAll: true, filters: { warehouseId } });
+
+      const BATCH_SIZE = 100;
+      const batches = [];
+      for (let i = 0; i < trackingList.length; i += BATCH_SIZE) {
+        batches.push(trackingList.slice(i, i + BATCH_SIZE));
+      }
+
+      let allResults: any[] = [];
+
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        const batchResults = processTrackingBatch(batch, allOrders);
+        allResults = [...allResults, ...batchResults];
+
+        setSearchProgress({ current: Math.min((i + 1) * BATCH_SIZE, trackingList.length), total: trackingList.length });
+        setSearchResults([...allResults]);
+
+        // Small delay to prevent UI blocking
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+
+    } catch (error) {
+      console.error('Error searching tracking numbers:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+      setSearchProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const handleExportToExcel = () => {
+    if (searchResults.length === 0) return;
+
+    const data = searchResults.map(result => ({
+      'Número de Guía': result.trackingNumber,
+      'Estado': result.status,
+      'Relación (ID Despacho)': result.dispatchId || 'N/A',
+      'Fecha': result.date ? formatToTimeZone(new Date(result.date), 'dd/MM/yyyy HH:mm') : 'N/A',
+      'Plataforma': result.platformName || 'N/A',
+      'Transportadora': result.carrierName || 'N/A',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Resultados de Búsqueda');
+    XLSX.writeFile(wb, `resultados_guia_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`);
+  };
+
+  const getStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial' | 'Anulada') => {
     switch (status) {
       case 'Pendiente':
         return <Badge variant="destructive">Pendiente</Badge>;
@@ -174,6 +297,8 @@ export function DispatchContent({
         return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Despachada</Badge>;
       case 'Parcial':
         return <Badge variant="secondary">Parcial</Badge>;
+      case 'Anulada':
+        return <Badge variant="outline">Anulada</Badge>;
       default:
         return <Badge variant="outline">Desconocido</Badge>;
     }
@@ -349,9 +474,10 @@ export function DispatchContent({
       </div>
 
       <Tabs defaultValue="pendientes" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="pendientes">Pendientes</TabsTrigger>
             <TabsTrigger value="parciales">Parciales</TabsTrigger>
+            <TabsTrigger value="buscar">Buscar Guías</TabsTrigger>
         </TabsList>
         <TabsContent value="pendientes">
             <Card>
@@ -537,6 +663,75 @@ export function DispatchContent({
                             {hasActiveFilters ? "No se encontraron despachos parciales para los filtros seleccionados." : "No hay órdenes con despacho parcial."}
                         </div>
                     )}
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="buscar">
+            <Card>
+                <CardHeader>
+                <CardTitle>Buscar Guías de Despacho</CardTitle>
+                <CardDescription>
+                    Ingresa números de guía para verificar si han sido despachados y obtener detalles. El sistema normaliza automáticamente: guías que empiecen con '24' y tengan 11 dígitos agregando un '0' al inicio, y guías que empiecen con '3' y tengan 11 dígitos agregando '7' al inicio y '001' al final.
+                </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="tracking-search">Números de Guía (uno por línea)</Label>
+                            <Textarea
+                                id="tracking-search"
+                                placeholder="GUIA001&#10;GUIA002&#10;GUIA003"
+                                value={searchTrackingNumbers}
+                                onChange={(e) => setSearchTrackingNumbers(e.target.value)}
+                                rows={5}
+                            />
+                        </div>
+                        <div className="flex gap-2">
+                            <Button onClick={handleSearchTrackingNumbers} disabled={isSearching || loading}>
+                                {isSearching ? `Buscando... ${searchProgress.current}/${searchProgress.total}` : 'Buscar'}
+                            </Button>
+                            {searchResults.length > 0 && (
+                                <Button onClick={handleExportToExcel} variant="outline">
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Exportar a Excel
+                                </Button>
+                            )}
+                        </div>
+                        {isSearching && (
+                            <div className="mt-2 text-sm text-muted-foreground">
+                                Procesando lote {Math.ceil(searchProgress.current / 100)} de {Math.ceil(searchProgress.total / 100)}...
+                            </div>
+                        )}
+                        {searchResults.length > 0 && (
+                            <div className="mt-6">
+                                <h4 className="text-lg font-semibold mb-4">Resultados de Búsqueda</h4>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Número de Guía</TableHead>
+                                            <TableHead>Estado</TableHead>
+                                            <TableHead>Relación (ID Despacho)</TableHead>
+                                            <TableHead>Fecha</TableHead>
+                                            <TableHead>Plataforma</TableHead>
+                                            <TableHead>Transportadora</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {searchResults.map((result, index) => (
+                                            <TableRow key={index}>
+                                                <TableCell className="font-mono">{result.trackingNumber}</TableCell>
+                                                <TableCell>{getStatusBadge(result.status)}</TableCell>
+                                                <TableCell>{result.dispatchId || 'N/A'}</TableCell>
+                                                <TableCell>{result.date ? formatToTimeZone(new Date(result.date), 'dd/MM/yyyy HH:mm') : 'N/A'}</TableCell>
+                                                <TableCell>{result.platformName || 'N/A'}</TableCell>
+                                                <TableCell>{result.carrierName || 'N/A'}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </div>
                 </CardContent>
             </Card>
         </TabsContent>

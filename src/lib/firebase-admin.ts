@@ -3,42 +3,91 @@ import { config } from 'dotenv';
 config(); // Load environment variables from .env file
 
 import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 // IMPORTANT: This service account is for demo purposes ONLY.
 // In a real application, you MUST secure this file and your service account key.
 // Do not commit service account keys to your repository.
-const serviceAccount = {
-  "type": "service_account",
-  "project_id": "studio-9748962172-82b35",
-  "private_key_id": "d991b01c312480373e226ad5a34241ce80c05423",
-  "private_key": process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  "client_email": "firebase-adminsdk-i4p1b@studio-9748962172-82b35.iam.gserviceaccount.com",
-  "client_id": "117281057431109312213",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-i4p1b%40studio-9748962172-82b35.iam.gserviceaccount.com"
-};
+
+async function getPrivateKey(): Promise<string | undefined> {
+    try {
+        // First try environment variable (Firebase App Hosting injection)
+        if (process.env.FIREBASE_PRIVATE_KEY) {
+            return process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+        }
+
+        // Fallback: Try to access secret directly from Secret Manager
+        try {
+            const client = new SecretManagerServiceClient();
+            const [version] = await client.accessSecretVersion({
+                name: 'projects/studio-9748962172-82b35/secrets/firebase-private-key/versions/latest',
+            });
+            const secretData = version.payload?.data?.toString();
+            if (secretData) {
+                console.log('Successfully retrieved private key from Secret Manager');
+                // Parse the JSON and extract the private_key field
+                const keyData = JSON.parse(secretData);
+                const privateKey = keyData.private_key;
+                if (privateKey) {
+                    // Convert escape sequences to actual newlines
+                    return privateKey.replace(/\\n/g, '\n');
+                }
+            }
+        } catch (secretError) {
+            console.warn('Could not access secret from Secret Manager:', secretError instanceof Error ? secretError.message : String(secretError));
+        }
+
+        // Last fallback: Check for explicit secret name
+        if (process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME) {
+            const client = new SecretManagerServiceClient();
+            const [version] = await client.accessSecretVersion({
+                name: `projects/${process.env.GCP_PROJECT_ID || 'studio-9748962172-82b35'}/secrets/${process.env.FIREBASE_PRIVATE_KEY_SECRET_NAME}/versions/latest`,
+            });
+            return version.payload?.data?.toString();
+        }
+
+        return undefined;
+    } catch (error) {
+        console.error('Error getting Firebase private key:', error);
+        return undefined;
+    }
+}
 
 let app: App;
 
-if (!process.env.FIREBASE_PRIVATE_KEY) {
-    console.warn("FIREBASE_PRIVATE_KEY is not set. Firebase Admin SDK will not be initialized. This is expected in client-side rendering.");
-    // Create a dummy app or handle it gracefully
-    // A more robust solution might throw an error if used where it's required.
-    app = {} as App; // Dummy object to prevent crashing on import
-} else {
+async function initializeAdminApp() {
+    const privateKey = await getPrivateKey();
+    console.log('Private key set:', !!privateKey);
+    if (!privateKey) {
+        console.warn("FIREBASE_PRIVATE_KEY or FIREBASE_PRIVATE_KEY_SECRET_NAME is not set. Firebase Admin SDK will not be initialized. This is expected in client-side rendering.");
+        app = {} as App;
+        return;
+    }
+
+    const serviceAccount = {
+        projectId: "studio-9748962172-82b35",
+        privateKey: privateKey,
+        clientEmail: "firebase-adminsdk-fbsvc@studio-9748962172-82b35.iam.gserviceaccount.com",
+    };
+
     try {
         app = getApps().find(app => app.name === 'admin') || initializeApp({
             credential: cert(serviceAccount),
+            databaseURL: "https://studio-9748962172-82b35-default-rtdb.firebaseio.com"
         }, 'admin');
+        console.log('Firebase Admin app initialized');
     } catch(e: any) {
+        console.error('Error initializing Firebase Admin:', e.message);
         if (e.message.includes('Failed to parse private key')) {
-            throw new Error("FIREBASE_PRIVATE_KEY is invalid. Please check your .env file or production environment variables.");
+            throw new Error("FIREBASE_PRIVATE_KEY is invalid. Please check your .env file or secret.");
         }
         throw e;
     }
 }
 
-
-export { app };
+export async function getApp(): Promise<App> {
+    if (!app) {
+        await initializeAdminApp();
+    }
+    return app;
+}

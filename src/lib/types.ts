@@ -10,35 +10,36 @@ export type ProductVariant = {
 };
 
 export type Product = {
-  id: string;
-  sku?: string; // SKU is now optional for the parent product
-  name: string;
-  description: string;
-  imageUrl: string;
-  imageHint: string;
-  categoryId: string;
-  priceDropshipping: number;
-  priceWholesale?: number;
-  cost?: number;
-  purchaseDate?: string;
-  stock: number;
-  pendingStock: number;
-  damagedStock: number;
-  vendorId: string;
-  rotationCategoryName?: string;
-  reservations?: Reservation[]; // This will now be populated on the fly
-  contentLink?: string;
-  productType: 'simple' | 'variable';
-  variants?: ProductVariant[]; // Array to hold variants
-  createdBy?: {
-    id: string;
-    name: string;
-  };
-  lastAuditedAt?: string;
-  lastAuditedBy?: string;
-  warehouseId?: string; // New field
-  locationId?: string; // New field for location
-};
+   id: string;
+   sku?: string; // SKU is now optional for the parent product
+   name: string;
+   description: string;
+   imageUrl: string;
+   imageHint: string;
+   categoryId: string;
+   priceDropshipping: number;
+   priceWholesale?: number;
+   cost?: number;
+   purchaseDate?: string;
+   stock: number;
+   pendingStock: number;
+   damagedStock: number;
+   vendorId: string;
+   rotationCategoryName?: string;
+   reservations?: Reservation[]; // This will now be populated on the fly
+   contentLink?: string;
+   productType: 'simple' | 'variable';
+   variants?: ProductVariant[]; // Array to hold variants
+   createdBy?: {
+     id: string;
+     name: string;
+   };
+   lastAuditedAt?: string;
+   lastAuditedBy?: string;
+   warehouseId?: string; // New field
+   locationId?: string; // New field for location
+   codigoERP?: string; // Código ERP field
+ };
 
 export type Reservation = {
   id: string; // Firestore document ID
@@ -295,6 +296,7 @@ export type CancellationRequest = {
     requestDate: string;
     status: 'pending' | 'completed' | 'rejected';
     isDispatched?: boolean;
+    isPendingOrder?: boolean;
     warehouseId?: string;
 };
 

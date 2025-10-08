@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useRef, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Card,
@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getInventoryMovements, getDispatchOrders } from '@/lib/api';
+import { useAuth } from '@/hooks/use-auth';
 
 
 interface HistoryContentProps {
@@ -48,18 +49,20 @@ interface HistoryContentProps {
 }
 
 export function HistoryContent({
-    initialMovements,
-    movementsTotalPages,
-    initialDispatchOrders,
-    ordersTotalPages,
-    allProducts,
-    allPlatforms,
-    allCarriers,
-}: HistoryContentProps) {
+      initialMovements,
+      movementsTotalPages,
+      initialDispatchOrders,
+      ordersTotalPages,
+      allProducts,
+      allPlatforms,
+      allCarriers,
+  }: HistoryContentProps) {
 
-    const router = useRouter();
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
+      const router = useRouter();
+      const pathname = usePathname();
+      const searchParams = useSearchParams();
+      const { user } = useAuth();
+      const redirectedRef = useRef(false);
 
     // Filter states from URL
     const [filterPlatformId, setFilterPlatformId] = useState<string>(searchParams.get('platformId') || 'all');
@@ -108,9 +111,20 @@ export function HistoryContent({
         router.push(`${pathname}?${params.toString()}`);
     }
 
+
     const productsById = useMemo(() => allProducts.reduce((acc, p) => ({ ...acc, [p.id]: p }), {} as Record<string, Product>), [allProducts]);
     const platformNames = useMemo(() => allPlatforms.reduce((acc, p) => ({ ...acc, [p.id]: p.name }), {} as Record<string, string>), [allPlatforms]);
     const carrierNames = useMemo(() => allCarriers.reduce((acc, c) => ({ ...acc, [c.id]: c.name }), {} as Record<string, string>), [allCarriers]);
+
+    // Auto-redirect logistics users to their warehouse URL
+    useEffect(() => {
+        if (!redirectedRef.current && user?.role === 'logistics' && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
+            const warehouse = user.warehouseId || 'wh-bog';
+            console.log('Redirecting logistics user to history warehouse URL:', warehouse);
+            redirectedRef.current = true;
+            router.push(`${pathname}?warehouse=${warehouse}`);
+        }
+    }, [user, searchParams, router, pathname]);
 
     const handleDownloadPdf = (order: DispatchOrder) => {
         const productsForPdf = order.products.map(p => ({ ...p, dispatchQuantity: p.quantity }));

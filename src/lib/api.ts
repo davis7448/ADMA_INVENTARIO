@@ -1,10 +1,10 @@
-
+"use server";
 
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -34,18 +34,16 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, warehouseId } = filters;
+    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse, warehouseId, userRole } = filters;
 
     let productQuery: Query = collection(db, 'products');
 
-    if (warehouseId) {
-        if (warehouseId === 'wh-bog') {
-            productQuery = query(productQuery, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
-        }
+    // For logistics in wh-bog, we need to fetch all to filter unassigned + assigned
+    // For others, filter in query
+    if (warehouseId && warehouseId !== 'all' && !(userRole === 'logistics' && warehouseId === 'wh-bog')) {
+        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
     }
-    
+
     const allProductsSnapshot = await getDocs(productQuery);
 
     let allProducts = allProductsSnapshot.docs.map(doc => {
@@ -53,12 +51,38 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         return {
             id: doc.id,
             ...doc.data(),
-            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
+            warehouseId: data.warehouseId, // keep null for unassigned
         } as Product
     });
 
+    // Apply warehouse filter in memory for logistics in wh-bog
+    if (warehouseId && warehouseId !== 'all') {
+        if (userRole === 'logistics' && warehouseId === 'wh-bog') {
+            allProducts = allProducts.filter(p => p.warehouseId === 'wh-bog');
+        } else if (userRole !== 'logistics') {
+            allProducts = allProducts.filter(p => p.warehouseId === warehouseId);
+        }
+        // For logistics in other warehouses, already filtered in query
+    }
+
+    // Fetch and attach reservations before filtering
+    const allReservations = await getAllReservations(warehouseId);
+    const reservationsByProductId: Record<string, Reservation[]> = {};
+
+    for (const reservation of allReservations) {
+      if (!reservationsByProductId[reservation.productId]) {
+          reservationsByProductId[reservation.productId] = [];
+      }
+      reservationsByProductId[reservation.productId].push(reservation);
+    }
+
+    const allProductsWithReservations = allProducts.map(product => ({
+      ...product,
+      reservations: reservationsByProductId[product.id] || [],
+    }));
+
     // Apply remaining client-side filters
-    const filteredProducts = allProducts.filter(product => {
+    const filteredProducts = allProductsWithReservations.filter(product => {
         const lowercasedQuery = searchQuery?.toLowerCase() || '';
         const searchMatch = !searchQuery || searchQuery.length <= 2
             ? true
@@ -76,8 +100,10 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
         const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
         const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
         const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
+        const variableMatch = !onlyVariable || product.productType === 'variable';
+        const noWarehouseMatch = !noWarehouse || !product.warehouseId;
 
-        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch;
+        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch && variableMatch && noWarehouseMatch;
     });
 
     const totalCount = filteredProducts.length;
@@ -85,23 +111,12 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
 
     const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
-    const allReservations = await getAllReservations(warehouseId);
-    const reservationsByProductId: Record<string, Reservation[]> = {};
-  
-    for (const reservation of allReservations) {
-      if (!reservationsByProductId[reservation.productId]) {
-          reservationsByProductId[reservation.productId] = [];
-      }
-      reservationsByProductId[reservation.productId].push(reservation);
-    }
-    
     const productsWithData = paginatedProducts.map(product => ({
         ...product,
         purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
         lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
         damagedStock: product.damagedStock || 0,
         pendingStock: product.pendingStock || 0,
-        reservations: reservationsByProductId[product.id] || [],
     }));
 
     return { products: productsWithData, totalPages };
@@ -268,15 +283,25 @@ export const deleteProduct = async (productId: string, user: User | null): Promi
     await batch.commit();
 };
 
-export const updateProductStock = async (transaction: any, productId: string, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
-    const productRef = doc(db, 'products', productId);
-    const productSnap = await transaction.get(productRef);
+export const updateProductStock = async (transaction: any, productOrId: string | Product, quantity: number, operation: 'add' | 'subtract' | 'subtract-pending', variantSku?: string) => {
+    let productData: Product;
+    let productRef: any;
 
-    if (!productSnap.exists()) {
-        throw new Error(`Producto con ID ${productId} no existe.`);
+    if (typeof productOrId === 'string') {
+        // productOrId is productId, need to read
+        productRef = doc(db, 'products', productOrId);
+        const productSnap = await transaction.get(productRef);
+
+        if (!productSnap.exists()) {
+            throw new Error(`Producto con ID ${productOrId} no existe.`);
+        }
+
+        productData = { id: productSnap.id, ...productSnap.data() } as Product;
+    } else {
+        // productOrId is Product object
+        productData = productOrId;
+        productRef = doc(db, 'products', productData.id);
     }
-  
-    const productData = productSnap.data() as Product;
   
     if (operation === 'subtract-pending') {
         const currentPendingStock = productData.pendingStock || 0;
@@ -580,12 +605,8 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     
     let movementsQuery: Query = collection(db, 'inventoryMovements');
 
-    if (warehouseId) {
-        if (warehouseId === 'wh-bog') {
-            movementsQuery = query(movementsQuery, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
-        }
+    if (warehouseId && warehouseId !== 'all') {
+        movementsQuery = query(movementsQuery, where('warehouseId', '==', warehouseId));
     }
     
     if (startDate) {
@@ -613,8 +634,21 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
     if (movementType && movementType !== 'all') {
         movementsQuery = query(movementsQuery, where('type', '==', movementType));
     }
+
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') { // 1. Todas las bodegas
+        queries.push(movementsQuery);
+    } else if (warehouseId === 'wh-bog') { // 2. Bodega INGENIO
+        queries.push(query(movementsQuery, where('warehouseId', '==', 'wh-bog')));
+        const nullQueryBase = collection(db, 'inventoryMovements');
+        queries.push(query(nullQueryBase, where('warehouseId', '==', null)));
+    } else { // 3. Bodega Laboratorio (o cualquier otra específica)
+        queries.push(query(movementsQuery, where('warehouseId', '==', warehouseId)));
+    }
     
-    const snapshot = await getDocs(movementsQuery);
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
     
     let allMovements = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -726,51 +760,10 @@ export const addInventoryMovement = async (movementData: Omit<InventoryMovement,
   }
 };
 
-export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string): Promise<void> => {
-    let operation: 'add' | 'subtract' = 'add';
-    let movementType: InventoryMovement['type'] = 'Entrada';
-    let notes = reasonLabel;
-
-    if (reasonLabel === 'Ajuste de Salida') {
-        operation = 'subtract';
-        movementType = 'Ajuste de Salida';
-        notes = 'Ajuste de Salida manual';
-    } else if (reasonLabel === 'Ajuste de Entrada') {
-        movementType = 'Ajuste de Entrada';
-        notes = 'Ajuste de Entrada manual';
-    } else if (reasonLabel === 'Devolución de Cliente') {
-        movementType = 'Entrada';
-    } else { // Recepción de Proveedor
-        const supplier = await getSupplierById(supplierId!);
-        notes = `Recepción de Proveedor: ${supplier?.name || 'Desconocido'}`;
-    }
-
-    for (const item of items) {
-        if (reasonLabel === 'Devolución de Cliente') {
-            notes = `Devolución de cliente. Guía: ${item.trackingNumber}`;
-        }
-        
-        await runTransaction(db, async (transaction) => {
-            await updateProductStock(transaction, item.productId, item.quantity, operation, item.sku);
-        });
-        
-        await addInventoryMovement({
-            type: movementType,
-            productId: item.productId,
-            productName: item.name,
-            quantity: item.quantity,
-            notes: notes,
-            userId: user?.id,
-            userName: user?.name,
-            carrierId,
-            warehouseId: user?.warehouseId || DEFAULT_WAREHOUSE_ID, // Use user's warehouse
-        });
-    }
-};
 
 // Dispatch Order Functions
 
-export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy, warehouseId }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'>): Promise<{ id: string, dispatchId: string, date: Date }> => {
+export const createDispatchOrder = async ({ platformId, carrierId, products, createdBy, warehouseId }: Omit<DispatchOrder, 'id' | 'status' | 'date' | 'totalItems' | 'trackingNumbers' | 'exceptions' | 'cancelledExceptions' | 'dispatchId'> & { warehouseId?: string | null }): Promise<{ id: string, dispatchId: string, date: Date }> => {
     const allPlatforms = await getPlatforms();
     const allCarriers = await getCarriers();
     const platformName = allPlatforms.find(p => p.id === platformId)?.name || 'N/A';
@@ -872,12 +865,8 @@ const parseFirestoreDate = (dateValue: any): Date => {
     
     let ordersQuery: Query = collection(db, 'dispatchOrders');
 
-    if (warehouseId) {
-        if (warehouseId === 'wh-bog') {
-            ordersQuery = query(ordersQuery, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
-        }
+    if (warehouseId && warehouseId !== 'all') {
+        ordersQuery = query(ordersQuery, where('warehouseId', '==', warehouseId));
     }
 
     if (startDate) {
@@ -893,12 +882,26 @@ const parseFirestoreDate = (dateValue: any): Date => {
         ordersQuery = query(ordersQuery, where('carrierId', '==', carrierId));
     }
 
-    const snapshot = await getDocs(ordersQuery);
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(ordersQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(ordersQuery, where('warehouseId', '==', 'wh-bog')));
+        const nullQueryBase = collection(db, 'dispatchOrders');
+        queries.push(query(nullQueryBase, where('warehouseId', '==', null)));
+    } else {
+        queries.push(query(ordersQuery, where('warehouseId', '==', warehouseId)));
+    }
+
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
 
     let allOrders = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        date: parseFirestoreDate(doc.data().date)
+        date: parseFirestoreDate(doc.data().date),
+        warehouseId: doc.data().warehouseId // Keep null if originally null
     } as DispatchOrder));
 
     const filteredOrders = allOrders.filter(order => {
@@ -920,60 +923,72 @@ const parseFirestoreDate = (dateValue: any): Date => {
 
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
-    
-    if (warehouseId) {
-        if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
-        }
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+        queries.push(query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'), where('warehouseId', '==', null)));
+    } else {
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
-    
-    const snapshot = await getDocs(baseQuery);
+
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
 
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { 
+        return {
             id: doc.id,
             ...data,
             date: parseFirestoreDate(data.date),
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as DispatchOrder
     });
 
-    return allOrders;
+    return allOrders.sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 
 export const getPartialDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'));
-    
-    if (warehouseId) {
-        if (warehouseId === 'wh-bog') {
-            baseQuery = query(baseQuery, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            baseQuery = query(baseQuery, where('warehouseId', '==', warehouseId));
-        }
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+        queries.push(query(collection(db, 'dispatchOrders'), where('status', '==', 'Parcial'), where('warehouseId', '==', null)));
+    } else {
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
 
-    const snapshot = await getDocs(baseQuery);
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
 
     let allOrders = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { 
+        return {
             id: doc.id,
             ...data,
             date: parseFirestoreDate(data.date),
+            warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as DispatchOrder
     });
-    
-    return allOrders;
+
+    return allOrders.sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 
-export const processDispatch = async (orderId: string, trackingNumbers: string[], newExceptions: DispatchException[]) => {
+export const processDispatch = async (
+    orderId: string, 
+    trackingNumbers: string[], 
+    newExceptions: DispatchException[]
+): Promise<{ success: boolean; requiresAnnulment?: boolean; guide?: string; cancellationRequestId?: string; error?: string }> => {
     const orderRef = doc(db, 'dispatchOrders', orderId);
 
     if (trackingNumbers.length > 0) {
         const cancellationRequestsCol = collection(db, 'cancellationRequests');
-        const CHUNK_SIZE = 30; // Firestore 'in' query limit
+        const CHUNK_SIZE = 30;
 
         for (let i = 0; i < trackingNumbers.length; i += CHUNK_SIZE) {
             const chunk = trackingNumbers.slice(i, i + CHUNK_SIZE);
@@ -983,87 +998,95 @@ export const processDispatch = async (orderId: string, trackingNumbers: string[]
             if (!cancellationSnapshot.empty) {
                 const cancelledGuide = cancellationSnapshot.docs[0].data().trackingNumber;
                 const cancellationRequestId = cancellationSnapshot.docs[0].id;
-                // Throw a specific error that includes the request ID
-                const error = new Error(`La guía ${cancelledGuide} tiene una solicitud de anulación pendiente y no puede ser despachada.`);
-                (error as any).cancellationRequestId = cancellationRequestId;
-                throw error;
+                return {
+                    success: false,
+                    requiresAnnulment: true,
+                    guide: cancelledGuide,
+                    cancellationRequestId: cancellationRequestId,
+                };
             }
         }
     }
 
-
-    await runTransaction(db, async (transaction) => {
-        const orderSnap = await transaction.get(orderRef);
-        if (!orderSnap.exists()) {
-            throw new Error('No se encontró la órden');
-        }
-        const orderData = orderSnap.data() as DispatchOrder;
-
-        const allProductIds = new Set<string>();
-        orderData.products.forEach(p => allProductIds.add(p.productId));
-        newExceptions.forEach(ex => ex.products.forEach(p => allProductIds.add(p.productId)));
-
-        const productRefs = Array.from(allProductIds).map(id => doc(db, 'products', id));
-        const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
-        const productDataMap = new Map<string, Product>();
-        productSnaps.forEach(snap => {
-            if (snap.exists()) {
-                productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const orderSnap = await transaction.get(orderRef);
+            if (!orderSnap.exists()) {
+                throw new Error('No se encontró la órden');
             }
-        });
-        
-        const existingExceptions = new Map((orderData.exceptions || []).map(ex => [ex.trackingNumber, ex]));
-        const processedExceptionGuides = new Set<string>();
-
-        for (const tn of trackingNumbers) {
-            if (existingExceptions.has(tn)) {
-                processedExceptionGuides.add(tn);
-            }
-        }
-        
-        for (const guide of Array.from(processedExceptionGuides)) {
-            const exception = existingExceptions.get(guide)!;
-            for (const p of exception.products) {
-                const productData = productDataMap.get(p.productId);
-                if (productData) {
-                    const newPendingStock = Math.max(0, (productData.pendingStock || 0) - p.quantity);
-                    transaction.update(doc(db, 'products', p.productId), { pendingStock: newPendingStock });
+            const orderData = orderSnap.data() as DispatchOrder;
+    
+            const allProductIds = new Set<string>();
+            orderData.products.forEach(p => allProductIds.add(p.productId));
+            newExceptions.forEach(ex => ex.products.forEach(p => allProductIds.add(p.productId)));
+    
+            const productRefs = Array.from(allProductIds).map(id => doc(db, 'products', id));
+            const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+            const productDataMap = new Map<string, Product>();
+            productSnaps.forEach(snap => {
+                if (snap.exists()) {
+                    productDataMap.set(snap.id, { id: snap.id, ...snap.data() } as Product);
+                }
+            });
+            
+            const existingExceptions = new Map((orderData.exceptions || []).map(ex => [ex.trackingNumber, ex]));
+            const processedExceptionGuides = new Set<string>();
+    
+            for (const tn of trackingNumbers) {
+                if (existingExceptions.has(tn)) {
+                    processedExceptionGuides.add(tn);
                 }
             }
-        }
-        
-        for (const ex of newExceptions) {
-            for (const exProd of ex.products) {
-                const productData = productDataMap.get(exProd.productId);
-                if (productData) {
-                    const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
-                    transaction.update(doc(db, 'products', exProd.productId), { pendingStock: newPendingStock });
-
-                    const alertRef = doc(collection(db, 'auditAlerts'));
-                    const newAlert: Omit<AuditAlert, 'id'> = {
-                        date: Timestamp.now(),
-                        productId: exProd.productId,
-                        productName: productData.name,
-                        productSku: exProd.variantSku || productData.sku || 'N/A',
-                        message: `Excepción en despacho: El producto se marcó como no disponible para envío.`,
-                        dispatchId: orderData.dispatchId,
-                        exceptionTrackingNumber: ex.trackingNumber,
-                    };
-                    transaction.set(alertRef, newAlert);
+            
+            for (const guide of Array.from(processedExceptionGuides)) {
+                const exception = existingExceptions.get(guide)!;
+                for (const p of exception.products) {
+                    const productData = productDataMap.get(p.productId);
+                    if (productData) {
+                        const newPendingStock = Math.max(0, (productData.pendingStock || 0) - p.quantity);
+                        transaction.update(doc(db, 'products', p.productId), { pendingStock: newPendingStock });
+                    }
                 }
             }
-        }
-
-        const finalRemainingExceptions = (orderData.exceptions || []).filter(ex => !processedExceptionGuides.has(ex.trackingNumber));
-        const finalExceptions = [...finalRemainingExceptions, ...newExceptions];
-        const finalStatus = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
-
-        transaction.update(orderRef, {
-            status: finalStatus,
-            trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
-            exceptions: finalExceptions,
+            
+            for (const ex of newExceptions) {
+                for (const exProd of ex.products) {
+                    const productData = productDataMap.get(exProd.productId);
+                    if (productData) {
+                        const newPendingStock = (productData.pendingStock || 0) + exProd.quantity;
+                        transaction.update(doc(db, 'products', exProd.productId), { pendingStock: newPendingStock });
+    
+                        const alertRef = doc(collection(db, 'auditAlerts'));
+                        const newAlert: Omit<AuditAlert, 'id'> = {
+                            date: Timestamp.now().toDate().toISOString(),
+                            productId: exProd.productId,
+                            productName: productData.name,
+                            productSku: exProd.variantSku || productData.sku || 'N/A',
+                            message: `Excepción en despacho: El producto se marcó como no disponible para envío.`,
+                            dispatchId: orderData.dispatchId,
+                            exceptionTrackingNumber: ex.trackingNumber,
+                        };
+                        transaction.set(alertRef, newAlert);
+                    }
+                }
+            }
+    
+            const finalRemainingExceptions = (orderData.exceptions || []).filter(ex => !processedExceptionGuides.has(ex.trackingNumber));
+            const finalExceptions = [...finalRemainingExceptions, ...newExceptions];
+            const finalStatus = finalExceptions.length > 0 ? 'Parcial' : 'Despachada';
+    
+            transaction.update(orderRef, {
+                status: finalStatus,
+                trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
+                exceptions: finalExceptions,
+            });
         });
-    });
+        return { success: true };
+    } catch (error) {
+        console.error("Error in processDispatch transaction:", error);
+        const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado durante la transacción.';
+        return { success: false, error: errorMessage };
+    }
 };
 
 export const cancelPendingDispatchItems = async (
@@ -1110,7 +1133,7 @@ export const cancelPendingDispatchItems = async (
                 }
 
                 // Logic to reduce pending stock
-                await updateProductStock(transaction, itemToCancel.productId, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantSku);
+                await updateProductStock(transaction, productData, itemToCancel.quantity, 'subtract-pending', itemToCancel.variantSku);
 
                 movementsToCreate.push({
                     type: 'Anulado',
@@ -1129,7 +1152,22 @@ export const cancelPendingDispatchItems = async (
         }
         
         const updatedExceptions = (orderData.exceptions || []).filter(ex => !guidesSet.has(ex.trackingNumber));
-        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...exceptionsToCancel];
+
+        // Clean exceptions to avoid undefined fields in Firestore
+        const cleanedExceptionsToCancel = exceptionsToCancel.map(ex => ({
+            trackingNumber: ex.trackingNumber,
+            products: ex.products.map(p => {
+                const cleanProduct: Partial<DispatchExceptionProduct> = {
+                    productId: p.productId,
+                    quantity: p.quantity,
+                };
+                if (p.variantId) cleanProduct.variantId = p.variantId;
+                if (p.variantSku) cleanProduct.variantSku = p.variantSku;
+                return cleanProduct as DispatchExceptionProduct;
+            })
+        }));
+
+        const updatedCancelledExceptions = [...(orderData.cancelledExceptions || []), ...cleanedExceptionsToCancel];
         
         const updatePayload: Record<string, any> = {
             exceptions: updatedExceptions,
@@ -1148,12 +1186,12 @@ export const cancelPendingDispatchItems = async (
             ...updatePayload,
         };
     });
-    
+
     // --- 3. POST-TRANSACTION OPERATIONS ---
     for (const movement of movementsToCreate) {
         await addInventoryMovement(movement);
     }
-    
+
     return updatedOrderData;
 };
 
@@ -1194,8 +1232,8 @@ export const annulDispatchedGuideItems = async (
                 console.warn(`Producto ${item.productId} no encontrado durante la anulación. Se omitirá la actualización de stock.`);
                 continue;
             }
-            
-            await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+
+            await updateProductStock(transaction, productData, item.quantity, 'add', item.sku);
 
             movementsToCreate.push({
                 type: 'Anulado',
@@ -1269,11 +1307,11 @@ export const annulGuideDuringDispatch = async (
 
         // Now, prepare all writes.
         const updatedProducts: DispatchOrderProduct[] = [...order.products];
-        
+
         for (const item of itemsToAnnul) {
             const productData = productDataMap.get(item.productId);
             if (productData) {
-                await updateProductStock(transaction, item.productId, item.quantity, 'add', item.sku);
+                await updateProductStock(transaction, productData, item.quantity, 'add', item.sku);
 
                 movementsToCreate.push({
                     type: 'Anulado',
@@ -1310,7 +1348,10 @@ export const annulGuideDuringDispatch = async (
         transaction.update(orderRef, updatePayload);
         transaction.update(cancellationRequestRef, { status: 'completed' });
 
-        return updatePayload;
+        return {
+            ...order,
+            ...updatePayload,
+        };
     });
 
     for (const movement of movementsToCreate) {
@@ -1324,18 +1365,22 @@ export const annulGuideDuringDispatch = async (
 
 // Audit Alert Functions
 export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]> => {
-    let q: Query = query(collection(db, 'auditAlerts'));
+    let baseQuery: Query = collection(db, 'auditAlerts');
+    let queries: Query[] = [];
 
-    if (warehouseId && warehouseId !== 'all') {
-        if (warehouseId === 'wh-bog') {
-            q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            q = query(q, where('warehouseId', '==', warehouseId));
-        }
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+        queries.push(query(collection(db, 'auditAlerts'), where('warehouseId', '==', null)));
+    } else {
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
 
-    const alertSnapshot = await getDocs(q);
-    const alertList = alertSnapshot.docs.map(doc => {
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
+
+    const alertList = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
@@ -1348,7 +1393,7 @@ export const getAuditAlerts = async (warehouseId?: string): Promise<AuditAlert[]
 
 // Pending Inventory Functions
 export const getPendingInventory = async (warehouseId?: string): Promise<PendingInventoryItem[]> => {
-    const productsResult = await getProducts({ fetchAll: true, filters: { warehouseId } });
+    const productsResult = await getProducts({ fetchAll: true, filters: { warehouseId: warehouseId === 'wh-bog' ? undefined : warehouseId } });
     const productsById = new Map(productsResult.products.map(p => [p.id, p]));
 
     const dispatchOrders = await getPartialDispatchOrders(warehouseId);
@@ -1572,27 +1617,30 @@ export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<strin
 
 // Reservation Functions
 export const getAllReservations = async (warehouseId?: string): Promise<Reservation[]> => {
-    let q: Query = collection(db, 'reservations');
-    
-    if (warehouseId) {
-        if (warehouseId === 'wh-bog') {
-            q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            q = query(q, where('warehouseId', '==', warehouseId));
-        }
+    let baseQuery: Query = collection(db, 'reservations');
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+        queries.push(query(collection(db, 'reservations'), where('warehouseId', '==', null)));
+    } else {
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
-    
-    const snapshot = await getDocs(q);
-    
+
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
+
     let allReservations = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { 
-            id: doc.id, 
-            ...data,
-            date: parseFirestoreDate(data.date).toISOString(),
+        return {
+          id: doc.id,
+          ...data,
+          date: parseFirestoreDate(data.date).toISOString(),
         } as Reservation;
     });
-    
+
     return allReservations;
 }
 
@@ -1669,19 +1717,22 @@ export const deleteReservation = async (reservationId: string) => {
 
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
-    let q: Query = query(collection(db, 'staleReservationAlerts'));
-    
-    if (warehouseId) {
-        if (warehouseId === 'wh-bog') {
-            q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
-        } else {
-            q = query(q, where('warehouseId', '==', warehouseId));
-        }
+    let baseQuery: Query = query(collection(db, 'staleReservationAlerts'));
+    let queries: Query[] = [];
+
+    if (!warehouseId || warehouseId === 'all') {
+        queries.push(baseQuery);
+    } else if (warehouseId === 'wh-bog') {
+        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+        queries.push(query(collection(db, 'staleReservationAlerts'), where('warehouseId', '==', null)));
+    } else {
+        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
     }
 
-    const alertSnapshot = await getDocs(q);
-    
-    const alertList = alertSnapshot.docs.map(doc => {
+    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
+
+    const alertList = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
             id: doc.id,
@@ -1734,18 +1785,20 @@ export const checkForStaleReservations = async (): Promise<void> => {
                 const productInfo = productMap.get(reservation.productId);
                 const vendedorName = vendedorMap.get(reservation.vendedorId) || 'Desconocido';
 
+
                 if (productInfo) {
                     const alertRef = doc(collection(db, 'staleReservationAlerts'));
                     const newAlert: Omit<StaleReservationAlert, 'id'> = {
-                        alertDate: Timestamp.now(),
+                        alertDate: Timestamp.now().toDate().toISOString(),
                         reservationId: reservation.id,
-                        reservationDate: Timestamp.fromDate(new Date(reservation.date)),
+                        reservationDate: new Date(reservation.date).toISOString(),
                         productId: reservation.productId,
                         productName: productInfo.name,
-                        productSku: productInfo.sku!,
+                        productSku: productInfo.sku || 'N/A',
                         vendedorName: vendedorName,
                         quantity: reservation.quantity,
-                        warehouseId: productInfo.warehouseId,
+                        warehouseId: productInfo.warehouseId || DEFAULT_WAREHOUSE_ID,
+
                     };
                     batch.set(alertRef, newAlert);
                 }
@@ -1777,15 +1830,21 @@ export const getOrGenerateStockAlerts = async (forceRegenerate = false, warehous
     try {
         const metadataSnap = await getDoc(metadataRef);
         if (metadataSnap.exists() && !forceRegenerate) {
-            let q: Query = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
-            if (warehouseId) {
-                if (warehouseId === 'wh-bog') {
-                    q = query(q, where('warehouseId', 'in', ['wh-bog', null]));
-                } else {
-                    q = query(q, where('warehouseId', '==', warehouseId));
-                }
+            const baseQuery = query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'));
+            let queries: Query[] = [];
+
+            if (!warehouseId || warehouseId === 'all') {
+                queries.push(baseQuery);
+            } else if (warehouseId === 'wh-bog') {
+                queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+                queries.push(query(collection(db, 'stockAlertsCache'), where(documentId(), '!=', 'metadata'), where('warehouseId', '==', null)));
+            } else {
+                queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
             }
-            const alertSnapshot = await getDocs(q);
+            
+            const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+            const alertSnapshot = { docs: snapshots.flatMap(snap => snap.docs) };
+            
             const alerts = alertSnapshot.docs.map(d => d.data() as StockAlertItem);
             return { alerts, lastGenerated: (metadataSnap.data().lastGenerated as Timestamp).toDate().toISOString() };
         } else {
@@ -1905,9 +1964,8 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
     }
 }
 
-
 // Cancellation Request Functions
-export const createCancellationRequests = async (trackingNumbers: string[], user: User): Promise<{ alreadyDispatched: string[] }> => {
+export const createCancellationRequests = async (trackingNumbers: string[], user: User): Promise<{ alreadyDispatched: string[]; pendingOrders: string[] }> => {
     const batch = writeBatch(db);
     const requestsCol = collection(db, 'cancellationRequests');
     const dispatchOrdersCol = collection(db, 'dispatchOrders');
@@ -1915,43 +1973,71 @@ export const createCancellationRequests = async (trackingNumbers: string[], user
     const alreadyDispatched: string[] = [];
 
     if (trackingNumbers.length === 0) {
-        return { alreadyDispatched: [] };
+        return { alreadyDispatched: [], pendingOrders: [] };
     }
     
-    const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', trackingNumbers));
-    const dispatchedSnapshot = await getDocs(dispatchedQuery);
-
+    const CHUNK_SIZE = 30;
     const dispatchedGuides = new Set<string>();
-    dispatchedSnapshot.forEach(doc => {
+    const exceptionGuides = new Set<string>();
+
+    // Query dispatched orders in chunks
+    for (let i = 0; i < trackingNumbers.length; i += CHUNK_SIZE) {
+        const chunk = trackingNumbers.slice(i, i + CHUNK_SIZE);
+        const dispatchedQuery = query(dispatchOrdersCol, where('trackingNumbers', 'array-contains-any', chunk));
+        const dispatchedSnapshot = await getDocs(dispatchedQuery);
+        dispatchedSnapshot.forEach(doc => {
+            const order = doc.data() as DispatchOrder;
+            order.trackingNumbers?.forEach(tn => {
+                if (trackingNumbers.includes(tn)) {
+                    if (order.status === 'Despachada') {
+                        dispatchedGuides.add(tn);
+                    } else if (order.status === 'Parcial') {
+                        dispatchedGuides.add(tn);
+                    } else if (order.status === 'Pendiente') {
+                        exceptionGuides.add(tn);
+                    }
+                }
+            });
+        });
+    }
+
+    const partialQuery = query(dispatchOrdersCol, where('status', '==', 'Parcial'));
+    const partialSnapshot = await getDocs(partialQuery);
+
+    // Check exceptions in partial orders
+    partialSnapshot.forEach(doc => {
         const order = doc.data() as DispatchOrder;
-        order.trackingNumbers?.forEach(tn => {
-            if (trackingNumbers.includes(tn)) {
-                dispatchedGuides.add(tn);
+        order.exceptions?.forEach(ex => {
+            if (trackingNumbers.includes(ex.trackingNumber)) {
+                exceptionGuides.add(ex.trackingNumber);
             }
         });
     });
 
     for (const tn of trackingNumbers) {
         const isDispatched = dispatchedGuides.has(tn);
+        const isPendingOrder = exceptionGuides.has(tn);
         if (isDispatched) {
             alreadyDispatched.push(tn);
         }
         const newRequest: Omit<CancellationRequest, 'id'> = {
             trackingNumber: tn,
             requestedBy: { id: user.id, name: user.name },
-            requestDate: Timestamp.now(),
+            requestDate: Timestamp.now().toDate().toISOString(),
             status: 'pending',
             isDispatched,
+            isPendingOrder,
+            warehouseId: user.warehouseId || DEFAULT_WAREHOUSE_ID,
         };
         const docRef = doc(requestsCol);
         batch.set(docRef, newRequest);
     }
 
     await batch.commit();
-    return { alreadyDispatched };
+    return { alreadyDispatched, pendingOrders: Array.from(exceptionGuides) };
 };
 
-export const getCancellationRequests = async (warehouseId?: string): Promise<CancellationRequest[]> => {
+export const getCancellationRequests = async ({ page = 1, limit: itemsPerPage = 20, warehouseId }: { page?: number, limit?: number, warehouseId?: string } = {}): Promise<{ requests: CancellationRequest[], totalPages: number, totalCount: number }> => {
     const q: Query = query(collection(db, 'cancellationRequests'));
     const requestsSnapshot = await getDocs(q);
 
@@ -1960,19 +2046,25 @@ export const getCancellationRequests = async (warehouseId?: string): Promise<Can
         return {
             id: doc.id,
             ...data,
-            requestDate: (data.requestDate as Timestamp).toDate().toISOString(),
+            requestDate: parseFirestoreDate(data.requestDate).toISOString(),
             isDispatched: !!data.isDispatched,
             warehouseId: data.warehouseId || DEFAULT_WAREHOUSE_ID,
         } as CancellationRequest;
     });
 
     const allWarehouses = await getWarehouses();
-    
+
     if (warehouseId && warehouseId !== 'all') {
         requestList = requestList.filter(req => req.warehouseId === warehouseId);
     }
 
-    return requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.date).getTime());
+    const sortedRequests = requestList.sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
+
+    const totalCount = sortedRequests.length;
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+    const paginatedRequests = sortedRequests.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+    return { requests: paginatedRequests, totalPages, totalCount };
 };
     
 export const updateCancellationRequestStatus = async (requestId: string, status: 'completed' | 'rejected', user: User | null): Promise<void> => {
@@ -2033,20 +2125,22 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const toDateEnd = toDate ? endOfDay(toDate) : null;
     let { warehouseId } = filters;
     
-    if (warehouseId === 'all') {
-        warehouseId = undefined;
-    }
+    // Si es INGENIO, traemos todo para filtrar en memoria. Si es otra, filtramos en DB.
+    const fetchWarehouseId = warehouseId === 'wh-bog' ? undefined : warehouseId;
+    const warehouseIdParam = warehouseId || undefined;
 
     const [ordersResult, movementsResult, allProducts, allCategories, allPlatforms, allCarriers] = await Promise.all([
-        getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
-        getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId } }),
-        getProducts({ fetchAll: true, filters: { warehouseId } }),
+        getDispatchOrders({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId: fetchWarehouseId } }),
+        getInventoryMovements({ fetchAll: true, filters: { startDate: fromDateStart?.toISOString(), endDate: toDateEnd?.toISOString(), warehouseId: fetchWarehouseId } }),
+        getProducts({ fetchAll: true, filters: { warehouseId: fetchWarehouseId } }),
         getCategories(),
         getPlatforms(),
         getCarriers(),
     ]);
 
+    // Lógica de filtrado en memoria para INGENIO
     let filteredOrders = ordersResult.orders;
+
     let filteredMovements = movementsResult.movements;
   
     const productIdsInCategory = filters.categoryIds.length > 0
@@ -2060,15 +2154,17 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const ordersInPeriod = filteredOrders.filter(order => {
         const platformMatch = filters.platformIds.length === 0 || filters.platformIds.includes(order.platformId);
         const carrierMatch = filters.carrierIds.length === 0 || filters.carrierIds.includes(order.carrierId);
-        
+
         let productMatch = true;
         if (filters.productIds.length > 0) {
             productMatch = order.products.some(p => filters.productIds.includes(p.productId));
         } else if (productIdsInCategory) {
             productMatch = order.products.some(p => productIdsInCategory.includes(p.productId));
         }
-        
-        return platformMatch && carrierMatch && productMatch;
+
+        const warehouseMatch = !warehouseId || warehouseId === 'all' || (warehouseId === 'wh-bog' && (order.warehouseId === 'wh-bog' || order.warehouseId == null)) || order.warehouseId === warehouseId;
+
+        return platformMatch && carrierMatch && productMatch && warehouseMatch;
     });
 
     const movementsInPeriod = filteredMovements.filter(m => {
@@ -2078,7 +2174,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         } else if (productIdsInCategory) {
             productMatch = productIdsInCategory.includes(m.productId);
         }
-        return productMatch;
+        const warehouseMatch = !warehouseId || warehouseId === 'all' || (warehouseId === 'wh-bog' && (m.warehouseId === 'wh-bog' || m.warehouseId == null)) || m.warehouseId === warehouseId;
+        return productMatch && warehouseMatch;
     });
   
     const ordersByDay: Record<string, number> = {};
@@ -2094,7 +2191,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             dispatchedInOrder -= exceptionsTotal;
         }
 
-        if (order.cancelledExceptions) {
+            if (order.cancelledExceptions) {
             const cancelledTotal = order.cancelledExceptions.reduce((sum, ex) => sum + ex.products.reduce((pSum, p) => pSum + p.quantity, 0), 0);
             annulledByDay[day] = (annulledByDay[day] || 0) + cancelledTotal;
             dispatchedInOrder -= cancelledTotal;
@@ -2135,17 +2232,16 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             }
             totalPendingUnits += unitsInOrder;
             pendingUnitsByDay[day] = (pendingUnitsByDay[day] || 0) + unitsInOrder;
-    });
+        });
   
-    let totalReturns = 0;
     const returnsByDay: Record<string, number> = {};
-    movementsInPeriod
+    const totalReturns = movementsInPeriod
         .filter(m => m.type === 'Entrada' && (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia')))
-        .forEach(m => {
-            totalReturns += m.quantity;
+        .reduce((sum, m) => {
             const day = format(new Date(m.date), 'yyyy-MM-dd');
             returnsByDay[day] = (returnsByDay[day] || 0) + m.quantity;
-    });
+            return sum + m.quantity;
+        }, 0);
   
     const chartData = [];
     const pendingChartData = [];
@@ -2316,9 +2412,47 @@ export const updateLocation = async (id: string, name: string): Promise<void> =>
     await updateDoc(locationRef, { name });
 };
 
+
 export const updateProductLocation = async (productId: string, locationId: string | null): Promise<void> => {
     const productRef = doc(db, 'products', productId);
     await updateDoc(productRef, { locationId });
 }
 
-    
+export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string, warehouseId?: string | null): Promise<void> => {
+    const warehouse = warehouseId || user?.warehouseId || DEFAULT_WAREHOUSE_ID;
+
+    for (const item of items) {
+        let type: InventoryMovement['type'];
+        if (reasonLabel === 'reception') {
+            type = 'Entrada';
+        } else if (reasonLabel === 'Ajuste de Entrada') {
+            type = 'Ajuste de Entrada';
+        } else if (reasonLabel === 'Ajuste de Salida') {
+            type = 'Ajuste de Salida';
+        } else if (reasonLabel === 'Devolución de Cliente') {
+            type = 'Entrada';
+        } else {
+            type = 'Entrada'; // default
+        }
+
+        await addInventoryMovement({
+            type,
+            productId: item.productId,
+            productName: item.name,
+            quantity: item.quantity,
+            notes: `${reasonLabel}${supplierId ? ` - Proveedor: ${supplierId}` : ''}${carrierId ? ` - Transportadora: ${carrierId}` : ''}${item.trackingNumber ? ` - Guía: ${item.trackingNumber}` : ''}`,
+            platformId: undefined,
+            carrierId: carrierId,
+            userId: user?.id,
+            userName: user?.name,
+            warehouseId: warehouse,
+        });
+
+        // Update stock
+        await runTransaction(db, async (transaction) => {
+            await updateProductStock(transaction, item.productId, item.quantity, type === 'Entrada' || type === 'Ajuste de Entrada' ? 'add' : 'subtract', item.variantId ? item.sku : undefined);
+        });
+    }
+}
+
+

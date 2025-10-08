@@ -25,19 +25,28 @@ export async function createCancellationRequestsAction(
     }
 
     try {
-        const { alreadyDispatched } = await createCancellationRequests(trackingNumbers, user);
-        
+        const CHUNK_SIZE = 30;
+        const allAlreadyDispatched: string[] = [];
+        const allPendingOrders: string[] = [];
+
+        for (let i = 0; i < trackingNumbers.length; i += CHUNK_SIZE) {
+            const chunk = trackingNumbers.slice(i, i + CHUNK_SIZE);
+            const { alreadyDispatched, pendingOrders } = await createCancellationRequests(chunk, user);
+            allAlreadyDispatched.push(...alreadyDispatched);
+            allPendingOrders.push(...pendingOrders);
+        }
+
         revalidatePath('/cancellations');
 
         let message = `Se procesaron ${trackingNumbers.length} guías.`;
-        if (alreadyDispatched.length > 0) {
-            message += ` ${alreadyDispatched.length} de ellas ya habían sido despachadas.`;
+        if (allAlreadyDispatched.length > 0) {
+            message += ` ${allAlreadyDispatched.length} de ellas ya habían sido despachadas.`;
         }
 
         return {
             success: true,
             message: message,
-            warnings: alreadyDispatched,
+            warnings: allAlreadyDispatched,
         };
 
     } catch (error) {
