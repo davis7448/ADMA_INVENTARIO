@@ -2341,6 +2341,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const carrierUsageCount: { [carrierName: string]: number } = {};
     let totalProductsShipped = 0;
     const dailyDispatchSummaryData: Record<string, Record<string, Record<string, number>>> = {};
+    const dailyProductDispatch: Record<string, Record<string, { name: string, quantity: number }>> = {};
 
     ordersInPeriod.forEach(order => {
         const platformName = platformNameMap[order.platformId] || 'Unknown Platform';
@@ -2365,6 +2366,34 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
             if (!dailyDispatchSummaryData[day][carrierName]) dailyDispatchSummaryData[day][carrierName] = {};
             dailyDispatchSummaryData[day][carrierName][platformName] = (dailyDispatchSummaryData[day][carrierName][platformName] || 0) + guideCount;
         }
+
+        // Calculate daily product dispatch
+        if (!dailyProductDispatch[day]) dailyProductDispatch[day] = {};
+        let netProducts: { productId: string, name: string, quantity: number }[] = [];
+        if (order.status === 'Despachada') {
+            netProducts = order.products.map(p => ({ productId: p.productId, name: p.name, quantity: p.quantity }));
+        } else if (order.status === 'Parcial') {
+            const exceptionMap = new Map(order.exceptions?.flatMap(ex => ex.products.map(p => [p.productId, p.quantity])) || []);
+            netProducts = order.products.map(p => ({
+                productId: p.productId,
+                name: p.name,
+                quantity: p.quantity - (exceptionMap.get(p.productId) || 0)
+            })).filter(p => p.quantity > 0);
+        }
+        if (order.cancelledExceptions) {
+            const cancelledMap = new Map(order.cancelledExceptions.flatMap(ex => ex.products.map(p => [p.productId, p.quantity])));
+            netProducts = netProducts.map(p => ({
+                productId: p.productId,
+                name: p.name,
+                quantity: p.quantity - (cancelledMap.get(p.productId) || 0)
+            })).filter(p => p.quantity > 0);
+        }
+        netProducts.forEach(p => {
+            if (!dailyProductDispatch[day][p.productId]) {
+                dailyProductDispatch[day][p.productId] = { name: p.name, quantity: 0 };
+            }
+            dailyProductDispatch[day][p.productId].quantity += p.quantity;
+        });
     });
 
     const platformCarrierChartData = Object.entries(platformCarrierMap).map(([platformName, carriers]) => {
@@ -2406,7 +2435,8 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
         percentage: ordersInPeriod.length > 0 ? ((platformWithMostOrdersEntry?.[1] || 0) / ordersInPeriod.length) * 100 : 0,
       },
       dailyDispatchSummaryData,
-    };
+      dailyProductDispatch,
+  };
 }
 
 

@@ -67,6 +67,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
     mostUsedCarrier: { name: '', count: 0, percentage: 0 },
     platformWithMostOrders: { name: '', count: 0, percentage: 0 },
     dailyDispatchSummaryData: {},
+    dailyProductDispatch: {},
 };
 
 function DashboardContent() {
@@ -627,6 +628,39 @@ function DashboardContent() {
                         No hay datos de despachos en el período seleccionado.
                     </div>
                 )}
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Listado de Productos Despachados por Día</CardTitle>
+                <CardDescription>
+                    Productos netamente despachados por día (excluyendo anulaciones y pendientes).
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="max-h-96 overflow-y-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Día</TableHead>
+                                <TableHead>Producto</TableHead>
+                                <TableHead className="text-right">Cantidad</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {Object.entries(dashboardData.dailyProductDispatch || {}).map(([day, products]) =>
+                                Object.entries(products).map(([productId, { name, quantity }]) => (
+                                    <TableRow key={`${day}-${productId}`}>
+                                        <TableCell>{day}</TableCell>
+                                        <TableCell>{name}</TableCell>
+                                        <TableCell className="text-right">{quantity}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </CardContent>
         </Card>
 

@@ -331,4 +331,5 @@ export type DashboardData = {
     mostUsedCarrier: { name: string; count: number, percentage: number };
     platformWithMostOrders: { name: string; count: number, percentage: number };
     dailyDispatchSummaryData: Record<string, Record<string, Record<string, number>>>;
+    dailyProductDispatch: Record<string, Record<string, { name: string, quantity: number }>>;
 };
