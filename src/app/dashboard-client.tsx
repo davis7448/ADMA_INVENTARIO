@@ -1,6 +1,6 @@
 "use client";
 
-// Force redeploy
+// Force rebuild 2025-10-09
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
