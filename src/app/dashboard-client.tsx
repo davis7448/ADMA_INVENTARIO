@@ -640,7 +640,7 @@ function DashboardContent() {
 
         <Card>
             <CardHeader>
-                <CardTitle>Listado de Productos Despachados por Día</CardTitle>
+                <CardTitle>Listado de Productos Despachados por Día - Updated</CardTitle>
                 <CardDescription>
                     Productos netamente despachados por día (excluyendo anulaciones y pendientes).
                 </CardDescription>
