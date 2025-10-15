@@ -333,3 +333,19 @@ export type DashboardData = {
     dailyDispatchSummaryData: Record<string, Record<string, Record<string, number>>>;
     dailyProductDispatch: Record<string, Record<string, { name: string, quantity: number }>>;
 };
+
+export interface ReturnsByProduct {
+  productId: string;
+  productName: string;
+  productSku: string;
+  totalReturns: number;
+  returnMovements: InventoryMovement[];
+}
+
+export interface DamagesReport {
+  productId: string;
+  productName: string;
+  productSku: string;
+  totalDamaged: number;
+  damageMovements: InventoryMovement[];
+}

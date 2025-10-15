@@ -2504,4 +2504,156 @@ export const registerInventoryEntry = async (items: (LogisticItem & { trackingNu
     }
 }
 
+// Returns and Damages Report Functions
+export interface ReturnsByProduct {
+  productId: string;
+  productName: string;
+  productSku: string;
+  totalReturns: number;
+  returnMovements: InventoryMovement[];
+}
+
+export interface DamagesReport {
+  productId: string;
+  productName: string;
+  productSku: string;
+  totalDamaged: number;
+  damageMovements: InventoryMovement[];
+}
+
+export const getReturnsByProduct = async (filters: { startDate?: string; endDate?: string; warehouseId?: string; page?: number; limit?: number } = {}): Promise<{ data: ReturnsByProduct[], totalCount: number, totalPages: number }> => {
+  const { startDate, endDate, warehouseId, page = 1, limit = 20 } = filters;
+
+  // Fetch movements without date filters to avoid composite index requirements
+  const movementsResult = await getInventoryMovements({
+    fetchAll: true,
+    filters: {
+      warehouseId: warehouseId === 'all' ? undefined : warehouseId,
+      movementType: 'Entrada'
+    }
+  });
+
+  // Filter movements in memory for date range and return criteria
+  let returnsMovements = movementsResult.movements.filter(m =>
+    m.type === 'Entrada' &&
+    (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia'))
+  );
+
+  // Apply date filtering in memory
+  if (startDate || endDate) {
+    returnsMovements = returnsMovements.filter(m => {
+      const movementDate = new Date(m.date);
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+
+      if (start && movementDate < start) return false;
+      if (end && movementDate > end) return false;
+      return true;
+    });
+  }
+
+  const returnsByProduct: Record<string, ReturnsByProduct> = {};
+
+  for (const movement of returnsMovements) {
+    if (!returnsByProduct[movement.productId]) {
+      returnsByProduct[movement.productId] = {
+        productId: movement.productId,
+        productName: movement.productName,
+        productSku: '', // Will be populated from product data
+        totalReturns: 0,
+        returnMovements: []
+      };
+    }
+
+    returnsByProduct[movement.productId].totalReturns += movement.quantity;
+    returnsByProduct[movement.productId].returnMovements.push(movement);
+  }
+
+  // Get product details to populate SKU
+  const productIds = Object.keys(returnsByProduct);
+  if (productIds.length > 0) {
+    const productsResult = await getProducts({ fetchAll: true, filters: { warehouseId } });
+    const productMap = new Map(productsResult.products.map(p => [p.id, p]));
+
+    for (const productId of productIds) {
+      const product = productMap.get(productId);
+      if (product) {
+        returnsByProduct[productId].productSku = product.sku || product.productType === 'variable' ? 'Variable' : 'N/A';
+      }
+    }
+  }
+
+  const sortedData = Object.values(returnsByProduct).sort((a, b) => b.totalReturns - a.totalReturns);
+  const totalCount = sortedData.length;
+  const totalPages = Math.ceil(totalCount / limit);
+  const startIndex = (page - 1) * limit;
+  const endIndex = startIndex + limit;
+  const paginatedData = sortedData.slice(startIndex, endIndex);
+
+  return {
+    data: paginatedData,
+    totalCount,
+    totalPages
+  };
+};
+
+export const getDamagesReport = async (filters: { startDate?: string; endDate?: string; warehouseId?: string } = {}): Promise<DamagesReport[]> => {
+  const { startDate, endDate, warehouseId } = filters;
+
+  // Fetch movements without date filters to avoid composite index requirements
+  const movementsResult = await getInventoryMovements({
+    fetchAll: true,
+    filters: {
+      warehouseId: warehouseId === 'all' ? undefined : warehouseId,
+      movementType: 'Averia'
+    }
+  });
+
+  // Apply date filtering in memory
+  let damageMovements = movementsResult.movements;
+  if (startDate || endDate) {
+    damageMovements = damageMovements.filter(m => {
+      const movementDate = new Date(m.date);
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+
+      if (start && movementDate < start) return false;
+      if (end && movementDate > end) return false;
+      return true;
+    });
+  }
+
+  const damagesByProduct: Record<string, DamagesReport> = {};
+
+  for (const movement of damageMovements) {
+    if (!damagesByProduct[movement.productId]) {
+      damagesByProduct[movement.productId] = {
+        productId: movement.productId,
+        productName: movement.productName,
+        productSku: '', // Will be populated from product data
+        totalDamaged: 0,
+        damageMovements: []
+      };
+    }
+
+    damagesByProduct[movement.productId].totalDamaged += movement.quantity;
+    damagesByProduct[movement.productId].damageMovements.push(movement);
+  }
+
+  // Get product details to populate SKU
+  const productIds = Object.keys(damagesByProduct);
+  if (productIds.length > 0) {
+    const productsResult = await getProducts({ fetchAll: true, filters: { warehouseId } });
+    const productMap = new Map(productsResult.products.map(p => [p.id, p]));
+
+    for (const productId of productIds) {
+      const product = productMap.get(productId);
+      if (product) {
+        damagesByProduct[productId].productSku = product.sku || product.productType === 'variable' ? 'Variable' : 'N/A';
+      }
+    }
+  }
+
+  return Object.values(damagesByProduct).sort((a, b) => b.totalDamaged - a.totalDamaged);
+};
 

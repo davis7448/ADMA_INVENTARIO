@@ -73,6 +73,7 @@ type NavItem = {
             { href: '/audit-alerts', label: 'Auditoría', roles: ['admin', 'plataformas'] },
             { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin', 'plataformas'], badge: 'stale_alerts' },
             { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'logistics', 'plataformas'] },
+            { href: '/returns-damages', label: 'Devoluciones y Averías', roles: ['admin', 'logistics', 'commercial'] },
         ]
     }
   ];
