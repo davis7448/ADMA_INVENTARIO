@@ -61,6 +61,7 @@ type NavItem = {
         children: [
             { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics', 'plataformas'] },
             { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics', 'plataformas'] },
+            { href: '/reporte-despachos', label: 'Reporte de Despachos', roles: ['admin', 'logistics', 'plataformas', 'commercial'] },
             { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics', 'plataformas', 'commercial'] },
             { href: '/cancellations', label: 'Anulaciones', roles: ['admin', 'commercial', 'logistics'] },
         ],

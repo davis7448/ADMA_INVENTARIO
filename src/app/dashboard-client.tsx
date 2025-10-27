@@ -448,9 +448,6 @@ function DashboardContent() {
         </div>
       )}
 
-      {loading ? null : (
-        <DailyDispatchSummary data={dashboardData.dailyDispatchSummaryData} />
-      )}
 
         <Card>
             <CardHeader>
@@ -638,57 +635,6 @@ function DashboardContent() {
             </CardContent>
         </Card>
 
-        <Card>
-            <CardHeader>
-                <CardTitle>Listado de Productos Despachados por Día - Updated</CardTitle>
-                <CardDescription>
-                    Productos netamente despachados por día (excluyendo anulaciones y pendientes).
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Accordion type="multiple" className="w-full space-y-2">
-                    {Object.entries(dashboardData.dailyProductDispatch || {})
-                        .sort(([a], [b]) => b.localeCompare(a))
-                        .map(([day, products]) => {
-                            const totalProductsForDay = Object.values(products).reduce((sum, p) => sum + p.quantity, 0);
-                            return (
-                                <AccordionItem value={day} key={day} className="border rounded-lg px-4">
-                                    <AccordionTrigger>
-                                        <div className="flex justify-between items-center w-full">
-                                            <span className="font-semibold text-lg capitalize">
-                                                {formatToTimeZone(new Date(`${day}T00:00:00`), 'eeee, dd MMM yyyy', { locale: es })}
-                                            </span>
-                                            <Badge variant="secondary">{totalProductsForDay} Productos</Badge>
-                                        </div>
-                                    </AccordionTrigger>
-                                    <AccordionContent>
-                                        <div className="pt-2">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Producto</TableHead>
-                                                        <TableHead className="text-right">Cantidad</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {Object.entries(products)
-                                                        .sort(([, a], [, b]) => b.quantity - a.quantity)
-                                                        .map(([productId, { name, quantity }]) => (
-                                                            <TableRow key={productId}>
-                                                                <TableCell>{name}</TableCell>
-                                                                <TableCell className="text-right">{quantity}</TableCell>
-                                                            </TableRow>
-                                                        ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    </AccordionContent>
-                                </AccordionItem>
-                            );
-                        })}
-                </Accordion>
-            </CardContent>
-        </Card>
 
     </div>
   );
