@@ -1,6 +1,6 @@
 "use client";
 
-// Force rebuild 2025-10-09
+// Force rebuild 2025-10-24
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -77,7 +77,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
     dailyProductDispatch: {},
 };
 
-function DashboardContent() {
+function NewDashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
@@ -111,7 +111,7 @@ function DashboardContent() {
   const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
 
   // Debug logging for warehouse filtering
-  console.log('Dashboard Auth Debug:', {
+  console.log('New Dashboard Auth Debug:', {
     user: user ? { id: user.id, role: user.role, warehouseId: user.warehouseId } : null,
     authEffectiveWarehouseId,
     selectedWarehouse,
@@ -121,7 +121,7 @@ function DashboardContent() {
   });
 
   // Debug logging
-  console.log('Dashboard Debug:', {
+  console.log('New Dashboard Debug:', {
     userRole: user?.role,
     userWarehouseId: user?.warehouseId,
     searchParamsWarehouse: searchParams.get('warehouse'),
@@ -266,7 +266,7 @@ function DashboardContent() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Dashboard Operativo</h1>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Nuevo Dashboard Operativo</h1>
         <div className="flex gap-2">
           {user?.role === 'admin' && (
             <Select value={selectedWarehouse || ''} onValueChange={(value) => setSelectedWarehouse(value === 'all' ? undefined : value)}>
@@ -448,6 +448,9 @@ function DashboardContent() {
         </div>
       )}
 
+      {loading ? null : (
+        <DailyDispatchSummary data={dashboardData.dailyDispatchSummaryData} />
+      )}
 
         <Card>
             <CardHeader>
@@ -635,13 +638,64 @@ function DashboardContent() {
             </CardContent>
         </Card>
 
+        <Card>
+            <CardHeader>
+                <CardTitle>Listado de Productos Despachados por Día</CardTitle>
+                <CardDescription>
+                    Productos netamente despachados por día (excluyendo anulaciones y pendientes).
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Accordion type="multiple" className="w-full space-y-2">
+                    {Object.entries(dashboardData.dailyProductDispatch || {})
+                        .sort(([a], [b]) => b.localeCompare(a))
+                        .map(([day, products]) => {
+                            const totalProductsForDay = Object.values(products).reduce((sum, p) => sum + p.quantity, 0);
+                            return (
+                                <AccordionItem value={day} key={day} className="border rounded-lg px-4">
+                                    <AccordionTrigger>
+                                        <div className="flex justify-between items-center w-full">
+                                            <span className="font-semibold text-lg capitalize">
+                                                {formatToTimeZone(new Date(`${day}T00:00:00`), 'eeee, dd MMM yyyy', { locale: es })}
+                                            </span>
+                                            <Badge variant="secondary">{totalProductsForDay} Productos</Badge>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="pt-2">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Producto</TableHead>
+                                                        <TableHead className="text-right">Cantidad</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {Object.entries(products)
+                                                        .sort(([, a], [, b]) => b.quantity - a.quantity)
+                                                        .map(([productId, { name, quantity }]) => (
+                                                            <TableRow key={productId}>
+                                                                <TableCell>{name}</TableCell>
+                                                                <TableCell className="text-right">{quantity}</TableCell>
+                                                            </TableRow>
+                                                        ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            );
+                        })}
+                </Accordion>
+            </CardContent>
+        </Card>
 
     </div>
   );
 }
 
-export default function DashboardClient() {
+export default function DashboardNewClient() {
     return (
-        <DashboardContent />
+        <NewDashboardContent />
     );
 }
