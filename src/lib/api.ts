@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, se
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest, ImportRequest } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
@@ -2655,5 +2655,50 @@ export const getDamagesReport = async (filters: { startDate?: string; endDate?: 
   }
 
   return Object.values(damagesByProduct).sort((a, b) => b.totalDamaged - a.totalDamaged);
+};
+
+export const createImportRequest = async (importRequest: Omit<ImportRequest, 'id'>): Promise<string> => {
+  const importRequestsCol = collection(db, 'importRequests');
+
+  // Clean the object to remove undefined values
+  const cleanData: Record<string, any> = {
+    requestDate: importRequest.requestDate,
+    requestedBy: importRequest.requestedBy,
+    productName: importRequest.productName,
+    status: importRequest.status,
+    createdAt: importRequest.createdAt,
+    updatedAt: importRequest.updatedAt,
+  };
+
+  // Only add optional fields if they exist
+  if (importRequest.imageUrl) {
+    cleanData.imageUrl = importRequest.imageUrl;
+  }
+  if (importRequest.referenceLink) {
+    cleanData.referenceLink = importRequest.referenceLink;
+  }
+
+  const docRef = await addDoc(importRequestsCol, cleanData);
+  return docRef.id;
+};
+
+export const getImportRequests = async (): Promise<ImportRequest[]> => {
+  const importRequestsCol = collection(db, 'importRequests');
+  const snapshot = await getDocs(importRequestsCol);
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    requestDate: parseFirestoreDate(doc.data().requestDate).toISOString(),
+    createdAt: parseFirestoreDate(doc.data().createdAt).toISOString(),
+    updatedAt: parseFirestoreDate(doc.data().updatedAt).toISOString(),
+  })) as ImportRequest[];
+};
+
+export const updateImportRequestStatus = async (id: string, status: ImportRequest['status']): Promise<void> => {
+  const importRequestRef = doc(db, 'importRequests', id);
+  await updateDoc(importRequestRef, {
+    status,
+    updatedAt: Timestamp.now(),
+  });
 };
 

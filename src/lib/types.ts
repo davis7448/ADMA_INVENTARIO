@@ -349,3 +349,18 @@ export interface DamagesReport {
   totalDamaged: number;
   damageMovements: InventoryMovement[];
 }
+
+export type ImportRequest = {
+  id: string;
+  requestDate: string;
+  requestedBy: {
+    id: string;
+    name: string;
+  };
+  productName: string;
+  imageUrl?: string;
+  referenceLink?: string;
+  status: 'solicitado' | 'en_proceso' | 'completado' | 'cancelado';
+  createdAt: string;
+  updatedAt: string;
+};

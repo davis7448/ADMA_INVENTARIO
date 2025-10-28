@@ -76,6 +76,14 @@ type NavItem = {
             { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'logistics', 'plataformas'] },
             { href: '/returns-damages', label: 'Devoluciones y Averías', roles: ['admin', 'logistics', 'commercial'] },
         ]
+    },
+    {
+        label: 'Alianzas',
+        roles: ['admin'],
+        children: [
+            { href: '/alianzas/importaciones/solicitud', label: 'Solicitud de Importación', roles: ['admin'] },
+            { href: '/alianzas/importaciones/registro', label: 'Registro de Importaciones', roles: ['admin'] },
+        ]
     }
   ];
 
