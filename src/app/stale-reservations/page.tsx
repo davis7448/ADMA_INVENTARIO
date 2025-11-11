@@ -6,8 +6,19 @@ import { Suspense } from 'react';
 
 export default async function StaleReservationsPage() {
     // Run check for stale reservations when this page is loaded
-    await checkForStaleReservations();
-    const alerts = await getStaleReservationAlerts();
+    try {
+        await checkForStaleReservations();
+    } catch (error) {
+        console.warn('Failed to check for stale reservations during build:', error);
+    }
+
+    let alerts: any[] = [];
+    try {
+        alerts = await getStaleReservationAlerts();
+    } catch (error) {
+        console.warn('Failed to fetch stale reservation alerts during build:', error);
+        alerts = [];
+    }
 
     return (
       <Suspense>
