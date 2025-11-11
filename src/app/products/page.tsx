@@ -65,19 +65,31 @@ export default async function ProductsPage({
     };
 
     const [productsResult, rotationCategories, locations] = await Promise.all([
-        getProducts({ page, limit, filters }),
-        getRotationCategories(),
-        getLocations(),
+        getProducts({ page, limit, filters }).catch(err => {
+            console.warn('Failed to fetch products during build:', err);
+            return { products: [], totalPages: 1 };
+        }),
+        getRotationCategories().catch(err => {
+            console.warn('Failed to fetch rotation categories during build:', err);
+            return [];
+        }),
+        getLocations().catch(err => {
+            console.warn('Failed to fetch locations during build:', err);
+            return [];
+        }),
     ]);
 
     const productIdsOnPage = productsResult.products.map(p => p.id);
-    const movementsResult = productIdsOnPage.length > 0 
-        ? await getInventoryMovements({ 
-            fetchAll: true, 
-            filters: { 
+    const movementsResult = productIdsOnPage.length > 0
+        ? await getInventoryMovements({
+            fetchAll: true,
+            filters: {
                 productIds: productIdsOnPage,
                 startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-            } 
+            }
+        }).catch(err => {
+            console.warn('Failed to fetch inventory movements during build:', err);
+            return { movements: [] };
         })
         : { movements: [] };
         
@@ -109,8 +121,14 @@ export default async function ProductsPage({
     const uniqueCategoryIds = [...new Set(productsWithRotation.map(p => p.categoryId).filter(Boolean))];
     
     const [supplierNames, categoryNames] = await Promise.all([
-        getSuppliersByIds(uniqueVendorIds as string[]),
-        getCategoriesByIds(uniqueCategoryIds as string[]),
+        getSuppliersByIds(uniqueVendorIds as string[]).catch(err => {
+            console.warn('Failed to fetch suppliers during build:', err);
+            return {};
+        }),
+        getCategoriesByIds(uniqueCategoryIds as string[]).catch(err => {
+            console.warn('Failed to fetch categories during build:', err);
+            return {};
+        }),
     ]);
 
 
