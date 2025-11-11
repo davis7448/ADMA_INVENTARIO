@@ -44,21 +44,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser?.email) {
-        let appUser = await findUserByEmail(firebaseUser.email);
-        
-        if (!appUser) {
-          console.log(`No se encontró perfil para ${firebaseUser.email}, creando uno...`);
-          const newUser: Omit<User, 'id'> = {
-            name: firebaseUser.email.split('@')[0],
-            email: firebaseUser.email,
-            role: 'commercial', 
+        try {
+          let appUser = await findUserByEmail(firebaseUser.email);
+
+          if (!appUser) {
+            console.log(`No se encontró perfil para ${firebaseUser.email}, creando uno...`);
+            const newUser: Omit<User, 'id'> = {
+              name: firebaseUser.email.split('@')[0],
+              email: firebaseUser.email,
+              role: 'commercial',
+              avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.email}`
+            };
+            const newUserId = await addUser(newUser);
+            appUser = { id: newUserId, ...newUser };
+            console.log(`Perfil creado con ID: ${newUserId}`);
+          }
+          setUser(appUser);
+        } catch (error) {
+          console.error("Failed to fetch or create user profile:", error);
+          // Set a fallback user to prevent app crash
+          setUser({
+            id: firebaseUser.uid,
+            name: firebaseUser.email?.split('@')[0] || 'User',
+            email: firebaseUser.email || '',
+            role: 'commercial',
             avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.email}`
-          };
-          const newUserId = await addUser(newUser);
-          appUser = { id: newUserId, ...newUser };
-          console.log(`Perfil creado con ID: ${newUserId}`);
+          });
         }
-        setUser(appUser);
 
       } else {
         setUser(null);
