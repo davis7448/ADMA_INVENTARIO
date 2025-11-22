@@ -6,7 +6,13 @@ import { VendedoresContent } from '@/components/vendedores-content';
 import { Suspense } from 'react';
 
 export default async function VendedoresPage() {
-    const vendedores: Vendedor[] = await getVendedores();
+    let vendedores: Vendedor[] = [];
+    try {
+        vendedores = await getVendedores();
+    } catch (error) {
+        console.warn('Failed to fetch vendedores during build:', error);
+        vendedores = [];
+    }
 
     return (
         <Suspense>

@@ -29,6 +29,8 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
             setWarehouses(fetchedWarehouses);
           } catch (error) {
             console.error("Failed to fetch warehouses:", error);
+            // Set empty warehouses array on error to prevent crashes
+            setWarehouses([]);
           } finally {
             setLoading(false);
           }
@@ -59,7 +61,7 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
         try {
           const fetchedWarehouses = await getWarehouses();
           setWarehouses(fetchedWarehouses);
-          
+
           const targetId = warehouseIdFromUrl;
 
           if (targetId && targetId !== 'all') {
@@ -70,6 +72,9 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
           }
         } catch (error) {
           console.error("Failed to fetch warehouses:", error);
+          // Set empty warehouses array on error to prevent crashes
+          setWarehouses([]);
+          setCurrentWarehouse(null);
         } finally {
           setLoading(false);
         }

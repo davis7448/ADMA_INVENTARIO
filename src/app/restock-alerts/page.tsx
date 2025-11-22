@@ -21,8 +21,15 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
 
 async function LowStockList() {
-    const { products: allProducts } = await getProducts({});
-    const lowStockProducts = allProducts.filter(p => p.stock <= 0);
+    let allProducts: any[] = [];
+    try {
+        const result = await getProducts({});
+        allProducts = result.products;
+    } catch (error) {
+        console.warn('Failed to fetch products during build:', error);
+        allProducts = [];
+    }
+    const lowStockProducts = allProducts.filter((p: any) => p.stock <= 0);
 
     return (
          <Card>

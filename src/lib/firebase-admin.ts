@@ -16,6 +16,20 @@ async function getPrivateKey(): Promise<string | undefined> {
             return process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
         }
 
+        // Try to access the service account secret from App Hosting environment
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+            try {
+                console.log('Using FIREBASE_SERVICE_ACCOUNT_KEY from environment');
+                const keyData = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+                const privateKey = keyData.private_key;
+                if (privateKey) {
+                    return privateKey.replace(/\\n/g, '\n');
+                }
+            } catch (parseError) {
+                console.warn('Could not parse FIREBASE_SERVICE_ACCOUNT_KEY:', parseError instanceof Error ? parseError.message : String(parseError));
+            }
+        }
+
         // Fallback: Try to access secret directly from Secret Manager
         try {
             const client = new SecretManagerServiceClient();

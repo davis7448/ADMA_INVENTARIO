@@ -1,7 +1,7 @@
-# Firebase Studio
+# ADMA Inventario
 
-This is a NextJS starter in Firebase Studio.
+This is a NextJS inventory management application using Firebase.
 
 To get started, take a look at src/app/page.tsx.
- 
-Updated for force rebuild
+
+Last updated: 2025-11-11

@@ -135,11 +135,26 @@ function DashboardContent() {
     // Fetch static filter options once - reduced limit for better performance
     setFilterOptionsLoading(true);
     Promise.all([
-      getProducts({ limit: 2000, filters: { warehouseId } }),
-      getCarriers(),
-      getCategories(),
-      getPlatforms(),
-      getWarehouses()
+      getProducts({ limit: 2000, filters: { warehouseId } }).catch(err => {
+        console.warn('Failed to fetch products for filters:', err);
+        return { products: [] };
+      }),
+      getCarriers().catch(err => {
+        console.warn('Failed to fetch carriers for filters:', err);
+        return [];
+      }),
+      getCategories().catch(err => {
+        console.warn('Failed to fetch categories for filters:', err);
+        return [];
+      }),
+      getPlatforms().catch(err => {
+        console.warn('Failed to fetch platforms for filters:', err);
+        return [];
+      }),
+      getWarehouses().catch(err => {
+        console.warn('Failed to fetch warehouses for filters:', err);
+        return [];
+      })
     ]).then(([productsResult, carriers, categories, platforms, warehouses]) => {
       setAllProducts(productsResult.products);
       setAllCarriers(carriers);

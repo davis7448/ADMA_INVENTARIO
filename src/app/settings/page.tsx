@@ -8,14 +8,26 @@ import { Suspense } from 'react';
 
 export default async function SettingsPage() {
     const [rotationCategories, users, entryReasons, warehouses, locations] = await Promise.all([
-        getRotationCategories(),
+        getRotationCategories().catch(err => {
+            console.warn('Failed to fetch rotation categories during build:', err);
+            return [];
+        }),
         getUsers().catch(err => {
             console.warn("Could not fetch users. This is expected in the prototype environment if admin SDK is not configured.");
             return []; // Return empty array on error
         }),
-        getEntryReasons(),
-        getWarehouses(),
-        getLocations(),
+        getEntryReasons().catch(err => {
+            console.warn('Failed to fetch entry reasons during build:', err);
+            return [];
+        }),
+        getWarehouses().catch(err => {
+            console.warn('Failed to fetch warehouses during build:', err);
+            return [];
+        }),
+        getLocations().catch(err => {
+            console.warn('Failed to fetch locations during build:', err);
+            return [];
+        }),
     ]);
 
     return (

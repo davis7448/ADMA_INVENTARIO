@@ -7,7 +7,13 @@ import { Suspense } from 'react';
 
 
 export default async function SuppliersPage() {
-    const suppliers: Supplier[] = await getSuppliers();
+    let suppliers: Supplier[] = [];
+    try {
+        suppliers = await getSuppliers();
+    } catch (error) {
+        console.warn('Failed to fetch suppliers during build:', error);
+        suppliers = [];
+    }
 
     return (
         <Suspense>

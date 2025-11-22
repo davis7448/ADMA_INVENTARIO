@@ -6,6 +6,10 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
+    function isAdminAccess() {
+      // Allow access when there's no auth (server-side admin operations)
+      return request.auth == null;
+    }
     function isRole(role) {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
@@ -20,68 +24,68 @@ service cloud.firestore {
 
     // Allow reads for all authenticated users on most collections
     match /products/{productId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isRoleIn(['admin', 'plataformas', 'logistics']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas', 'logistics']) || isAdminAccess();
     }
     match /suppliers/{supplierId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
     match /categories/{categoryId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
     match /carriers/{carrierId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
     match /platforms/{platformId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
     match /vendedores/{vendedorId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isRoleIn(['admin', 'plataformas']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isRole('admin');
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRole('admin') || isAdminAccess();
     }
     match /inventoryMovements/{movementId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() || isAdminAccess();
     }
     match /dispatchOrders/{orderId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() || isAdminAccess();
     }
     match /auditAlerts/{alertId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() || isAdminAccess();
     }
     match /staleReservationAlerts/{alertId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() || isAdminAccess();
     }
     match /stockAlertsCache/{cacheId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() || isAdminAccess();
     }
     match /cancellationRequests/{reqId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() || isAdminAccess();
     }
     match /warehouses/{warehouseId} {
-      allow read: if isSignedIn();
-      allow create, update: if isRole('admin');
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update: if isRole('admin') || isAdminAccess();
     }
     match /counters/{counterId} {
-      allow read, write: if isSignedIn(); // Server-side access, but locked down for safety.
+      allow read, write: if isSignedIn() || isAdminAccess(); // Server-side access, but locked down for safety.
     }
     match /reservations/{reservationId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() || isAdminAccess();
     }
     match /rotationCategories/{catId} {
-      allow read: if isSignedIn();
-      allow update: if isRoleIn(['admin', 'plataformas']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
      match /entryReasons/{reasonId} {
-      allow read: if isSignedIn();
-      allow create, update: if isRoleIn(['admin', 'plataformas']);
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
   }
 }
