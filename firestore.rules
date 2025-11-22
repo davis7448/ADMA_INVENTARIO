@@ -84,8 +84,16 @@ service cloud.firestore {
       allow update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
     }
      match /entryReasons/{reasonId} {
-      allow read: if isSignedIn() || isAdminAccess();
-      allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
-    }
-  }
-}
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+     }
+     match /locations/{locationId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+     }
+     match /importRequests/{requestId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+     }
+   }
+ }

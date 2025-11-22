@@ -85,11 +85,11 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
       categoryId: '',
       vendorId: '',
       warehouseId: DEFAULT_WAREHOUSE_ID,
-      priceDropshipping: undefined,
-      priceWholesale: undefined,
-      cost: undefined,
+      priceDropshipping: 0,
+      priceWholesale: 0,
+      cost: 0,
       purchaseDate: undefined,
-      stock: undefined,
+      stock: 0,
       image: undefined,
       contentLink: '',
       codigoERP: '',
@@ -250,7 +250,24 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
   
   useEffect(() => {
     if (!open) {
-      form.reset({ warehouseId: DEFAULT_WAREHOUSE_ID });
+      form.reset({
+        name: '',
+        sku: '',
+        description: '',
+        productType: 'simple',
+        categoryId: '',
+        vendorId: '',
+        warehouseId: DEFAULT_WAREHOUSE_ID,
+        priceDropshipping: 0,
+        priceWholesale: 0,
+        cost: 0,
+        purchaseDate: undefined,
+        stock: 0,
+        image: undefined,
+        contentLink: '',
+        codigoERP: '',
+        variants: [],
+      });
       setImagePreview(null);
     }
   }, [open, form]);
@@ -607,12 +624,12 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Precio Dropshipping</FormLabel>
                                 <FormControl>
-                                    <Input 
-                                        type="number" 
-                                        step="0.01" 
-                                        placeholder="e.g., 79.99" 
-                                        {...field} 
-                                        value={productType === 'variable' ? '' : field.value ?? ''} 
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="e.g., 79.99"
+                                        {...field}
+                                        value={productType === 'variable' ? '' : field.value}
                                         disabled={productType === 'variable'}
                                     />
                                 </FormControl>
@@ -627,12 +644,12 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Precio x Mayor</FormLabel>
                                 <FormControl>
-                                    <Input 
-                                        type="number" 
-                                        step="0.01" 
-                                        placeholder="e.g., 69.99" 
-                                        {...field} 
-                                        value={productType === 'variable' ? '' : field.value ?? ''} 
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="e.g., 69.99"
+                                        {...field}
+                                        value={productType === 'variable' ? '' : field.value}
                                         disabled={productType === 'variable'}
                                     />
                                 </FormControl>
@@ -649,12 +666,12 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                               <FormItem>
                                   <FormLabel>Stock</FormLabel>
                                   <FormControl>
-                                      <Input 
-                                          type="number" 
-                                          placeholder="e.g., 100" 
-                                          {...field} 
-                                          value={field.value ?? ''}
-                                          onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} 
+                                      <Input
+                                          type="number"
+                                          placeholder="e.g., 100"
+                                          {...field}
+                                          value={field.value}
+                                          onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)}
                                           disabled={productType === 'variable' || !canEditSensitiveData}
                                           readOnly={productType === 'variable'}
                                       />
@@ -670,12 +687,12 @@ export function AddProductForm({ onProductAdded }: AddProductFormProps) {
                             <FormItem>
                                 <FormLabel>Costo</FormLabel>
                                 <FormControl>
-                                  <Input 
+                                  <Input
                                     type={canEditSensitiveData ? "number" : "password"}
-                                    step="0.01" 
+                                    step="0.01"
                                     placeholder={canEditSensitiveData ? "e.g., 45.50" : "****"}
-                                    {...field} 
-                                    value={canEditSensitiveData ? field.value ?? '' : '****'}
+                                    {...field}
+                                    value={canEditSensitiveData ? field.value : '****'}
                                     disabled={!canEditSensitiveData}
                                   />
                                 </FormControl>

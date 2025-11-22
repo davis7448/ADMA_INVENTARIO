@@ -4,12 +4,17 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, se
 import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, type Query, type DocumentSnapshot } from "firebase/firestore";
+import { Storage } from '@google-cloud/storage';
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest, ImportRequest } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
 
 const storage = getStorage();
+const gcsStorage = new Storage({
+  projectId: 'studio-9748962172-82b35',
+  keyFilename: './studio-9748962172-82b35-firebase-adminsdk-fbsvc-0ab934a6b7.json'
+});
 const DEFAULT_WAREHOUSE_ID = 'wh-bog';
 
 // Image Upload Function
@@ -19,11 +24,25 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
   }
   const fileExtension = imageFile.name.split('.').pop();
   const fileName = `${uuidv4()}.${fileExtension}`;
-  const storageRef = ref(storage, `product-images/${fileName}`);
 
   try {
-    const snapshot = await uploadBytes(storageRef, imageFile);
-    const downloadURL = await getDownloadURL(snapshot.ref);
+    // Use Google Cloud Storage for server-side uploads
+    const bucket = gcsStorage.bucket('studio-9748962172-82b35.firebasestorage.app');
+    const file = bucket.file(`product-images/${fileName}`);
+
+    // Convert File to Buffer
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: imageFile.type,
+      },
+      public: true, // Make the file publicly accessible
+    });
+
+    // Get the public URL
+    const downloadURL = `https://storage.googleapis.com/${bucket.name}/${file.name}`;
     return downloadURL;
   } catch (error) {
     console.error("Error uploading image: ", error);
