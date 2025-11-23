@@ -105,10 +105,22 @@ function NewDashboardContent() {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
   const [allWarehouses, setAllWarehouses] = useState<{ id: string; name: string }[]>([]);
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string | undefined>(searchParams.get('warehouse') || undefined);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string | undefined>(() => {
+    const urlWarehouse = searchParams.get('warehouse');
+    if (urlWarehouse) return urlWarehouse;
+    if (user?.role === 'logistics' && user.warehouseId) return user.warehouseId;
+    return undefined;
+  });
 
   const effectiveWarehouseId = user?.role === 'admin' ? selectedWarehouse : authEffectiveWarehouseId;
   const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
+
+  // Auto-set warehouse for logistics users
+  useEffect(() => {
+    if (user?.role === 'logistics' && user.warehouseId && !searchParams.get('warehouse') && selectedWarehouse !== user.warehouseId) {
+      setSelectedWarehouse(user.warehouseId);
+    }
+  }, [user, searchParams, selectedWarehouse]);
 
   // Debug logging for warehouse filtering
   console.log('New Dashboard Auth Debug:', {
