@@ -1,33 +1,46 @@
-"use client";
-
 import DashboardNewClient from './dashboard-new-client';
-import { useAuth } from '@/hooks/use-auth';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
+import { Suspense } from 'react';
+import { cookies } from 'next/headers';
+import { getAuth } from 'firebase-admin/auth';
+import { getApp } from '@/lib/firebase-admin';
+import { getUsers } from '@/lib/api';
+import type { User } from '@/lib/types';
+import { redirect } from 'next/navigation';
 
-export default function NewDashboardPage() {
-    const { user, loading: authLoading } = useAuth();
-    const searchParams = useSearchParams();
-    const router = useRouter();
-    const redirectedRef = useRef(false);
+async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
+    if (!sessionCookie) return null;
+    try {
+        const app = await getApp();
+        const decodedClaims = await getAuth(app).verifySessionCookie(sessionCookie, true);
+        const users = await getUsers();
+        return users.find(u => u.email === decodedClaims.email) || null;
+    } catch (error) {
+        console.error("Session verification failed:", error);
+        return null;
+    }
+}
 
-    // Auto-redirect logistics users to their warehouse URL
-    useEffect(() => {
-        if (!authLoading && !redirectedRef.current && user?.role === 'logistics' && !searchParams.get('warehouse')) {
-            const warehouse = user.warehouseId || 'wh-bog';
-            redirectedRef.current = true;
-            router.push(`/dashboard?warehouse=${warehouse}`);
-        }
-    }, [user, authLoading, searchParams, router]);
+export default async function NewDashboardPage({
+    searchParams
+  }: {
+    searchParams: { [key: string]: string | string[] | undefined }
+  }) {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('__session')?.value;
+    const user = await getCurrentUser(sessionCookie);
 
-    if (authLoading) {
-        return (
-            <div className="flex h-screen items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        );
+    // Server-side redirect for logistics users
+    if (user?.role === 'logistics' && !searchParams?.warehouse) {
+        const warehouse = user.warehouseId || 'wh-bog';
+        redirect(`/dashboard?warehouse=${warehouse}`);
     }
 
-    return <DashboardNewClient />;
+    return (
+        <Suspense>
+            <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'commercial', 'plataformas']}>
+                <DashboardNewClient />
+            </AuthProviderWrapper>
+        </Suspense>
+    );
 }
