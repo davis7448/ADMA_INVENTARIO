@@ -1,6 +1,6 @@
 "use client";
 
-// Force rebuild 2025-11-23
+// Force rebuild 2025-11-23 v2
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
