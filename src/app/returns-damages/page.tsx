@@ -158,13 +158,33 @@ function ReturnsDamagesPageContent() {
         const notes = movement.notes.toLowerCase();
         const searchTerm = globalTrackingSearch.toLowerCase();
 
-        // Check if search term is in notes
+        // Check if search term is in notes (most inclusive search)
         if (notes.includes(searchTerm)) return true;
 
-        // Check if search term matches extracted tracking number
-        const trackingMatch = movement.notes.match(/Guía:\s*([^\s.,]+)/);
-        if (trackingMatch && trackingMatch[1]) {
-          return trackingMatch[1].toLowerCase().includes(searchTerm);
+        // Also check for tracking numbers in various formats
+        // Look for patterns like "Guía: XXX", "- Guía: XXX", "XXX" as standalone numbers
+        const trackingPatterns = [
+          /Guía:\s*([^\s.,]+)/i,  // "Guía: XXX"
+          /- Guía:\s*([^\s.,]+)/i, // "- Guía: XXX"
+          /\b\d{8,12}\b/g,        // Standalone numbers (8-12 digits, typical for tracking)
+        ];
+
+        for (const pattern of trackingPatterns) {
+          const matches = movement.notes.match(pattern);
+          if (matches) {
+            for (const match of matches) {
+              // If it's a full pattern match, extract the number part
+              if (match.includes('Guía:')) {
+                const numberMatch = match.match(/Guía:\s*([^\s.,]+)/i);
+                if (numberMatch && numberMatch[1] && numberMatch[1].toLowerCase().includes(searchTerm)) {
+                  return true;
+                }
+              } else if (match.toLowerCase().includes(searchTerm)) {
+                // Direct match for standalone numbers
+                return true;
+              }
+            }
+          }
         }
 
         return false;
