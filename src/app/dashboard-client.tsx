@@ -47,7 +47,6 @@ import DashboardPlatformCarrierChart from '@/components/dashboard-platform-carri
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
 import React from 'react';
-import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 import { es } from 'date-fns/locale';
 import DashboardAnnulledChart from '@/components/dashboard-annulled-chart';
 import DashboardAdjustChart from '@/components/dashboard-adjust-chart';
@@ -460,9 +459,6 @@ function NewDashboardContent() {
         </div>
       )}
 
-      {loading ? null : (
-        <DailyDispatchSummary data={dashboardData.dailyDispatchSummaryData} />
-      )}
 
         <Card>
             <CardHeader>
