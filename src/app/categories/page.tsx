@@ -1,4 +1,6 @@
 
+export const dynamic = 'force-dynamic';
+
 import { getCategories } from '@/lib/api';
 import type { Category } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';

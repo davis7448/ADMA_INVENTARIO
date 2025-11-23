@@ -308,6 +308,42 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             return;
         }
 
+        // Validate stock availability
+        const stockErrors: string[] = [];
+        for (const item of dispatchedProducts) {
+            const product = allProductsList.find(p => p.id === item.productId);
+            if (!product) {
+                stockErrors.push(`Producto ${item.name} no encontrado.`);
+                continue;
+            }
+
+            let availableStock = 0;
+            if (item.variantId && product.productType === 'variable') {
+                const variant = product.variants?.find(v => v.id === item.variantId);
+                if (variant) {
+                    availableStock = variant.stock;
+                } else {
+                    stockErrors.push(`Variante de ${item.name} no encontrada.`);
+                    continue;
+                }
+            } else {
+                availableStock = product.stock;
+            }
+
+            if (availableStock < item.quantity) {
+                stockErrors.push(`Producto: ${item.name}. Disponible: ${availableStock}, se piden: ${item.quantity}.`);
+            }
+        }
+
+        if (stockErrors.length > 0) {
+            toast({
+                variant: 'destructive',
+                title: "No hay suficiente inventario",
+                description: stockErrors.join(' '),
+            });
+            return;
+        }
+
         startDispatchTransition(async () => {
             const platformName = platforms.find(p => p.id === platform)?.name || 'N/A';
             const carrierName = carriers.find(c => c.id === carrier)?.name || 'N/A';

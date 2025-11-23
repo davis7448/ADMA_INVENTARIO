@@ -53,92 +53,97 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
-    const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse, warehouseId, userRole } = filters;
+    try {
+        const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse, warehouseId, userRole } = filters;
 
-    let productQuery: Query = collection(db, 'products');
+        let productQuery: Query = collection(db, 'products');
 
-    // For logistics in wh-bog, we need to fetch all to filter unassigned + assigned
-    // For others, filter in query
-    if (warehouseId && warehouseId !== 'all' && !(userRole === 'logistics' && warehouseId === 'wh-bog')) {
-        productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
-    }
-
-    const allProductsSnapshot = await getDocs(productQuery);
-
-    let allProducts = allProductsSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...doc.data(),
-            warehouseId: data.warehouseId, // keep null for unassigned
-        } as Product
-    });
-
-    // Apply warehouse filter in memory for logistics in wh-bog
-    if (warehouseId && warehouseId !== 'all') {
-        if (userRole === 'logistics' && warehouseId === 'wh-bog') {
-            allProducts = allProducts.filter(p => p.warehouseId === 'wh-bog');
-        } else if (userRole !== 'logistics') {
-            allProducts = allProducts.filter(p => p.warehouseId === warehouseId);
+        // For logistics in wh-bog, we need to fetch all to filter unassigned + assigned
+        // For others, filter in query
+        if (warehouseId && warehouseId !== 'all' && !(userRole === 'logistics' && warehouseId === 'wh-bog')) {
+            productQuery = query(productQuery, where('warehouseId', '==', warehouseId));
         }
-        // For logistics in other warehouses, already filtered in query
+
+        const allProductsSnapshot = await getDocs(productQuery);
+
+        let allProducts = allProductsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...doc.data(),
+                warehouseId: data.warehouseId, // keep null for unassigned
+            } as Product
+        });
+
+        // Apply warehouse filter in memory for logistics in wh-bog
+        if (warehouseId && warehouseId !== 'all') {
+            if (userRole === 'logistics' && warehouseId === 'wh-bog') {
+                allProducts = allProducts.filter(p => p.warehouseId === 'wh-bog');
+            } else if (userRole !== 'logistics') {
+                allProducts = allProducts.filter(p => p.warehouseId === warehouseId);
+            }
+            // For logistics in other warehouses, already filtered in query
+        }
+
+        // Fetch and attach reservations before filtering
+        const allReservations = await getAllReservations(warehouseId);
+        const reservationsByProductId: Record<string, Reservation[]> = {};
+
+        for (const reservation of allReservations) {
+          if (!reservationsByProductId[reservation.productId]) {
+              reservationsByProductId[reservation.productId] = [];
+          }
+          reservationsByProductId[reservation.productId].push(reservation);
+        }
+
+        const allProductsWithReservations = allProducts.map(product => ({
+          ...product,
+          reservations: reservationsByProductId[product.id] || [],
+        }));
+
+        // Apply remaining client-side filters
+        const filteredProducts = allProductsWithReservations.filter(product => {
+            const lowercasedQuery = searchQuery?.toLowerCase() || '';
+            const searchMatch = !searchQuery || searchQuery.length <= 2
+                ? true
+                : product.name.toLowerCase().includes(lowercasedQuery) ||
+                  (product.sku && product.sku.toLowerCase().includes(lowercasedQuery)) ||
+                  (product.productType === 'variable' && product.variants?.some(variant =>
+                      variant.name.toLowerCase().includes(lowercasedQuery) ||
+                      variant.sku.toLowerCase().includes(lowercasedQuery)
+                  ));
+            
+            const rotationMatch = !selectedRotation || selectedRotation === 'all' || product.rotationCategoryName === selectedRotation;
+            const stockMatch = !minStock || product.stock >= parseInt(minStock, 10);
+            const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
+            const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
+            const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
+            const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
+            const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
+            const variableMatch = !onlyVariable || product.productType === 'variable';
+            const noWarehouseMatch = !noWarehouse || !product.warehouseId;
+
+            return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch && variableMatch && noWarehouseMatch;
+        });
+
+        const totalCount = filteredProducts.length;
+        const totalPages = Math.ceil(totalCount / itemsPerPage);
+
+        const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+        const productsWithData = paginatedProducts.map(product => ({
+            ...product,
+            purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
+            lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
+            damagedStock: product.damagedStock || 0,
+            pendingStock: product.pendingStock || 0,
+        }));
+
+        return { products: productsWithData, totalPages };
+    } catch (error) {
+        console.error("Error fetching products:", error);
+        return { products: [], totalPages: 0 };
     }
-
-    // Fetch and attach reservations before filtering
-    const allReservations = await getAllReservations(warehouseId);
-    const reservationsByProductId: Record<string, Reservation[]> = {};
-
-    for (const reservation of allReservations) {
-      if (!reservationsByProductId[reservation.productId]) {
-          reservationsByProductId[reservation.productId] = [];
-      }
-      reservationsByProductId[reservation.productId].push(reservation);
-    }
-
-    const allProductsWithReservations = allProducts.map(product => ({
-      ...product,
-      reservations: reservationsByProductId[product.id] || [],
-    }));
-
-    // Apply remaining client-side filters
-    const filteredProducts = allProductsWithReservations.filter(product => {
-        const lowercasedQuery = searchQuery?.toLowerCase() || '';
-        const searchMatch = !searchQuery || searchQuery.length <= 2
-            ? true
-            : product.name.toLowerCase().includes(lowercasedQuery) || 
-              (product.sku && product.sku.toLowerCase().includes(lowercasedQuery)) ||
-              (product.productType === 'variable' && product.variants?.some(variant => 
-                  variant.name.toLowerCase().includes(lowercasedQuery) ||
-                  variant.sku.toLowerCase().includes(lowercasedQuery)
-              ));
-        
-        const rotationMatch = !selectedRotation || selectedRotation === 'all' || product.rotationCategoryName === selectedRotation;
-        const stockMatch = !minStock || product.stock >= parseInt(minStock, 10);
-        const pendingMatch = !hasPending || (product.pendingStock && product.pendingStock > 0);
-        const reservationsMatch = !hasReservations || (product.reservations && product.reservations.length > 0);
-        const vendedorMatch = !selectedVendedor || selectedVendedor === 'all' || (product.reservations && product.reservations.some(r => r.vendedorId === selectedVendedor));
-        const categoryMatch = !selectedCategory || selectedCategory === 'all' || product.categoryId === selectedCategory;
-        const auditedMatch = !onlyAudited || !!product.lastAuditedAt;
-        const variableMatch = !onlyVariable || product.productType === 'variable';
-        const noWarehouseMatch = !noWarehouse || !product.warehouseId;
-
-        return searchMatch && rotationMatch && stockMatch && pendingMatch && reservationsMatch && vendedorMatch && categoryMatch && auditedMatch && variableMatch && noWarehouseMatch;
-    });
-
-    const totalCount = filteredProducts.length;
-    const totalPages = Math.ceil(totalCount / itemsPerPage);
-
-    const paginatedProducts = fetchAll ? filteredProducts : filteredProducts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-
-    const productsWithData = paginatedProducts.map(product => ({
-        ...product,
-        purchaseDate: product.purchaseDate ? parseFirestoreDate(product.purchaseDate).toISOString() : undefined,
-        lastAuditedAt: product.lastAuditedAt ? parseFirestoreDate(product.lastAuditedAt).toISOString() : undefined,
-        damagedStock: product.damagedStock || 0,
-        pendingStock: product.pendingStock || 0,
-    }));
-
-    return { products: productsWithData, totalPages };
   };
 
 export const getProductById = async (id: string): Promise<Product | null> => {
@@ -412,7 +417,7 @@ export const registerDamagedProduct = async (productId: string, quantity: number
              if (variant.stock >= quantity) {
                 variant.stock -= quantity;
             } else {
-                throw new Error(`No hay suficiente stock para la variante ${variant.name} para marcar como averiado. Disponible: ${variant.stock}, Averiado: ${quantity}`);
+                throw new Error(`No hay suficiente stock para la variante ${variant.name} para marcar como averiado. Disponible: ${variant.stock}, se requieren: ${quantity}`);
             }
 
             updateData.variants = variants;
@@ -461,10 +466,15 @@ export const clearProductAudit = async (productId: string): Promise<void> => {
 
 // Supplier Functions
 export const getSuppliers = async (): Promise<Supplier[]> => {
-    const suppliersCol = collection(db, 'suppliers');
-    const supplierSnapshot = await getDocs(suppliersCol);
-    const supplierList = supplierSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
-    return supplierList;
+    try {
+        const suppliersCol = collection(db, 'suppliers');
+        const supplierSnapshot = await getDocs(suppliersCol);
+        const supplierList = supplierSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Supplier));
+        return supplierList;
+    } catch (error) {
+        console.error("Error fetching suppliers:", error);
+        return [];
+    }
 };
 
 export const getSupplierById = async (id: string): Promise<Supplier | null> => {
@@ -501,10 +511,15 @@ export const getSuppliersByIds = async (ids: string[]): Promise<Record<string, s
 
 // Category Functions
 export const getCategories = async (): Promise<Category[]> => {
-    const categoriesCol = collection(db, 'categories');
-    const categorySnapshot = await getDocs(categoriesCol);
-    const categoryList = categorySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
-    return categoryList;
+    try {
+        const categoriesCol = collection(db, 'categories');
+        const categorySnapshot = await getDocs(categoriesCol);
+        const categoryList = categorySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category));
+        return categoryList;
+    } catch (error) {
+        console.error("Error fetching categories:", error);
+        return [];
+    }
 };
 
 export const addCategory = async (category: Omit<Category, 'id'>): Promise<string> => {
@@ -1459,10 +1474,15 @@ export const getPendingInventory = async (warehouseId?: string): Promise<Pending
 
 // Settings Functions
 export const getRotationCategories = async (): Promise<RotationCategory[]> => {
-    const rotationCategoriesCol = collection(db, 'rotationCategories');
-    const snapshot = await getDocs(rotationCategoriesCol);
-    const categoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RotationCategory));
-    return categoryList.sort((a, b) => b.salesThreshold - a.salesThreshold);
+    try {
+        const rotationCategoriesCol = collection(db, 'rotationCategories');
+        const snapshot = await getDocs(rotationCategoriesCol);
+        const categoryList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RotationCategory));
+        return categoryList.sort((a, b) => b.salesThreshold - a.salesThreshold);
+    } catch (error) {
+        console.error("Error fetching rotation categories:", error);
+        return [];
+    }
 };
 
 export const addRotationCategory = async (category: Omit<RotationCategory, 'id'>): Promise<string> => {
@@ -1481,10 +1501,15 @@ export const updateRotationCategories = async (categories: RotationCategory[]): 
 };
 
 export const getEntryReasons = async (): Promise<EntryReason[]> => {
-    const entryReasonsCol = collection(db, 'entryReasons');
-    const snapshot = await getDocs(entryReasonsCol);
-    const reasonList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EntryReason));
-    return reasonList;
+    try {
+        const entryReasonsCol = collection(db, 'entryReasons');
+        const snapshot = await getDocs(entryReasonsCol);
+        const reasonList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EntryReason));
+        return reasonList;
+    } catch (error) {
+        console.error("Error fetching entry reasons:", error);
+        return [];
+    }
 };
 
 export const addEntryReason = async (reason: Pick<EntryReason, 'label' | 'value'>): Promise<string> => {
@@ -1586,9 +1611,8 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
     for (const movement of returnMovements) {
         const day = format(startOfDay(new Date(movement.date)), 'yyyy-MM-dd');
         const qty = movement.quantity;
-        const carrierMatch = movement.notes.match(/Transportadora: (.*?)(?:\.|$)/);
-        const carrierName = carrierMatch ? carrierMatch[1].trim() : 'Unknown';
-        
+        const carrierName = movement.carrierId ? carrierMap.get(movement.carrierId) || 'Unknown Carrier' : 'Unknown Carrier';
+
         returnsByDay[day] = (returnsByDay[day] || 0) + qty;
         returnsByCarrier[carrierName] = (returnsByCarrier[carrierName] || 0) + qty;
 
@@ -1623,9 +1647,14 @@ export const getProductPerformanceData = async (productId: string): Promise<Prod
 
 // Vendedor Functions
 export const getVendedores = async (): Promise<Vendedor[]> => {
-    const vendedoresCol = collection(db, 'vendedores');
-    const snapshot = await getDocs(vendedoresCol);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vendedor));
+    try {
+        const vendedoresCol = collection(db, 'vendedores');
+        const snapshot = await getDocs(vendedoresCol);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vendedor));
+    } catch (error) {
+        console.error("Error fetching vendedores:", error);
+        return [];
+    }
 };
 
 export const addVendedor = async (vendedor: Omit<Vendedor, 'id'>): Promise<string> => {
@@ -1736,32 +1765,37 @@ export const deleteReservation = async (reservationId: string) => {
 
 // Stale Reservation Alert Functions
 export const getStaleReservationAlerts = async (warehouseId?: string): Promise<StaleReservationAlert[]> => {
-    let baseQuery: Query = query(collection(db, 'staleReservationAlerts'));
-    let queries: Query[] = [];
+    try {
+        let baseQuery: Query = query(collection(db, 'staleReservationAlerts'));
+        let queries: Query[] = [];
 
-    if (!warehouseId || warehouseId === 'all') {
-        queries.push(baseQuery);
-    } else if (warehouseId === 'wh-bog') {
-        queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
-        queries.push(query(collection(db, 'staleReservationAlerts'), where('warehouseId', '==', null)));
-    } else {
-        queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
+        if (!warehouseId || warehouseId === 'all') {
+            queries.push(baseQuery);
+        } else if (warehouseId === 'wh-bog') {
+            queries.push(query(baseQuery, where('warehouseId', '==', 'wh-bog')));
+            queries.push(query(collection(db, 'staleReservationAlerts'), where('warehouseId', '==', null)));
+        } else {
+            queries.push(query(baseQuery, where('warehouseId', '==', warehouseId)));
+        }
+
+        const snapshots = await Promise.all(queries.map(q => getDocs(q)));
+        const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
+
+        const alertList = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                alertDate: parseFirestoreDate(data.alertDate).toISOString(),
+                reservationDate: parseFirestoreDate(data.reservationDate).toISOString(),
+            } as StaleReservationAlert;
+        });
+
+        return alertList.sort((a, b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
+    } catch (error) {
+        console.error("Error fetching stale reservation alerts:", error);
+        return [];
     }
-
-    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
-    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
-
-    const alertList = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            ...data,
-            alertDate: parseFirestoreDate(data.alertDate).toISOString(),
-            reservationDate: parseFirestoreDate(data.reservationDate).toISOString(),
-        } as StaleReservationAlert;
-    });
-
-    return alertList.sort((a, b) => new Date(b.alertDate).getTime() - new Date(a.reservationDate).getTime());
 };
 
 export const checkForStaleReservations = async (): Promise<void> => {
