@@ -142,9 +142,10 @@ function ReturnsDamagesPageContent() {
     setGlobalSearchLoading(true);
     try {
       // Search in inventory movements for tracking numbers
+      // Note: We fetch more than needed and filter client-side to avoid complex Firestore indexes
       const movementsResult = await getInventoryMovements({
-        page,
-        limit: 30, // 30 results per page as requested
+        page: 1, // Always start from page 1 and filter client-side
+        limit: 1000, // Fetch more to allow client-side filtering
         filters: {
           warehouseId: selectedWarehouse === 'all' ? undefined : selectedWarehouse,
           // We'll filter by tracking number in notes on the client side since Firestore doesn't support regex searches easily
@@ -190,9 +191,14 @@ function ReturnsDamagesPageContent() {
         return false;
       });
 
-      setGlobalSearchResults(filteredMovements);
+      // Apply client-side pagination
+      const startIndex = (page - 1) * 30;
+      const endIndex = startIndex + 30;
+      const paginatedResults = filteredMovements.slice(startIndex, endIndex);
+
+      setGlobalSearchResults(paginatedResults);
       setGlobalSearchPagination({
-        totalCount: filteredMovements.length, // This is approximate since we're filtering client-side
+        totalCount: filteredMovements.length,
         totalPages: Math.ceil(filteredMovements.length / 30),
         currentPage: page
       });
@@ -336,9 +342,7 @@ function ReturnsDamagesPageContent() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {globalSearchResults
-                        .slice((globalSearchPagination.currentPage - 1) * 30, globalSearchPagination.currentPage * 30)
-                        .map((movement, index) => {
+                      {globalSearchResults.map((movement, index) => {
                           const trackingMatch = movement.notes?.match(/Guía:\s*([^\s.,]+)/);
                           const trackingNumber = trackingMatch ? trackingMatch[1] : 'N/A';
 
