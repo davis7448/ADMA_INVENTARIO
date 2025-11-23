@@ -23,8 +23,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { CalendarIcon, Download, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
+import { CalendarIcon, Download, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { format, subDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
 import { getReturnsByProduct, getDamagesReport, getWarehouses } from '@/lib/api';
@@ -50,12 +50,27 @@ function ReturnsDamagesPageContent() {
   const [dateRange, setDateRange] = useState<{
     from: Date | undefined;
     to: Date | undefined;
-  }>({
-    from: undefined,
-    to: undefined,
+  }>(() => {
+    const today = new Date();
+    return {
+      from: subDays(today, 6), // 7 días incluyendo hoy
+      to: today,
+    };
   });
   const [returnsPage, setReturnsPage] = useState(1);
   const [dailyReturns, setDailyReturns] = useState<Record<string, number>>({});
+  const [trackingSearch, setTrackingSearch] = useState('');
+
+  // Filter damages data based on tracking search
+  const filteredDamagesData = damagesData.filter(item =>
+    item.damageMovements.some(movement => {
+      const trackingMatch = movement.notes.match(/Guía:\s*([^\s.,]+)/);
+      const trackingNumber = trackingMatch ? trackingMatch[1] : '';
+      return trackingSearch === '' ||
+             trackingNumber.toLowerCase().includes(trackingSearch.toLowerCase()) ||
+             movement.notes.toLowerCase().includes(trackingSearch.toLowerCase());
+    })
+  );
 
   useEffect(() => {
     loadData();
@@ -391,80 +406,116 @@ function ReturnsDamagesPageContent() {
         </TabsContent>
 
         <TabsContent value="damages" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Averías Reportadas</CardTitle>
-                <CardDescription>
-                  Desglose individual de productos averiados con sus motivos
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => exportToXLSX(damagesData, 'averias-reportadas.xlsx', 'Averías')}
-                disabled={damagesData.length === 0}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar Excel
-              </Button>
-            </CardHeader>
+           {/* Search Bar for Tracking Numbers */}
+           <Card>
+             <CardContent className="pt-6">
+               <div className="flex items-center space-x-2">
+                 <div className="relative flex-1 max-w-sm">
+                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                   <input
+                     type="text"
+                     placeholder="Buscar por número de guía..."
+                     value={trackingSearch}
+                     onChange={(e) => setTrackingSearch(e.target.value)}
+                     className="pl-10 pr-4 py-2 w-full border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                   />
+                 </div>
+                 {trackingSearch && (
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => setTrackingSearch('')}
+                   >
+                     Limpiar
+                   </Button>
+                 )}
+               </div>
+             </CardContent>
+           </Card>
+
+           <Card>
+             <CardHeader className="flex flex-row items-center justify-between">
+               <div>
+                 <CardTitle>Averías Reportadas</CardTitle>
+                 <CardDescription>
+                   Desglose individual de productos averiados con sus motivos
+                   {trackingSearch && ` (filtrado por: "${trackingSearch}")`}
+                 </CardDescription>
+               </div>
+               <Button
+                 variant="outline"
+                 onClick={() => exportToXLSX(filteredDamagesData, 'averias-reportadas.xlsx', 'Averías')}
+                 disabled={filteredDamagesData.length === 0}
+               >
+                 <Download className="mr-2 h-4 w-4" />
+                 Exportar Excel
+               </Button>
+             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="flex justify-center py-8">
                   <div className="text-muted-foreground">Cargando...</div>
                 </div>
-              ) : damagesData.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead className="text-right">Cantidad</TableHead>
-                      <TableHead>Guía</TableHead>
-                      <TableHead>Motivo de Avería</TableHead>
-                      <TableHead>Usuario</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {damagesData.flatMap((item) =>
-                      item.damageMovements.map((movement: any, index: number) => {
-                        // Extract tracking number from notes
-                        const trackingMatch = movement.notes.match(/Guía:\s*([^\s.,]+)/);
-                        const trackingNumber = trackingMatch ? trackingMatch[1] : 'N/A';
+              ) : filteredDamagesData.length > 0 ? (
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Fecha</TableHead>
+                       <TableHead>Producto</TableHead>
+                       <TableHead>SKU</TableHead>
+                       <TableHead className="text-right">Cantidad</TableHead>
+                       <TableHead>Guía</TableHead>
+                       <TableHead>Motivo de Avería</TableHead>
+                       <TableHead>Usuario</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {filteredDamagesData.flatMap((item) =>
+                       item.damageMovements
+                         .filter((movement: any) => {
+                           const trackingMatch = movement.notes.match(/Guía:\s*([^\s.,]+)/);
+                           const trackingNumber = trackingMatch ? trackingMatch[1] : '';
+                           return trackingSearch === '' ||
+                                  trackingNumber.toLowerCase().includes(trackingSearch.toLowerCase()) ||
+                                  movement.notes.toLowerCase().includes(trackingSearch.toLowerCase());
+                         })
+                         .map((movement: any, index: number) => {
+                           // Extract tracking number from notes
+                           const trackingMatch = movement.notes.match(/Guía:\s*([^\s.,]+)/);
+                           const trackingNumber = trackingMatch ? trackingMatch[1] : 'N/A';
 
-                        return (
-                          <TableRow key={`${item.productId}-${index}`}>
-                            <TableCell className="font-medium">
-                              {format(new Date(movement.date), 'dd/MM/yyyy')}
-                            </TableCell>
-                            <TableCell>{item.productName}</TableCell>
-                            <TableCell className="font-mono text-sm">{item.productSku}</TableCell>
-                            <TableCell className="text-right">
-                              <Badge variant="destructive">{movement.quantity}</Badge>
-                            </TableCell>
-                            <TableCell className="font-mono text-sm">
-                              {trackingNumber}
-                            </TableCell>
-                            <TableCell>
-                              {movement.notes.includes('Devolución averiada:') ?
-                                movement.notes.split('Devolución averiada:')[1]?.split('.')[0]?.trim() ||
-                                movement.notes.split('Devolución averiada:')[1]?.trim() :
-                                movement.notes
-                              }
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {movement.userName || 'N/A'}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
+                           return (
+                             <TableRow key={`${item.productId}-${index}`}>
+                               <TableCell className="font-medium">
+                                 {format(new Date(movement.date), 'dd/MM/yyyy')}
+                               </TableCell>
+                               <TableCell>{item.productName}</TableCell>
+                               <TableCell className="font-mono text-sm">{item.productSku}</TableCell>
+                               <TableCell className="text-right">
+                                 <Badge variant="destructive">{movement.quantity}</Badge>
+                               </TableCell>
+                               <TableCell className="font-mono text-sm">
+                                 {trackingNumber}
+                               </TableCell>
+                               <TableCell>
+                                 {movement.notes.includes('Devolución averiada:') ?
+                                   movement.notes.split('Devolución averiada:')[1]?.split('.')[0]?.trim() ||
+                                   movement.notes.split('Devolución averiada:')[1]?.trim() :
+                                   movement.notes
+                                 }
+                               </TableCell>
+                               <TableCell className="text-sm text-muted-foreground">
+                                 {movement.userName || 'N/A'}
+                               </TableCell>
+                             </TableRow>
+                           );
+                         })
+                     )}
+                   </TableBody>
+                 </Table>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  No se encontraron averías en el período seleccionado.
+                  {trackingSearch ? 'No se encontraron averías que coincidan con la búsqueda.' : 'No se encontraron averías en el período seleccionado.'}
                 </div>
               )}
             </CardContent>
