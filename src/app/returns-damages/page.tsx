@@ -32,14 +32,21 @@ import type { ReturnsByProduct, DamagesReport, Warehouse } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
 import * as XLSX from 'xlsx';
+import { useAuth } from '@/hooks/use-auth';
 
 function ReturnsDamagesPageContent() {
+  const { user } = useAuth();
   const [returnsData, setReturnsData] = useState<ReturnsByProduct[]>([]);
   const [returnsPagination, setReturnsPagination] = useState({ totalCount: 0, totalPages: 0, currentPage: 1 });
   const [damagesData, setDamagesData] = useState<DamagesReport[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string>('all');
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string>(() => {
+    if (user?.role === 'logistics' && user.warehouseId) {
+      return user.warehouseId;
+    }
+    return 'all';
+  });
   const [dateRange, setDateRange] = useState<{
     from: Date | undefined;
     to: Date | undefined;
