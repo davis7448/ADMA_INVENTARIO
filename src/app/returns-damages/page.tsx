@@ -27,8 +27,8 @@ import { CalendarIcon, Download, ChevronLeft, ChevronRight, Search } from 'lucid
 import { format, subDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
-import { getReturnsByProduct, getDamagesReport, getWarehouses } from '@/lib/api';
-import type { ReturnsByProduct, DamagesReport, Warehouse } from '@/lib/types';
+import { getReturnsByProduct, getDamagesReport, getWarehouses, getInventoryMovements } from '@/lib/api';
+import type { ReturnsByProduct, DamagesReport, Warehouse, InventoryMovement } from '@/lib/types';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
 import * as XLSX from 'xlsx';
@@ -59,7 +59,11 @@ function ReturnsDamagesPageContent() {
   });
   const [returnsPage, setReturnsPage] = useState(1);
   const [dailyReturns, setDailyReturns] = useState<Record<string, number>>({});
-  const [trackingSearch, setTrackingSearch] = useState('');
+  const [trackingSearch, setTrackingSearch] = useState(''); // For damages tab search
+  const [globalTrackingSearch, setGlobalTrackingSearch] = useState(''); // For global tracking search
+  const [globalSearchResults, setGlobalSearchResults] = useState<InventoryMovement[]>([]);
+  const [globalSearchPagination, setGlobalSearchPagination] = useState({ totalCount: 0, totalPages: 0, currentPage: 1 });
+  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
 
   // Filter damages data based on tracking search
   const filteredDamagesData = damagesData.filter(item =>
@@ -128,6 +132,68 @@ function ReturnsDamagesPageContent() {
     loadData();
   }, [selectedWarehouse, dateRange, returnsPage]);
 
+  const searchGlobalTracking = async (page = 1) => {
+    if (!globalTrackingSearch.trim()) {
+      setGlobalSearchResults([]);
+      setGlobalSearchPagination({ totalCount: 0, totalPages: 0, currentPage: 1 });
+      return;
+    }
+
+    setGlobalSearchLoading(true);
+    try {
+      // Search in inventory movements for tracking numbers
+      const movementsResult = await getInventoryMovements({
+        page,
+        limit: 30, // 30 results per page as requested
+        filters: {
+          warehouseId: selectedWarehouse === 'all' ? undefined : selectedWarehouse,
+          // We'll filter by tracking number in notes on the client side since Firestore doesn't support regex searches easily
+        }
+      });
+
+      // Filter movements that contain the search term in their notes (tracking numbers)
+      const filteredMovements = movementsResult.movements.filter(movement => {
+        if (!movement.notes) return false;
+
+        const notes = movement.notes.toLowerCase();
+        const searchTerm = globalTrackingSearch.toLowerCase();
+
+        // Check if search term is in notes
+        if (notes.includes(searchTerm)) return true;
+
+        // Check if search term matches extracted tracking number
+        const trackingMatch = movement.notes.match(/Guía:\s*([^\s.,]+)/);
+        if (trackingMatch && trackingMatch[1]) {
+          return trackingMatch[1].toLowerCase().includes(searchTerm);
+        }
+
+        return false;
+      });
+
+      setGlobalSearchResults(filteredMovements);
+      setGlobalSearchPagination({
+        totalCount: filteredMovements.length, // This is approximate since we're filtering client-side
+        totalPages: Math.ceil(filteredMovements.length / 30),
+        currentPage: page
+      });
+    } catch (error) {
+      console.error('Error searching tracking numbers:', error);
+      setGlobalSearchResults([]);
+      setGlobalSearchPagination({ totalCount: 0, totalPages: 0, currentPage: 1 });
+    } finally {
+      setGlobalSearchLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (globalTrackingSearch.trim()) {
+      searchGlobalTracking(1);
+    } else {
+      setGlobalSearchResults([]);
+      setGlobalSearchPagination({ totalCount: 0, totalPages: 0, currentPage: 1 });
+    }
+  }, [globalTrackingSearch, selectedWarehouse]);
+
   const exportToXLSX = (data: any[], filename: string, sheetName: string = 'Datos') => {
     if (data.length === 0) return;
 
@@ -193,6 +259,141 @@ function ReturnsDamagesPageContent() {
           <p className="text-muted-foreground">Reporte de devoluciones por producto y averías reportadas con sus motivos.</p>
         </div>
       </div>
+
+      {/* Global Tracking Search */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Buscar Guías de Devolución</CardTitle>
+          <CardDescription>
+            Busca guías específicas en todo el historial de movimientos de inventario
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <input
+                type="text"
+                placeholder="Buscar por número de guía..."
+                value={globalTrackingSearch}
+                onChange={(e) => setGlobalTrackingSearch(e.target.value)}
+                className="pl-10 pr-4 py-2 w-full border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+              />
+            </div>
+            {globalTrackingSearch && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setGlobalTrackingSearch('')}
+              >
+                Limpiar
+              </Button>
+            )}
+          </div>
+
+          {/* Global Search Results */}
+          {globalTrackingSearch && (
+            <div className="mt-4">
+              {globalSearchLoading ? (
+                <div className="flex justify-center py-4">
+                  <div className="text-muted-foreground">Buscando guías...</div>
+                </div>
+              ) : globalSearchResults.length > 0 ? (
+                <>
+                  <div className="mb-2 text-sm text-muted-foreground">
+                    Encontrados {globalSearchPagination.totalCount} resultados para "{globalTrackingSearch}"
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Producto</TableHead>
+                        <TableHead className="text-right">Cantidad</TableHead>
+                        <TableHead>Guía</TableHead>
+                        <TableHead>Notas</TableHead>
+                        <TableHead>Usuario</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {globalSearchResults
+                        .slice((globalSearchPagination.currentPage - 1) * 30, globalSearchPagination.currentPage * 30)
+                        .map((movement, index) => {
+                          const trackingMatch = movement.notes?.match(/Guía:\s*([^\s.,]+)/);
+                          const trackingNumber = trackingMatch ? trackingMatch[1] : 'N/A';
+
+                          return (
+                            <TableRow key={`${movement.id || index}`}>
+                              <TableCell className="font-medium">
+                                {format(new Date(movement.date), 'dd/MM/yyyy')}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={movement.type === 'Entrada' ? 'default' : 'secondary'}>
+                                  {movement.type}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{movement.productName}</TableCell>
+                              <TableCell className="text-right">
+                                <Badge variant={movement.quantity > 0 ? 'default' : 'destructive'}>
+                                  {movement.quantity > 0 ? '+' : ''}{movement.quantity}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
+                                {trackingNumber}
+                              </TableCell>
+                              <TableCell className="max-w-xs truncate">
+                                {movement.notes}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {movement.userName || 'N/A'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                    </TableBody>
+                  </Table>
+
+                  {/* Pagination for global search */}
+                  {globalSearchPagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="text-sm text-muted-foreground">
+                        Mostrando {((globalSearchPagination.currentPage - 1) * 30) + 1} - {Math.min(globalSearchPagination.currentPage * 30, globalSearchPagination.totalCount)} de {globalSearchPagination.totalCount} resultados
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => searchGlobalTracking(globalSearchPagination.currentPage - 1)}
+                          disabled={globalSearchPagination.currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Anterior
+                        </Button>
+                        <span className="text-sm">
+                          Página {globalSearchPagination.currentPage} de {globalSearchPagination.totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => searchGlobalTracking(globalSearchPagination.currentPage + 1)}
+                          disabled={globalSearchPagination.currentPage === globalSearchPagination.totalPages}
+                        >
+                          Siguiente
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : globalTrackingSearch ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  No se encontraron guías que coincidan con "{globalTrackingSearch}"
+                </div>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -406,40 +607,12 @@ function ReturnsDamagesPageContent() {
         </TabsContent>
 
         <TabsContent value="damages" className="space-y-4">
-           {/* Search Bar for Tracking Numbers */}
-           <Card>
-             <CardContent className="pt-6">
-               <div className="flex items-center space-x-2">
-                 <div className="relative flex-1 max-w-sm">
-                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                   <input
-                     type="text"
-                     placeholder="Buscar por número de guía..."
-                     value={trackingSearch}
-                     onChange={(e) => setTrackingSearch(e.target.value)}
-                     className="pl-10 pr-4 py-2 w-full border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                   />
-                 </div>
-                 {trackingSearch && (
-                   <Button
-                     variant="ghost"
-                     size="sm"
-                     onClick={() => setTrackingSearch('')}
-                   >
-                     Limpiar
-                   </Button>
-                 )}
-               </div>
-             </CardContent>
-           </Card>
-
            <Card>
              <CardHeader className="flex flex-row items-center justify-between">
                <div>
                  <CardTitle>Averías Reportadas</CardTitle>
                  <CardDescription>
                    Desglose individual de productos averiados con sus motivos
-                   {trackingSearch && ` (filtrado por: "${trackingSearch}")`}
                  </CardDescription>
                </div>
                <Button
