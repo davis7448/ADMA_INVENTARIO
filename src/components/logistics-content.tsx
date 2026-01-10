@@ -461,7 +461,23 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
             toast({ variant: 'destructive', title: 'Error', description: 'No hay productos para ajustar.' });
             return;
         }
-        
+
+        // Check if any products have been audited
+        const auditedProducts = adjustmentProducts.filter(item => {
+            const product = allProductsList.find(p => p.id === item.productId);
+            return product && product.lastAuditedAt;
+        });
+
+        if (auditedProducts.length > 0) {
+            const auditedNames = auditedProducts.map(p => p.name).join(', ');
+            toast({
+                variant: 'destructive',
+                title: 'Ajuste No Permitido',
+                description: `Los siguientes productos ya han sido auditados y no se pueden ajustar: ${auditedNames}.`,
+            });
+            return;
+        }
+
         const reasonLabel = adjustmentType === 'in' ? 'Ajuste de Entrada' : 'Ajuste de Salida';
 
         startEntryTransition(async () => {
