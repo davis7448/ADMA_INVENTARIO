@@ -7,6 +7,7 @@ import { Suspense } from 'react';
 import { getAuth } from 'firebase-admin/auth';
 import { getApp } from '@/lib/firebase-admin';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
     if (!sessionCookie) {
@@ -33,6 +34,11 @@ export default async function LogisticsPage({
     const user = await getCurrentUser(sessionCookie);
     const effectiveWarehouseId = user && user.role !== 'admin' ? (user.warehouseId || 'wh-bog') : undefined;
     const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
+
+    // Server-side redirect for logistics users
+    if (user?.role === 'logistics' && !searchParams?.warehouse) {
+        redirect(`?warehouse=${warehouseId}`);
+    }
 
     const filters = {
         warehouseId: warehouseId,

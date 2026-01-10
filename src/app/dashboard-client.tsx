@@ -1,6 +1,6 @@
 "use client";
 
-// Force rebuild 2025-10-09
+// Force rebuild 2025-11-23 v2
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -25,13 +25,6 @@ import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms
 import type { DashboardData } from '@/lib/types';
 import type { Product, Carrier, Category, Platform, ProductVariant } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown, ArchiveX, Settings, Edit } from 'lucide-react';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import { formatToTimeZone } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
 import { addDays, format, startOfDay } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -45,9 +38,7 @@ import DashboardReturnsChart from '@/components/dashboard-returns-chart';
 import { Progress } from '@/components/ui/progress';
 import DashboardPlatformCarrierChart from '@/components/dashboard-platform-carrier-chart';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Badge } from '@/components/ui/badge';
 import React from 'react';
-import DailyDispatchSummary from '@/components/daily-dispatch-summary';
 import { es } from 'date-fns/locale';
 import DashboardAnnulledChart from '@/components/dashboard-annulled-chart';
 import DashboardAdjustChart from '@/components/dashboard-adjust-chart';
@@ -77,7 +68,7 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
     dailyProductDispatch: {},
 };
 
-function DashboardContent() {
+function NewDashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, effectiveWarehouseId: authEffectiveWarehouseId } = useAuth();
@@ -105,13 +96,25 @@ function DashboardContent() {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [allPlatforms, setAllPlatforms] = useState<Platform[]>([]);
   const [allWarehouses, setAllWarehouses] = useState<{ id: string; name: string }[]>([]);
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string | undefined>(searchParams.get('warehouse') || undefined);
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string | undefined>(() => {
+    const urlWarehouse = searchParams.get('warehouse');
+    if (urlWarehouse) return urlWarehouse;
+    if (user?.role === 'logistics' && user.warehouseId) return user.warehouseId;
+    return undefined;
+  });
 
   const effectiveWarehouseId = user?.role === 'admin' ? selectedWarehouse : authEffectiveWarehouseId;
   const warehouseId = searchParams.get('warehouse') || effectiveWarehouseId || undefined;
 
+  // Auto-set warehouse for logistics users
+  useEffect(() => {
+    if (user?.role === 'logistics' && user.warehouseId && !searchParams.get('warehouse') && selectedWarehouse !== user.warehouseId) {
+      setSelectedWarehouse(user.warehouseId);
+    }
+  }, [user, searchParams, selectedWarehouse]);
+
   // Debug logging for warehouse filtering
-  console.log('Dashboard Auth Debug:', {
+  console.log('New Dashboard Auth Debug:', {
     user: user ? { id: user.id, role: user.role, warehouseId: user.warehouseId } : null,
     authEffectiveWarehouseId,
     selectedWarehouse,
@@ -121,7 +124,7 @@ function DashboardContent() {
   });
 
   // Debug logging
-  console.log('Dashboard Debug:', {
+  console.log('New Dashboard Debug:', {
     userRole: user?.role,
     userWarehouseId: user?.warehouseId,
     searchParamsWarehouse: searchParams.get('warehouse'),
@@ -135,26 +138,11 @@ function DashboardContent() {
     // Fetch static filter options once - reduced limit for better performance
     setFilterOptionsLoading(true);
     Promise.all([
-      getProducts({ limit: 2000, filters: { warehouseId } }).catch(err => {
-        console.warn('Failed to fetch products for filters:', err);
-        return { products: [] };
-      }),
-      getCarriers().catch(err => {
-        console.warn('Failed to fetch carriers for filters:', err);
-        return [];
-      }),
-      getCategories().catch(err => {
-        console.warn('Failed to fetch categories for filters:', err);
-        return [];
-      }),
-      getPlatforms().catch(err => {
-        console.warn('Failed to fetch platforms for filters:', err);
-        return [];
-      }),
-      getWarehouses().catch(err => {
-        console.warn('Failed to fetch warehouses for filters:', err);
-        return [];
-      })
+      getProducts({ limit: 2000, filters: { warehouseId } }),
+      getCarriers(),
+      getCategories(),
+      getPlatforms(),
+      getWarehouses()
     ]).then(([productsResult, carriers, categories, platforms, warehouses]) => {
       setAllProducts(productsResult.products);
       setAllCarriers(carriers);
@@ -281,7 +269,7 @@ function DashboardContent() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-        <h1 className="text-3xl font-bold font-headline tracking-tight">Dashboard Operativo</h1>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Nuevo Dashboard Operativo</h1>
         <div className="flex gap-2">
           {user?.role === 'admin' && (
             <Select value={selectedWarehouse || ''} onValueChange={(value) => setSelectedWarehouse(value === 'all' ? undefined : value)}>
@@ -655,8 +643,8 @@ function DashboardContent() {
   );
 }
 
-export default function DashboardClient() {
+export default function DashboardNewClient() {
     return (
-        <DashboardContent />
+        <NewDashboardContent />
     );
 }

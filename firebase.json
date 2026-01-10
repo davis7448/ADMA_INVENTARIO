@@ -7,7 +7,7 @@
   },
   "apphosting": {
     "backendId": "test",
-    "rootDir": "/",
+    "rootDir": "src",
     "ignore": [
       "node_modules",
       ".git",
