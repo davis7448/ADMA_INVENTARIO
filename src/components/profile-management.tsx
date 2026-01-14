@@ -146,10 +146,10 @@ export function ProfileManagement() {
                          <Button asChild variant="outline">
                             <label htmlFor="avatar-upload" className="cursor-pointer">
                                 Cambiar Foto
-                                <Input 
+                                <Input
                                     id="avatar-upload"
-                                    type="file" 
-                                    className="hidden" 
+                                    type="file"
+                                    className="hidden"
                                     accept="image/*"
                                     onChange={handleAvatarChange}
                                 />

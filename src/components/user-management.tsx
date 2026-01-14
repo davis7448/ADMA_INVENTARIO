@@ -110,6 +110,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate, warehouse
                                     <SelectItem value="plataformas">Plataformas</SelectItem>
                                     <SelectItem value="logistics">Logística</SelectItem>
                                     <SelectItem value="commercial">Comercial</SelectItem>
+                                    <SelectItem value="consulta">Consulta</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -213,6 +214,7 @@ function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdat
                         <SelectItem value="plataformas">Plataformas</SelectItem>
                         <SelectItem value="logistics">Logística</SelectItem>
                         <SelectItem value="commercial">Comercial</SelectItem>
+                        <SelectItem value="consulta">Consulta</SelectItem>
                     </SelectContent>
                 </Select>
             </TableCell>

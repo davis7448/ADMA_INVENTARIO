@@ -233,7 +233,17 @@ export type CreateUserFormState = {
 export const UpdateProfileFormSchema = z.object({
     name: z.string().min(1, 'El nombre es requerido.'),
     phone: z.string().optional(),
-    avatar: z.any().optional(),
+    avatar: z
+        .any()
+        .optional()
+        .refine(
+            (file) => !file || file.size <= MAX_FILE_SIZE,
+            `El tamaño máximo del archivo es de 2MB.`
+        )
+        .refine(
+            (file) => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
+            'Solo se admiten los formatos .jpg, .jpeg, .png y .webp.'
+        ),
 });
 
 export type UpdateProfileFormValues = z.infer<typeof UpdateProfileFormSchema>;

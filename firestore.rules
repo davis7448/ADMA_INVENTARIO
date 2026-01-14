@@ -49,7 +49,7 @@ service cloud.firestore {
     }
     match /users/{userId} {
       allow read: if isSignedIn() || isAdminAccess();
-      allow create, update, delete: if isRole('admin') || isAdminAccess();
+      allow create, update, delete: if isRole('admin') || isAdminAccess() || (request.auth != null && request.auth.uid == userId);
     }
     match /inventoryMovements/{movementId} {
       allow read, write: if isSignedIn() || isAdminAccess();
@@ -94,6 +94,11 @@ service cloud.firestore {
      match /importRequests/{requestId} {
        allow read: if isSignedIn() || isAdminAccess();
        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+     }
+     match /modificaciones/{modId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+       allow delete: if isRole('admin') || isAdminAccess();
      }
    }
  }

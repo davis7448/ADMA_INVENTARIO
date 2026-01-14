@@ -33,8 +33,9 @@ type NavItem = {
   };
   
   const navItems: NavItem[] = [
-    { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial', 'plataformas'] },
-    { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'plataformas', 'logistics'] },
+    { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
+    { href: '/tablero-resultados', label: 'Tablero de Resultados', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
+    { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'consulta', 'plataformas', 'logistics'] },
     {
         label: 'Ventas',
         roles: ['admin'],
@@ -55,15 +56,17 @@ type NavItem = {
             { href: '/normalize-warehouses', label: 'Normalizar Bodegas', roles: ['admin'] },
         ],
     },
+    { href: '/salary-management', label: 'Gestión de Salarios', roles: ['admin'] },
+    { href: '/modificaciones', label: 'Modificaciones', roles: ['admin'] },
     {
         label: 'Logística',
         roles: ['admin', 'logistics', 'plataformas', 'commercial'],
         children: [
             { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics', 'plataformas'] },
             { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics', 'plataformas'] },
-            { href: '/reporte-despachos', label: 'Reporte de Despachos', roles: ['admin', 'logistics', 'plataformas', 'commercial'] },
-            { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics', 'plataformas', 'commercial'] },
-            { href: '/cancellations', label: 'Anulaciones', roles: ['admin', 'commercial', 'logistics'] },
+            { href: '/reporte-despachos', label: 'Reporte de Despachos', roles: ['admin', 'logistics', 'plataformas', 'commercial', 'consulta'] },
+            { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics', 'plataformas', 'commercial', 'consulta'] },
+            { href: '/cancellations', label: 'Anulaciones', roles: ['admin', 'commercial', 'consulta', 'logistics'] },
         ],
     },
     { href: '/history', label: 'Historial', roles: ['admin', 'logistics', 'plataformas'] },
@@ -73,8 +76,8 @@ type NavItem = {
         children: [
             { href: '/audit-alerts', label: 'Auditoría', roles: ['admin', 'plataformas'] },
             { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin', 'plataformas'], badge: 'stale_alerts' },
-            { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'logistics', 'plataformas'] },
-            { href: '/returns-damages', label: 'Devoluciones y Averías', roles: ['admin', 'logistics', 'commercial'] },
+            { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'consulta', 'logistics', 'plataformas'] },
+            { href: '/returns-damages', label: 'Devoluciones y Averías', roles: ['admin', 'logistics', 'commercial', 'consulta'] },
         ]
     },
     {

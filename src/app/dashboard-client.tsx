@@ -44,6 +44,7 @@ import DashboardAnnulledChart from '@/components/dashboard-annulled-chart';
 import DashboardAdjustChart from '@/components/dashboard-adjust-chart';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getWarehouses } from '@/lib/api';
+import { Badge } from '@/components/ui/badge';
 
 const SKELETON_DASHBOARD_DATA: DashboardData = {
     totalItemsDispatched: 0,

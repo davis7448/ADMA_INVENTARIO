@@ -94,6 +94,18 @@ export async function updateUserWarehouseAction(userId: string, warehouseId: str
     }
 }
 
+export async function updateUserSalaryAction(userId: string, salary: number): Promise<{ success: boolean; message: string }> {
+    try {
+        await updateUserProfile(userId, { salary });
+        revalidatePath('/settings');
+        revalidatePath('/tablero-resultados');
+        return { success: true, message: 'Salario del usuario actualizado con éxito.' };
+    } catch (error) {
+        console.error("Error updating user salary:", error);
+        return { success: false, message: 'No se pudo actualizar el salario del usuario.' };
+    }
+}
+
 export async function resetUserPasswordAction(email: string): Promise<{ success: boolean, message: string }> {
     try {
         await sendPasswordReset(email);
@@ -113,9 +125,11 @@ export async function updateUserAction(userId: string, formData: FormData): Prom
     });
 
     if (!validatedFields.success) {
+        const fieldErrors = validatedFields.error.flatten().fieldErrors;
+        const firstError = Object.values(fieldErrors).flat()[0] || 'La validación falló. Por favor, revisa tus entradas.';
         return {
-            message: 'La validación falló. Por favor, revisa tus entradas.',
-            errors: validatedFields.error.flatten().fieldErrors,
+            message: firstError,
+            errors: fieldErrors,
             success: false,
         };
     }
