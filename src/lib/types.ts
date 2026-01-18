@@ -100,18 +100,19 @@ export type ReturnRequest = {
 export type UserRole = 'admin' | 'logistics' | 'commercial' | 'consulta' | 'plataformas';
 
 export type User = {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  role: UserRole;
-  avatarUrl: string;
-  photoURL?: string; // For commercial dashboard
-  salary?: number; // For commercial dashboard
-  commissionPercentage?: number; // For commercial dashboard
-  activeBusinessesTarget?: number; // KPI target for commercial
-  billing?: number; // Total billing for commercial
-  warehouseId?: string; // New field
+   id: string;
+   name: string;
+   email: string;
+   phone?: string;
+   role: UserRole;
+   avatarUrl: string;
+   photoURL?: string; // For commercial dashboard
+   salary?: number; // For commercial dashboard
+   commissionPercentage?: number; // For commercial dashboard
+   activeBusinessesTarget?: number; // KPI target for commercial
+   billing?: number; // Total billing for commercial
+   warehouseId?: string; // New field
+   commercialCode?: string; // 4-digit code for commercial users
 };
 
 export type InventoryMovement = {

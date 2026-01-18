@@ -50,6 +50,7 @@ export async function createUserAction(
       email,
       role,
       avatarUrl: `https://i.pravatar.cc/150?u=${email}`,
+      commercialCode: validatedFields.data.commercialCode,
     });
     
     revalidatePath('/settings');
@@ -113,6 +114,17 @@ export async function resetUserPasswordAction(email: string): Promise<{ success:
     } catch (error) {
         console.error("Error sending password reset email:", error);
         return { success: false, message: 'No se pudo enviar el correo de restablecimiento de contraseña.' };
+    }
+}
+
+export async function updateUserCommercialCodeAction(userId: string, commercialCode: string): Promise<{ success: boolean; message: string }> {
+    try {
+        await updateUserProfile(userId, { commercialCode });
+        revalidatePath('/settings');
+        return { success: true, message: 'Código comercial actualizado con éxito.' };
+    } catch (error) {
+        console.error("Error updating user commercial code:", error);
+        return { success: false, message: 'No se pudo actualizar el código comercial del usuario.' };
     }
 }
 

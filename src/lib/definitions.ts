@@ -220,6 +220,15 @@ export const CreateUserFormSchema = z.object({
     role: z.enum(['admin', 'logistics', 'commercial', 'plataformas'], {
         required_error: 'El rol es requerido.',
     }),
+    commercialCode: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.role === 'commercial' && (!data.commercialCode || data.commercialCode.length !== 4)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'El código comercial es requerido para usuarios comerciales y debe tener 4 dígitos.',
+            path: ['commercialCode'],
+        });
+    }
 });
 
 export type CreateUserFormValues = z.infer<typeof CreateUserFormSchema>;

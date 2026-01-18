@@ -37,7 +37,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { MoreHorizontal } from 'lucide-react';
 import type { User, UserRole, Warehouse } from '@/lib/types';
-import { updateUserRoleAction, resetUserPasswordAction, updateUserWarehouseAction } from '@/app/actions/users';
+import { updateUserRoleAction, resetUserPasswordAction, updateUserWarehouseAction, updateUserCommercialCodeAction } from '@/app/actions/users';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from './ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -122,6 +122,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate, warehouse
                     <TableHead>Usuario</TableHead>
                     <TableHead>Correo Electrónico</TableHead>
                     <TableHead>Rol</TableHead>
+                    <TableHead>Código Comercial</TableHead>
                     <TableHead>Bodega Asignada</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -155,6 +156,9 @@ function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdat
     const [isRolePending, startRoleTransition] = useTransition();
     const [isWarehousePending, startWarehouseTransition] = useTransition();
     const [isResetPending, startResetTransition] = useTransition();
+    const [isCodePending, startCodeTransition] = useTransition();
+    const [editingCode, setEditingCode] = useState(false);
+    const [codeValue, setCodeValue] = useState(user.commercialCode || '');
     const { toast } = useToast();
 
     const handleRoleChange = (newRole: UserRole) => {
@@ -192,6 +196,20 @@ function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdat
         });
     }
 
+    const handleCodeChange = (newCode: string) => {
+        if (newCode === user.commercialCode) return;
+        startCodeTransition(async () => {
+            const result = await updateUserCommercialCodeAction(user.id, newCode);
+            if (result.success) {
+                toast({ title: '¡Éxito!', description: result.message });
+                onUsersUpdate();
+                setEditingCode(false);
+            } else {
+                toast({ title: 'Error', description: result.message, variant: 'destructive' });
+            }
+        });
+    }
+
     return (
          <TableRow>
             <TableCell>
@@ -217,6 +235,33 @@ function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdat
                         <SelectItem value="consulta">Consulta</SelectItem>
                     </SelectContent>
                 </Select>
+            </TableCell>
+            <TableCell>
+                {user.role === 'commercial' ? (
+                    editingCode ? (
+                        <Input
+                            value={codeValue}
+                            onChange={(e) => setCodeValue(e.target.value)}
+                            onBlur={() => handleCodeChange(codeValue)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleCodeChange(codeValue);
+                                if (e.key === 'Escape') {
+                                    setCodeValue(user.commercialCode || '');
+                                    setEditingCode(false);
+                                }
+                            }}
+                            maxLength={4}
+                            className="w-20"
+                            disabled={isCodePending}
+                        />
+                    ) : (
+                        <span onClick={() => setEditingCode(true)} className="cursor-pointer underline">
+                            {user.commercialCode || 'Sin código'}
+                        </span>
+                    )
+                ) : (
+                    '-'
+                )}
             </TableCell>
             <TableCell>
                  <Select 

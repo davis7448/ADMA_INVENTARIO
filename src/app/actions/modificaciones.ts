@@ -12,8 +12,8 @@ export type Modificacion = {
     BODEGA: string | null;
     COMERCIAL: string | null;
     "CODIGO COMERCIAL": string | null;
-    "PRIVADO/PUBLICO": string | null;
-    "CORREO/CODIGO": string | null;
+    "PRIVADO_PUBLICO": string | null;
+    "CORREO_CODIGO": string | null;
     CREADO: string | null;
     SOLICITUD: string | null;
     "CANTIDAD PREVIA": number | null;
@@ -70,8 +70,11 @@ export async function deleteModificacion(id: string) {
 export async function getComercialUsers() {
     const q = query(collection(db, 'users'), where('role', '==', 'commercial'));
     const querySnapshot = await getDocs(q);
-    const users = querySnapshot.docs.map(doc => doc.data().name || doc.data().email);
-    return [...users, 'Maria del mar Garay', 'Camilo Useche'];
+    const users = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return { name: data.name || data.email, code: data.commercialCode || data.email };
+    });
+    return [...users, { name: 'Camilo Useche', code: 'Camilo Useche' }];
 }
 
 export async function getPlataformas() {

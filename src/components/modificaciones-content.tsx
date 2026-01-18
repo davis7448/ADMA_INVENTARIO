@@ -22,7 +22,7 @@ export function ModificacionesContent() {
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<(Modificacion & { id: string }) | null>(null);
-    const [comercialUsers, setComercialUsers] = useState<string[]>([]);
+    const [comercialUsers, setComercialUsers] = useState<{ name: string; code: string }[]>([]);
     const [plataformas, setPlataformas] = useState<string[]>([]);
     const [formData, setFormData] = useState<Partial<Modificacion>>({
         FECHA: Date.now(),
@@ -35,8 +35,8 @@ export function ModificacionesContent() {
         BODEGA: '',
         COMERCIAL: '',
         "CODIGO COMERCIAL": '',
-        "PRIVADO/PUBLICO": '',
-        "CORREO/CODIGO": '',
+        "PRIVADO_PUBLICO": '',
+        "CORREO_CODIGO": '',
         CREADO: '',
         SOLICITUD: '',
         "CANTIDAD PREVIA": null,
@@ -65,7 +65,7 @@ export function ModificacionesContent() {
                 setComercialUsers(users);
             } catch (error) {
                 console.error('Error fetching comercial users:', error);
-                setComercialUsers(['Maria del mar Garay', 'Camilo Useche']); // Fallback
+                setComercialUsers([{ name: 'Camilo Useche', code: 'CU' }]); // Fallback
             }
         };
         const fetchPlataformas = async () => {
@@ -107,13 +107,22 @@ export function ModificacionesContent() {
     };
 
     const handleFormChange = (field: keyof Modificacion, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        setFormData(prev => {
+            const newData = { ...prev, [field]: value };
+            // Auto-calculate CANTIDAD POSTERIOR
+            if (field === 'CANTIDAD PREVIA' || field === 'CANTIDAD SOLICITADA') {
+                const previa = field === 'CANTIDAD PREVIA' ? Number(value) : Number(prev['CANTIDAD PREVIA'] || 0);
+                const solicitada = field === 'CANTIDAD SOLICITADA' ? Number(value) : Number(prev['CANTIDAD SOLICITADA'] || 0);
+                newData['CANTIDAD POSTERIOR'] = previa + solicitada;
+            }
+            return newData;
+        });
     };
 
     const handleCreate = async () => {
         try {
             const variables = formData.VARIABLE ? formData.VARIABLE.split(',').map(v => v.trim()) : [''];
-            const emails = formData["CORREO/CODIGO"] ? formData["CORREO/CODIGO"].split(',').map(e => e.trim()) : [''];
+            const emails = formData["CORREO_CODIGO"] ? formData["CORREO_CODIGO"].split(',').map(e => e.trim()) : [''];
 
             for (const variable of variables) {
                 const [varName, sku] = variable.includes(':') ? variable.split(':') : [variable, formData["SKU "] || ''];
@@ -122,7 +131,7 @@ export function ModificacionesContent() {
                         ...formData,
                         VARIABLE: varName,
                         "SKU ": sku,
-                        "CORREO/CODIGO": email,
+                        "CORREO_CODIGO": email,
                     };
                     await createModificacion(record as Omit<Modificacion, 'ID CONSECUTIVO'>);
                 }
@@ -174,8 +183,8 @@ export function ModificacionesContent() {
             BODEGA: '',
             COMERCIAL: '',
             "CODIGO COMERCIAL": '',
-            "PRIVADO/PUBLICO": '',
-            "CORREO/CODIGO": '',
+            "PRIVADO_PUBLICO": '',
+            "CORREO_CODIGO": '',
             CREADO: '',
             SOLICITUD: '',
             "CANTIDAD PREVIA": null,
@@ -186,7 +195,7 @@ export function ModificacionesContent() {
 
     const openEditDialog = (item: Modificacion & { id: string }) => {
         setEditingItem(item);
-        setFormData({
+        const newFormData = {
             FECHA: item.FECHA,
             ID: item.ID,
             PRODUCTO: item.PRODUCTO || '',
@@ -197,14 +206,19 @@ export function ModificacionesContent() {
             BODEGA: item.BODEGA || '',
             COMERCIAL: item.COMERCIAL || '',
             "CODIGO COMERCIAL": item["CODIGO COMERCIAL"] || '',
-            "PRIVADO/PUBLICO": item["PRIVADO/PUBLICO"] || '',
-            "CORREO/CODIGO": item["CORREO/CODIGO"] || '',
+            "PRIVADO_PUBLICO": item["PRIVADO_PUBLICO"] || '',
+            "CORREO_CODIGO": item["CORREO_CODIGO"] || '',
             CREADO: item.CREADO || '',
             SOLICITUD: item.SOLICITUD || '',
             "CANTIDAD PREVIA": item["CANTIDAD PREVIA"] || null,
             "CANTIDAD SOLICITADA": item["CANTIDAD SOLICITADA"] || null,
             "CANTIDAD POSTERIOR": item["CANTIDAD POSTERIOR"] || null,
-        });
+        };
+        // Auto-calculate CANTIDAD POSTERIOR
+        const previa = Number(newFormData["CANTIDAD PREVIA"] || 0);
+        const solicitada = Number(newFormData["CANTIDAD SOLICITADA"] || 0);
+        newFormData["CANTIDAD POSTERIOR"] = previa + solicitada;
+        setFormData(newFormData);
         setDialogOpen(true);
     };
 
@@ -240,7 +254,7 @@ export function ModificacionesContent() {
                         </div>
                         <Button onClick={handleFilter}>Filtrar</Button>
                         </div>
-                        {user?.role === 'plataformas' && (
+                        {(user?.role === 'plataformas' || user?.role === 'admin') && (
                             <Dialog open={dialogOpen} onOpenChange={(open) => {
                                 setDialogOpen(open);
                                 if (!open) {
@@ -272,11 +286,18 @@ export function ModificacionesContent() {
                                         />
                                     </div>
                                     <div>
-                                        <Label>Variable (formato: Variable:SKU, Variable:SKU)</Label>
+                                        <Label>Variable (formato: Variable:SKU o solo Variable)</Label>
                                         <Textarea
                                             value={formData.VARIABLE || ''}
                                             onChange={(e) => handleFormChange('VARIABLE', e.target.value)}
-                                            placeholder="X1 UNIDAD:123, X2 UNIDADES:456"
+                                            placeholder="X1 UNIDAD:123, X2 UNIDADES:456 o X1 UNIDAD"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>SKU</Label>
+                                        <Input
+                                            value={formData["SKU "] || ''}
+                                            onChange={(e) => handleFormChange('SKU ', e.target.value)}
                                         />
                                     </div>
                                     <div>
@@ -316,14 +337,20 @@ export function ModificacionesContent() {
                                     </div>
                                     <div>
                                         <Label>Comercial</Label>
-                                        <Select value={formData.COMERCIAL || ''} onValueChange={(value) => handleFormChange('COMERCIAL', value)}>
+                                        <Select value={formData.COMERCIAL || ''} onValueChange={(value) => {
+                                            const selectedUser = comercialUsers.find(u => u.name === value);
+                                            if (selectedUser) {
+                                                handleFormChange('COMERCIAL', selectedUser.name);
+                                                handleFormChange('CODIGO COMERCIAL', selectedUser.code);
+                                            }
+                                        }}>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Selecciona un comercial" />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {comercialUsers.map((user) => (
-                                                    <SelectItem key={user} value={user}>
-                                                        {user}
+                                                    <SelectItem key={user.name} value={user.name}>
+                                                        {user.name} ({user.code})
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
@@ -338,32 +365,47 @@ export function ModificacionesContent() {
                                     </div>
                                     <div>
                                         <Label>Privado/Público</Label>
-                                        <Input
-                                            value={formData["PRIVADO/PUBLICO"] || ''}
-                                            onChange={(e) => handleFormChange('PRIVADO/PUBLICO', e.target.value)}
-                                        />
+                                        <Select value={formData["PRIVADO_PUBLICO"] || ''} onValueChange={(value) => handleFormChange('PRIVADO_PUBLICO', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecciona una opción" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Publico">Publico</SelectItem>
+                                                <SelectItem value="Privado">Privado</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <div>
                                         <Label>Correo/Código (separados por coma)</Label>
                                         <Textarea
-                                            value={formData["CORREO/CODIGO"] || ''}
-                                            onChange={(e) => handleFormChange('CORREO/CODIGO', e.target.value)}
+                                            value={formData["CORREO_CODIGO"] || ''}
+                                            onChange={(e) => handleFormChange('CORREO_CODIGO', e.target.value)}
                                             placeholder="email1@example.com, email2@example.com"
                                         />
                                     </div>
                                     <div>
                                         <Label>Creado</Label>
-                                        <Input
-                                            value={formData.CREADO || ''}
-                                            onChange={(e) => handleFormChange('CREADO', e.target.value)}
-                                        />
+                                        <Select value={formData.CREADO || ''} onValueChange={(value) => handleFormChange('CREADO', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecciona una opción" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="SI">SI</SelectItem>
+                                                <SelectItem value="NO">NO</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <div>
                                         <Label>Solicitud</Label>
-                                        <Input
-                                            value={formData.SOLICITUD || ''}
-                                            onChange={(e) => handleFormChange('SOLICITUD', e.target.value)}
-                                        />
+                                        <Select value={formData.SOLICITUD || ''} onValueChange={(value) => handleFormChange('SOLICITUD', value)}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecciona una opción" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="SUMA">SUMA</SelectItem>
+                                                <SelectItem value="AJUSTE">AJUSTE</SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <div>
                                         <Label>Cantidad Previa</Label>
@@ -386,7 +428,7 @@ export function ModificacionesContent() {
                                         <Input
                                             type="number"
                                             value={formData["CANTIDAD POSTERIOR"] || ''}
-                                            onChange={(e) => handleFormChange('CANTIDAD POSTERIOR', Number(e.target.value))}
+                                            disabled
                                         />
                                     </div>
                                 </div>
@@ -434,8 +476,8 @@ export function ModificacionesContent() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {paginatedData.map((row, index) => (
-                                            <TableRow key={index}>
+                                        {paginatedData.map((row) => (
+                                            <TableRow key={row.id}>
                                                 <TableCell>{row.FECHA ? new Date(row.FECHA).toLocaleDateString() : ''}</TableCell>
                                                 <TableCell>{row.ID}</TableCell>
                                                 <TableCell>{row.PRODUCTO}</TableCell>
@@ -446,8 +488,8 @@ export function ModificacionesContent() {
                                                 <TableCell>{row.BODEGA}</TableCell>
                                                 <TableCell>{row.COMERCIAL}</TableCell>
                                                 <TableCell>{row["CODIGO COMERCIAL"]}</TableCell>
-                                                <TableCell>{row["PRIVADO/PUBLICO"]}</TableCell>
-                                                <TableCell>{row["CORREO/CODIGO"]}</TableCell>
+                                                <TableCell>{row["PRIVADO_PUBLICO"]}</TableCell>
+                                                <TableCell>{row["CORREO_CODIGO"]}</TableCell>
                                                 <TableCell>{row.CREADO}</TableCell>
                                                 <TableCell>{row.SOLICITUD}</TableCell>
                                                 <TableCell>{row["CANTIDAD PREVIA"]}</TableCell>

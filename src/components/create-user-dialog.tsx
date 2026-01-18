@@ -54,6 +54,7 @@ export function CreateUserDialog({ onUserCreated }: CreateUserDialogProps) {
       email: '',
       password: '',
       role: 'commercial',
+      commercialCode: '',
     },
   });
 
@@ -175,6 +176,21 @@ export function CreateUserDialog({ onUserCreated }: CreateUserDialogProps) {
                 </FormItem>
               )}
             />
+            {form.watch('role') === 'commercial' && (
+              <FormField
+                control={form.control}
+                name="commercialCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Código Comercial (4 dígitos)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="1234" maxLength={4} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="secondary">

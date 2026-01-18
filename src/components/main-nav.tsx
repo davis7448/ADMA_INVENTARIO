@@ -57,7 +57,7 @@ type NavItem = {
         ],
     },
     { href: '/salary-management', label: 'Gestión de Salarios', roles: ['admin'] },
-    { href: '/modificaciones', label: 'Modificaciones', roles: ['admin'] },
+    { href: '/modificaciones', label: 'Modificaciones', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
     {
         label: 'Logística',
         roles: ['admin', 'logistics', 'plataformas', 'commercial'],
