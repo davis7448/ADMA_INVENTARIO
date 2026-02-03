@@ -16,6 +16,15 @@ service cloud.firestore {
     function isRoleIn(roles) {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
     }
+    
+    // -- COMMERCIAL MODULE HELPER --
+    function isCommercial() {
+        return isRole('commercial') || isRole('commercial_director');
+    }
+    
+    function isDirector() {
+        return isRole('commercial_director');
+    }
 
     // Default deny all access
     match /{document=**} {
@@ -49,6 +58,8 @@ service cloud.firestore {
     }
     match /users/{userId} {
       allow read: if isSignedIn() || isAdminAccess();
+      // Allow users to update their own profile? Or strictly admins. 
+      // Existing rule: allow create, update, delete: if isRole('admin') || isAdminAccess() || (request.auth != null && request.auth.uid == userId);
       allow create, update, delete: if isRole('admin') || isAdminAccess() || (request.auth != null && request.auth.uid == userId);
     }
     match /inventoryMovements/{movementId} {
@@ -99,5 +110,35 @@ service cloud.firestore {
        allow read: if isSignedIn() || isAdminAccess();
        allow create, update, delete: if isSignedIn() || isAdminAccess();
      }
+     
+    // --- NEW COMMERCIAL MODULE RULES ---
+    
+    // Clients: Commercials can create/read their own or all? 
+    // Usually Director sees all, Commercial sees theirs. For now, lenient read, strict write.
+    match /clients/{clientId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create: if isCommercial() || isAdminAccess() || isRole('admin');
+       allow update: if isCommercial() || isAdminAccess() || isRole('admin');
+       allow delete: if isDirector() || isRole('admin') || isAdminAccess();
+    }
+
+    match /commercial_challenges/{challengeId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update, delete: if isDirector() || isRole('admin') || isAdminAccess();
+    }
+
+    match /commercial_ratings/{ratingId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       // "solo podrán poner 1 por día" - validation ideally happens in backend, 
+       // but here we ensure they are authenticated.
+       allow create: if isSignedIn() || isAdminAccess();
+       allow update, delete: if false; // Ratings are permanent usually? Or admin only.
+    }
+
+    match /academy_resources/{resourceId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update, delete: if isDirector() || isRole('admin') || isAdminAccess();
+    }
+
    }
  }
