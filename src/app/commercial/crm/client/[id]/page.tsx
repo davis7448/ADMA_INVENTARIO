@@ -1,45 +1,222 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Edit, Phone, Mail, MapPin, Calendar, DollarSign, Activity } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, Edit, Phone, Mail, MapPin, Calendar, DollarSign, Plus, FileText, Upload, Search } from 'lucide-react';
 import Link from 'next/link';
+import { getClientById, updateClient } from '@/lib/commercial-api';
+import { getProducts } from '@/lib/api';
+import { CommercialClient, ClientStatus, ClientCategory, ClientType } from '@/types/commercial';
+import { Product } from '@/lib/types';
+import { useAuth } from '@/hooks/use-auth';
 
-// Mock data fetcher since we don't have a direct 'getClientById' server action exposed in this snippet context
-// In real app, we would add `getClientById` to commercial-api.ts
-const mockClient = {
-    id: '1',
-    name: 'Farmacia San Juan',
-    email: 'contacto@sanjuan.com',
-    phone: '+57 300 123 4567',
-    city: 'Bogotá',
-    category: 'Laboratorio',
-    type: 'Mixto',
-    status: 'selling',
-    avg_sales: 1500,
-    birthday: '1990-05-15',
-    notes: 'Cliente muy interesado en productos de alta rotación. Se le envió catálogo ayer.'
+type ClientNote = {
+    id: string;
+    content: string;
+    created_at: any;
+    created_by: string;
+};
+
+type ClientOrder = {
+    id: string;
+    product_id: string;
+    product_name: string;
+    unit_price: number;
+    quantity: number;
+    total: number;
+    status: 'quotation' | 'pending' | 'paid';
+    payment_proof?: string;
+    created_at: any;
 };
 
 export default function ClientDetailPage() {
     const params = useParams();
-    const router = useRouter();
-    const [client, setClient] = useState<any>(null);
+    const { user } = useAuth();
+    const [client, setClient] = useState<CommercialClient | null>(null);
     const [loading, setLoading] = useState(true);
+    const [notes, setNotes] = useState<ClientNote[]>([]);
+    const [orders, setOrders] = useState<ClientOrder[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [editOpen, setEditOpen] = useState(false);
+    const [noteOpen, setNoteOpen] = useState(false);
+    const [orderOpen, setOrderOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    const [editForm, setEditForm] = useState({
+        name: '',
+        email: '',
+        phone: '',
+        city: '',
+        category: '' as ClientCategory,
+        type: '' as ClientType,
+        status: '' as ClientStatus,
+        avg_sales: 0,
+        notes: '',
+    });
+
+    const [newNote, setNewNote] = useState('');
+    const [newOrder, setNewOrder] = useState({
+        product_id: '',
+        product_name: '',
+        unit_price: 0,
+        quantity: 1,
+        total: 0,
+        payment_proof: '',
+    });
+    const [productSearch, setProductSearch] = useState('');
+    const [productPage, setProductPage] = useState(0);
+    const [editingPrice, setEditingPrice] = useState(false);
+    const [tempUnitPrice, setTempUnitPrice] = useState(0);
+    const PRODUCTS_PER_PAGE = 20;
+
+    const filteredProducts = products.filter(p =>
+        p.name.toLowerCase().includes(productSearch.toLowerCase())
+    );
+    const paginatedProducts = filteredProducts.slice(
+        productPage * PRODUCTS_PER_PAGE,
+        (productPage + 1) * PRODUCTS_PER_PAGE
+    );
+    const totalProductPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
 
     useEffect(() => {
-        // Simulate fetch
-        setTimeout(() => {
-            setClient({ ...mockClient, id: params.id });
-            setLoading(false);
-        }, 500);
+        async function loadClient() {
+            const id = params.id as string;
+            if (!id) return;
+            
+            try {
+                const data = await getClientById(id);
+                setClient(data);
+                if (data) {
+                    setEditForm({
+                        name: data.name || '',
+                        email: data.email || '',
+                        phone: data.phone || '',
+                        city: data.city || '',
+                        category: data.category || 'laboratorio',
+                        type: data.type || 'mixto',
+                        status: data.status || 'finding_winner',
+                        avg_sales: data.avg_sales || 0,
+                        notes: data.notes || '',
+                    });
+                }
+                setNotes([
+                    { id: '1', content: 'Cliente registrado', created_at: data?.created_at, created_by: 'Sistema' },
+                ]);
+                
+                const productsData = await getProducts({ fetchAll: true });
+                setProducts(productsData.products);
+            } catch (error) {
+                console.error('Error loading client:', error);
+            } finally {
+                setLoading(false);
+            }
+        }
+        loadClient();
     }, [params.id]);
 
-    if (loading) return <div className="p-8">Cargando...</div>;
+    const handleSaveEdit = async () => {
+        if (!client) return;
+        setSaving(true);
+        try {
+            await updateClient(client.id!, {
+                ...editForm,
+                avg_sales: Number(editForm.avg_sales),
+            });
+            const updated = await getClientById(client.id!);
+            setClient(updated);
+            setEditOpen(false);
+        } catch (error) {
+            console.error('Error updating client:', error);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleAddNote = async () => {
+        if (!newNote.trim() || !client) return;
+        const note: ClientNote = {
+            id: Date.now().toString(),
+            content: newNote,
+            created_at: new Date(),
+            created_by: user?.name || 'Usuario',
+        };
+        setNotes([note, ...notes]);
+        await updateClient(client.id!, { notes: (client.notes || '') + '\n' + newNote });
+        const updated = await getClientById(client.id!);
+        setClient(updated);
+        setNewNote('');
+        setNoteOpen(false);
+    };
+
+    const handleProductChange = (productId: string) => {
+        const product = products.find(p => p.id === productId);
+        if (product) {
+            setNewOrder({
+                ...newOrder,
+                product_id: productId,
+                product_name: product.name,
+                unit_price: product.priceDropshipping || 0,
+                total: (product.priceDropshipping || 0) * newOrder.quantity,
+            });
+        }
+    };
+
+    const handleQuantityChange = (quantity: number) => {
+        const qty = Math.max(1, quantity);
+        setNewOrder({
+            ...newOrder,
+            quantity: qty,
+            total: newOrder.unit_price * qty,
+        });
+    };
+
+    const handlePaymentProof = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setNewOrder({
+                ...newOrder,
+                payment_proof: file.name,
+            });
+        }
+    };
+
+    const handleAddOrder = async () => {
+        if (!newOrder.product_id.trim() || !client) return;
+        
+        const order: ClientOrder = {
+            id: Date.now().toString(),
+            product_id: newOrder.product_id,
+            product_name: newOrder.product_name,
+            unit_price: newOrder.unit_price,
+            quantity: newOrder.quantity,
+            total: newOrder.total,
+            status: newOrder.payment_proof ? 'pending' : 'quotation',
+            payment_proof: newOrder.payment_proof || undefined,
+            created_at: new Date(),
+        };
+        
+        setOrders([...orders, order]);
+        setNewOrder({ product_id: '', product_name: '', unit_price: 0, quantity: 1, total: 0, payment_proof: '' });
+        setOrderOpen(false);
+    };
+
+    const formatDate = (date: any) => {
+        if (!date) return 'No especificado';
+        if (typeof date === 'string') return new Date(date).toLocaleDateString('es-CO');
+        if (date.toDate) return date.toDate().toLocaleDateString('es-CO');
+        return String(date);
+    };
+
+    if (loading) return <div className="p-8 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
     if (!client) return <div className="p-8">Cliente no encontrado</div>;
 
     return (
@@ -54,15 +231,87 @@ export default function ClientDetailPage() {
                     <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Badge variant={client.status === 'selling' ? 'default' : 'secondary'}>
-                            {client.status.toUpperCase()}
+                            {client.status?.toUpperCase()}
                         </Badge>
                         <span>• {client.category}</span>
                     </div>
                 </div>
                 <div className="ml-auto">
-                    <Button variant="outline">
-                        <Edit className="mr-2 h-4 w-4" /> Editar
-                    </Button>
+                    <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">
+                                <Edit className="mr-2 h-4 w-4" /> Editar
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                                <DialogTitle>Editar Cliente</DialogTitle>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid gap-2">
+                                    <Label>Nombre</Label>
+                                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Email</Label>
+                                    <Input value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Teléfono</Label>
+                                    <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Ciudad</Label>
+                                    <Input value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Categoría</Label>
+                                        <Select value={editForm.category} onValueChange={v => setEditForm({...editForm, category: v as ClientCategory})}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="laboratorio">Laboratorio</SelectItem>
+                                                <SelectItem value="chino">Chino</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Tipo</Label>
+                                        <Select value={editForm.type} onValueChange={v => setEditForm({...editForm, type: v as ClientType})}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="dropshipper">Dropshipper</SelectItem>
+                                                <SelectItem value="mixto">Mixto</SelectItem>
+                                                <SelectItem value="ecommerce">Ecommerce</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Estado</Label>
+                                    <Select value={editForm.status} onValueChange={v => setEditForm({...editForm, status: v as ClientStatus})}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="finding_winner">Encontrando Winner</SelectItem>
+                                            <SelectItem value="testing">Testeando</SelectItem>
+                                            <SelectItem value="selling">Vendiendo</SelectItem>
+                                            <SelectItem value="scaling">Escalando</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Notas</Label>
+                                    <Textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+                                <Button onClick={handleSaveEdit} disabled={saving}>
+                                    {saving ? 'Guardando...' : 'Guardar'}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </div>
 
@@ -74,25 +323,27 @@ export default function ClientDetailPage() {
                     <CardContent className="space-y-4">
                         <div className="flex items-center gap-3">
                             <Mail className="h-4 w-4 text-muted-foreground" />
-                            <span>{client.email}</span>
+                            <span>{client.email || 'No especificado'}</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <Phone className="h-4 w-4 text-muted-foreground" />
-                            <span>{client.phone}</span>
+                            <span>{client.phone || 'No especificado'}</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span>{client.city}</span>
+                            <span>{client.city || 'No especificado'}</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span>Cumpleaños: {client.birthday}</span>
+                            <span>Cumpleaños: {formatDate(client.birthday)}</span>
                         </div>
-                        <div className="flex items-center gap-3 pt-4 border-t">
-                            <DollarSign className="h-4 w-4 text-green-600" />
-                            <span className="font-bold text-lg">${client.avg_sales.toLocaleString()}</span>
-                            <span className="text-xs text-muted-foreground">Ventas Promedio</span>
-                        </div>
+                        {client.avg_sales !== undefined && (
+                            <div className="flex items-center gap-3 pt-4 border-t">
+                                <DollarSign className="h-4 w-4 text-green-600" />
+                                <span className="font-bold text-lg">${client.avg_sales.toLocaleString()}</span>
+                                <span className="text-xs text-muted-foreground">Ventas Promedio</span>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -112,29 +363,298 @@ export default function ClientDetailPage() {
                                     <div className="relative pl-4 border-l-2 border-muted space-y-6">
                                         <div className="relative">
                                             <div className="absolute -left-[21px] top-1 h-4 w-4 rounded-full bg-primary" />
-                                            <p className="font-medium">Cambio de estado a "Selling"</p>
-                                            <p className="text-sm text-muted-foreground">Hoy, 10:00 AM</p>
-                                        </div>
-                                        <div className="relative">
-                                            <div className="absolute -left-[21px] top-1 h-4 w-4 rounded-full bg-muted-foreground" />
                                             <p className="font-medium">Cliente registrado</p>
-                                            <p className="text-sm text-muted-foreground">Ayer, 4:30 PM</p>
+                                            <p className="text-sm text-muted-foreground">{formatDate(client.created_at)}</p>
                                         </div>
                                     </div>
                                 </CardContent>
                             </Card>
                         </TabsContent>
                         <TabsContent value="notes" className="pt-4">
+                            <div className="flex justify-end mb-4">
+                                <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Agregar Nota</Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Nueva Nota</DialogTitle>
+                                        </DialogHeader>
+                                        <Textarea 
+                                            placeholder="Escribe una nota..." 
+                                            value={newNote}
+                                            onChange={e => setNewNote(e.target.value)}
+                                            className="min-h-[100px]"
+                                        />
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => setNoteOpen(false)}>Cancelar</Button>
+                                            <Button onClick={handleAddNote}>Agregar</Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
                             <Card>
-                                <CardContent className="pt-6">
-                                    <p className="italic text-muted-foreground">"{client.notes}"</p>
+                                <CardContent className="pt-6 space-y-4">
+                                    {notes.length === 0 ? (
+                                        <p className="text-muted-foreground text-center py-4">Sin notas</p>
+                                    ) : (
+                                        notes.map(note => (
+                                            <div key={note.id} className="border-b pb-3 last:border-0">
+                                                <p className="text-sm">{note.content}</p>
+                                                <p className="text-xs text-muted-foreground mt-1">
+                                                    {note.created_by} • {formatDate(note.created_at)}
+                                                </p>
+                                            </div>
+                                        ))
+                                    )}
                                 </CardContent>
                             </Card>
                         </TabsContent>
                         <TabsContent value="orders" className="pt-4">
-                            <div className="text-center p-8 text-muted-foreground">
-                                No hay pedidos registrados aún.
+                            <div className="flex justify-end mb-4">
+                                <Dialog open={orderOpen} onOpenChange={(open) => {
+                                    setOrderOpen(open);
+                                    if (!open) {
+                                        setProductSearch('');
+                                        setProductPage(0);
+                                        setEditingPrice(false);
+                                        setTempUnitPrice(0);
+                                    }
+                                }}>
+                                    <DialogTrigger asChild>
+                                        <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Agregar Pedido</Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[500px]">
+                                        <DialogHeader>
+                                            <DialogTitle>Nuevo Pedido</DialogTitle>
+                                        </DialogHeader>
+                                        <div className="grid gap-4 py-4">
+                                            <div className="grid gap-2">
+                                                <Label>Producto</Label>
+                                                <div className="relative">
+                                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                    <Input
+                                                        placeholder="Buscar producto..."
+                                                        value={productSearch}
+                                                        onChange={e => {
+                                                            setProductSearch(e.target.value);
+                                                            setProductPage(0);
+                                                        }}
+                                                        className="pl-8"
+                                                    />
+                                                </div>
+                                                <div className="border rounded-md max-h-[200px] overflow-y-auto">
+                                                    {paginatedProducts.length === 0 ? (
+                                                        <div className="p-4 text-center text-muted-foreground text-sm">
+                                                            No se encontraron productos
+                                                        </div>
+                                                    ) : (
+                                                        paginatedProducts.map(product => (
+                                                            <div
+                                                                key={product.id}
+                                                                onClick={() => {
+                                                                    handleProductChange(product.id);
+                                                                    setProductSearch('');
+                                                                }}
+                                                                className={`p-3 cursor-pointer hover:bg-muted border-b last:border-0 ${
+                                                                    newOrder.product_id === product.id ? 'bg-primary/10' : ''
+                                                                }`}
+                                                            >
+                                                                <p className="font-medium text-sm">{product.name}</p>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    ${(product.priceDropshipping || 0).toLocaleString()}
+                                                                </p>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                                {totalProductPages > 1 && (
+                                                    <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                                                        <span>
+                                                            {filteredProducts.length} producto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
+                                                        </span>
+                                                        <div className="flex gap-1">
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-6 text-xs"
+                                                                onClick={() => setProductPage(p => Math.max(0, p - 1))}
+                                                                disabled={productPage === 0}
+                                                            >
+                                                                Anterior
+                                                            </Button>
+                                                            <span className="px-2">
+                                                                {productPage + 1} / {totalProductPages}
+                                                            </span>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-6 text-xs"
+                                                                onClick={() => setProductPage(p => Math.min(totalProductPages - 1, p + 1))}
+                                                                disabled={productPage >= totalProductPages - 1}
+                                                            >
+                                                                Siguiente
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {newOrder.product_name && (
+                                                <div className="grid gap-2">
+                                                    <Label>Precio Unitario</Label>
+                                                    {editingPrice ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <Input 
+                                                                type="number"
+                                                                value={tempUnitPrice}
+                                                                onChange={e => setTempUnitPrice(Number(e.target.value))}
+                                                                className="w-32"
+                                                                autoFocus
+                                                            />
+                                                            <Button 
+                                                                size="sm" 
+                                                                onClick={() => {
+                                                                    setNewOrder(prev => ({
+                                                                        ...prev,
+                                                                        unit_price: tempUnitPrice,
+                                                                        total: tempUnitPrice * prev.quantity
+                                                                    }));
+                                                                    setEditingPrice(false);
+                                                                }}
+                                                            >
+                                                                ✓
+                                                            </Button>
+                                                            <Button 
+                                                                size="sm" 
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setTempUnitPrice(newOrder.unit_price);
+                                                                    setEditingPrice(false);
+                                                                }}
+                                                            >
+                                                                ✕
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2">
+                                                            <Input 
+                                                                type="text"
+                                                                value={`$${newOrder.unit_price.toLocaleString()}`}
+                                                                disabled
+                                                                className="w-32 bg-muted"
+                                                            />
+                                                            <Button 
+                                                                size="sm" 
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setTempUnitPrice(newOrder.unit_price);
+                                                                    setEditingPrice(true);
+                                                                }}
+                                                            >
+                                                                Editar
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid gap-2">
+                                                    <Label>Cantidad</Label>
+                                                    <Input 
+                                                        type="number" 
+                                                        min="1"
+                                                        value={newOrder.quantity}
+                                                        onChange={e => handleQuantityChange(Number(e.target.value))}
+                                                    />
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label>Total</Label>
+                                                    <Input 
+                                                        type="text"
+                                                        value={`$${newOrder.total.toLocaleString()}`}
+                                                        disabled
+                                                        className="bg-muted font-bold"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label>Comprobante de Pago (Opcional)</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Input 
+                                                        type="file"
+                                                        accept="image/*,.pdf"
+                                                        onChange={handlePaymentProof}
+                                                        className="hidden"
+                                                        id="payment-proof"
+                                                    />
+                                                    <Button 
+                                                        type="button" 
+                                                        variant="outline" 
+                                                        onClick={() => document.getElementById('payment-proof')?.click()}
+                                                        className="w-full"
+                                                    >
+                                                        <Upload className="mr-2 h-4 w-4" />
+                                                        {newOrder.payment_proof || 'Subir comprobante'}
+                                                    </Button>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {newOrder.payment_proof 
+                                                        ? 'Comprobante cargado - El pedido quedará como "Pendiente"' 
+                                                        : 'Sin comprobante - El pedido quedará como "Cotización"'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => {
+                                                setNewOrder({ product_id: '', product_name: '', unit_price: 0, quantity: 1, total: 0, payment_proof: '' });
+                                                setProductSearch('');
+                                                setProductPage(0);
+                                                setOrderOpen(false);
+                                            }}>Cancelar</Button>
+                                            <Button onClick={handleAddOrder} disabled={!newOrder.product_id}>
+                                                Agregar Pedido
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
                             </div>
+                            <Card>
+                                <CardContent className="pt-6">
+                                    {orders.length === 0 ? (
+                                        <p className="text-muted-foreground text-center py-4">Sin pedidos</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {orders.map(order => (
+                                                <div key={order.id} className="border rounded-lg p-4 space-y-2">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <p className="font-medium">{order.product_name}</p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {order.quantity} x ${order.unit_price.toLocaleString()} • {formatDate(order.created_at)}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="font-bold text-lg">${order.total.toLocaleString()}</p>
+                                                            <Badge 
+                                                                variant={order.status === 'quotation' ? 'secondary' : order.status === 'pending' ? 'outline' : 'default'}
+                                                                className="text-xs"
+                                                            >
+                                                                {order.status === 'quotation' ? 'Cotización' : order.status === 'pending' ? 'Pendiente' : 'Pagado'}
+                                                            </Badge>
+                                                        </div>
+                                                    </div>
+                                                    {order.payment_proof && (
+                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                            <FileText className="h-3 w-3" />
+                                                            <span>{order.payment_proof}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
                         </TabsContent>
                     </Tabs>
                 </div>

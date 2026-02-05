@@ -8,8 +8,9 @@ import { Plus, Search, Filter } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { CommercialClient } from '@/types/commercial';
-import { getAllClients, getClientsByCommercial } from '@/lib/commercial-api';
+import { getAllClients, getClientsByCommercial, updateClient } from '@/lib/commercial-api';
 import { useAuth } from '@/hooks/use-auth';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 // Helper for status colors
 const getStatusColor = (status: string) => {
@@ -41,7 +42,6 @@ export default function CrmDashboardPage() {
         async function loadClients() {
             if (!user) return;
             try {
-                // If director, fetch all. If commercial, fetch mine.
                 const isDirector = user.role === 'commercial_director' || user.role === 'admin';
                 const data = isDirector ? await getAllClients() : await getClientsByCommercial(user.id);
                 setClients(data);
@@ -60,6 +60,40 @@ export default function CrmDashboardPage() {
         { id: 'selling', label: 'Vendiendo' },
         { id: 'scaling', label: 'Escalando' }
     ];
+
+    const onDragEnd = async (result: DropResult) => {
+        const { destination, source, draggableId } = result;
+
+        if (!destination) return;
+        if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+
+        const clientId = draggableId;
+        const newStatus = destination.droppableId;
+
+        const client = clients.find(c => c.id === clientId);
+        if (!client || client.status === newStatus) return;
+
+        setClients(prev => prev.map(c => 
+            c.id === clientId ? { ...c, status: newStatus } : c
+        ));
+
+        try {
+            await updateClient(clientId, { status: newStatus });
+        } catch (error) {
+            console.error('Error updating client status:', error);
+            setClients(prev => prev.map(c => 
+                c.id === clientId ? { ...c, status: client.status } : c
+            ));
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -89,42 +123,63 @@ export default function CrmDashboardPage() {
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-[calc(100vh-250px)] overflow-x-auto">
-                {columns.map(col => {
-                    const colClients = clients.filter(c => c.status === col.id);
-                    return (
-                        <div key={col.id} className="flex flex-col gap-4 bg-muted/40 p-4 rounded-xl min-w-[280px]">
-                            <div className="flex items-center justify-between">
-                                <h3 className="font-semibold text-sm uppercase text-muted-foreground">{col.label}</h3>
-                                <Badge variant="secondary" className="rounded-full">{colClients.length}</Badge>
-                            </div>
+            <DragDropContext onDragEnd={onDragEnd}>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-[calc(100vh-250px)] overflow-x-auto">
+                    {columns.map(col => {
+                        const colClients = clients.filter(c => c.status === col.id);
+                        return (
+                            <Droppable key={col.id} droppableId={col.id}>
+                                {(provided, snapshot) => (
+                                    <div
+                                        ref={provided.innerRef}
+                                        {...provided.droppableProps}
+                                        className={`flex flex-col gap-4 bg-muted/40 p-4 rounded-xl min-w-[280px] ${snapshot.isDraggingOver ? 'bg-muted/60' : ''}`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="font-semibold text-sm uppercase text-muted-foreground">{col.label}</h3>
+                                            <Badge variant="secondary" className="rounded-full">{colClients.length}</Badge>
+                                        </div>
 
-                            <div className="flex-1 space-y-3 overflow-y-auto pr-2">
-                                {colClients.map(client => (
-                                    <Link key={client.id} href={`/commercial/crm/client/${client.id}`}>
-                                        <Card className="cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary/50">
-                                            <CardContent className="p-4">
-                                                <div className="font-bold text-base truncate">{client.name}</div>
-                                                <div className="text-xs text-muted-foreground mb-2 truncate">{client.email}</div>
+                                        <div className="flex-1 space-y-3 overflow-y-auto pr-2">
+                                            {colClients.map((client, index) => (
+                                                <Draggable key={client.id} draggableId={client.id} index={index}>
+                                                    {(provided, snapshot) => (
+                                                        <div
+                                                            ref={provided.innerRef}
+                                                            {...provided.draggableProps}
+                                                            {...provided.dragHandleProps}
+                                                        >
+                                                            <Link href={`/commercial/crm/client/${client.id}`}>
+                                                                <Card className={`cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary/50 ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary' : ''}`}>
+                                                                    <CardContent className="p-4">
+                                                                        <div className="font-bold text-base truncate">{client.name}</div>
+                                                                        <div className="text-xs text-muted-foreground mb-2 truncate">{client.email}</div>
 
-                                                <div className="flex flex-wrap gap-1 mt-2">
-                                                    <Badge variant="outline" className="text-[10px] h-5">{client.category}</Badge>
-                                                    <Badge variant="outline" className="text-[10px] h-5">{client.type}</Badge>
+                                                                        <div className="flex flex-wrap gap-1 mt-2">
+                                                                            <Badge variant="outline" className="text-[10px] h-5">{client.category}</Badge>
+                                                                            <Badge variant="outline" className="text-[10px] h-5">{client.type}</Badge>
+                                                                        </div>
+                                                                    </CardContent>
+                                                                </Card>
+                                                            </Link>
+                                                        </div>
+                                                    )}
+                                                </Draggable>
+                                            ))}
+                                            {provided.placeholder}
+                                            {colClients.length === 0 && (
+                                                <div className="text-center text-xs text-muted-foreground py-8 border-2 border-dashed rounded-lg">
+                                                    Sin clientes
                                                 </div>
-                                            </CardContent>
-                                        </Card>
-                                    </Link>
-                                ))}
-                                {colClients.length === 0 && (
-                                    <div className="text-center text-xs text-muted-foreground py-8 border-2 border-dashed rounded-lg">
-                                        Sin clientes
+                                            )}
+                                        </div>
                                     </div>
                                 )}
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
+                            </Droppable>
+                        )
+                    })}
+                </div>
+            </DragDropContext>
         </div>
     );
 }

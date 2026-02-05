@@ -113,12 +113,11 @@ service cloud.firestore {
      
     // --- NEW COMMERCIAL MODULE RULES ---
     
-    // Clients: Commercials can create/read their own or all? 
-    // Usually Director sees all, Commercial sees theirs. For now, lenient read, strict write.
+    // Clients: Commercials can create/read their own or all.
     match /clients/{clientId} {
        allow read: if isSignedIn() || isAdminAccess();
-       allow create: if isCommercial() || isAdminAccess() || isRole('admin');
-       allow update: if isCommercial() || isAdminAccess() || isRole('admin');
+       allow create: if isSignedIn() || isAdminAccess();
+       allow update: if isSignedIn() || isAdminAccess();
        allow delete: if isDirector() || isRole('admin') || isAdminAccess();
     }
 

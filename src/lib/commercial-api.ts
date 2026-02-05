@@ -92,6 +92,27 @@ export const getAllClients = async (): Promise<CommercialClient[]> => {
     }
 };
 
+export const getClientById = async (clientId: string): Promise<CommercialClient | null> => {
+    try {
+        const clientRef = doc(db, 'clients', clientId);
+        const clientSnap = await getDoc(clientRef);
+        if (clientSnap.exists()) {
+            const data = clientSnap.data();
+            return {
+                id: clientSnap.id,
+                ...data,
+                created_at: data.created_at?.toDate(),
+                updated_at: data.updated_at?.toDate(),
+                birthday: data.birthday?.toDate ? data.birthday.toDate() : data.birthday
+            } as CommercialClient;
+        }
+        return null;
+    } catch (error) {
+        console.error("Error fetching client by id:", error);
+        return null;
+    }
+};
+
 // --- CHALLENGES ---
 
 export const createChallenge = async (challenge: CommercialChallenge): Promise<string> => {
