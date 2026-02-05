@@ -29,6 +29,90 @@ import { startOfDay, endOfDay } from 'date-fns';
 
 // --- CLIENTS ---
 
+export interface ClientExistsResult {
+    exists: boolean;
+    client?: CommercialClient & { assigned_commercial_name?: string };
+}
+
+export const checkClientExists = async (email: string, phone: string): Promise<ClientExistsResult> => {
+    try {
+        const clientsCol = collection(db, 'clients');
+        
+        // Buscar por email principal
+        const emailQuery = query(clientsCol, where('email', '==', email));
+        const emailSnapshot = await getDocs(emailQuery);
+        
+        if (!emailSnapshot.empty) {
+            const doc = emailSnapshot.docs[0];
+            const data = doc.data();
+            return {
+                exists: true,
+                client: {
+                    id: doc.id,
+                    ...data,
+                    assigned_commercial_name: data.assigned_commercial_name
+                } as CommercialClient & { assigned_commercial_name?: string }
+            };
+        }
+        
+        // Buscar por emails adicionales
+        const additionalEmailQuery = query(clientsCol, where('additional_emails', 'array-contains', email));
+        const additionalEmailSnapshot = await getDocs(additionalEmailQuery);
+        
+        if (!additionalEmailSnapshot.empty) {
+            const doc = additionalEmailSnapshot.docs[0];
+            const data = doc.data();
+            return {
+                exists: true,
+                client: {
+                    id: doc.id,
+                    ...data,
+                    assigned_commercial_name: data.assigned_commercial_name
+                } as CommercialClient & { assigned_commercial_name?: string }
+            };
+        }
+        
+        // Buscar por teléfono principal
+        const phoneQuery = query(clientsCol, where('phone', '==', phone));
+        const phoneSnapshot = await getDocs(phoneQuery);
+        
+        if (!phoneSnapshot.empty) {
+            const doc = phoneSnapshot.docs[0];
+            const data = doc.data();
+            return {
+                exists: true,
+                client: {
+                    id: doc.id,
+                    ...data,
+                    assigned_commercial_name: data.assigned_commercial_name
+                } as CommercialClient & { assigned_commercial_name?: string }
+            };
+        }
+        
+        // Buscar por teléfonos adicionales
+        const additionalPhoneQuery = query(clientsCol, where('additional_phones', 'array-contains', phone));
+        const additionalPhoneSnapshot = await getDocs(additionalPhoneQuery);
+        
+        if (!additionalPhoneSnapshot.empty) {
+            const doc = additionalPhoneSnapshot.docs[0];
+            const data = doc.data();
+            return {
+                exists: true,
+                client: {
+                    id: doc.id,
+                    ...data,
+                    assigned_commercial_name: data.assigned_commercial_name
+                } as CommercialClient & { assigned_commercial_name?: string }
+            };
+        }
+        
+        return { exists: false };
+    } catch (error) {
+        console.error("Error checking client exists:", error);
+        throw error;
+    }
+};
+
 export const createClient = async (client: CommercialClient): Promise<string> => {
     try {
         const clientsCol = collection(db, 'clients');
@@ -89,6 +173,27 @@ export const getAllClients = async (): Promise<CommercialClient[]> => {
     } catch (error) {
         console.error("Error fetching all clients:", error);
         return [];
+    }
+};
+
+// Obtener usuario por ID para obtener nombre del comercial
+export const getUserById = async (userId: string): Promise<{id: string, name: string, email: string, role: string} | null> => {
+    try {
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            const data = userSnap.data();
+            return {
+                id: userSnap.id,
+                name: data.name || 'Usuario',
+                email: data.email || '',
+                role: data.role || 'commercial'
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error("Error fetching user:", error);
+        return null;
     }
 };
 

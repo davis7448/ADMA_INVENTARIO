@@ -5,8 +5,10 @@ export type ClientStatus = 'finding_winner' | 'testing' | 'selling' | 'scaling';
 export interface CommercialClient {
   id?: string;
   name: string;
-  email: string;
+  email: string; // Email principal
+  additional_emails?: string[]; // Correos adicionales vinculados
   phone: string;
+  additional_phones?: string[]; // Teléfonos adicionales
   birthday: Date |  any; // Timestamp from Firestore often needs handling
   category: ClientCategory;
   type: ClientType;
@@ -14,6 +16,7 @@ export interface CommercialClient {
   city: string;
   status: ClientStatus;
   assigned_commercial_id: string; 
+  assigned_commercial_name?: string; // Nombre del comercial para mostrar
   products_testing?: string[];
   products_selling?: string[];
   created_at: Date | any;

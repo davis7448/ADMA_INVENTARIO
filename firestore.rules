@@ -113,13 +113,23 @@ service cloud.firestore {
      
     // --- NEW COMMERCIAL MODULE RULES ---
     
-    // Clients: Commercials can create/read their own or all.
-    match /clients/{clientId} {
-       allow read: if isSignedIn() || isAdminAccess();
-       allow create: if isSignedIn() || isAdminAccess();
-       allow update: if isSignedIn() || isAdminAccess();
-       allow delete: if isDirector() || isRole('admin') || isAdminAccess();
-    }
+     // Clients: Commercials can only read their own. Directors/Admins/Plataformas can read all.
+     match /clients/{clientId} {
+        allow read: if isSignedIn() && (
+          resource.data.assigned_commercial_id == request.auth.uid || 
+          isRole('admin') || 
+          isRole('plataformas') ||
+          isRole('commercial_director')
+        ) || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update: if isSignedIn() && (
+          resource.data.assigned_commercial_id == request.auth.uid || 
+          isRole('admin') || 
+          isRole('plataformas') ||
+          isRole('commercial_director')
+        ) || isAdminAccess();
+        allow delete: if isDirector() || isRole('admin') || isRole('plataformas') || isAdminAccess();
+     }
 
     match /commercial_challenges/{challengeId} {
        allow read: if isSignedIn() || isAdminAccess();
