@@ -61,7 +61,7 @@ function formatFields(data: any) {
 function parseFields(doc: any) {
   if (!doc || !doc.fields) return { id: doc.name?.split('/').pop() };
   const fields: any = { id: doc.name?.split('/').pop() };
-  for (const [key, value: any] of Object.entries(doc.fields)) {
+  for (const [key, value] of Object.entries(doc.fields) as [string, any][]) {
     if (value.stringValue !== undefined) fields[key] = value.stringValue;
     else if (value.integerValue !== undefined) fields[key] = Number(value.integerValue);
     else if (value.booleanValue !== undefined) fields[key] = value.booleanValue;
