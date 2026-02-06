@@ -1,30 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, query, where, orderBy, limit, startAfter, getDocs, Timestamp, Query } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, startAfter, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-export async function POST(request: NextRequest) {
-  console.log('[API] /api/history/movements - START');
+export async function GET(request: NextRequest) {
+  console.log('[API] GET /api/history/movements - START');
   
   try {
-    const body = await request.json();
-    const { page = 1, limit: itemsPerPage = 20, filters = {} } = body;
+    const { searchParams } = new URL(request.url);
     
-    console.log('[API] Request params:', { page, itemsPerPage, filters });
+    // Pagination params
+    const cursor = searchParams.get('cursor');
+    const targetPage = Number(searchParams.get('page')) || 1;
+    const itemsPerPage = Number(searchParams.get('limit')) || 20;
     
-    const { startDate, endDate, platformId, carrierId, warehouseId } = filters;
+    // Filter params
+    const warehouseId = searchParams.get('warehouseId') || 'all';
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const platformId = searchParams.get('platformId');
+    const carrierId = searchParams.get('carrierId');
     
-    // Base query
-    let movementsQuery: Query = collection(db, 'inventoryMovements');
+    console.log('[API] Params:', { 
+      cursor, 
+      targetPage, 
+      itemsPerPage, 
+      warehouseId,
+      hasDateFilter: !!(startDate || endDate)
+    });
     
-    // Build query with filters
+    // Build query constraints
     const constraints: any[] = [];
     
-    // Warehouse filter (required for performance)
+    // Required: warehouse filter
     if (warehouseId && warehouseId !== 'all') {
       constraints.push(where('warehouseId', '==', warehouseId));
     }
     
-    // Date filters (most important)
+    // Optional: platform filter (before orderBy for index efficiency)
+    if (platformId && platformId !== 'all') {
+      constraints.push(where('platformId', '==', platformId));
+    }
+    
+    // Optional: carrier filter (before orderBy for index efficiency)
+    if (carrierId && carrierId !== 'all') {
+      constraints.push(where('carrierId', '==', carrierId));
+    }
+    
+    // Date filters
     if (startDate) {
       constraints.push(where('date', '>=', new Date(startDate)));
     }
@@ -32,58 +54,72 @@ export async function POST(request: NextRequest) {
       constraints.push(where('date', '<=', new Date(endDate)));
     }
     
-    // Platform filter
-    if (platformId && platformId !== 'all') {
-      constraints.push(where('platformId', '==', platformId));
-    }
-    
-    // Carrier filter
-    if (carrierId && carrierId !== 'all') {
-      constraints.push(where('carrierId', '==', carrierId));
-    }
-    
     // Order by date desc (newest first)
     constraints.push(orderBy('date', 'desc'));
     
-    // Apply constraints
-    movementsQuery = query(movementsQuery, ...constraints);
+    // Add cursor if provided (for pagination)
+    if (cursor) {
+      console.log('[API] Fetching page after cursor:', cursor);
+      try {
+        const cursorDoc = await getDoc(doc(db, 'inventoryMovements', cursor));
+        if (cursorDoc.exists()) {
+          constraints.push(startAfter(cursorDoc));
+        }
+      } catch (cursorError) {
+        console.error('[API] Error with cursor:', cursorError);
+        // Continue without cursor
+      }
+    }
     
-    console.log('[API] Executing query...');
+    // Limit results
+    constraints.push(limit(itemsPerPage));
     
     // Execute query
-    const snapshot = await getDocs(movementsQuery);
+    console.log('[API] Executing query with', constraints.length, 'constraints');
+    const movementsRef = collection(db, 'inventoryMovements');
+    const movementsQuery = query(movementsRef, ...constraints);
     
-    console.log(`[API] Query returned ${snapshot.docs.length} total docs`);
+    const snapshot = await getDocs(movementsQuery);
+    console.log(`[API] Query returned ${snapshot.docs.length} documents`);
     
     // Map results
-    let allMovements = snapshot.docs.map(doc => {
-      const data = doc.data();
+    const movements = snapshot.docs.map(docSnapshot => {
+      const data = docSnapshot.data();
       return {
-        id: doc.id,
+        id: docSnapshot.id,
         ...data,
         date: data.date?.toDate?.() ? data.date.toDate().toISOString() : data.date,
       };
     });
     
-    // Pagination (client-side for now, can be optimized with cursor)
-    const totalCount = allMovements.length;
-    const totalPages = Math.ceil(totalCount / itemsPerPage);
-    const startIndex = (page - 1) * itemsPerPage;
-    const paginatedMovements = allMovements.slice(startIndex, startIndex + itemsPerPage);
+    // Get next cursor (last document ID)
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    const nextCursor = lastDoc?.id || null;
     
-    console.log(`[API] Returning ${paginatedMovements.length} movements (page ${page}/${totalPages})`);
+    // Check if there are more results
+    const hasMore = snapshot.docs.length === itemsPerPage;
+    
+    console.log('[API] Response:', { 
+      count: movements.length, 
+      hasMore, 
+      nextCursor,
+      page: targetPage
+    });
     
     return NextResponse.json({
-      movements: paginatedMovements,
-      totalPages,
-      totalCount,
-      page
+      movements,
+      hasMore,
+      nextCursor,
+      page: targetPage
     });
     
   } catch (error) {
     console.error('[API] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch movements', details: (error as Error).message },
+      { 
+        error: 'Failed to fetch movements', 
+        details: (error as Error).message 
+      },
       { status: 500 }
     );
   }

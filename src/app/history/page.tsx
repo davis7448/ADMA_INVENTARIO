@@ -21,7 +21,7 @@ async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
   }
 }
 
-export const revalidate = 3600; // Cache platforms and carriers for 1 hour
+export const revalidate = 3600;
 
 export default async function HistoryPage({
   searchParams
@@ -40,17 +40,23 @@ export default async function HistoryPage({
     redirect(`?warehouse=${effectiveWarehouseId}`);
   }
 
-  // Fetch static data (cached)
+  // Fetch static data only (platforms and carriers)
+  // Movements will be fetched client-side with cursor pagination
   let platforms: any[] = [];
   let carriers: any[] = [];
   
   try {
-    [platforms, carriers] = await Promise.all([
-      getPlatforms(),
-      getCarriers()
-    ]);
+    platforms = await getPlatforms();
   } catch (error) {
-    console.error('Error fetching platforms/carriers:', error);
+    console.error('Error fetching platforms:', error);
+    platforms = [];
+  }
+  
+  try {
+    carriers = await getCarriers();
+  } catch (error) {
+    console.error('Error fetching carriers:', error);
+    carriers = [];
   }
 
   return (
@@ -59,7 +65,7 @@ export default async function HistoryPage({
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Historial</h1>
           <p className="text-muted-foreground mt-2">
-            Consulta el historial de movimientos y órdenes de despacho
+            Consulta el historial de movimientos de inventario
           </p>
         </div>
         

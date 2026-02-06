@@ -7,12 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CalendarIcon, Search, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Search, X, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 
 interface HistoryContainerProps {
@@ -26,59 +26,66 @@ export function HistoryContainer({
   initialCarriers,
   warehouseId 
 }: HistoryContainerProps) {
-  // State
+  // State for movements and pagination
   const [movements, setMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [cursors, setCursors] = useState<{[page: number]: string | null}>({1: null});
+  const [totalLoaded, setTotalLoaded] = useState(0);
   
   // Filters
-  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [platformId, setPlatformId] = useState<string>('all');
   const [carrierId, setCarrierId] = useState<string>('all');
   const [productSearch, setProductSearch] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
+  
+  // Page selector
+  const [goToPage, setGoToPage] = useState('');
+  const [jumpLoading, setJumpLoading] = useState(false);
 
-  // Fetch movements
-  const fetchMovements = useCallback(async (pageNum: number = 1) => {
+  // Fetch movements for current page
+  const fetchMovements = useCallback(async (targetPage: number = 1) => {
     setLoading(true);
     setError(null);
     
     try {
-      const filters: any = {
-        warehouseId: warehouseId || 'all',
-      };
+      const cursor = cursors[targetPage] || null;
       
-      if (dateRange.from) {
-        filters.startDate = dateRange.from.toISOString();
+      // Build query params
+      const params = new URLSearchParams();
+      params.set('page', String(targetPage));
+      params.set('limit', '20');
+      params.set('warehouseId', warehouseId || 'all');
+      
+      if (cursor) {
+        params.set('cursor', cursor);
       }
-      if (dateRange.to) {
-        filters.endDate = dateRange.to.toISOString();
+      if (startDate) {
+        params.set('startDate', startDate.toISOString());
+      }
+      if (endDate) {
+        params.set('endDate', endDate.toISOString());
       }
       if (platformId !== 'all') {
-        filters.platformId = platformId;
+        params.set('platformId', platformId);
       }
       if (carrierId !== 'all') {
-        filters.carrierId = carrierId;
+        params.set('carrierId', carrierId);
       }
       
-      console.log('[Client] Fetching movements:', { page: pageNum, filters });
+      console.log('[Client] Fetching page', targetPage, 'cursor:', cursor);
       
-      const response = await fetch('/api/history/movements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          page: pageNum,
-          limit: 20,
-          filters
-        })
-      });
+      const response = await fetch(`/api/history/movements?${params.toString()}`);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.details || `HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
@@ -88,8 +95,17 @@ export function HistoryContainer({
       }
       
       setMovements(data.movements);
-      setTotalPages(data.totalPages);
+      setHasMore(data.hasMore);
       setPage(data.page);
+      setTotalLoaded((data.page - 1) * 20 + data.movements.length);
+      
+      // Store cursor for next page
+      if (data.nextCursor && data.hasMore) {
+        setCursors(prev => ({
+          ...prev,
+          [data.page + 1]: data.nextCursor
+        }));
+      }
       
     } catch (err) {
       console.error('[Client] Error fetching movements:', err);
@@ -97,12 +113,55 @@ export function HistoryContainer({
     } finally {
       setLoading(false);
     }
-  }, [dateRange, platformId, carrierId, warehouseId]);
+  }, [cursors, startDate, endDate, platformId, carrierId, warehouseId]);
 
   // Initial load
   useEffect(() => {
     fetchMovements(1);
   }, [fetchMovements]);
+
+  // Jump to specific page (load all intermediate pages)
+  const jumpToPage = async (targetPage: number) => {
+    if (targetPage < 1) return;
+    if (targetPage === page) return;
+    
+    setJumpLoading(true);
+    
+    try {
+      let currentPage = page;
+      
+      // If going forward, load pages sequentially
+      if (targetPage > page) {
+        while (currentPage < targetPage && hasMore) {
+          await fetchMovements(currentPage + 1);
+          currentPage++;
+        }
+      } else {
+        // If going backward, we need to reload from page 1
+        // Clear cursors and start over
+        setCursors({1: null});
+        setPage(1);
+        
+        let pageNum = 1;
+        while (pageNum < targetPage) {
+          const cursor = cursors[pageNum + 1];
+          if (!cursor && pageNum > 1) {
+            // We don't have cursor for this page, need to load sequentially
+            await fetchMovements(pageNum + 1);
+          }
+          pageNum++;
+        }
+        
+        // Now fetch the target page
+        await fetchMovements(targetPage);
+      }
+    } catch (err) {
+      console.error('Error jumping to page:', err);
+    } finally {
+      setJumpLoading(false);
+      setGoToPage('');
+    }
+  };
 
   // Search products
   const searchProducts = async (query: string) => {
@@ -135,26 +194,30 @@ export function HistoryContainer({
     setSelectedProductId(product.id);
     setProductSearch(product.name);
     setSearchResults([]);
-    // TODO: Filter movements by product
   };
 
   // Clear all filters
   const clearFilters = () => {
-    setDateRange({});
+    setStartDate(undefined);
+    setEndDate(undefined);
     setPlatformId('all');
     setCarrierId('all');
     setProductSearch('');
     setSelectedProductId(null);
     setSearchResults([]);
+    setCursors({1: null});
+    setPage(1);
     fetchMovements(1);
   };
 
   // Apply filters
   const applyFilters = () => {
+    setCursors({1: null});
+    setPage(1);
     fetchMovements(1);
   };
 
-  const hasActiveFilters = dateRange.from || dateRange.to || platformId !== 'all' || 
+  const hasActiveFilters = startDate || endDate || platformId !== 'all' || 
                           carrierId !== 'all' || selectedProductId;
 
   return (
@@ -168,47 +231,52 @@ export function HistoryContainer({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Date Range */}
             <div className="space-y-2">
-              <Label>Rango de Fechas</Label>
+              <Label>Fecha Inicio</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     className={cn(
                       "w-full justify-start text-left font-normal",
-                      !dateRange.from && !dateRange.to && "text-muted-foreground"
+                      !startDate && "text-muted-foreground"
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRange.from ? (
-                      dateRange.to ? (
-                        <>
-                          {format(dateRange.from, "dd/MM/yyyy", { locale: es })} -{" "}
-                          {format(dateRange.to, "dd/MM/yyyy", { locale: es })}
-                        </>
-                      ) : (
-                        format(dateRange.from, "dd/MM/yyyy", { locale: es })
-                      )
-                    ) : (
-                      <span>Seleccionar fechas</span>
-                    )}
+                    {startDate ? format(startDate, "dd/MM/yyyy", { locale: es }) : <span>Desde...</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
+                    mode="single"
+                    selected={startDate}
+                    onSelect={setStartDate}
                     initialFocus
-                    mode="range"
-                    defaultMonth={dateRange.from}
-                    selected={{
-                      from: dateRange.from,
-                      to: dateRange.to
-                    }}
-                    onSelect={(range) => {
-                      setDateRange({
-                        from: range?.from,
-                        to: range?.to
-                      });
-                    }}
-                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Fecha Fin</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !endDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {endDate ? format(endDate, "dd/MM/yyyy", { locale: es }) : <span>Hasta...</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={endDate}
+                    onSelect={setEndDate}
+                    initialFocus
                   />
                 </PopoverContent>
               </Popover>
@@ -247,7 +315,7 @@ export function HistoryContainer({
             </div>
 
             {/* Product Search */}
-            <div className="space-y-2 relative">
+            <div className="space-y-2 relative lg:col-span-2">
               <Label>Producto</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -285,47 +353,32 @@ export function HistoryContainer({
 
           {/* Active Filters & Actions */}
           <div className="flex items-center justify-between mt-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {hasActiveFilters && (
                 <>
-                  <span className="text-sm text-muted-foreground">Filtros activos:</span>
-                  {dateRange.from && (
+                  <span className="text-sm text-muted-foreground">Filtros:</span>
+                  {startDate && (
                     <Badge variant="secondary" className="gap-1">
-                      Fecha
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => setDateRange({})}
-                      />
+                      Desde {format(startDate, "dd/MM/yyyy")}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setStartDate(undefined)} />
+                    </Badge>
+                  )}
+                  {endDate && (
+                    <Badge variant="secondary" className="gap-1">
+                      Hasta {format(endDate, "dd/MM/yyyy")}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setEndDate(undefined)} />
                     </Badge>
                   )}
                   {platformId !== 'all' && (
                     <Badge variant="secondary" className="gap-1">
                       {initialPlatforms.find((p: any) => p.id === platformId)?.name}
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => setPlatformId('all')}
-                      />
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setPlatformId('all')} />
                     </Badge>
                   )}
                   {carrierId !== 'all' && (
                     <Badge variant="secondary" className="gap-1">
                       {initialCarriers.find((c: any) => c.id === carrierId)?.name}
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => setCarrierId('all')}
-                      />
-                    </Badge>
-                  )}
-                  {selectedProductId && (
-                    <Badge variant="secondary" className="gap-1">
-                      Producto
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => {
-                          setSelectedProductId(null);
-                          setProductSearch('');
-                        }}
-                      />
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setCarrierId('all')} />
                     </Badge>
                   )}
                 </>
@@ -339,11 +392,7 @@ export function HistoryContainer({
                 </Button>
               )}
               <Button onClick={applyFilters} size="sm" disabled={loading}>
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Aplicar'
-                )}
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aplicar'}
               </Button>
             </div>
           </div>
@@ -356,7 +405,7 @@ export function HistoryContainer({
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Movimientos</CardTitle>
             <span className="text-sm text-muted-foreground">
-              Página {page} de {totalPages}
+              Página {page} | Total cargado: {totalLoaded}
             </span>
           </div>
         </CardHeader>
@@ -412,7 +461,7 @@ export function HistoryContainer({
                             {movement.type}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell className="font-medium max-w-xs truncate">
                           {movement.productName || movement.productId}
                         </TableCell>
                         <TableCell>{movement.quantity}</TableCell>
@@ -425,29 +474,55 @@ export function HistoryContainer({
                 </Table>
               </div>
 
-              {/* Pagination */}
-              <div className="flex items-center justify-between mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchMovements(page - 1)}
-                  disabled={page <= 1 || loading}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Anterior
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Página {page} de {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchMovements(page + 1)}
-                  disabled={page >= totalPages || loading}
-                >
-                  Siguiente
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
+              {/* Pagination Controls */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+                {/* Previous/Next */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchMovements(page - 1)}
+                    disabled={page <= 1 || loading}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Anterior
+                  </Button>
+                  
+                  <span className="text-sm text-muted-foreground px-4">
+                    Página <strong>{page}</strong>
+                  </span>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchMovements(page + 1)}
+                    disabled={!hasMore || loading}
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+
+                {/* Go to Page */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Ir a página:</span>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={goToPage}
+                    onChange={(e) => setGoToPage(e.target.value)}
+                    className="w-20"
+                    placeholder="#"
+                  />
+                  <Button 
+                    size="sm" 
+                    variant="secondary"
+                    disabled={!goToPage || jumpLoading}
+                    onClick={() => jumpToPage(Number(goToPage))}
+                  >
+                    {jumpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir'}
+                  </Button>
+                </div>
               </div>
             </>
           )}
