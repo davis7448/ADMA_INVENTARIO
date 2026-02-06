@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +34,7 @@ export function HistoryContainer({
   const [hasMore, setHasMore] = useState(true);
   const [cursors, setCursors] = useState<{[page: number]: string | null}>({1: null});
   const [totalLoaded, setTotalLoaded] = useState(0);
+  const hasInitialLoad = useRef(false);
   
   // Filters
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
@@ -51,6 +52,9 @@ export function HistoryContainer({
 
   // Fetch movements for current page
   const fetchMovements = useCallback(async (targetPage: number = 1) => {
+    // Prevent duplicate requests
+    if (loading) return;
+    
     setLoading(true);
     setError(null);
     
@@ -113,12 +117,15 @@ export function HistoryContainer({
     } finally {
       setLoading(false);
     }
-  }, [cursors, startDate, endDate, platformId, carrierId, warehouseId]);
+  }, [cursors, startDate, endDate, platformId, carrierId, warehouseId, loading]);
 
-  // Initial load
+  // Initial load - only once
   useEffect(() => {
-    fetchMovements(1);
-  }, [fetchMovements]);
+    if (!hasInitialLoad.current) {
+      hasInitialLoad.current = true;
+      fetchMovements(1);
+    }
+  }, []); // Empty dependency array - only run once
 
   // Jump to specific page (load all intermediate pages)
   const jumpToPage = async (targetPage: number) => {
