@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChevronLeft, ChevronRight, Loader2, Search, X, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
@@ -26,29 +27,43 @@ export function HistoryContainer({
   initialCarriers,
   warehouseId 
 }: HistoryContainerProps) {
+  // Active tab state
+  const [activeTab, setActiveTab] = useState<'movements' | 'orders'>('movements');
+  
   // State for movements and pagination
   const [movements, setMovements] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [cursors, setCursors] = useState<{[page: number]: string | null}>({1: null});
-  const [totalLoaded, setTotalLoaded] = useState(0);
-  const hasInitialLoad = useRef(false);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [movementsError, setMovementsError] = useState<string | null>(null);
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [movementsHasMore, setMovementsHasMore] = useState(true);
+  const [movementsCursors, setMovementsCursors] = useState<{[page: number]: string | null}>({1: null});
+  const [movementsTotalLoaded, setMovementsTotalLoaded] = useState(0);
+  const [movementsGoToPage, setMovementsGoToPage] = useState('');
+  const [movementsJumpLoading, setMovementsJumpLoading] = useState(false);
   
-  // Filters
+  // State for orders and pagination
+  const [orders, setOrders] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersHasMore, setOrdersHasMore] = useState(true);
+  const [ordersCursors, setOrdersCursors] = useState<{[page: number]: string | null}>({1: null});
+  const [ordersTotalLoaded, setOrdersTotalLoaded] = useState(0);
+  const [ordersGoToPage, setOrdersGoToPage] = useState('');
+  const [ordersJumpLoading, setOrdersJumpLoading] = useState(false);
+  
+  const hasInitialLoad = useRef({ movements: false, orders: false });
+  
+  // Filters (shared between tabs)
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [platformId, setPlatformId] = useState<string>('all');
   const [carrierId, setCarrierId] = useState<string>('all');
+  const [status, setStatus] = useState<string>('all');
   const [productSearch, setProductSearch] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
-  
-  // Page selector
-  const [goToPage, setGoToPage] = useState('');
-  const [jumpLoading, setJumpLoading] = useState(false);
 
   // Create lookup maps for platforms and carriers
   const platformMap = useMemo(() => {
@@ -70,13 +85,13 @@ export function HistoryContainer({
   // Fetch movements for current page
   const fetchMovements = useCallback(async (targetPage: number = 1) => {
     // Prevent duplicate requests
-    if (loading) return;
+    if (movementsLoading) return;
     
-    setLoading(true);
-    setError(null);
+    setMovementsLoading(true);
+    setMovementsError(null);
     
     try {
-      const cursor = cursors[targetPage] || null;
+      const cursor = movementsCursors[targetPage] || null;
       
       // Build query params
       const params = new URLSearchParams();
@@ -100,7 +115,7 @@ export function HistoryContainer({
         params.set('carrierId', carrierId);
       }
       
-      console.log('[Client] Fetching page', targetPage, 'cursor:', cursor);
+      console.log('[Client] Fetching movements page', targetPage, 'cursor:', cursor);
       
       const response = await fetch(`/api/history/movements?${params.toString()}`);
       
@@ -116,13 +131,13 @@ export function HistoryContainer({
       }
       
       setMovements(data.movements);
-      setHasMore(data.hasMore);
-      setPage(data.page);
-      setTotalLoaded((data.page - 1) * 20 + data.movements.length);
+      setMovementsHasMore(data.hasMore);
+      setMovementsPage(data.page);
+      setMovementsTotalLoaded((data.page - 1) * 20 + data.movements.length);
       
       // Store cursor for next page
       if (data.nextCursor && data.hasMore) {
-        setCursors(prev => ({
+        setMovementsCursors(prev => ({
           ...prev,
           [data.page + 1]: data.nextCursor
         }));
@@ -130,45 +145,124 @@ export function HistoryContainer({
       
     } catch (err) {
       console.error('[Client] Error fetching movements:', err);
-      setError((err as Error).message);
+      setMovementsError((err as Error).message);
     } finally {
-      setLoading(false);
+      setMovementsLoading(false);
     }
-  }, [cursors, startDate, endDate, platformId, carrierId, warehouseId, loading]);
+  }, [movementsCursors, startDate, endDate, platformId, carrierId, warehouseId, movementsLoading]);
 
-  // Initial load - only once
-  useEffect(() => {
-    if (!hasInitialLoad.current) {
-      hasInitialLoad.current = true;
-      fetchMovements(1);
-    }
-  }, []); // Empty dependency array - only run once
-
-  // Jump to specific page (load all intermediate pages)
-  const jumpToPage = async (targetPage: number) => {
-    if (targetPage < 1) return;
-    if (targetPage === page) return;
+  // Fetch orders for current page
+  const fetchOrders = useCallback(async (targetPage: number = 1) => {
+    // Prevent duplicate requests
+    if (ordersLoading) return;
     
-    setJumpLoading(true);
+    setOrdersLoading(true);
+    setOrdersError(null);
     
     try {
-      let currentPage = page;
+      const cursor = ordersCursors[targetPage] || null;
+      
+      // Build query params
+      const params = new URLSearchParams();
+      params.set('page', String(targetPage));
+      params.set('limit', '20');
+      params.set('warehouseId', warehouseId || 'all');
+      
+      if (cursor) {
+        params.set('cursor', cursor);
+      }
+      if (startDate) {
+        params.set('startDate', startDate.toISOString());
+      }
+      if (endDate) {
+        params.set('endDate', endDate.toISOString());
+      }
+      if (platformId !== 'all') {
+        params.set('platformId', platformId);
+      }
+      if (carrierId !== 'all') {
+        params.set('carrierId', carrierId);
+      }
+      if (status !== 'all') {
+        params.set('status', status);
+      }
+      
+      console.log('[Client] Fetching orders page', targetPage, 'cursor:', cursor);
+      
+      const response = await fetch(`/api/history/orders?${params.toString()}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || `HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      setOrders(data.orders);
+      setOrdersHasMore(data.hasMore);
+      setOrdersPage(data.page);
+      setOrdersTotalLoaded((data.page - 1) * 20 + data.orders.length);
+      
+      // Store cursor for next page
+      if (data.nextCursor && data.hasMore) {
+        setOrdersCursors(prev => ({
+          ...prev,
+          [data.page + 1]: data.nextCursor
+        }));
+      }
+      
+    } catch (err) {
+      console.error('[Client] Error fetching orders:', err);
+      setOrdersError((err as Error).message);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [ordersCursors, startDate, endDate, platformId, carrierId, status, warehouseId, ordersLoading]);
+
+  // Initial load - only once per tab
+  useEffect(() => {
+    if (!hasInitialLoad.current.movements) {
+      hasInitialLoad.current.movements = true;
+      fetchMovements(1);
+    }
+  }, [fetchMovements]);
+
+  useEffect(() => {
+    if (activeTab === 'orders' && !hasInitialLoad.current.orders) {
+      hasInitialLoad.current.orders = true;
+      fetchOrders(1);
+    }
+  }, [activeTab, fetchOrders]);
+
+  // Jump to specific page for movements
+  const jumpToMovementsPage = async (targetPage: number) => {
+    if (targetPage < 1) return;
+    if (targetPage === movementsPage) return;
+    
+    setMovementsJumpLoading(true);
+    
+    try {
+      let currentPage = movementsPage;
       
       // If going forward, load pages sequentially
-      if (targetPage > page) {
-        while (currentPage < targetPage && hasMore) {
+      if (targetPage > movementsPage) {
+        while (currentPage < targetPage && movementsHasMore) {
           await fetchMovements(currentPage + 1);
           currentPage++;
         }
       } else {
         // If going backward, we need to reload from page 1
         // Clear cursors and start over
-        setCursors({1: null});
-        setPage(1);
+        setMovementsCursors({1: null});
+        setMovementsPage(1);
         
         let pageNum = 1;
         while (pageNum < targetPage) {
-          const cursor = cursors[pageNum + 1];
+          const cursor = movementsCursors[pageNum + 1];
           if (!cursor && pageNum > 1) {
             // We don't have cursor for this page, need to load sequentially
             await fetchMovements(pageNum + 1);
@@ -180,10 +274,53 @@ export function HistoryContainer({
         await fetchMovements(targetPage);
       }
     } catch (err) {
-      console.error('Error jumping to page:', err);
+      console.error('Error jumping to movements page:', err);
     } finally {
-      setJumpLoading(false);
-      setGoToPage('');
+      setMovementsJumpLoading(false);
+      setMovementsGoToPage('');
+    }
+  };
+
+  // Jump to specific page for orders
+  const jumpToOrdersPage = async (targetPage: number) => {
+    if (targetPage < 1) return;
+    if (targetPage === ordersPage) return;
+    
+    setOrdersJumpLoading(true);
+    
+    try {
+      let currentPage = ordersPage;
+      
+      // If going forward, load pages sequentially
+      if (targetPage > ordersPage) {
+        while (currentPage < targetPage && ordersHasMore) {
+          await fetchOrders(currentPage + 1);
+          currentPage++;
+        }
+      } else {
+        // If going backward, we need to reload from page 1
+        // Clear cursors and start over
+        setOrdersCursors({1: null});
+        setOrdersPage(1);
+        
+        let pageNum = 1;
+        while (pageNum < targetPage) {
+          const cursor = ordersCursors[pageNum + 1];
+          if (!cursor && pageNum > 1) {
+            // We don't have cursor for this page, need to load sequentially
+            await fetchOrders(pageNum + 1);
+          }
+          pageNum++;
+        }
+        
+        // Now fetch the target page
+        await fetchOrders(targetPage);
+      }
+    } catch (err) {
+      console.error('Error jumping to orders page:', err);
+    } finally {
+      setOrdersJumpLoading(false);
+      setOrdersGoToPage('');
     }
   };
 
@@ -226,23 +363,53 @@ export function HistoryContainer({
     setEndDate(undefined);
     setPlatformId('all');
     setCarrierId('all');
+    setStatus('all');
     setProductSearch('');
     setSelectedProductId(null);
     setSearchResults([]);
-    setCursors({1: null});
-    setPage(1);
-    fetchMovements(1);
+    
+    if (activeTab === 'movements') {
+      setMovementsCursors({1: null});
+      setMovementsPage(1);
+      fetchMovements(1);
+    } else {
+      setOrdersCursors({1: null});
+      setOrdersPage(1);
+      fetchOrders(1);
+    }
   };
 
   // Apply filters
   const applyFilters = () => {
-    setCursors({1: null});
-    setPage(1);
-    fetchMovements(1);
+    if (activeTab === 'movements') {
+      setMovementsCursors({1: null});
+      setMovementsPage(1);
+      fetchMovements(1);
+    } else {
+      setOrdersCursors({1: null});
+      setOrdersPage(1);
+      fetchOrders(1);
+    }
   };
 
   const hasActiveFilters = startDate || endDate || platformId !== 'all' || 
-                          carrierId !== 'all' || selectedProductId;
+                          carrierId !== 'all' || status !== 'all' || selectedProductId;
+
+  // Get status badge variant
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case 'Pendiente':
+        return 'default';
+      case 'Despachada':
+        return 'success';
+      case 'Parcial':
+        return 'warning';
+      case 'Anulada':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -252,7 +419,7 @@ export function HistoryContainer({
           <CardTitle className="text-lg">Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Date Range */}
             <div className="space-y-2">
               <Label>Fecha Inicio</Label>
@@ -338,6 +505,23 @@ export function HistoryContainer({
               </Select>
             </div>
 
+            {/* Status - Only show in orders tab */}
+            <div className="space-y-2">
+              <Label>Estado</Label>
+              <Select value={status} onValueChange={setStatus} disabled={activeTab === 'movements'}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="Pendiente">Pendiente</SelectItem>
+                  <SelectItem value="Despachada">Despachada</SelectItem>
+                  <SelectItem value="Parcial">Parcial</SelectItem>
+                  <SelectItem value="Anulada">Anulada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Product Search */}
             <div className="space-y-2 relative lg:col-span-2">
               <Label>Producto</Label>
@@ -405,6 +589,12 @@ export function HistoryContainer({
                       <X className="h-3 w-3 cursor-pointer" onClick={() => setCarrierId('all')} />
                     </Badge>
                   )}
+                  {status !== 'all' && activeTab === 'orders' && (
+                    <Badge variant="secondary" className="gap-1">
+                      {status}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setStatus('all')} />
+                    </Badge>
+                  )}
                 </>
               )}
             </div>
@@ -415,143 +605,285 @@ export function HistoryContainer({
                   Limpiar
                 </Button>
               )}
-              <Button onClick={applyFilters} size="sm" disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aplicar'}
+              <Button onClick={applyFilters} size="sm" disabled={activeTab === 'movements' ? movementsLoading : ordersLoading}>
+                {activeTab === 'movements' 
+                  ? (movementsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aplicar')
+                  : (ordersLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aplicar')
+                }
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Results */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Movimientos</CardTitle>
-            <span className="text-sm text-muted-foreground">
-              Página {page} | Total cargado: {totalLoaded}
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <div className="p-8 text-center text-destructive">
-              <p>Error al cargar los movimientos:</p>
-              <p className="text-sm mt-2">{error}</p>
-              <Button onClick={() => fetchMovements(page)} variant="outline" className="mt-4">
-                Reintentar
-              </Button>
-            </div>
-          ) : loading ? (
-            <div className="p-8 text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-              <p className="mt-2 text-muted-foreground">Cargando movimientos...</p>
-            </div>
-          ) : movements.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <p>No se encontraron movimientos</p>
-              <p className="text-sm mt-2">Intenta ajustar los filtros</p>
-            </div>
-          ) : (
-            <>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Plataforma</TableHead>
-                      <TableHead>Transportadora</TableHead>
-                      <TableHead>Usuario</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {movements.map((movement: any) => (
-                      <TableRow key={movement.id}>
-                        <TableCell>
-                          {movement.date && format(new Date(movement.date), "dd/MM/yyyy HH:mm", { locale: es })}
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant={
-                              movement.type === 'Entrada' ? 'default' :
-                              movement.type === 'Salida' ? 'secondary' :
-                              movement.type === 'Averia' ? 'destructive' :
-                              'outline'
-                            }
-                          >
-                            {movement.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium max-w-xs truncate">
-                          {movement.productName || movement.productId}
-                        </TableCell>
-                        <TableCell>{movement.quantity}</TableCell>
-                        <TableCell>{platformMap[movement.platformId] || movement.platformId || '-'}</TableCell>
-                        <TableCell>{carrierMap[movement.carrierId] || movement.carrierId || '-'}</TableCell>
-                        <TableCell>{movement.userName || '-'}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'movements' | 'orders')} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="movements">Movimientos</TabsTrigger>
+          <TabsTrigger value="orders">Órdenes de Despacho</TabsTrigger>
+        </TabsList>
 
-              {/* Pagination Controls */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
-                {/* Previous/Next */}
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fetchMovements(page - 1)}
-                    disabled={page <= 1 || loading}
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-2" />
-                    Anterior
-                  </Button>
-                  
-                  <span className="text-sm text-muted-foreground px-4">
-                    Página <strong>{page}</strong>
-                  </span>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fetchMovements(page + 1)}
-                    disabled={!hasMore || loading}
-                  >
-                    Siguiente
-                    <ChevronRight className="h-4 w-4 ml-2" />
+        {/* Movements Tab */}
+        <TabsContent value="movements">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Movimientos</CardTitle>
+                <span className="text-sm text-muted-foreground">
+                  Página {movementsPage} | Total cargado: {movementsTotalLoaded}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {movementsError ? (
+                <div className="p-8 text-center text-destructive">
+                  <p>Error al cargar los movimientos:</p>
+                  <p className="text-sm mt-2">{movementsError}</p>
+                  <Button onClick={() => fetchMovements(movementsPage)} variant="outline" className="mt-4">
+                    Reintentar
                   </Button>
                 </div>
+              ) : movementsLoading && movements.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                  <p className="mt-2 text-muted-foreground">Cargando movimientos...</p>
+                </div>
+              ) : movements.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <p>No se encontraron movimientos</p>
+                  <p className="text-sm mt-2">Intenta ajustar los filtros</p>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Producto</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Plataforma</TableHead>
+                          <TableHead>Transportadora</TableHead>
+                          <TableHead>Usuario</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {movements.map((movement: any) => (
+                          <TableRow key={movement.id}>
+                            <TableCell>
+                              {movement.date && format(new Date(movement.date), "dd/MM/yyyy HH:mm", { locale: es })}
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant={
+                                  movement.type === 'Entrada' ? 'default' :
+                                  movement.type === 'Salida' ? 'secondary' :
+                                  movement.type === 'Averia' ? 'destructive' :
+                                  'outline'
+                                }
+                              >
+                                {movement.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium max-w-xs truncate">
+                              {movement.productName || movement.productId}
+                            </TableCell>
+                            <TableCell>{movement.quantity}</TableCell>
+                            <TableCell>{platformMap[movement.platformId] || movement.platformId || '-'}</TableCell>
+                            <TableCell>{carrierMap[movement.carrierId] || movement.carrierId || '-'}</TableCell>
+                            <TableCell>{movement.userName || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
 
-                {/* Go to Page */}
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Ir a página:</span>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={goToPage}
-                    onChange={(e) => setGoToPage(e.target.value)}
-                    className="w-20"
-                    placeholder="#"
-                  />
-                  <Button 
-                    size="sm" 
-                    variant="secondary"
-                    disabled={!goToPage || jumpLoading}
-                    onClick={() => jumpToPage(Number(goToPage))}
-                  >
-                    {jumpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir'}
+                  {/* Pagination Controls */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+                    {/* Previous/Next */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchMovements(movementsPage - 1)}
+                        disabled={movementsPage <= 1 || movementsLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-2" />
+                        Anterior
+                      </Button>
+                      
+                      <span className="text-sm text-muted-foreground px-4">
+                        Página <strong>{movementsPage}</strong>
+                      </span>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchMovements(movementsPage + 1)}
+                        disabled={!movementsHasMore || movementsLoading}
+                      >
+                        Siguiente
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
+
+                    {/* Go to Page */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Ir a página:</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={movementsGoToPage}
+                        onChange={(e) => setMovementsGoToPage(e.target.value)}
+                        className="w-20"
+                        placeholder="#"
+                      />
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        disabled={!movementsGoToPage || movementsJumpLoading}
+                        onClick={() => jumpToMovementsPage(Number(movementsGoToPage))}
+                      >
+                        {movementsJumpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir'}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Orders Tab */}
+        <TabsContent value="orders">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Órdenes de Despacho</CardTitle>
+                <span className="text-sm text-muted-foreground">
+                  Página {ordersPage} | Total cargado: {ordersTotalLoaded}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {ordersError ? (
+                <div className="p-8 text-center text-destructive">
+                  <p>Error al cargar las órdenes:</p>
+                  <p className="text-sm mt-2">{ordersError}</p>
+                  <Button onClick={() => fetchOrders(ordersPage)} variant="outline" className="mt-4">
+                    Reintentar
                   </Button>
                 </div>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+              ) : ordersLoading && orders.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                  <p className="mt-2 text-muted-foreground">Cargando órdenes...</p>
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <p>No se encontraron órdenes</p>
+                  <p className="text-sm mt-2">Intenta ajustar los filtros</p>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>ID Despacho</TableHead>
+                          <TableHead>Plataforma</TableHead>
+                          <TableHead>Transportadora</TableHead>
+                          <TableHead>Productos</TableHead>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Total Items</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orders.map((order: any) => (
+                          <TableRow key={order.id}>
+                            <TableCell>
+                              {order.date && format(new Date(order.date), "dd/MM/yyyy HH:mm", { locale: es })}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {order.dispatchId || order.id}
+                            </TableCell>
+                            <TableCell>{platformMap[order.platformId] || order.platformId || '-'}</TableCell>
+                            <TableCell>{carrierMap[order.carrierId] || order.carrierId || '-'}</TableCell>
+                            <TableCell className="max-w-xs">
+                              <div className="truncate" title={order.products?.map((p: any) => p.name).join(', ')}>
+                                {order.products?.map((p: any) => p.name).join(', ') || '-'}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={getStatusBadgeVariant(order.status)}>
+                                {order.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{order.totalItems || order.items?.length || 0}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+                    {/* Previous/Next */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchOrders(ordersPage - 1)}
+                        disabled={ordersPage <= 1 || ordersLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-2" />
+                        Anterior
+                      </Button>
+                      
+                      <span className="text-sm text-muted-foreground px-4">
+                        Página <strong>{ordersPage}</strong>
+                      </span>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchOrders(ordersPage + 1)}
+                        disabled={!ordersHasMore || ordersLoading}
+                      >
+                        Siguiente
+                        <ChevronRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
+
+                    {/* Go to Page */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Ir a página:</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={ordersGoToPage}
+                        onChange={(e) => setOrdersGoToPage(e.target.value)}
+                        className="w-20"
+                        placeholder="#"
+                      />
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        disabled={!ordersGoToPage || ordersJumpLoading}
+                        onClick={() => jumpToOrdersPage(Number(ordersGoToPage))}
+                      >
+                        {ordersJumpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ir'}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
