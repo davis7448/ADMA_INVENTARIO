@@ -59,6 +59,7 @@ export default async function HistoryPage({
 
   const filters = {
     productId: searchParams?.productId as string || 'all',
+    productSearch: searchParams?.productSearch as string,
     platformId: searchParams?.platformId as string || 'all',
     carrierId: searchParams?.carrierId as string || 'all',
     movementType: searchParams?.movementType as string || 'all',
@@ -71,16 +72,34 @@ export default async function HistoryPage({
   const [
     movementsResult,
     ordersResult,
-    allProducts,
     allPlatforms,
     allCarriers,
   ] = await Promise.all([
     getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
     getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
-    getProducts({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }), // Fetch all for filter dropdowns
     getPlatforms(),
     getCarriers(),
   ]);
+
+  // Extract unique product IDs from movements to fetch only necessary products
+  const movementProductIds = new Set<string>();
+  movementsResult.movements.forEach(m => {
+    if (m.productId) movementProductIds.add(m.productId);
+  });
+  
+  // Fetch only products that appear in movements (max 50 for performance)
+  let productsForMovements: Product[] = [];
+  if (movementProductIds.size > 0) {
+    const productIds = Array.from(movementProductIds).slice(0, 50);
+    const productsResult = await getProducts({ 
+      limit: 50,
+      filters: { 
+        ids: productIds,
+        warehouseId: filters.warehouseId 
+      } 
+    });
+    productsForMovements = productsResult.products;
+  }
 
   return (
     <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
@@ -89,7 +108,7 @@ export default async function HistoryPage({
         movementsTotalPages={movementsResult.totalPages}
         initialDispatchOrders={ordersResult.orders}
         ordersTotalPages={ordersResult.totalPages}
-        allProducts={allProducts.products}
+        allProducts={productsForMovements}
         allPlatforms={allPlatforms}
         allCarriers={allCarriers}
       />
