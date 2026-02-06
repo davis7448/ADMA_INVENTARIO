@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +49,23 @@ export function HistoryContainer({
   // Page selector
   const [goToPage, setGoToPage] = useState('');
   const [jumpLoading, setJumpLoading] = useState(false);
+
+  // Create lookup maps for platforms and carriers
+  const platformMap = useMemo(() => {
+    const map: {[key: string]: string} = {};
+    initialPlatforms.forEach((p: any) => {
+      map[p.id] = p.name;
+    });
+    return map;
+  }, [initialPlatforms]);
+
+  const carrierMap = useMemo(() => {
+    const map: {[key: string]: string} = {};
+    initialCarriers.forEach((c: any) => {
+      map[c.id] = c.name;
+    });
+    return map;
+  }, [initialCarriers]);
 
   // Fetch movements for current page
   const fetchMovements = useCallback(async (targetPage: number = 1) => {
@@ -472,8 +489,8 @@ export function HistoryContainer({
                           {movement.productName || movement.productId}
                         </TableCell>
                         <TableCell>{movement.quantity}</TableCell>
-                        <TableCell>{movement.platformId || '-'}</TableCell>
-                        <TableCell>{movement.carrierId || '-'}</TableCell>
+                        <TableCell>{platformMap[movement.platformId] || movement.platformId || '-'}</TableCell>
+                        <TableCell>{carrierMap[movement.carrierId] || movement.carrierId || '-'}</TableCell>
                         <TableCell>{movement.userName || '-'}</TableCell>
                       </TableRow>
                     ))}
