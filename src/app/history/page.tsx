@@ -35,7 +35,7 @@ async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
     }
 }
 
-export const revalidate = 0;
+export const revalidate = 3600; // Cache for 1 hour since platforms and carriers rarely change
 
 export default async function HistoryPage({
     searchParams
@@ -55,7 +55,7 @@ export default async function HistoryPage({
 
   const movementsPage = Number(searchParams?.movementsPage || '1');
   const ordersPage = Number(searchParams?.ordersPage || '1');
-  const itemsPerPage = Number(searchParams?.limit || '10');
+  const itemsPerPage = Number(searchParams?.limit || '5'); // Reduced from 10 to 5 to prevent connection issues
 
   const filters = {
     productId: searchParams?.productId as string || 'all',
@@ -69,19 +69,21 @@ export default async function HistoryPage({
   };
 
 
-  // Fetch data with error handling to prevent page crash
+  // Fetch data SEQUENTIALLY to prevent Firebase connection issues
+  // Promise.all creates too many simultaneous connections
   let movementsResult = { movements: [] as InventoryMovement[], totalPages: 0, totalCount: 0 };
   let ordersResult = { orders: [] as DispatchOrder[], totalPages: 0, totalCount: 0 };
   let allPlatforms: Platform[] = [];
   let allCarriers: Carrier[] = [];
 
   try {
-    [movementsResult, ordersResult, allPlatforms, allCarriers] = await Promise.all([
-      getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
-      getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
-      getPlatforms(),
-      getCarriers(),
-    ]);
+    // 1. First fetch static data (platforms and carriers) - these are cached
+    allPlatforms = await getPlatforms();
+    allCarriers = await getCarriers();
+    
+    // 2. Then fetch dynamic data one by one
+    movementsResult = await getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters });
+    ordersResult = await getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters });
   } catch (error) {
     console.error("Error fetching history data:", error);
     // Return empty data - page will show "no data" state
