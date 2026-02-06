@@ -69,17 +69,22 @@ export default async function HistoryPage({
   };
 
 
-  const [
-    movementsResult,
-    ordersResult,
-    allPlatforms,
-    allCarriers,
-  ] = await Promise.all([
-    getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
-    getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
-    getPlatforms(),
-    getCarriers(),
-  ]);
+  // Fetch data with error handling
+  let movementsResult = { movements: [] as any[], totalPages: 0, totalCount: 0 };
+  let ordersResult = { orders: [] as any[], totalPages: 0, totalCount: 0 };
+  let allPlatforms: Platform[] = [];
+  let allCarriers: Carrier[] = [];
+  
+  try {
+    [movementsResult, ordersResult, allPlatforms, allCarriers] = await Promise.all([
+      getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
+      getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
+      getPlatforms(),
+      getCarriers(),
+    ]);
+  } catch (error) {
+    console.error("Error fetching history data:", error);
+  }
 
   // Extract unique product IDs from movements to fetch only necessary products
   const movementProductIds = new Set<string>();
@@ -90,15 +95,19 @@ export default async function HistoryPage({
   // Fetch only products that appear in movements (max 50 for performance)
   let productsForMovements: Product[] = [];
   if (movementProductIds.size > 0) {
-    const productIds = Array.from(movementProductIds).slice(0, 50);
-    const productsResult = await getProducts({ 
-      limit: 50,
-      filters: { 
-        ids: productIds,
-        warehouseId: filters.warehouseId 
-      } 
-    });
-    productsForMovements = productsResult.products;
+    try {
+      const productIds = Array.from(movementProductIds).slice(0, 50);
+      const productsResult = await getProducts({ 
+        limit: 50,
+        filters: { 
+          ids: productIds,
+          warehouseId: filters.warehouseId 
+        } 
+      });
+      productsForMovements = productsResult.products;
+    } catch (error) {
+      console.error("Error fetching products for history:", error);
+    }
   }
 
   return (
