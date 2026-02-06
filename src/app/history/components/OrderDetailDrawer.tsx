@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -81,6 +82,18 @@ export function OrderDetailDrawer({
   carrierMap,
 }: OrderDetailDrawerProps) {
   if (!order) return null;
+
+  // Create product lookup map from order products
+  const productMap = useMemo(() => {
+    const map: {[key: string]: string} = {};
+    order.products.forEach((p: any) => {
+      map[p.productId] = p.name;
+      if (p.variantId) {
+        map[p.variantId] = p.name;
+      }
+    });
+    return map;
+  }, [order.products]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -254,7 +267,7 @@ export function OrderDetailDrawer({
                           <p className="text-xs text-muted-foreground">Productos afectados:</p>
                           {exception.products.map((prod, pIdx) => (
                             <p key={pIdx} className="text-sm">
-                              • {prod.variantSku || prod.productId}: {prod.quantity} unidad
+                              • {productMap[prod.productId] || productMap[prod.variantId || ''] || prod.variantSku || prod.productId}: {prod.quantity} unidad
                               {prod.quantity > 1 ? 'es' : ''}
                             </p>
                           ))}
@@ -294,7 +307,7 @@ export function OrderDetailDrawer({
                           <p className="text-xs text-muted-foreground">Productos:</p>
                           {exception.products.map((prod, pIdx) => (
                             <p key={pIdx} className="text-sm">
-                              • {prod.variantSku || prod.productId}: {prod.quantity} unidad
+                              • {productMap[prod.productId] || productMap[prod.variantId || ''] || prod.variantSku || prod.productId}: {prod.quantity} unidad
                               {prod.quantity > 1 ? 'es' : ''}
                             </p>
                           ))}
