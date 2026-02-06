@@ -65,22 +65,41 @@ export default async function HistoryPage({
     startDate: searchParams?.startDate as string,
     endDate: searchParams?.endDate as string,
     warehouseId: searchParams?.warehouse as string || effectiveWarehouseId,
+    productSearch: searchParams?.productSearch as string,
   };
 
 
   const [
     movementsResult,
     ordersResult,
-    allProducts,
     allPlatforms,
     allCarriers,
   ] = await Promise.all([
     getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
     getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
-    getProducts({ fetchAll: true, filters: { warehouseId: filters.warehouseId } }), // Fetch all for filter dropdowns
     getPlatforms(),
     getCarriers(),
   ]);
+
+  // Extract unique product IDs from movements (max 50 for performance)
+  const uniqueProductIds = Array.from(new Set(
+    movementsResult.movements.map(m => m.productId)
+  )).slice(0, 50);
+
+  // Fetch only the products that appear in the movements
+  let relatedProducts: Product[] = [];
+  if (uniqueProductIds.length > 0) {
+    try {
+      const productsResult = await getProducts({ 
+        fetchAll: true, 
+        filters: { ids: uniqueProductIds } 
+      });
+      relatedProducts = productsResult.products;
+    } catch (error) {
+      console.error("Error fetching related products:", error);
+      // Continue with empty products array - page will still work
+    }
+  }
 
   return (
     <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
@@ -89,7 +108,7 @@ export default async function HistoryPage({
         movementsTotalPages={movementsResult.totalPages}
         initialDispatchOrders={ordersResult.orders}
         ordersTotalPages={ordersResult.totalPages}
-        allProducts={allProducts.products}
+        allProducts={relatedProducts}
         allPlatforms={allPlatforms}
         allCarriers={allCarriers}
       />

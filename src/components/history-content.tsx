@@ -32,7 +32,7 @@ import type { DateRange } from 'react-day-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getInventoryMovements, getDispatchOrders } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
@@ -77,7 +77,6 @@ export function HistoryContent({
         }
         return undefined;
     });
-    const [productComboboxOpen, setProductComboboxOpen] = useState(false);
 
     // Pagination states from URL
     const movementsPage = Number(searchParams.get('movementsPage') || '1');
@@ -208,6 +207,7 @@ export function HistoryContent({
     const clearFilters = () => {
         const params = new URLSearchParams(searchParams.toString());
         params.delete('productId');
+        params.delete('productSearch');
         params.delete('platformId');
         params.delete('carrierId');
         params.delete('movementType');
@@ -230,33 +230,33 @@ export function HistoryContent({
         <div className="mb-6 space-y-4 p-4 border rounded-lg bg-muted/50">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div className="space-y-2">
-                    <Label>Filtrar por producto</Label>
-                    <Popover open={productComboboxOpen} onOpenChange={setProductComboboxOpen}>
-                        <PopoverTrigger asChild>
-                            <Button variant="outline" role="combobox" aria-expanded={productComboboxOpen} className="w-full justify-between">
-                                {filterProductId !== 'all' ? allProducts.find((p) => p.id === filterProductId)?.name : "Todos los productos"}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                            <Command>
-                                <CommandInput placeholder="Buscar producto..." />
-                                <CommandEmpty>No se encontró el producto.</CommandEmpty>
-                                <CommandGroup>
-                                    <CommandItem key="all" value="all" onSelect={() => { setFilterProductId('all'); setProductComboboxOpen(false); }}>
-                                        <Check className={cn("mr-2 h-4 w-4", filterProductId === 'all' ? "opacity-100" : "opacity-0")} />
-                                        Todos los productos
-                                    </CommandItem>
-                                    {allProducts.map((p) => (
-                                        <CommandItem key={p.id} value={p.name} onSelect={() => { setFilterProductId(p.id); setProductComboboxOpen(false); }}>
-                                            <Check className={cn("mr-2 h-4 w-4", filterProductId === p.id ? "opacity-100" : "opacity-0")} />
-                                            {p.name}
-                                        </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                            </Command>
-                        </PopoverContent>
-                    </Popover>
+                    <Label>Buscar por producto</Label>
+                    <Input 
+                        placeholder="Escribe nombre o SKU (3+ caracteres)..."
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.currentTarget.value.length >= 3) {
+                                const params = new URLSearchParams(searchParams.toString());
+                                params.set('productSearch', e.currentTarget.value);
+                                params.set('movementsPage', '1');
+                                router.push(`${pathname}?${params.toString()}`);
+                            }
+                        }}
+                    />
+                    {filterProductId !== 'all' && (
+                        <Badge 
+                            variant="secondary" 
+                            className="cursor-pointer" 
+                            onClick={() => {
+                                setFilterProductId('all');
+                                const params = new URLSearchParams(searchParams.toString());
+                                params.delete('productId');
+                                params.delete('productSearch');
+                                router.push(`${pathname}?${params.toString()}`);
+                            }}
+                        >
+                            {allProducts.find((p) => p.id === filterProductId)?.name || 'Producto'} ×
+                        </Badge>
+                    )}
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="platform-filter">Plataforma</Label>

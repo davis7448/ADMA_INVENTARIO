@@ -54,7 +54,7 @@ export const uploadImageAndGetURL = async (imageFile: File): Promise<string> => 
 // Product Functions
 export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ products: Product[], totalPages: number }> => {
     try {
-        const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse, warehouseId, userRole } = filters;
+        const { searchQuery, selectedCategory, selectedRotation, selectedVendedor, minStock, hasPending, hasReservations, onlyAudited, onlyVariable, noWarehouse, warehouseId, userRole, ids } = filters;
 
         let productQuery: Query = collection(db, 'products');
 
@@ -101,8 +101,14 @@ export const getProducts = async ({ page = 1, limit: itemsPerPage = 20, fetchAll
           reservations: reservationsByProductId[product.id] || [],
         }));
 
+        // Filter by IDs if provided (for performance optimization)
+        let productsToFilter = allProductsWithReservations;
+        if (ids && ids.length > 0) {
+            productsToFilter = allProductsWithReservations.filter(product => ids.includes(product.id));
+        }
+
         // Apply remaining client-side filters
-        const filteredProducts = allProductsWithReservations.filter(product => {
+        const filteredProducts = productsToFilter.filter(product => {
             const lowercasedQuery = searchQuery?.toLowerCase() || '';
             const searchMatch = !searchQuery || searchQuery.length <= 2
                 ? true
@@ -635,7 +641,20 @@ export const sendPasswordReset = async (email: string) => {
 
 // Inventory Movement Functions
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
-    const { startDate, endDate, productId, platformId, carrierId, movementType, warehouseId, productIds } = filters;
+    const { startDate, endDate, productId, productSearch, platformId, carrierId, movementType, warehouseId, productIds } = filters;
+    
+    // If productSearch is provided, first find matching products
+    let matchingProductIds: string[] = [];
+    if (productSearch && productSearch.length >= 3) {
+        const productsResult = await getProducts({ 
+            limit: 50, 
+            filters: { searchQuery: productSearch } 
+        });
+        matchingProductIds = productsResult.products.map(p => p.id);
+        if (matchingProductIds.length === 0) {
+            return { movements: [], totalPages: 0, totalCount: 0 };
+        }
+    }
     
     let movementsQuery: Query = collection(db, 'inventoryMovements');
 
@@ -656,6 +675,13 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         const chunks = [];
         for (let i = 0; i < productIds.length; i += 30) {
             chunks.push(productIds.slice(i, i + 30));
+        }
+        movementsQuery = query(movementsQuery, where('productId', 'in', chunks[0]));
+    }
+    if (matchingProductIds.length > 0) {
+        const chunks = [];
+        for (let i = 0; i < matchingProductIds.length; i += 30) {
+            chunks.push(matchingProductIds.slice(i, i + 30));
         }
         movementsQuery = query(movementsQuery, where('productId', 'in', chunks[0]));
     }
