@@ -9,12 +9,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChevronLeft, ChevronRight, Loader2, Search, X, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Search, X, Calendar as CalendarIcon, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { OrderDetailDrawer } from './OrderDetailDrawer';
 
 interface HistoryContainerProps {
   initialPlatforms: any[];
@@ -64,6 +65,10 @@ export function HistoryContainer({
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
+
+  // Order detail drawer state
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   // Create lookup maps for platforms and carriers
   const platformMap = useMemo(() => {
@@ -355,6 +360,12 @@ export function HistoryContainer({
     setSelectedProductId(product.id);
     setProductSearch(product.name);
     setSearchResults([]);
+  };
+
+  // Handle order click to open detail drawer
+  const openOrderDetail = (order: any) => {
+    setSelectedOrder(order);
+    setIsDetailOpen(true);
   };
 
   // Clear all filters
@@ -801,8 +812,12 @@ export function HistoryContainer({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {orders.map((order: any) => (
-                          <TableRow key={order.id}>
+                         {orders.map((order: any) => (
+                          <TableRow
+                            key={order.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => openOrderDetail(order)}
+                          >
                             <TableCell>
                               {order.date && format(new Date(order.date), "dd/MM/yyyy HH:mm", { locale: es })}
                             </TableCell>
@@ -884,6 +899,15 @@ export function HistoryContainer({
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Order Detail Drawer */}
+      <OrderDetailDrawer
+        order={selectedOrder}
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        platformMap={platformMap}
+        carrierMap={carrierMap}
+      />
     </div>
   );
 }
