@@ -106,12 +106,17 @@ service cloud.firestore {
        allow read: if isSignedIn() || isAdminAccess();
        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
      }
-     match /modificaciones/{modId} {
-       allow read: if isSignedIn() || isAdminAccess();
-       allow create, update, delete: if isSignedIn() || isAdminAccess();
-     }
-     
-    // --- NEW COMMERCIAL MODULE RULES ---
+      match /modificaciones/{modId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update, delete: if isSignedIn() || isAdminAccess();
+      }
+      match /return_guides/{guideId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRoleIn(['admin', 'plataformas', 'logistics']) || isAdminAccess();
+        allow update, delete: if isRole('admin') || isAdminAccess();
+      }
+      
+     // --- NEW COMMERCIAL MODULE RULES ---
     
      // Clients: Commercials can only read their own. Directors/Admins/Plataformas can read all.
      match /clients/{clientId} {

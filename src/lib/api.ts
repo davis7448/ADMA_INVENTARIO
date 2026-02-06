@@ -2755,3 +2755,82 @@ export const updateImportRequestStatus = async (id: string, status: ImportReques
   });
 };
 
+// --- RETURN GUIDES ---
+
+export interface ReturnGuide {
+  id?: string;
+  carrierId: string;
+  trackingNumber: string;
+  warehouseId?: string;
+  registeredBy: string;
+  registeredByName: string;
+  createdAt: Date | Timestamp;
+}
+
+export const registerReturnGuides = async (
+  guides: { carrierId: string; trackingNumber: string }[],
+  user: { id: string; name: string; },
+  warehouseId?: string
+): Promise<{ success: boolean; count: number; message?: string }> => {
+  try {
+    const returnGuidesCol = collection(db, 'return_guides');
+    const batch = [];
+    
+    for (const guide of guides) {
+      batch.push(addDoc(returnGuidesCol, {
+        carrierId: guide.carrierId,
+        trackingNumber: guide.trackingNumber,
+        warehouseId: warehouseId || null,
+        registeredBy: user.id,
+        registeredByName: user.name,
+        createdAt: serverTimestamp()
+      }));
+    }
+    
+    await Promise.all(batch);
+    return { success: true, count: guides.length };
+  } catch (error) {
+    console.error("Error registering return guides:", error);
+    return { 
+      success: false, 
+      count: 0, 
+      message: error instanceof Error ? error.message : 'Error desconocido' 
+    };
+  }
+};
+
+export const getReturnGuides = async (filters?: { 
+  warehouseId?: string; 
+  carrierId?: string;
+  startDate?: Date;
+  endDate?: Date;
+  limit?: number;
+}): Promise<ReturnGuide[]> => {
+  try {
+    const returnGuidesCol = collection(db, 'return_guides');
+    let q = query(returnGuidesCol, orderBy('createdAt', 'desc'));
+    
+    if (filters?.warehouseId) {
+      q = query(q, where('warehouseId', '==', filters.warehouseId));
+    }
+    
+    if (filters?.carrierId) {
+      q = query(q, where('carrierId', '==', filters.carrierId));
+    }
+    
+    if (filters?.limit) {
+      q = query(q, limit(filters.limit));
+    }
+    
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt
+    })) as ReturnGuide[];
+  } catch (error) {
+    console.error("Error fetching return guides:", error);
+    return [];
+  }
+};
+

@@ -108,12 +108,10 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     const [adjustmentType, setAdjustmentType] = useState<'in' | 'out'>('in');
     
     // Devoluciones State
-    const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
     const [isReturnProcessing, startReturnTransition] = useTransition();
     const [returnCarrier, setReturnCarrier] = useState('');
-    const [returnedProducts, setReturnedProducts] = useState<(LogisticItem & {trackingNumber: string})[]>([]);
+    const [returnGuides, setReturnGuides] = useState<{ trackingNumber: string; createdAt: Date }[]>([]);
     const [currentTrackingNumber, setCurrentTrackingNumber] = useState('');
-    const [productToAdd, setProductToAdd] = useState<(Product | ProductVariant) & { parentId?: string, parentImageUrl?: string } | null>(null);
     const returnBarcodeRef = useRef<HTMLInputElement>(null);
 
     // Averías State
@@ -540,87 +538,63 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
     const handleReturnBarcodeScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            const barcode = e.currentTarget.value;
-            const simpleProduct = allProductsList.find(p => p.productType === 'simple' && p.sku === barcode);
-
-            if (simpleProduct) {
-                setProductToAdd(simpleProduct);
-                setIsReturnDialogOpen(true);
-            } else {
-                const parentProduct = allProductsList.find(p => p.productType === 'variable' && p.variants?.some(v => v.sku === barcode));
-                if (parentProduct) {
-                    const variant = parentProduct.variants?.find(v => v.sku === barcode);
-                    if (variant) {
-                        setProductToAdd({ ...variant, parentId: parentProduct.id, parentImageUrl: parentProduct.imageUrl });
-                        setIsReturnDialogOpen(true);
-                    } else {
-                         toast({ variant: 'destructive', title: "Error", description: "SKU de variante no encontrado." });
-                    }
-                } else {
-                    toast({ variant: 'destructive', title: "Error", description: "Producto no encontrado." });
-                }
-            }
-            if(returnBarcodeRef.current) returnBarcodeRef.current.value = '';
-        }
-    };
-    
-    const handleAddProductToReturn = () => {
-        if (productToAdd && currentTrackingNumber) {
-            const parentId = productToAdd.parentId || (productToAdd as Product).id;
-            const parentProduct = allProductsList.find(p => p.id === parentId);
-
-            const logisticItem: LogisticItem & { trackingNumber: string } = {
-                productId: parentId,
-                variantId: 'productType' in productToAdd ? undefined : productToAdd.id,
-                name: productToAdd.name,
-                sku: productToAdd.sku || '',
-                imageUrl: productToAdd.parentImageUrl || (parentProduct ? parentProduct.imageUrl : ''),
-                quantity: 1,
-                trackingNumber: currentTrackingNumber,
-            };
-
-            setReturnedProducts(prev => [...prev, logisticItem]);
-            toast({ title: "Producto Agregado", description: `${productToAdd.name} añadido a la devolución.` });
+            const trackingNumber = e.currentTarget.value.trim();
             
-            setIsReturnDialogOpen(false);
-            setProductToAdd(null);
-            setCurrentTrackingNumber('');
+            if (!trackingNumber) {
+                toast({ variant: 'destructive', title: "Error", description: "Por favor, ingresa un número de guía." });
+                return;
+            }
+            
+            if (!returnCarrier) {
+                toast({ variant: 'destructive', title: "Error", description: "Por favor, selecciona una transportadora primero." });
+                if(returnBarcodeRef.current) returnBarcodeRef.current.value = '';
+                return;
+            }
+            
+            // Verificar si la guía ya existe en la lista
+            if (returnGuides.some(g => g.trackingNumber.toLowerCase() === trackingNumber.toLowerCase())) {
+                toast({ variant: 'destructive', title: "Guía duplicada", description: "Esta guía ya está en la lista." });
+                if(returnBarcodeRef.current) returnBarcodeRef.current.value = '';
+                return;
+            }
+            
+            setReturnGuides(prev => [...prev, { trackingNumber, createdAt: new Date() }]);
+            toast({ title: "Guía Agregada", description: `Guía ${trackingNumber} añadida a la devolución.` });
+            
+            if(returnBarcodeRef.current) returnBarcodeRef.current.value = '';
             returnBarcodeRef.current?.focus();
-        } else {
-            toast({ variant: 'destructive', title: "Error", description: "Por favor, ingresa un número de guía." });
-        }
-    };
-    
-    const handleAddProductKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleAddProductToReturn();
         }
     };
 
-    const handleRemoveReturnedProduct = (index: number) => {
-        setReturnedProducts(prev => prev.filter((_, i) => i !== index));
+    const handleRemoveReturnGuide = (index: number) => {
+        setReturnGuides(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleProcessReturn = async () => {
-        if (!returnCarrier || returnedProducts.length === 0) {
+        if (!returnCarrier || returnGuides.length === 0) {
             toast({
                 variant: 'destructive',
                 title: 'Faltan datos',
-                description: 'Por favor, selecciona una transportadora y agrega productos a la devolución.'
+                description: 'Por favor, selecciona una transportadora y agrega guías a la devolución.'
             });
             return;
         }
         
         startReturnTransition(async () => {
-            const result = await registerInventoryEntryAction(returnedProducts, user, 'Devolución de Cliente', undefined, returnCarrier, effectiveWarehouseId);
+            const { registerReturnGuides } = await import('@/lib/api');
+            const guides = returnGuides.map(g => ({
+                carrierId: returnCarrier,
+                trackingNumber: g.trackingNumber
+            }));
+            
+            const result = await registerReturnGuides(guides, user, effectiveWarehouseId);
             if (result.success) {
                 toast({
                     title: '¡Devolución Procesada!',
-                    description: `Se han procesado ${result.count} productos. El stock ha sido restaurado.`
+                    description: `Se han registrado ${result.count} guías de devolución.`
                 });
                 setReturnCarrier('');
-                setReturnedProducts([]);
+                setReturnGuides([]);
             } else {
                 toast({
                     variant: 'destructive',
@@ -731,44 +705,6 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
-
-        <Dialog open={isReturnDialogOpen} onOpenChange={(open) => {
-            setIsReturnDialogOpen(open);
-            if (!open) {
-                setProductToAdd(null);
-                setCurrentTrackingNumber('');
-            }
-        }}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Añadir Producto a Devolución</DialogTitle>
-                    <DialogDescription>
-                       Ingresa el número de guía para el producto <span className="font-semibold">{productToAdd?.name}</span>.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                     <div className="space-y-2">
-                        <Label htmlFor="tracking-number">Número de Guía</Label>
-                        <Input
-                            id="tracking-number"
-                            value={currentTrackingNumber}
-                            onChange={(e) => setCurrentTrackingNumber(e.target.value)}
-                            placeholder="Ej: TRK123456789"
-                            onKeyDown={handleAddProductKeyDown}
-                            autoFocus
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                            Cancelar
-                        </Button>
-                    </DialogClose>
-                    <Button onClick={handleAddProductToReturn}>Agregar a Devolución</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
 
         <Dialog open={isSearchDialogOpen} onOpenChange={setIsSearchDialogOpen}>
             <DialogContent className="sm:max-w-2xl">
@@ -1191,71 +1127,69 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                                     <CardDescription>Gestiona las devoluciones masivas de clientes.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-6">
-                                    <div>
-                                        <Label htmlFor="return-carrier">Transportadora</Label>
-                                        <Select value={returnCarrier} onValueChange={setReturnCarrier}>
-                                            <SelectTrigger id="return-carrier">
-                                                <SelectValue placeholder="Seleccionar una transportadora" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
                                      <div>
-                                        <Label htmlFor="return-barcode">Escanear o Buscar Producto</Label>
-                                        <div className="flex gap-2">
-                                            <div className="relative flex-grow">
-                                                <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                                <Input 
-                                                    id="return-barcode"
-                                                    ref={returnBarcodeRef}
-                                                    placeholder="Escanear SKU para agregar producto" 
-                                                    className="pl-8"
-                                                    onKeyDown={handleReturnBarcodeScan}
-                                                />
-                                            </div>
-                                            <Button variant="outline" size="icon" onClick={() => openSearchDialog('devoluciones')}>
-                                                <Search className="h-4 w-4" />
-                                                <span className="sr-only">Buscar Producto</span>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                     <Card>
-                                        <CardHeader><CardTitle>Productos a Devolver</CardTitle></CardHeader>
-                                        <CardContent>
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Producto</TableHead>
-                                                        <TableHead>SKU</TableHead>
-                                                        <TableHead>Nº Guía</TableHead>
-                                                        <TableHead className="text-right">Acciones</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {returnedProducts.length > 0 ? (
-                                                        returnedProducts.map((p, index) => (
-                                                            <TableRow key={`${p.sku}-${index}`}>
-                                                                <TableCell className="font-medium">{p.name}</TableCell>
-                                                                <TableCell>{p.sku}</TableCell>
-                                                                <TableCell>{p.trackingNumber}</TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveReturnedProduct(index)}>
-                                                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                                                    </Button>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        ))
-                                                    ) : (
-                                                        <TableRow>
-                                                            <TableCell colSpan={4} className="text-center">Aún no hay productos en la devolución.</TableCell>
-                                                        </TableRow>
-                                                    )}
-                                                </TableBody>
-                                            </Table>
-                                        </CardContent>
-                                    </Card>
+                                         <Label htmlFor="return-carrier">Transportadora</Label>
+                                         <Select value={returnCarrier} onValueChange={setReturnCarrier}>
+                                             <SelectTrigger id="return-carrier">
+                                                 <SelectValue placeholder="Seleccionar una transportadora" />
+                                             </SelectTrigger>
+                                             <SelectContent>
+                                                 {carriers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                             </SelectContent>
+                                         </Select>
+                                     </div>
+                                      <div>
+                                         <Label htmlFor="return-barcode">Escanear Número de Guía</Label>
+                                         <div className="flex gap-2">
+                                             <div className="relative flex-grow">
+                                                 <Barcode className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                 <Input 
+                                                     id="return-barcode"
+                                                     ref={returnBarcodeRef}
+                                                     placeholder="Escanear o escribir número de guía" 
+                                                     className="pl-8"
+                                                     onKeyDown={handleReturnBarcodeScan}
+                                                     disabled={!returnCarrier}
+                                                 />
+                                             </div>
+                                         </div>
+                                         {!returnCarrier && (
+                                             <p className="text-xs text-muted-foreground mt-1">Primero selecciona una transportadora</p>
+                                         )}
+                                     </div>
+                                      <Card>
+                                         <CardHeader><CardTitle>Guías a Devolver</CardTitle></CardHeader>
+                                         <CardContent>
+                                             <Table>
+                                                 <TableHeader>
+                                                     <TableRow>
+                                                         <TableHead>Nº Guía</TableHead>
+                                                         <TableHead>Fecha/Hora</TableHead>
+                                                         <TableHead className="text-right">Acciones</TableHead>
+                                                     </TableRow>
+                                                 </TableHeader>
+                                                 <TableBody>
+                                                     {returnGuides.length > 0 ? (
+                                                         returnGuides.map((g, index) => (
+                                                             <TableRow key={`${g.trackingNumber}-${index}`}>
+                                                                 <TableCell className="font-medium font-mono">{g.trackingNumber}</TableCell>
+                                                                 <TableCell>{g.createdAt.toLocaleString()}</TableCell>
+                                                                 <TableCell className="text-right">
+                                                                     <Button variant="ghost" size="icon" onClick={() => handleRemoveReturnGuide(index)}>
+                                                                         <Trash2 className="h-4 w-4 text-destructive" />
+                                                                     </Button>
+                                                                 </TableCell>
+                                                             </TableRow>
+                                                         ))
+                                                     ) : (
+                                                         <TableRow>
+                                                             <TableCell colSpan={3} className="text-center">Aún no hay guías en la devolución.</TableCell>
+                                                         </TableRow>
+                                                     )}
+                                                 </TableBody>
+                                             </Table>
+                                         </CardContent>
+                                     </Card>
                                 </CardContent>
                                 <CardFooter>
                                     <Button onClick={handleProcessReturn} disabled={isReturnProcessing}>
