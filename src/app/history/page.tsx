@@ -23,19 +23,26 @@ import { getUsers } from '@/lib/api';
 import { redirect } from 'next/navigation';
 
 async function getCurrentUser(sessionCookie?: string): Promise<User | null> {
-    if (!sessionCookie) return null;
+    console.log('[DEBUG] HistoryPage - getCurrentUser called');
+    if (!sessionCookie) {
+        console.log('[DEBUG] HistoryPage - No session cookie');
+        return null;
+    }
     try {
+        console.log('[DEBUG] HistoryPage - Verifying session...');
         const app = await getApp();
         const decodedClaims = await getAuth(app).verifySessionCookie(sessionCookie, true);
         const users = await getUsers();
-        return users.find(u => u.email === decodedClaims.email) || null;
+        const user = users.find(u => u.email === decodedClaims.email) || null;
+        console.log('[DEBUG] HistoryPage - User found:', user?.email);
+        return user;
     } catch (error) {
-        console.error("Session verification failed, this is expected if FIREBASE_PRIVATE_KEY is not set.", error);
+        console.error("[DEBUG] HistoryPage - Session verification failed:", error);
         return null;
     }
 }
 
-export const revalidate = 3600; // Cache for 1 hour since platforms and carriers rarely change
+export const revalidate = 3600;
 
 export default async function HistoryPage({
     searchParams
@@ -43,19 +50,27 @@ export default async function HistoryPage({
     searchParams: { [key: string]: string | string[] | undefined }
   }) {
 
+  console.log('[DEBUG] HistoryPage - START');
+  console.log('[DEBUG] HistoryPage - searchParams:', JSON.stringify(searchParams));
+
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('__session')?.value;
+  console.log('[DEBUG] HistoryPage - Session cookie exists:', !!sessionCookie);
+
   const user = await getCurrentUser(sessionCookie);
   const effectiveWarehouseId = user && user.role !== 'admin' ? (user.warehouseId || 'wh-bog') : undefined;
+  console.log('[DEBUG] HistoryPage - effectiveWarehouseId:', effectiveWarehouseId);
 
   // Server-side redirect for logistics users
   if (user?.role === 'logistics' && !searchParams?.warehouse) {
+      console.log('[DEBUG] HistoryPage - Redirecting logistics user');
       redirect(`?warehouse=${effectiveWarehouseId}`);
   }
 
   const movementsPage = Number(searchParams?.movementsPage || '1');
   const ordersPage = Number(searchParams?.ordersPage || '1');
-  const itemsPerPage = Number(searchParams?.limit || '5'); // Reduced from 10 to 5 to prevent connection issues
+  const itemsPerPage = Number(searchParams?.limit || '5');
+  console.log('[DEBUG] HistoryPage - Pagination:', { movementsPage, ordersPage, itemsPerPage });
 
   const filters = {
     productId: searchParams?.productId as string || 'all',
@@ -67,47 +82,63 @@ export default async function HistoryPage({
     warehouseId: searchParams?.warehouse as string || effectiveWarehouseId,
     productSearch: searchParams?.productSearch as string,
   };
+  console.log('[DEBUG] HistoryPage - Filters:', JSON.stringify(filters));
 
-
-  // Fetch data SEQUENTIALLY to prevent Firebase connection issues
-  // Promise.all creates too many simultaneous connections
   let movementsResult = { movements: [] as InventoryMovement[], totalPages: 0, totalCount: 0 };
   let ordersResult = { orders: [] as DispatchOrder[], totalPages: 0, totalCount: 0 };
   let allPlatforms: Platform[] = [];
   let allCarriers: Carrier[] = [];
 
   try {
-    // 1. First fetch static data (platforms and carriers) - these are cached
+    console.log('[DEBUG] HistoryPage - Fetching platforms...');
     allPlatforms = await getPlatforms();
-    allCarriers = await getCarriers();
+    console.log('[DEBUG] HistoryPage - Platforms fetched:', allPlatforms.length);
     
-    // 2. Then fetch dynamic data one by one
+    console.log('[DEBUG] HistoryPage - Fetching carriers...');
+    allCarriers = await getCarriers();
+    console.log('[DEBUG] HistoryPage - Carriers fetched:', allCarriers.length);
+    
+    console.log('[DEBUG] HistoryPage - Fetching movements...');
     movementsResult = await getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters });
+    console.log('[DEBUG] HistoryPage - Movements fetched:', movementsResult.movements.length);
+    
+    console.log('[DEBUG] HistoryPage - Fetching orders...');
     ordersResult = await getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters });
+    console.log('[DEBUG] HistoryPage - Orders fetched:', ordersResult.orders.length);
   } catch (error) {
-    console.error("Error fetching history data:", error);
-    // Return empty data - page will show "no data" state
+    console.error('[DEBUG] HistoryPage - ERROR fetching data:', error);
+    console.error('[DEBUG] HistoryPage - Error stack:', (error as Error).stack);
   }
 
-  // Extract unique product IDs from movements (max 50 for performance)
+  console.log('[DEBUG] HistoryPage - Extracting product IDs...');
   const uniqueProductIds = Array.from(new Set(
     movementsResult.movements.map(m => m.productId)
   )).slice(0, 50);
+  console.log('[DEBUG] HistoryPage - Unique product IDs:', uniqueProductIds.length);
 
-  // Fetch only the products that appear in the movements
   let relatedProducts: Product[] = [];
   if (uniqueProductIds.length > 0) {
     try {
+      console.log('[DEBUG] HistoryPage - Fetching related products...');
       const productsResult = await getProducts({ 
         fetchAll: true, 
         filters: { ids: uniqueProductIds } 
       });
       relatedProducts = productsResult.products;
+      console.log('[DEBUG] HistoryPage - Related products fetched:', relatedProducts.length);
     } catch (error) {
-      console.error("Error fetching related products:", error);
-      // Continue with empty products array - page will still work
+      console.error('[DEBUG] HistoryPage - ERROR fetching related products:', error);
+      console.error('[DEBUG] HistoryPage - Error stack:', (error as Error).stack);
     }
   }
+
+  console.log('[DEBUG] HistoryPage - RENDERING with data:', {
+    movements: movementsResult.movements.length,
+    orders: ordersResult.orders.length,
+    platforms: allPlatforms.length,
+    carriers: allCarriers.length,
+    products: relatedProducts.length
+  });
 
   return (
     <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'plataformas']}>
