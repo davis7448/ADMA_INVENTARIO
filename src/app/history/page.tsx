@@ -69,17 +69,23 @@ export default async function HistoryPage({
   };
 
 
-  const [
-    movementsResult,
-    ordersResult,
-    allPlatforms,
-    allCarriers,
-  ] = await Promise.all([
-    getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
-    getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
-    getPlatforms(),
-    getCarriers(),
-  ]);
+  // Fetch data with error handling to prevent page crash
+  let movementsResult = { movements: [] as InventoryMovement[], totalPages: 0, totalCount: 0 };
+  let ordersResult = { orders: [] as DispatchOrder[], totalPages: 0, totalCount: 0 };
+  let allPlatforms: Platform[] = [];
+  let allCarriers: Carrier[] = [];
+
+  try {
+    [movementsResult, ordersResult, allPlatforms, allCarriers] = await Promise.all([
+      getInventoryMovements({ page: movementsPage, limit: itemsPerPage, filters }),
+      getDispatchOrders({ page: ordersPage, limit: itemsPerPage, filters }),
+      getPlatforms(),
+      getCarriers(),
+    ]);
+  } catch (error) {
+    console.error("Error fetching history data:", error);
+    // Return empty data - page will show "no data" state
+  }
 
   // Extract unique product IDs from movements (max 50 for performance)
   const uniqueProductIds = Array.from(new Set(
