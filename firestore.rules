@@ -116,25 +116,51 @@ service cloud.firestore {
         allow update, delete: if isRole('admin') || isAdminAccess();
       }
       
-     // --- NEW COMMERCIAL MODULE RULES ---
-    
-     // Clients: Commercials can only read their own. Directors/Admins/Plataformas can read all.
-     match /clients/{clientId} {
-        allow read: if isSignedIn() && (
-          resource.data.assigned_commercial_id == request.auth.uid || 
-          isRole('admin') || 
-          isRole('plataformas') ||
-          isRole('commercial_director')
-        ) || isAdminAccess();
-        allow create: if isSignedIn() || isAdminAccess();
-        allow update: if isSignedIn() && (
-          resource.data.assigned_commercial_id == request.auth.uid || 
-          isRole('admin') || 
-          isRole('plataformas') ||
-          isRole('commercial_director')
-        ) || isAdminAccess();
-        allow delete: if isDirector() || isRole('admin') || isRole('plataformas') || isAdminAccess();
-     }
+      // --- NEW COMMERCIAL MODULE RULES ---
+     
+      // Clients: Commercials can only read their own. Directors/Admins/Plataformas can read all.
+      match /clients/{clientId} {
+         // Lectura: 
+         // - Comerciales: solo sus propios clientes
+         // - Admin/Director/Plataformas: todos los clientes
+         allow read: if isSignedIn() && (
+           resource.data.assigned_commercial_id == request.auth.uid || 
+           isRole('admin') || 
+           isRole('plataformas') ||
+           isRole('commercial_director')
+         ) || isAdminAccess();
+         
+         // Creación:
+         // - Solo admin, commercial, commercial_director pueden crear
+         // - Plataformas NO puede crear clientes
+         // - Al crear, el assigned_commercial_id debe ser el usuario actual o admin puede asignar a otro
+         allow create: if isSignedIn() && (
+           isRole('admin') || 
+           isRole('commercial') || 
+           isRole('commercial_director')
+         ) || isAdminAccess();
+         
+         // Actualización:
+         // - Comercial: solo sus propios clientes
+         // - Admin: puede editar cualquier cliente y cambiar assigned_commercial_id
+         // - Director: puede editar cualquier cliente
+         allow update: if isSignedIn() && (
+           // Comercial puede editar sus propios clientes
+           (resource.data.assigned_commercial_id == request.auth.uid && isRole('commercial')) ||
+           // Admin puede editar todos y cambiar assigned_commercial_id
+           isRole('admin') || 
+           // Director puede editar todos
+           isRole('commercial_director')
+         ) || isAdminAccess();
+         
+         // Eliminación:
+         // - Solo Director, Admin o Plataformas pueden eliminar
+         allow delete: if isSignedIn() && (
+           isRole('commercial_director') || 
+           isRole('admin') || 
+           isRole('plataformas')
+         ) || isAdminAccess();
+      }
 
     match /commercial_challenges/{challengeId} {
        allow read: if isSignedIn() || isAdminAccess();

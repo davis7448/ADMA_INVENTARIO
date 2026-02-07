@@ -153,8 +153,8 @@ export default function CommercialDashboardPage() {
                                 No hay comerciales registrados
                             </div>
                         ) : (
-                            <div className="space-y-4">
-                                {commercials.slice(0, 5).map((commercial, index) => (
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                {commercials.map((commercial, index) => (
                                     <div className="flex items-center" key={commercial.id}>
                                         <div className="h-9 w-9 rounded-full bg-muted border flex items-center justify-center font-bold text-muted-foreground">
                                             {index + 1}
@@ -175,11 +175,6 @@ export default function CommercialDashboardPage() {
                                         </div>
                                     </div>
                                 ))}
-                                {commercials.length > 5 && (
-                                    <p className="text-center text-xs text-muted-foreground pt-2">
-                                        +{commercials.length - 5} comerciales más
-                                    </p>
-                                )}
                             </div>
                         )}
                     </CardContent>

@@ -43,7 +43,7 @@ export default function CrmDashboardPage() {
             if (!user) return;
             try {
                 const isDirector = user.role === 'commercial_director' || user.role === 'admin';
-                const data = isDirector ? await getAllClients() : await getClientsByCommercial(user.id);
+                const data = isDirector ? await getAllClients(user.role, user.id) : await getClientsByCommercial(user.id);
                 setClients(data);
             } catch (err) {
                 console.error(err);

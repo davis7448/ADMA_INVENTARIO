@@ -594,15 +594,24 @@ export const getUsers = async (): Promise<User[]> => {
     return userList;
 };
 
-export const addUser = async (user: Omit<User, 'id'>): Promise<string> => {
+export const addUser = async (user: Omit<User, 'id'>, uid?: string): Promise<string> => {
     const usersCol = collection(db, 'users');
     const q = query(usersCol, where("email", "==", user.email));
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
         throw new Error("Ya existe un usuario con este correo electrónico.");
     }
-    const docRef = await addDoc(usersCol, user);
-    return docRef.id;
+    // Si se proporciona un UID (Firebase Auth), usarlo como ID del documento
+    // Esto asegura consistencia entre Auth UID y Firestore document ID
+    if (uid) {
+        const docRef = doc(usersCol, uid);
+        await setDoc(docRef, user);
+        return uid;
+    } else {
+        // Fallback para casos donde no hay UID (creación manual de usuarios)
+        const docRef = await addDoc(usersCol, user);
+        return docRef.id;
+    }
 };
 
 export const findUserByEmail = async (email: string): Promise<User | null> => {
