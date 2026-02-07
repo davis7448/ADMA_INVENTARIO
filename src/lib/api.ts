@@ -601,6 +601,7 @@ export const addUser = async (user: Omit<User, 'id'>): Promise<string> => {
     if (!querySnapshot.empty) {
         throw new Error("Ya existe un usuario con este correo electrónico.");
     }
+    // Usar addDoc para generar ID aleatorio de Firestore
     const docRef = await addDoc(usersCol, user);
     return docRef.id;
 };
@@ -641,6 +642,7 @@ export const sendPasswordReset = async (email: string) => {
 
 // Inventory Movement Functions
 export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ movements: InventoryMovement[], totalPages: number, totalCount: number }> => {
+    console.log('[DEBUG] getInventoryMovements - START', { page, itemsPerPage, fetchAll, filters });
     const { startDate, endDate, productId, productSearch, platformId, carrierId, movementType, warehouseId, productIds } = filters;
     
     // If productSearch is provided, first find matching products
@@ -678,6 +680,13 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         }
         movementsQuery = query(movementsQuery, where('productId', 'in', chunks[0]));
     }
+    if (matchingProductIds.length > 0) {
+        const chunks = [];
+        for (let i = 0; i < matchingProductIds.length; i += 30) {
+            chunks.push(matchingProductIds.slice(i, i + 30));
+        }
+        movementsQuery = query(movementsQuery, where('productId', 'in', chunks[0]));
+    }
     if (platformId && platformId !== 'all') {
         movementsQuery = query(movementsQuery, where('platformId', '==', platformId));
     }
@@ -700,8 +709,21 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
         queries.push(query(movementsQuery, where('warehouseId', '==', warehouseId)));
     }
     
-    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
-    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
+    // SEQUENTIAL execution to prevent connection issues
+    console.log(`[DEBUG] getInventoryMovements - Executing ${queries.length} queries SEQUENTIALLY`);
+    const allDocs: any[] = [];
+    for (let i = 0; i < queries.length; i++) {
+        console.log(`[DEBUG] getInventoryMovements - Executing query ${i + 1}/${queries.length}`);
+        try {
+            const snap = await getDocs(queries[i]);
+            console.log(`[DEBUG] getInventoryMovements - Query ${i + 1} returned ${snap.docs.length} docs`);
+            allDocs.push(...snap.docs);
+        } catch (err) {
+            console.error(`[DEBUG] getInventoryMovements - Query ${i + 1} FAILED:`, err);
+            throw err;
+        }
+    }
+    const snapshot = { docs: allDocs };
     
     let allMovements = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -711,11 +733,6 @@ export const getInventoryMovements = async ({ page = 1, limit: itemsPerPage = 10
           date: parseFirestoreDate(data.date).toISOString(),
         } as InventoryMovement
     });
-    
-    // Filter by product search results if provided
-    if (matchingProductIds.length > 0) {
-        allMovements = allMovements.filter(m => matchingProductIds.includes(m.productId));
-    }
     
     const sortedMovements = allMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -919,6 +936,7 @@ const parseFirestoreDate = (dateValue: any): Date => {
   };
 
   export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
+    console.log('[DEBUG] getDispatchOrders - START', { page, itemsPerPage, fetchAll, filters });
     const { startDate, endDate, productId, platformId, carrierId, warehouseId } = filters;
     
     let ordersQuery: Query = collection(db, 'dispatchOrders');
@@ -952,8 +970,21 @@ const parseFirestoreDate = (dateValue: any): Date => {
         queries.push(query(ordersQuery, where('warehouseId', '==', warehouseId)));
     }
 
-    const snapshots = await Promise.all(queries.map(q => getDocs(q)));
-    const snapshot = { docs: snapshots.flatMap(snap => snap.docs) };
+    // SEQUENTIAL execution to prevent connection issues
+    console.log(`[DEBUG] getDispatchOrders - Executing ${queries.length} queries SEQUENTIALLY`);
+    const allDocs: any[] = [];
+    for (let i = 0; i < queries.length; i++) {
+        console.log(`[DEBUG] getDispatchOrders - Executing query ${i + 1}/${queries.length}`);
+        try {
+            const snap = await getDocs(queries[i]);
+            console.log(`[DEBUG] getDispatchOrders - Query ${i + 1} returned ${snap.docs.length} docs`);
+            allDocs.push(...snap.docs);
+        } catch (err) {
+            console.error(`[DEBUG] getDispatchOrders - Query ${i + 1} FAILED:`, err);
+            throw err;
+        }
+    }
+    const snapshot = { docs: allDocs };
 
     let allOrders = snapshot.docs.map(doc => ({
         id: doc.id,

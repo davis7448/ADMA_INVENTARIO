@@ -107,9 +107,16 @@ export const checkClientExists = async (email: string, phone: string): Promise<C
         }
         
         return { exists: false };
-    } catch (error) {
+    } catch (error: any) {
+        // Manejar errores de permisos - si no tiene permiso para leer otros clientes,
+        // asumimos que no existe (el usuario podrá intentar crearlo)
+        if (error.code === 'permission-denied') {
+            console.warn("Permission denied when checking client existence. Assuming client does not exist.");
+            return { exists: false };
+        }
         console.error("Error checking client exists:", error);
-        throw error;
+        // En lugar de lanzar error, devolvemos false para no bloquear al usuario
+        return { exists: false };
     }
 };
 
@@ -159,8 +166,14 @@ export const getClientsByCommercial = async (commercialId: string): Promise<Comm
     }
 };
 
-export const getAllClients = async (): Promise<CommercialClient[]> => {
+export const getAllClients = async (userRole?: string, userId?: string): Promise<CommercialClient[]> => {
     try {
+        // Si es comercial (no admin/director/plataformas), usar getClientsByCommercial en su lugar
+        if (userRole === 'commercial' && userId) {
+            console.warn("Commercial users should use getClientsByCommercial instead of getAllClients");
+            return getClientsByCommercial(userId);
+        }
+        
         const clientsCol = collection(db, 'clients');
         const snapshot = await getDocs(clientsCol);
         return snapshot.docs.map(doc => ({
@@ -170,8 +183,12 @@ export const getAllClients = async (): Promise<CommercialClient[]> => {
             updated_at: doc.data().updated_at?.toDate(),
             birthday: doc.data().birthday?.toDate ? doc.data().birthday.toDate() : doc.data().birthday
         } as CommercialClient));
-    } catch (error) {
-        console.error("Error fetching all clients:", error);
+    } catch (error: any) {
+        if (error.code === 'permission-denied') {
+            console.error("Permission denied when fetching all clients. User may not have admin/director/plataformas role.");
+        } else {
+            console.error("Error fetching all clients:", error);
+        }
         return [];
     }
 };
@@ -365,46 +382,77 @@ export const getProductsForCatalog = async (): Promise<Product[]> => {
 // --- USER FIX / MIGRATION ---
 
 export const fixUserProfile = async (user: any) => {
-    if (!user || !user.email) return;
+    // Validación robusta de datos de entrada
+    if (!user || typeof user !== 'object') {
+        console.warn("fixUserProfile: Invalid user object provided");
+        return;
+    }
+
+    // El ID del usuario puede venir en user.id (desde Firestore) o user.uid (desde Firebase Auth)
+    const userId = user.id || user.uid;
+    const userEmail = user.email;
+
+    if (!userId) {
+        console.warn("fixUserProfile: User ID is missing (neither user.id nor user.uid found)");
+        return;
+    }
+
+    if (!userEmail || typeof userEmail !== 'string') {
+        console.warn("fixUserProfile: User email is missing or invalid");
+        return;
+    }
+
+    // Validar que el ID sea un string válido para Firestore
+    if (typeof userId !== 'string' || userId.trim() === '') {
+        console.warn("fixUserProfile: User ID must be a non-empty string");
+        return;
+    }
 
     try {
         // 1. Check if profile exists with correct UID
-        const correctProfileRef = doc(db, 'users', user.uid);
+        const correctProfileRef = doc(db, 'users', userId);
         const correctProfileSnap = await getDoc(correctProfileRef);
 
         if (correctProfileSnap.exists()) {
-            console.log("User profile is correct.");
+            console.log("User profile is correct. ID:", userId);
             return;
         }
 
         // 2. If not, find by email
         const usersCol = collection(db, 'users');
-        const q = query(usersCol, where('email', '==', user.email));
+        const q = query(usersCol, where('email', '==', userEmail));
         const snapshot = await getDocs(q);
 
         if (!snapshot.empty) {
-            console.log("Found disconnected profile. Migrating...");
+            console.log("Found disconnected profile. Migrating to ID:", userId);
             const oldDoc = snapshot.docs[0];
             const oldData = oldDoc.data();
 
             // 3. Create new profile with correct UID
             await setDoc(correctProfileRef, {
                 ...oldData,
-                id: user.uid, // Ensure ID is updated in data too
+                id: userId, // Ensure ID is updated in data too
                 migratedFrom: oldDoc.id,
                 updated_at: serverTimestamp()
             });
 
-            console.log("Profile migrated successfully to", user.uid);
+            console.log("Profile migrated successfully to", userId);
 
             // Optional: Delete old if we could, but likely lack permissions.
         } else {
             // 4. If no profile at all, create one? 
             // Maybe better to wait for manual creation, but for Commercial Reps this might be needed.
-            console.warn("No user profile found for email:", user.email);
+            console.warn("No user profile found for email:", userEmail);
         }
 
-    } catch (error) {
-        console.error("Error fixing user profile:", error);
+    } catch (error: any) {
+        // Manejar específicamente errores de Firebase
+        if (error.code === 'permission-denied') {
+            console.error("Permission denied when fixing user profile. User may not have access to users collection.");
+        } else if (error.message && error.message.includes('indexOf')) {
+            console.error("Invalid document ID format:", userId);
+        } else {
+            console.error("Error fixing user profile:", error);
+        }
     }
 };

@@ -14,6 +14,9 @@ export const firebaseConfig = {
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// Initialize Firestore WITHOUT persistence to prevent connection issues
+// Persistence was causing "Connection closed" errors on Firebase App Hosting
 const db = getFirestore(app);
 
 // Enable offline persistence

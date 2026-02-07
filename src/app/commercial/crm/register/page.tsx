@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/use-auth';
 import { createClient, checkClientExists, getUserById } from '@/lib/commercial-api';
+import { getUsers } from '@/lib/api';
 import { CommercialClient } from '@/types/commercial';
+import type { User } from '@/lib/types';
 import { ArrowLeft, Loader2, Plus, X, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +27,31 @@ export default function RegisterClientPage() {
         clientName?: string;
         assignedTo?: string;
     } | null>(null);
+
+    // Lista de comerciales para admins
+    const [commercials, setCommercials] = useState<User[]>([]);
+    const [selectedCommercialId, setSelectedCommercialId] = useState<string>('');
+    const [loadingCommercials, setLoadingCommercials] = useState(false);
+
+    // Verificar si el usuario es admin
+    const isAdmin = user?.role === 'admin' || user?.role === 'commercial_director';
+
+    // Cargar lista de comerciales si es admin
+    useEffect(() => {
+        if (isAdmin) {
+            setLoadingCommercials(true);
+            getUsers().then(users => {
+                const commercialUsers = users.filter(u => 
+                    u.role === 'commercial' || u.role === 'commercial_director'
+                );
+                setCommercials(commercialUsers);
+                setLoadingCommercials(false);
+            }).catch(error => {
+                console.error('Error loading commercials:', error);
+                setLoadingCommercials(false);
+            });
+        }
+    }, [isAdmin]);
 
     // Simple state for form
     const [formData, setFormData] = useState<Partial<CommercialClient>>({
@@ -119,13 +146,26 @@ export default function RegisterClientPage() {
                 return;
             }
 
-            // Obtener nombre del comercial actual
-            const currentUser = await getUserById(user.id);
+            // Determinar el comercial asignado
+            let assignedCommercialId: string;
+            let assignedCommercialName: string;
+
+            if (isAdmin && selectedCommercialId) {
+                // Admin seleccionó un comercial específico
+                const selectedCommercial = commercials.find(c => c.id === selectedCommercialId);
+                assignedCommercialId = selectedCommercialId;
+                assignedCommercialName = selectedCommercial?.name || selectedCommercial?.email || 'Comercial';
+            } else {
+                // Usar el comercial actual (o admin crea para sí mismo)
+                const currentUser = await getUserById(user.id);
+                assignedCommercialId = user.id;
+                assignedCommercialName = currentUser?.name || user.email || 'Comercial';
+            }
 
             await createClient({
                 ...formData as CommercialClient,
-                assigned_commercial_id: user.id,
-                assigned_commercial_name: currentUser?.name || user.email,
+                assigned_commercial_id: assignedCommercialId,
+                assigned_commercial_name: assignedCommercialName,
                 additional_emails: additionalEmails,
                 additional_phones: additionalPhones,
                 created_at: new Date(),
@@ -313,6 +353,32 @@ export default function RegisterClientPage() {
                                     onChange={(e) => handleChange('avg_sales', Number(e.target.value))}
                                 />
                             </div>
+                            
+                            {/* Selector de comercial (solo para admins) */}
+                            {isAdmin && (
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label htmlFor="assigned_commercial">Asignar a Comercial</Label>
+                                    <Select 
+                                        value={selectedCommercialId} 
+                                        onValueChange={setSelectedCommercialId}
+                                        disabled={loadingCommercials}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={loadingCommercials ? "Cargando comerciales..." : "Seleccionar comercial..."} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value={user?.id || ''}>
+                                                Yo mismo ({user?.name || user?.email})
+                                            </SelectItem>
+                                            {commercials.map((commercial) => (
+                                                <SelectItem key={commercial.id} value={commercial.id}>
+                                                    {commercial.name || commercial.email} ({commercial.role === 'commercial_director' ? 'Director' : 'Comercial'})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                         </div>
 
                         <div className="pt-4 flex justify-end">

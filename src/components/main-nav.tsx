@@ -34,16 +34,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
-  { href: '/tablero-resultados', label: 'Tablero de Resultados', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
   { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'consulta', 'plataformas', 'logistics'] },
-  {
-    label: 'Ventas',
-    roles: ['admin'],
-    children: [
-      { href: '/orders', label: 'Órdenes', roles: ['admin'] },
-      { href: '/returns', label: 'Garantías', roles: ['admin'] },
-    ],
-  },
   {
     label: 'Activos',
     roles: ['admin', 'plataformas'],
@@ -54,9 +45,9 @@ const navItems: NavItem[] = [
       { href: '/platforms', label: 'Plataformas', roles: ['admin', 'plataformas'] },
       { href: '/vendedores', label: 'Vendedores', roles: ['admin', 'plataformas'] },
       { href: '/normalize-warehouses', label: 'Normalizar Bodegas', roles: ['admin'] },
+      { href: '/salary-management', label: 'Gestión de Salarios', roles: ['admin'] },
     ],
   },
-  { href: '/salary-management', label: 'Gestión de Salarios', roles: ['admin'] },
   { href: '/modificaciones', label: 'Modificaciones', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
   {
     label: 'Logística',
@@ -78,14 +69,6 @@ const navItems: NavItem[] = [
       { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin', 'plataformas'], badge: 'stale_alerts' },
       { href: '/stock-alerts', label: 'Stock', roles: ['admin', 'commercial', 'consulta', 'logistics', 'plataformas'] },
       { href: '/returns-damages', label: 'Devoluciones y Averías', roles: ['admin', 'logistics', 'commercial', 'consulta'] },
-    ]
-  },
-  {
-    label: 'Alianzas',
-    roles: ['admin'],
-    children: [
-      { href: '/alianzas/importaciones/solicitud', label: 'Solicitud de Importación', roles: ['admin'] },
-      { href: '/alianzas/importaciones/registro', label: 'Registro de Importaciones', roles: ['admin'] },
     ]
   },
   {

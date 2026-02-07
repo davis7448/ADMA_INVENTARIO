@@ -6,11 +6,16 @@ import { Activity, Users, DollarSign, Star, TrendingUp } from 'lucide-react';
 import { ChallengeCard } from '@/components/commercial/challenge-card';
 import { useEffect, useState } from 'react';
 import { getActiveChallenges } from '@/lib/commercial-api';
+import { getUsers } from '@/lib/api';
 import { CommercialChallenge } from '@/types/commercial';
+import type { User } from '@/lib/types';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 export default function CommercialDashboardPage() {
     const { user } = useAuth();
     const [challenges, setChallenges] = useState<CommercialChallenge[]>([]);
+    const [commercials, setCommercials] = useState<User[]>([]);
+    const [loadingCommercials, setLoadingCommercials] = useState(true);
 
     useEffect(() => {
         if (user) {
@@ -18,6 +23,15 @@ export default function CommercialDashboardPage() {
             import('@/lib/commercial-api').then(({ fixUserProfile, getActiveChallenges }) => {
                 fixUserProfile(user);
                 getActiveChallenges('daily').then(setChallenges);
+            });
+
+            // Load real commercials
+            getUsers().then(users => {
+                const commercialUsers = users.filter(u => 
+                    u.role === 'commercial' || u.role === 'commercial_director'
+                );
+                setCommercials(commercialUsers);
+                setLoadingCommercials(false);
             });
         }
     }, [user]);
@@ -42,7 +56,7 @@ export default function CommercialDashboardPage() {
                 </div>
             </div>
 
-            {/* STATS ROW */}
+            {/* STATS ROW - Placeholder for future implementation */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/10 border-blue-200/50 backdrop-blur-sm">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -52,9 +66,9 @@ export default function CommercialDashboardPage() {
                         <Users className="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">1,240</div>
+                        <div className="text-2xl font-bold text-muted-foreground">-</div>
                         <p className="text-xs text-muted-foreground">
-                            +180 desde el mes pasado
+                            En construcción
                         </p>
                     </CardContent>
                 </Card>
@@ -67,9 +81,9 @@ export default function CommercialDashboardPage() {
                         <DollarSign className="h-4 w-4 text-green-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">$45.2M</div>
+                        <div className="text-2xl font-bold text-muted-foreground">-</div>
                         <p className="text-xs text-muted-foreground">
-                            +12% vs mes anterior
+                            En construcción
                         </p>
                     </CardContent>
                 </Card>
@@ -82,9 +96,9 @@ export default function CommercialDashboardPage() {
                         <Activity className="h-4 w-4 text-purple-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">24.5%</div>
+                        <div className="text-2xl font-bold text-muted-foreground">-</div>
                         <p className="text-xs text-muted-foreground">
-                            -2% vs semana pasada
+                            En construcción
                         </p>
                     </CardContent>
                 </Card>
@@ -97,9 +111,9 @@ export default function CommercialDashboardPage() {
                         <Star className="h-4 w-4 text-amber-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">4.8</div>
+                        <div className="text-2xl font-bold text-muted-foreground">-</div>
                         <p className="text-xs text-muted-foreground">
-                            Basado en 42 calificaciones
+                            En construcción
                         </p>
                     </CardContent>
                 </Card>
@@ -121,45 +135,48 @@ export default function CommercialDashboardPage() {
                                 <div className="text-center text-muted-foreground">No hay retos activos hoy.</div>
                             </Card>
                         )}
-                        {/* Placeholder mock challenge if none exist yet */}
-                        {challenges.length === 0 && (
-                            <ChallengeCard challenge={{
-                                title: "Vende 3 Productos 'Winner' Hoy",
-                                description: "Logra vender 3 unidades de cualquier producto catalogado como 'Winner' para desbloquear bonificación.",
-                                type: 'daily',
-                                reward: '50 Estrellas',
-                                is_active: true, // Should be true, but type mismatch fix
-                                created_by: 'system',
-                                created_at: new Date()
-                            }} />
-                        )}
                     </div>
                 </Card>
 
-                {/* LEADERBOARD / ACTIVITY */}
+                {/* TOP COMMERCIALS - REAL DATA */}
                 <Card className="col-span-3">
                     <CardHeader>
-                        <CardTitle>Top Comerciales</CardTitle>
+                        <CardTitle>Equipo Comercial</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-8">
-                            {[1, 2, 3, 4, 5].map((i) => (
-                                <div className="flex items-center" key={i}>
-                                    <div className="h-9 w-9 rounded-full bg-muted border flex items-center justify-center font-bold text-muted-foreground">
-                                        {i}
+                        {loadingCommercials ? (
+                            <div className="text-center text-muted-foreground py-8">
+                                Cargando equipo...
+                            </div>
+                        ) : commercials.length === 0 ? (
+                            <div className="text-center text-muted-foreground py-8">
+                                No hay comerciales registrados
+                            </div>
+                        ) : (
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                                {commercials.map((commercial, index) => (
+                                    <div className="flex items-center" key={commercial.id}>
+                                        <div className="h-9 w-9 rounded-full bg-muted border flex items-center justify-center font-bold text-muted-foreground">
+                                            {index + 1}
+                                        </div>
+                                        <Avatar className="h-9 w-9 ml-2">
+                                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                                {commercial.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'C'}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="ml-3 space-y-1">
+                                            <p className="text-sm font-medium leading-none">{commercial.name}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {commercial.email}
+                                            </p>
+                                        </div>
+                                        <div className="ml-auto text-xs text-muted-foreground">
+                                            {commercial.role === 'commercial_director' ? 'Director' : 'Comercial'}
+                                        </div>
                                     </div>
-                                    <div className="ml-4 space-y-1">
-                                        <p className="text-sm font-medium leading-none">Comercial {i}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            $15,000,000 en ventas
-                                        </p>
-                                    </div>
-                                    <div className="ml-auto font-medium text-green-600">
-                                        +{Math.floor(Math.random() * 50)}%
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

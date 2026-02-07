@@ -16,10 +16,10 @@ import {
 const sidebarItems = [
     { href: '/commercial/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/commercial/crm/dashboard', label: 'CRM / Clientes', icon: Users },
-    { href: '/commercial/catalog/page', label: 'Catálogo', icon: ShoppingBag },
-    { href: '/commercial/challenges/page', label: 'Retos y Misiones', icon: Trophy },
-    { href: '/commercial/ratings/page', label: 'Calificaciones', icon: Star },
-    { href: '/commercial/academy/page', label: 'Academia', icon: GraduationCap },
+    { href: '/commercial/catalog', label: 'Catálogo', icon: ShoppingBag },
+    { href: '/commercial/challenges', label: 'Retos y Misiones', icon: Trophy },
+    { href: '/commercial/ratings', label: 'Calificaciones', icon: Star },
+    { href: '/commercial/academy', label: 'Academia', icon: GraduationCap },
 ];
 
 export function CommercialSidebar() {
