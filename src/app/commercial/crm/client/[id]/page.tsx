@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Edit, Phone, Mail, MapPin, Calendar, DollarSign, Plus, FileText, Upload, Search } from 'lucide-react';
+import { ArrowLeft, Edit, Phone, Mail, MapPin, Calendar, DollarSign, Plus, FileText, Upload, Search, Users } from 'lucide-react';
 import Link from 'next/link';
 import { getClientById, updateClient } from '@/lib/commercial-api';
 import { getProducts } from '@/lib/api';
@@ -234,6 +234,15 @@ export default function ClientDetailPage() {
                             {client.status?.toUpperCase()}
                         </Badge>
                         <span>• {client.category}</span>
+                        {client.assigned_commercial_name && (
+                            <>
+                                <span>•</span>
+                                <span className="flex items-center gap-1">
+                                    <Users className="h-3 w-3" />
+                                    {client.assigned_commercial_name}
+                                </span>
+                            </>
+                        )}
                     </div>
                 </div>
                 <div className="ml-auto">
@@ -336,6 +345,10 @@ export default function ClientDetailPage() {
                         <div className="flex items-center gap-3">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             <span>Cumpleaños: {formatDate(client.birthday)}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                            <span>Comercial: {client.assigned_commercial_name || 'No asignado'}</span>
                         </div>
                         {client.avg_sales !== undefined && (
                             <div className="flex items-center gap-3 pt-4 border-t">
