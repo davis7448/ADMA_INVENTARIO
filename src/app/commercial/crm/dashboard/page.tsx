@@ -159,6 +159,15 @@ export default function CrmDashboardPage() {
                                                                             <Badge variant="outline" className="text-[10px] h-5">{client.category}</Badge>
                                                                             <Badge variant="outline" className="text-[10px] h-5">{client.type}</Badge>
                                                                         </div>
+                                                                        
+                                                                        {client.assigned_commercial_name && (
+                                                                            <div className="mt-2 pt-2 border-t border-border/50">
+                                                                                <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                                                                    <span className="font-medium">Comercial:</span>
+                                                                                    <span className="truncate">{client.assigned_commercial_name}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
                                                                     </CardContent>
                                                                 </Card>
                                                             </Link>
