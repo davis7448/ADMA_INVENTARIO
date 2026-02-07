@@ -26,6 +26,15 @@ type ClientNote = {
     created_by: string;
 };
 
+type ClientHistoryEvent = {
+    id: string;
+    type: 'status_change' | 'edit' | 'note' | 'order' | 'registered';
+    description: string;
+    created_at: any;
+    created_by: string;
+    details?: string;
+};
+
 type ClientOrder = {
     id: string;
     product_id: string;
@@ -44,6 +53,7 @@ export default function ClientDetailPage() {
     const [client, setClient] = useState<CommercialClient | null>(null);
     const [loading, setLoading] = useState(true);
     const [notes, setNotes] = useState<ClientNote[]>([]);
+    const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
     const [orders, setOrders] = useState<ClientOrder[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [editOpen, setEditOpen] = useState(false);
@@ -87,6 +97,46 @@ export default function ClientDetailPage() {
     );
     const totalProductPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
 
+    // Función para agregar evento al historial
+    const addHistoryEvent = async (type: ClientHistoryEvent['type'], description: string, details?: string) => {
+        if (!client) return;
+        
+        const newEvent: ClientHistoryEvent = {
+            id: Date.now().toString(),
+            type,
+            description,
+            details,
+            created_at: new Date(),
+            created_by: user?.name || 'Usuario',
+        };
+        
+        const updatedHistory = [newEvent, ...history];
+        setHistory(updatedHistory);
+        
+        // Guardar en Firestore
+        const clientHistory = data?.history || [];
+        await updateClient(client.id!, { 
+            history: [...clientHistory, newEvent] 
+        });
+    };
+
+    // Función para inicializar historial si no existe
+    const initHistory = (clientData: CommercialClient | null) => {
+        if (clientData?.history && Array.isArray(clientData.history)) {
+            setHistory(clientData.history);
+        } else {
+            // Crear evento inicial de registro
+            const initialEvent: ClientHistoryEvent = {
+                id: '1',
+                type: 'registered',
+                description: 'Cliente registrado',
+                created_at: clientData?.created_at || new Date(),
+                created_by: 'Sistema',
+            };
+            setHistory([initialEvent]);
+        }
+    };
+
     useEffect(() => {
         async function loadClient() {
             const id = params.id as string;
@@ -107,10 +157,8 @@ export default function ClientDetailPage() {
                         avg_sales: data.avg_sales || 0,
                         notes: data.notes || '',
                     });
+                    initHistory(data);
                 }
-                setNotes([
-                    { id: '1', content: 'Cliente registrado', created_at: data?.created_at, created_by: 'Sistema' },
-                ]);
                 
                 const productsData = await getProducts({ fetchAll: true });
                 setProducts(productsData.products);
@@ -127,12 +175,40 @@ export default function ClientDetailPage() {
         if (!client) return;
         setSaving(true);
         try {
+            const changes: string[] = [];
+            
+            // Detectar cambios
+            if (editForm.name !== client.name) changes.push(`Nombre: ${client.name} → ${editForm.name}`);
+            if (editForm.email !== client.email) changes.push(`Email: ${client.email} → ${editForm.email}`);
+            if (editForm.phone !== client.phone) changes.push(`Teléfono: ${client.phone} → ${editForm.phone}`);
+            if (editForm.city !== client.city) changes.push(`Ciudad: ${client.city} → ${editForm.city}`);
+            if (editForm.category !== client.category) changes.push(`Categoría: ${client.category} → ${editForm.category}`);
+            if (editForm.type !== client.type) changes.push(`Tipo: ${client.type} → ${editForm.type}`);
+            
+            // Detectar cambio de estado
+            if (editForm.status !== client.status) {
+                const statusLabels: Record<string, string> = {
+                    finding_winner: 'Encontrando Winner',
+                    testing: 'Testeando',
+                    selling: 'Vendiendo',
+                    scaling: 'Escalando'
+                };
+                changes.push(`Estado: ${statusLabels[client.status] || client.status} → ${statusLabels[editForm.status] || editForm.status}`);
+            }
+            
             await updateClient(client.id!, {
                 ...editForm,
                 avg_sales: Number(editForm.avg_sales),
             });
+            
             const updated = await getClientById(client.id!);
             setClient(updated);
+            
+            // Registrar en historial
+            if (changes.length > 0) {
+                await addHistoryEvent('edit', 'Datos actualizados', changes.join(', '));
+            }
+            
             setEditOpen(false);
         } catch (error) {
             console.error('Error updating client:', error);
@@ -153,6 +229,10 @@ export default function ClientDetailPage() {
         await updateClient(client.id!, { notes: (client.notes || '') + '\n' + newNote });
         const updated = await getClientById(client.id!);
         setClient(updated);
+        
+        // Registrar en historial
+        await addHistoryEvent('note', 'Nota agregada', newNote.substring(0, 50) + (newNote.length > 50 ? '...' : ''));
+        
         setNewNote('');
         setNoteOpen(false);
     };
@@ -205,6 +285,10 @@ export default function ClientDetailPage() {
         };
         
         setOrders([...orders, order]);
+        
+        // Registrar en historial
+        await addHistoryEvent('order', 'Pedido creado', `${order.product_name} x${order.quantity} - $${order.total.toLocaleString()}`);
+        
         setNewOrder({ product_id: '', product_name: '', unit_price: 0, quantity: 1, total: 0, payment_proof: '' });
         setOrderOpen(false);
     };
@@ -370,16 +454,34 @@ export default function ClientDetailPage() {
                         <TabsContent value="activity" className="space-y-4 pt-4">
                             <Card>
                                 <CardHeader>
-                                    <CardTitle className="text-base">Historial Reciente</CardTitle>
+                                    <CardTitle className="text-base">Historial de Actividad</CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="relative pl-4 border-l-2 border-muted space-y-6">
-                                        <div className="relative">
-                                            <div className="absolute -left-[21px] top-1 h-4 w-4 rounded-full bg-primary" />
-                                            <p className="font-medium">Cliente registrado</p>
-                                            <p className="text-sm text-muted-foreground">{formatDate(client.created_at)}</p>
+                                    {history.length === 0 ? (
+                                        <p className="text-muted-foreground text-sm">No hay actividad registrada</p>
+                                    ) : (
+                                        <div className="relative pl-4 border-l-2 border-muted space-y-6">
+                                            {history.map((event) => (
+                                                <div key={event.id} className="relative">
+                                                    <div className={`absolute -left-[21px] top-1 h-4 w-4 rounded-full ${
+                                                        event.type === 'registered' ? 'bg-green-500' :
+                                                        event.type === 'status_change' ? 'bg-blue-500' :
+                                                        event.type === 'edit' ? 'bg-yellow-500' :
+                                                        event.type === 'note' ? 'bg-purple-500' :
+                                                        event.type === 'order' ? 'bg-orange-500' :
+                                                        'bg-primary'
+                                                    }`} />
+                                                    <p className="font-medium">{event.description}</p>
+                                                    {event.details && (
+                                                        <p className="text-sm text-muted-foreground mt-1">{event.details}</p>
+                                                    )}
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        {event.created_by} • {formatDate(event.created_at)}
+                                                    </p>
+                                                </div>
+                                            ))}
                                         </div>
-                                    </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </TabsContent>
