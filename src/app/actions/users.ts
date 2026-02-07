@@ -99,7 +99,6 @@ export async function updateUserSalaryAction(userId: string, salary: number): Pr
     try {
         await updateUserProfile(userId, { salary });
         revalidatePath('/settings');
-        revalidatePath('/tablero-resultados');
         return { success: true, message: 'Salario del usuario actualizado con éxito.' };
     } catch (error) {
         console.error("Error updating user salary:", error);
