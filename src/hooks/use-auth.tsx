@@ -55,8 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role: 'commercial',
               avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.email}`
             };
-            // Usar el Firebase Auth UID como ID del documento para consistencia
-            const newUserId = await addUser(newUser, firebaseUser.uid);
+            // Crear usuario con ID generado por Firestore (addDoc)
+            const newUserId = await addUser(newUser);
             appUser = { id: newUserId, ...newUser };
             console.log(`Perfil creado con ID: ${newUserId}`);
           }
