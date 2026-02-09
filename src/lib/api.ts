@@ -1982,6 +1982,10 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
             getInventoryMovements({ fetchAll: true, filters: { warehouseId, startDate: subDays(new Date(), 7).toISOString() } }),
         ]);
 
+        console.log('[DEBUG StockAlerts] Total productos:', productsResult.products.length);
+        console.log('[DEBUG StockAlerts] Total movimientos:', allMovementsResult.movements.length);
+        console.log('[DEBUG StockAlerts] Movimientos de salida:', allMovementsResult.movements.filter(m => m.type === 'Salida').length);
+
         const salesByProductId: Record<string, number[]> = {};
         for (const movement of allMovementsResult.movements) {
             if (movement.type === 'Salida') {
@@ -1994,6 +1998,8 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
                 }
             }
         }
+        
+        console.log('[DEBUG StockAlerts] Productos con ventas:', Object.keys(salesByProductId).length);
         
         // CÁLCULO DIRECTO SIN GEMINI - Más rápido y eficiente
         const alerts = productsResult.products.flatMap(product => {
@@ -2010,6 +2016,11 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
                 const daysWithSales = salesLast7Days.filter(s => s > 0).length;
                 const totalSales = salesLast7Days.reduce((a, b) => a + b, 0);
                 const dailyAverageSales = daysWithSales > 0 ? totalSales / daysWithSales : 0;
+                
+                // Debug para productos
+                if (product.stock > 0) {
+                    console.log(`[DEBUG StockAlerts] ${product.name}: stock=${product.stock}, disponible=${availableForSale}, venta_diaria=${dailyAverageSales.toFixed(2)}, dias_restantes=${dailyAverageSales > 0 ? (availableForSale / dailyAverageSales).toFixed(1) : 'N/A'}`);
+                }
                 
                 // Determinar alerta
                 let alertTriggered = false;
@@ -2092,6 +2103,8 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
             
             return alertsForProduct;
         });
+        
+        console.log('[DEBUG StockAlerts] Total alertas generadas:', alerts.length);
         
         const batch = writeBatch(db);
         const alertsCol = collection(db, 'stockAlertsCache');
