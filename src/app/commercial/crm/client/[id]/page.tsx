@@ -136,24 +136,40 @@ export default function ClientDetailPage() {
         const updatedHistory = [newEvent, ...history];
         setHistory(updatedHistory);
         
-        // Guardar en Firestore
-        const clientHistory = client?.history || [];
+        // Guardar en Firestore - usar updatedHistory que tiene todos los eventos
         await updateClient(client.id!, { 
-            history: [...clientHistory, newEvent] 
+            history: updatedHistory 
         });
     };
 
-    // Función para inicializar historial si no existe
+    // Función para inicializar historial
     const initHistory = (clientData: CommercialClient | null) => {
-        if (clientData?.history && Array.isArray(clientData.history)) {
-            setHistory(clientData.history);
+        console.log('[DEBUG] initHistory - clientData?.history:', clientData?.history);
+        
+        if (clientData?.history && Array.isArray(clientData.history) && clientData.history.length > 0) {
+            console.log('[DEBUG] initHistory - Events found:', clientData.history.length);
+            
+            // Convertir timestamps de Firestore a fechas si es necesario
+            const convertedHistory = clientData.history.map((event: any) => ({
+                ...event,
+                created_at: event.created_at?.toDate ? event.created_at.toDate() : 
+                           event.created_at instanceof Date ? event.created_at :
+                           new Date(event.created_at)
+            }));
+            // Ordenar por fecha (más recientes primero)
+            convertedHistory.sort((a: any, b: any) => 
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            console.log('[DEBUG] initHistory - convertedHistory:', convertedHistory);
+            setHistory(convertedHistory);
         } else {
+            console.log('[DEBUG] initHistory - No history found, creating initial event');
             // Crear evento inicial de registro
             const initialEvent: ClientHistoryEvent = {
                 id: '1',
                 type: 'registered',
                 description: 'Cliente registrado',
-                created_at: clientData?.created_at || new Date(),
+                created_at: clientData?.created_at ? new Date(clientData.created_at) : new Date(),
                 created_by: 'Sistema',
             };
             setHistory([initialEvent]);
