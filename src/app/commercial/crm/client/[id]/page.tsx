@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Edit, Phone, Mail, MapPin, Calendar, DollarSign, Plus, FileText, Upload, Search, Users } from 'lucide-react';
 import Link from 'next/link';
-import { getClientById, updateClient } from '@/lib/commercial-api';
+import { getClientById, updateClient, createClientTest, getClientTests } from '@/lib/commercial-api';
 import { getProducts } from '@/lib/api';
 import { CommercialClient, ClientStatus, ClientCategory, ClientType } from '@/types/commercial';
 import { Product } from '@/lib/types';
@@ -44,6 +44,7 @@ type ClientTest = {
     status: 'test_new' | 'active';
     created_at: any;
     created_by: string;
+    created_by_name?: string;
 };
 
 type ClientOrder = {
@@ -165,7 +166,10 @@ export default function ClientDetailPage() {
             if (!id) return;
             
             try {
-                const data = await getClientById(id);
+                const [data, testsData] = await Promise.all([
+                    getClientById(id),
+                    getClientTests(id)
+                ]);
                 setClient(data);
                 if (data) {
                     setEditForm({
@@ -184,6 +188,7 @@ export default function ClientDetailPage() {
                 
                 const productsData = await getProducts({ fetchAll: true });
                 setProducts(productsData.products);
+                setTests(testsData);
             } catch (error) {
                 console.error('Error loading client:', error);
             } finally {
@@ -320,15 +325,28 @@ export default function ClientDetailPage() {
         
         const statusLabel = newTest.status === 'active' ? 'Ya Activo' : 'Testeo Nuevo';
         
+        // Guardar en Firestore
+        const testId = await createClientTest({
+            clientId: client.id,
+            productId: newTest.product_id,
+            productName: newTest.product_name,
+            productSku: newTest.product_sku,
+            platform: newTest.platform,
+            status: newTest.status,
+            created_by: user?.id || 'unknown',
+            created_by_name: user?.name || 'Usuario'
+        });
+        
         const test: ClientTest = {
-            id: Date.now().toString(),
+            id: testId,
             productId: newTest.product_id,
             productName: newTest.product_name,
             productSku: newTest.product_sku,
             platform: newTest.platform,
             status: newTest.status,
             created_at: new Date(),
-            created_by: user?.name || 'Usuario',
+            created_by: user?.id || 'unknown',
+            created_by_name: user?.name || 'Usuario'
         };
         
         setTests([test, ...tests]);

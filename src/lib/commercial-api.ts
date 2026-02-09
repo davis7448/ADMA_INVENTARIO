@@ -456,3 +456,59 @@ export const fixUserProfile = async (user: any) => {
         }
     }
 };
+
+// --- CLIENT TESTS / TESTING ---
+
+export interface ClientTest {
+    id: string;
+    clientId: string;
+    productId: string;
+    productName: string;
+    productSku: string;
+    platform: string;
+    status: 'test_new' | 'active';
+    created_at: any;
+    created_by: string;
+    created_by_name?: string;
+}
+
+export const createClientTest = async (test: Omit<ClientTest, 'id' | 'created_at'>): Promise<string> => {
+    try {
+        const testsCol = collection(db, 'client_tests');
+        const docRef = await addDoc(testsCol, {
+            ...test,
+            created_at: serverTimestamp()
+        });
+        return docRef.id;
+    } catch (error) {
+        console.error("Error creating client test:", error);
+        throw error;
+    }
+};
+
+export const getClientTests = async (clientId: string): Promise<ClientTest[]> => {
+    try {
+        const testsCol = collection(db, 'client_tests');
+        const q = query(testsCol, where('clientId', '==', clientId), orderBy('created_at', 'desc'));
+        const snapshot = await getDocs(q);
+        
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            created_at: doc.data().created_at?.toDate() || doc.data().created_at
+        } as ClientTest));
+    } catch (error) {
+        console.error("Error fetching client tests:", error);
+        return [];
+    }
+};
+
+export const deleteClientTest = async (testId: string): Promise<void> => {
+    try {
+        const testRef = doc(db, 'client_tests', testId);
+        await deleteDoc(testRef);
+    } catch (error) {
+        console.error("Error deleting client test:", error);
+        throw error;
+    }
+};
