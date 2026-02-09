@@ -136,7 +136,7 @@ export default function ClientDetailPage() {
         setHistory(updatedHistory);
         
         // Guardar en Firestore
-        const clientHistory = data?.history || [];
+        const clientHistory = client?.history || [];
         await updateClient(client.id!, { 
             history: [...clientHistory, newEvent] 
         });
