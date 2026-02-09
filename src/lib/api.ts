@@ -8,7 +8,6 @@ import { Storage } from '@google-cloud/storage';
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest, ImportRequest } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
-import { checkStockAvailability } from "@/ai/flows/stock-monitoring";
 
 const storage = getStorage();
 const gcsStorage = new Storage({
@@ -1859,17 +1858,28 @@ export const checkForStaleReservations = async (): Promise<void> => {
     
     const batch = writeBatch(db);
 
-    const [allReservations, allMovements, allAlerts, productsResult, vendedores] = await Promise.all([
+    // Optimización: Solo obtener lo necesario
+    const [allReservations, allMovements, allAlerts, vendedores] = await Promise.all([
         getAllReservations(),
         getDocs(query(collection(db, 'inventoryMovements'), where('date', '>=', THIRTY_DAYS_AGO))),
         getStaleReservationAlerts(),
-        getProducts({ limit: 10000 }),
         getVendedores(),
     ]);
 
-    const productMap = new Map(productsResult.products.map(p => [p.id, p]));
     const vendedorMap = new Map(vendedores.map(v => [v.id, v.name]));
     const existingAlertReservationIds = new Set(allAlerts.map(a => a.reservationId));
+
+    // Optimización: Solo obtener productos que tienen reservas (evitar traer 10000+ productos)
+    const productIdsNeeded = new Set<string>();
+    allReservations.forEach(r => productIdsNeeded.add(r.productId));
+    
+    const productsResult = await getProducts({ 
+        limit: Array.from(productIdsNeeded).length > 0 ? Array.from(productIdsNeeded).length : 1,
+        filters: { ids: Array.from(productIdsNeeded) }
+    });
+    
+    // Crear mapa de productos solo con los necesarios
+    const productMap = new Map(productsResult.products.map(p => [p.id, p]));
 
     const movements = allMovements.docs.map(doc => {
         const data = doc.data();
@@ -1985,70 +1995,102 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
             }
         }
         
-        const itemsToCheck: any[] = [];
-        for (const product of productsResult.products) {
-            const salesLast7Days = salesByProductId[product.id] || Array(7).fill(0);
-
+        // CÁLCULO DIRECTO SIN GEMINI - Más rápido y eficiente
+        const alerts = productsResult.products.flatMap(product => {
+            const alertsForProduct: StockAlertItem[] = [];
+            
+            // Productos simples
             if (product.productType === 'simple' && product.sku) {
-                const totalReserved = Array.isArray(product.reservations) ? product.reservations.reduce((sum, res) => sum + res.quantity, 0) : 0;
-                itemsToCheck.push({
-                    id: product.id,
-                    productName: product.name,
-                    physicalStock: product.stock,
-                    reservedStock: totalReserved,
-                    salesLast7Days,
-                    name: product.name, sku: product.sku, imageUrl: product.imageUrl,
-                    warehouseId: product.warehouseId,
-                });
-            } else if (product.productType === 'variable' && product.variants) {
-                for (const variant of product.variants) {
-                    const variantReserved = (Array.isArray(product.reservations) ? product.reservations : [])
-                        .filter(r => r.variantId === variant.id)
-                        .reduce((sum, res) => sum + res.quantity, 0);
-
-                    itemsToCheck.push({
-                        id: `${product.id}-${variant.id}`,
-                        productName: `${product.name} - ${variant.name}`,
-                        physicalStock: variant.stock,
-                        reservedStock: variantReserved,
-                        salesLast7Days, 
-                        name: `${product.name} - ${variant.name}`, sku: variant.sku, imageUrl: product.imageUrl,
+                const salesLast7Days = salesByProductId[product.id] || Array(7).fill(0);
+                const totalReserved = Array.isArray(product.reservations) 
+                    ? product.reservations.reduce((sum, res) => sum + res.quantity, 0) 
+                    : 0;
+                
+                const availableForSale = product.stock - totalReserved;
+                const daysWithSales = salesLast7Days.filter(s => s > 0).length;
+                const totalSales = salesLast7Days.reduce((a, b) => a + b, 0);
+                const dailyAverageSales = daysWithSales > 0 ? totalSales / daysWithSales : 0;
+                
+                // Determinar alerta
+                let alertTriggered = false;
+                let message = '';
+                
+                if (dailyAverageSales > 0) {
+                    const daysOfStockLeft = availableForSale / dailyAverageSales;
+                    if (daysOfStockLeft >= 0 && daysOfStockLeft < 3) {
+                        alertTriggered = true;
+                        message = `Stock crítico: ${daysOfStockLeft.toFixed(1)} días restantes según ventas promedio de los últimos 7 días.`;
+                    }
+                } else {
+                    // Sin ventas recientes
+                    if (availableForSale <= 5 && availableForSale > 0) {
+                        alertTriggered = true;
+                        message = `Bajo stock: ${availableForSale} unidades sin ventas recientes (últimos 7 días).`;
+                    }
+                }
+                
+                if (alertTriggered) {
+                    alertsForProduct.push({
+                        id: product.id,
+                        name: product.name,
+                        sku: product.sku,
+                        imageUrl: product.imageUrl,
+                        physicalStock: product.stock,
+                        reservedStock: totalReserved,
+                        availableForSale,
+                        dailyAverageSales,
+                        message,
                         warehouseId: product.warehouseId,
                     });
                 }
+            } 
+            // Productos variables (por variante)
+            else if (product.productType === 'variable' && product.variants) {
+                for (const variant of product.variants) {
+                    const salesLast7Days = salesByProductId[product.id] || Array(7).fill(0);
+                    const variantReserved = (Array.isArray(product.reservations) ? product.reservations : [])
+                        .filter(r => r.variantId === variant.id)
+                        .reduce((sum, res) => sum + res.quantity, 0);
+                    
+                    const availableForSale = variant.stock - variantReserved;
+                    const daysWithSales = salesLast7Days.filter(s => s > 0).length;
+                    const totalSales = salesLast7Days.reduce((a, b) => a + b, 0);
+                    const dailyAverageSales = daysWithSales > 0 ? totalSales / daysWithSales : 0;
+                    
+                    let alertTriggered = false;
+                    let message = '';
+                    
+                    if (dailyAverageSales > 0) {
+                        const daysOfStockLeft = availableForSale / dailyAverageSales;
+                        if (daysOfStockLeft >= 0 && daysOfStockLeft < 3) {
+                            alertTriggered = true;
+                            message = `Stock crítico: ${daysOfStockLeft.toFixed(1)} días restantes según ventas promedio de los últimos 7 días.`;
+                        }
+                    } else {
+                        if (availableForSale <= 5 && availableForSale > 0) {
+                            alertTriggered = true;
+                            message = `Bajo stock: ${availableForSale} unidades sin ventas recientes (últimos 7 días).`;
+                        }
+                    }
+                    
+                    if (alertTriggered) {
+                        alertsForProduct.push({
+                            id: `${product.id}-${variant.id}`,
+                            name: `${product.name} - ${variant.name}`,
+                            sku: variant.sku,
+                            imageUrl: product.imageUrl,
+                            physicalStock: variant.stock,
+                            reservedStock: variantReserved,
+                            availableForSale,
+                            dailyAverageSales,
+                            message,
+                            warehouseId: product.warehouseId,
+                        });
+                    }
+                }
             }
-        }
-
-        const analysisResult = await checkStockAvailability({ products: itemsToCheck });
-        
-        const analysisMap = new Map(analysisResult.analyses.map(a => [a.id, a]));
-
-        const triggeredAlerts = itemsToCheck.filter(item => {
-            const analysis = analysisMap.get(item.id);
-            if (!analysis) return false;
-
-            const hasSales = item.salesLast7Days.some((s: number) => s > 0);
             
-            if (!hasSales) {
-                return analysis.availableForSale <= 5 && analysis.availableForSale > 0;
-            }
-            return analysis.alertTriggered;
-        });
-
-        const newAlerts: StockAlertItem[] = triggeredAlerts.map(item => {
-            const analysis = analysisMap.get(item.id)!;
-            return {
-                id: item.id,
-                name: item.name,
-                sku: item.sku,
-                imageUrl: item.imageUrl,
-                physicalStock: item.physicalStock,
-                reservedStock: item.reservedStock,
-                availableForSale: analysis.availableForSale,
-                dailyAverageSales: analysis.dailyAverageSales,
-                alertMessage: analysis.alertMessage,
-                warehouseId: item.warehouseId,
-            };
+            return alertsForProduct;
         });
         
         const batch = writeBatch(db);
@@ -2056,7 +2098,7 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
         const oldAlertsSnap = await getDocs(query(alertsCol, where(documentId(), '!=', 'metadata')));
         oldAlertsSnap.forEach(doc => batch.delete(doc.ref));
 
-        newAlerts.forEach(alert => {
+        alerts.forEach(alert => {
             const docRef = doc(alertsCol, alert.id);
             batch.set(docRef, alert);
         });
@@ -2065,7 +2107,7 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
         batch.set(doc(alertsCol, 'metadata'), { lastGenerated: newGeneratedDate });
         await batch.commit();
 
-        return { alerts: newAlerts, lastGenerated: newGeneratedDate.toISOString() };
+        return { alerts, lastGenerated: newGeneratedDate.toISOString() };
     } catch (e: any) {
          console.error("Failed to generate and cache stock alerts:", e);
          return { alerts: [], error: e.message || "Ocurrió un error desconocido al generar las alertas." };

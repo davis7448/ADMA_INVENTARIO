@@ -28,11 +28,22 @@ type ClientNote = {
 
 type ClientHistoryEvent = {
     id: string;
-    type: 'status_change' | 'edit' | 'note' | 'order' | 'registered';
+    type: 'status_change' | 'edit' | 'note' | 'order' | 'registered' | 'testing';
     description: string;
     created_at: any;
     created_by: string;
     details?: string;
+};
+
+type ClientTest = {
+    id: string;
+    productId: string;
+    productName: string;
+    productSku: string;
+    platform: string;
+    status: 'test_new' | 'active';
+    created_at: any;
+    created_by: string;
 };
 
 type ClientOrder = {
@@ -55,10 +66,12 @@ export default function ClientDetailPage() {
     const [notes, setNotes] = useState<ClientNote[]>([]);
     const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
     const [orders, setOrders] = useState<ClientOrder[]>([]);
+    const [tests, setTests] = useState<ClientTest[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [editOpen, setEditOpen] = useState(false);
     const [noteOpen, setNoteOpen] = useState(false);
     const [orderOpen, setOrderOpen] = useState(false);
+    const [testOpen, setTestOpen] = useState(false);
     const [saving, setSaving] = useState(false);
 
     const [editForm, setEditForm] = useState({
@@ -82,7 +95,15 @@ export default function ClientDetailPage() {
         total: 0,
         payment_proof: '',
     });
-    const [productSearch, setProductSearch] = useState('');
+    
+    const [newTest, setNewTest] = useState({
+        product_id: '',
+        product_name: '',
+        product_sku: '',
+        platform: '',
+        status: 'test_new' as 'test_new' | 'active',
+    });
+    
     const [productPage, setProductPage] = useState(0);
     const [editingPrice, setEditingPrice] = useState(false);
     const [tempUnitPrice, setTempUnitPrice] = useState(0);
@@ -293,6 +314,40 @@ export default function ClientDetailPage() {
         setOrderOpen(false);
     };
 
+    const handleAddTest = async () => {
+        if (!newTest.product_id.trim() || !newTest.platform.trim() || !client) return;
+        
+        const statusLabel = newTest.status === 'active' ? 'Ya Activo' : 'Testeo Nuevo';
+        
+        const test: ClientTest = {
+            id: Date.now().toString(),
+            productId: newTest.product_id,
+            productName: newTest.product_name,
+            productSku: newTest.product_sku,
+            platform: newTest.platform,
+            status: newTest.status,
+            created_at: new Date(),
+            created_by: user?.name || 'Usuario',
+        };
+        
+        setTests([test, ...tests]);
+        
+        // Registrar en historial
+        await addHistoryEvent('testing', `Activación de testeo: ${statusLabel}`, `${newTest.product_name} en ${newTest.platform}`);
+        
+        setNewTest({ product_id: '', product_name: '', product_sku: '', platform: '', status: 'test_new' });
+        setTestOpen(false);
+    };
+
+    const handleProductTestChange = (productId: string, productName: string, productSku: string) => {
+        setNewTest({
+            ...newTest,
+            product_id: productId,
+            product_name: productName,
+            product_sku: productSku,
+        });
+    };
+
     const formatDate = (date: any) => {
         if (!date) return 'No especificado';
         if (typeof date === 'string') return new Date(date).toLocaleDateString('es-CO');
@@ -450,6 +505,7 @@ export default function ClientDetailPage() {
                             <TabsTrigger value="activity">Actividad</TabsTrigger>
                             <TabsTrigger value="notes">Notas</TabsTrigger>
                             <TabsTrigger value="orders">Pedidos</TabsTrigger>
+                            <TabsTrigger value="testing">Testeos</TabsTrigger>
                         </TabsList>
                         <TabsContent value="activity" className="space-y-4 pt-4">
                             <Card>
@@ -764,6 +820,164 @@ export default function ClientDetailPage() {
                                                             <span>{order.payment_proof}</span>
                                                         </div>
                                                     )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                             </Card>
+                        </TabsContent>
+                        <TabsContent value="testing" className="pt-4">
+                            <div className="flex justify-end mb-4">
+                                <Dialog open={testOpen} onOpenChange={(open) => {
+                                    setTestOpen(open);
+                                    if (!open) {
+                                        setProductSearch('');
+                                        setProductPage(0);
+                                    }
+                                }}>
+                                    <DialogTrigger asChild>
+                                        <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Solicitar Testeo</Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[500px]">
+                                        <DialogHeader>
+                                            <DialogTitle>Solicitar Activación de Testeo</DialogTitle>
+                                        </DialogHeader>
+                                        <div className="grid gap-4 py-4">
+                                            <div className="grid gap-2">
+                                                <Label>Producto</Label>
+                                                <div className="relative">
+                                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                    <Input
+                                                        placeholder="Buscar producto..."
+                                                        value={productSearch}
+                                                        onChange={e => {
+                                                            setProductSearch(e.target.value);
+                                                            setProductPage(0);
+                                                        }}
+                                                        className="pl-8"
+                                                    />
+                                                </div>
+                                                <div className="border rounded-md max-h-[200px] overflow-y-auto">
+                                                    {paginatedProducts.length === 0 ? (
+                                                        <div className="p-4 text-center text-muted-foreground text-sm">
+                                                            No se encontraron productos
+                                                        </div>
+                                                    ) : (
+                                                        paginatedProducts.map(product => (
+                                                            <div
+                                                                key={product.id}
+                                                                onClick={() => {
+                                                                    handleProductTestChange(product.id, product.name, product.sku || '');
+                                                                    setProductSearch('');
+                                                                }}
+                                                                className={`p-3 cursor-pointer hover:bg-muted border-b last:border-0 ${
+                                                                    newTest.product_id === product.id ? 'bg-primary/10' : ''
+                                                                }`}
+                                                            >
+                                                                <p className="font-medium text-sm">{product.name}</p>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    {product.sku}
+                                                                </p>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                                {Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) > 1 && (
+                                                    <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                                                        <span>
+                                                            {filteredProducts.length} producto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
+                                                        </span>
+                                                        <div className="flex gap-1">
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-6 text-xs"
+                                                                onClick={() => setProductPage(p => Math.max(0, p - 1))}
+                                                                disabled={productPage === 0}
+                                                            >
+                                                                Anterior
+                                                            </Button>
+                                                            <span className="px-2">
+                                                                {productPage + 1} / {Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE)}
+                                                            </span>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-6 text-xs"
+                                                                onClick={() => setProductPage(p => Math.min(Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) - 1, p + 1))}
+                                                                disabled={productPage >= Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) - 1}
+                                                            >
+                                                                Siguiente
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label>Plataforma</Label>
+                                                <Input 
+                                                    placeholder="Ej: TikTok, Instagram, Facebook..."
+                                                    value={newTest.platform}
+                                                    onChange={e => setNewTest({...newTest, platform: e.target.value})}
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label>Estado</Label>
+                                                <Select 
+                                                    value={newTest.status}
+                                                    onValueChange={(v: 'test_new' | 'active') => setNewTest({...newTest, status: v})}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="test_new">Testeo Nuevo</SelectItem>
+                                                        <SelectItem value="active">Ya Activo</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => {
+                                                setNewTest({ product_id: '', product_name: '', product_sku: '', platform: '', status: 'test_new' });
+                                                setProductSearch('');
+                                                setTestOpen(false);
+                                            }}>
+                                                Cancelar
+                                            </Button>
+                                            <Button 
+                                                onClick={handleAddTest}
+                                                disabled={!newTest.product_id || !newTest.platform.trim()}
+                                            >
+                                                Solicitar Testeo
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
+                            <Card>
+                                <CardContent className="pt-6">
+                                    {tests.length === 0 ? (
+                                        <p className="text-muted-foreground text-center py-4">Sin testeos registrados</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {tests.map(test => (
+                                                <div key={test.id} className="border rounded-lg p-4 space-y-2">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <p className="font-medium">{test.productName}</p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {test.platform} • {formatDate(test.created_at)}
+                                                            </p>
+                                                        </div>
+                                                        <Badge 
+                                                            variant={test.status === 'active' ? 'default' : 'secondary'}
+                                                            className="text-xs"
+                                                        >
+                                                            {test.status === 'active' ? 'Ya Activo' : 'Testeo Nuevo'}
+                                                        </Badge>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
