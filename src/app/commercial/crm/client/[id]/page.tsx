@@ -104,6 +104,7 @@ export default function ClientDetailPage() {
         status: 'test_new' as 'test_new' | 'active',
     });
     
+    const [productSearch, setProductSearch] = useState('');
     const [productPage, setProductPage] = useState(0);
     const [editingPrice, setEditingPrice] = useState(false);
     const [tempUnitPrice, setTempUnitPrice] = useState(0);
