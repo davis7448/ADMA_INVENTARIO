@@ -154,10 +154,17 @@ service cloud.firestore {
        allow update, delete: if false; // Ratings are permanent usually? Or admin only.
     }
 
-    match /academy_resources/{resourceId} {
-       allow read: if isSignedIn() || isAdminAccess();
-       allow create, update, delete: if isDirector() || isRole('admin') || isAdminAccess();
-    }
+     match /academy_resources/{resourceId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update, delete: if isDirector() || isRole('admin') || isAdminAccess();
+     }
 
-   }
+     // Client Tests
+     match /client_tests/{testId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update, delete: if isSignedIn() || isAdminAccess();
+     }
+
+    }
  }

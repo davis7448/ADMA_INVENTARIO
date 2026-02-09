@@ -15,7 +15,8 @@ import {
     limit,
     serverTimestamp,
     deleteDoc,
-    setDoc
+    setDoc,
+    type DocumentData
 } from "firebase/firestore";
 import type {
     CommercialClient,
@@ -138,10 +139,20 @@ export const createClient = async (client: CommercialClient): Promise<string> =>
 export const updateClient = async (clientId: string, data: Partial<CommercialClient>) => {
     try {
         const clientRef = doc(db, 'clients', clientId);
-        await updateDoc(clientRef, {
-            ...data,
-            updated_at: serverTimestamp()
-        });
+        
+        // Convertir fechas a formato serializable
+        const dataToSave: DocumentData = { ...data, updated_at: serverTimestamp() };
+        
+        if (data.history && Array.isArray(data.history)) {
+            dataToSave.history = data.history.map((event: any) => ({
+                ...event,
+                created_at: event.created_at instanceof Date 
+                    ? Timestamp.fromDate(event.created_at) 
+                    : event.created_at
+            }));
+        }
+        
+        await setDoc(clientRef, dataToSave, { merge: true });
     } catch (error) {
         console.error("Error updating client:", error);
         throw new Error("Failed to update client");
