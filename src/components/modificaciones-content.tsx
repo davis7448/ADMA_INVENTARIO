@@ -9,21 +9,40 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getModificaciones, createModificacion, updateModificacion, deleteModificacion, getComercialUsers, getPlataformas, type Modificacion } from '@/app/actions/modificaciones';
+import { getModificaciones, createModificacion, updateModificacion, deleteModificacion, getComercialUsers, getPlataformas, getAllModificacionesForExport, type Modificacion } from '@/app/actions/modificaciones';
 import { Textarea } from '@/components/ui/textarea';
+import { Download, Loader2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+
+const PAISES = [
+    'Argentina',
+    'Chile', 
+    'Colombia',
+    'Ecuador',
+    'México',
+    'Panamá',
+    'Paraguay',
+    'Perú',
+    'República Dominicana',
+    'Uruguay'
+].sort();
 
 export function ModificacionesContent() {
     const { user } = useAuth();
     const [data, setData] = useState<(Modificacion & { id: string })[]>([]);
     const [loading, setLoading] = useState(true);
+    const [exporting, setExporting] = useState(false);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
+    const [filterPais, setFilterPais] = useState<string>('todos');
+    const [filterComercial, setFilterComercial] = useState<string>('todos');
     const [pageSize, setPageSize] = useState<number>(20);
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<(Modificacion & { id: string }) | null>(null);
     const [comercialUsers, setComercialUsers] = useState<{ name: string; code: string }[]>([]);
     const [plataformas, setPlataformas] = useState<string[]>([]);
+    const [formError, setFormError] = useState<string>('');
     const [formData, setFormData] = useState<Partial<Modificacion>>({
         FECHA: Date.now(),
         ID: null,
@@ -42,14 +61,15 @@ export function ModificacionesContent() {
         "CANTIDAD PREVIA": null,
         "CANTIDAD SOLICITADA": null,
         "CANTIDAD POSTERIOR": null,
+        PAIS: '',
     });
 
     const fetchData = async (start?: Date, end?: Date) => {
         setLoading(true);
         try {
-            const result = await getModificaciones(start, end);
+            const result = await getModificaciones(start, end, filterPais, filterComercial);
             setData(result);
-            setCurrentPage(1); // Reset to first page on new data
+            setCurrentPage(1);
         } catch (error) {
             console.error('Error fetching modificaciones:', error);
         } finally {
@@ -65,7 +85,7 @@ export function ModificacionesContent() {
                 setComercialUsers(users);
             } catch (error) {
                 console.error('Error fetching comercial users:', error);
-                setComercialUsers([{ name: 'Camilo Useche', code: 'CU' }]); // Fallback
+                setComercialUsers([{ name: 'Camilo Useche', code: 'CU' }]);
             }
         };
         const fetchPlataformas = async () => {
@@ -74,7 +94,7 @@ export function ModificacionesContent() {
                 setPlataformas(plats);
             } catch (error) {
                 console.error('Error fetching plataformas:', error);
-                setPlataformas([]); // Fallback
+                setPlataformas([]);
             }
         };
         fetchComercialUsers();
@@ -109,7 +129,6 @@ export function ModificacionesContent() {
     const handleFormChange = (field: keyof Modificacion, value: any) => {
         setFormData(prev => {
             const newData = { ...prev, [field]: value };
-            // Auto-calculate CANTIDAD POSTERIOR
             if (field === 'CANTIDAD PREVIA' || field === 'CANTIDAD SOLICITADA') {
                 const previa = field === 'CANTIDAD PREVIA' ? Number(value) : Number(prev['CANTIDAD PREVIA'] || 0);
                 const solicitada = field === 'CANTIDAD SOLICITADA' ? Number(value) : Number(prev['CANTIDAD SOLICITADA'] || 0);
@@ -120,6 +139,14 @@ export function ModificacionesContent() {
     };
 
     const handleCreate = async () => {
+        setFormError('');
+        
+        // Validar país obligatorio
+        if (!formData.PAIS || formData.PAIS.trim() === '') {
+            setFormError('El campo PAÍS es obligatorio');
+            return;
+        }
+
         try {
             const variables = formData.VARIABLE ? formData.VARIABLE.split(',').map(v => v.trim()) : [''];
             const emails = formData["CORREO_CODIGO"] ? formData["CORREO_CODIGO"].split(',').map(e => e.trim()) : [''];
@@ -139,9 +166,10 @@ export function ModificacionesContent() {
 
             setDialogOpen(false);
             resetForm();
-            fetchData(); // Refresh data
-        } catch (error) {
+            fetchData();
+        } catch (error: any) {
             console.error('Error creating modificacion:', error);
+            setFormError(error.message || 'Error al crear modificación');
         }
     };
 
@@ -153,7 +181,7 @@ export function ModificacionesContent() {
             setDialogOpen(false);
             setEditingItem(null);
             resetForm();
-            fetchData(); // Refresh data
+            fetchData();
         } catch (error) {
             console.error('Error updating modificacion:', error);
         }
@@ -163,9 +191,8 @@ export function ModificacionesContent() {
         if (!confirm('¿Estás seguro de que quieres eliminar esta modificación?')) return;
 
         try {
-            // Note: We'll need to add deleteModificacion function
             await deleteModificacion(id);
-            fetchData(); // Refresh data
+            fetchData();
         } catch (error) {
             console.error('Error deleting modificacion:', error);
         }
@@ -190,7 +217,9 @@ export function ModificacionesContent() {
             "CANTIDAD PREVIA": null,
             "CANTIDAD SOLICITADA": null,
             "CANTIDAD POSTERIOR": null,
+            PAIS: '',
         });
+        setFormError('');
     };
 
     const openEditDialog = (item: Modificacion & { id: string }) => {
@@ -213,13 +242,70 @@ export function ModificacionesContent() {
             "CANTIDAD PREVIA": item["CANTIDAD PREVIA"] || null,
             "CANTIDAD SOLICITADA": item["CANTIDAD SOLICITADA"] || null,
             "CANTIDAD POSTERIOR": item["CANTIDAD POSTERIOR"] || null,
+            PAIS: item.PAIS || '',
         };
-        // Auto-calculate CANTIDAD POSTERIOR
         const previa = Number(newFormData["CANTIDAD PREVIA"] || 0);
         const solicitada = Number(newFormData["CANTIDAD SOLICITADA"] || 0);
         newFormData["CANTIDAD POSTERIOR"] = previa + solicitada;
         setFormData(newFormData);
         setDialogOpen(true);
+    };
+
+    const handleExportExcel = async () => {
+        setExporting(true);
+        try {
+            const start = startDate ? new Date(startDate) : undefined;
+            const end = endDate ? new Date(endDate) : undefined;
+            
+            // Obtener todos los datos (sin paginación)
+            const allData = await getAllModificacionesForExport(start, end, filterPais, filterComercial);
+            
+            if (allData.length === 0) {
+                alert('No hay datos para exportar');
+                setExporting(false);
+                return;
+            }
+
+            // Preparar datos para Excel
+            const excelData = allData.map(row => ({
+                'Fecha': row.FECHA ? new Date(row.FECHA).toLocaleDateString() : '',
+                'ID': row.ID || '',
+                'Producto': row.PRODUCTO || '',
+                'Variable': row.VARIABLE || '',
+                'SKU': row["SKU "] || '',
+                'Precio': row["PRECIO "] || '',
+                'Plataforma': row.PLATAFORMA || '',
+                'Bodega': row.BODEGA || '',
+                'Comercial': row.COMERCIAL || '',
+                'Código Comercial': row["CODIGO COMERCIAL"] || '',
+                'Privado/Público': row["PRIVADO_PUBLICO"] || '',
+                'Correo/Código': row["CORREO_CODIGO"] || '',
+                'Creado': row.CREADO || '',
+                'Solicitud': row.SOLICITUD || '',
+                'Cantidad Previa': row["CANTIDAD PREVIA"] || '',
+                'Cantidad Solicitada': row["CANTIDAD SOLICITADA"] || '',
+                'Cantidad Posterior': row["CANTIDAD POSTERIOR"] || '',
+                'ID Consecutivo': row["ID CONSECUTIVO"] || '',
+                'País': row.PAIS || '',
+            }));
+
+            // Crear workbook
+            const ws = XLSX.utils.json_to_sheet(excelData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Modificaciones');
+            
+            // Generar nombre de archivo
+            const fileName = `modificaciones_${new Date().toISOString().split('T')[0]}.xlsx`;
+            
+            // Descargar
+            XLSX.writeFile(wb, fileName);
+            
+        } catch (error) {
+            console.error('Error exporting to Excel:', error);
+            alert('Error al exportar a Excel');
+        } finally {
+            setExporting(false);
+        }
     };
 
     return (
@@ -232,214 +318,274 @@ export function ModificacionesContent() {
             <Card>
                 <CardHeader>
                     <CardTitle>Tabla de Modificaciones</CardTitle>
-                    <div className="flex justify-between items-end">
-                        <div className="flex gap-4 items-end">
-                        <div>
-                            <Label htmlFor="start-date">Fecha Inicio</Label>
-                            <Input
-                                id="start-date"
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                            />
+                    <div className="flex flex-wrap gap-4 items-end justify-between">
+                        <div className="flex gap-4 items-end flex-wrap">
+                            <div>
+                                <Label htmlFor="start-date">Fecha Inicio</Label>
+                                <Input
+                                    id="start-date"
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <Label htmlFor="end-date">Fecha Fin</Label>
+                                <Input
+                                    id="end-date"
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <Label>País</Label>
+                                <Select value={filterPais} onValueChange={setFilterPais}>
+                                    <SelectTrigger className="w-44">
+                                        <SelectValue placeholder="Todos" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="todos">Todos</SelectItem>
+                                        {PAISES.map(pais => (
+                                            <SelectItem key={pais} value={pais}>{pais}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label>Comercial</Label>
+                                <Select value={filterComercial} onValueChange={setFilterComercial}>
+                                    <SelectTrigger className="w-48">
+                                        <SelectValue placeholder="Todos" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="todos">Todos</SelectItem>
+                                        {comercialUsers.map(user => (
+                                            <SelectItem key={user.code} value={user.code}>{user.name} ({user.code})</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button onClick={handleFilter}>Filtrar</Button>
                         </div>
-                        <div>
-                            <Label htmlFor="end-date">Fecha Fin</Label>
-                            <Input
-                                id="end-date"
-                                type="date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                            />
+                        <div className="flex gap-2">
+                            <Button 
+                                variant="outline" 
+                                onClick={handleExportExcel}
+                                disabled={exporting}
+                            >
+                                {exporting ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Download className="mr-2 h-4 w-4" />
+                                )}
+                                Exportar Excel
+                            </Button>
+                            {(user?.role === 'plataformas' || user?.role === 'admin') && (
+                                <Dialog open={dialogOpen} onOpenChange={(open) => {
+                                    setDialogOpen(open);
+                                    if (!open) {
+                                        setEditingItem(null);
+                                        resetForm();
+                                    }
+                                }}>
+                                    <DialogTrigger asChild>
+                                        <Button>Crear Nueva Modificación</Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                                        <DialogHeader>
+                                            <DialogTitle>{editingItem ? 'Editar Modificación' : 'Crear Nueva Modificación'}</DialogTitle>
+                                        </DialogHeader>
+                                        {formError && (
+                                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                                                {formError}
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <Label>ID</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={formData.ID || ''}
+                                                    onChange={(e) => handleFormChange('ID', Number(e.target.value))}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Producto</Label>
+                                                <Input
+                                                    value={formData.PRODUCTO || ''}
+                                                    onChange={(e) => handleFormChange('PRODUCTO', e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Variable (formato: Variable:SKU o solo Variable)</Label>
+                                                <Textarea
+                                                    value={formData.VARIABLE || ''}
+                                                    onChange={(e) => handleFormChange('VARIABLE', e.target.value)}
+                                                    placeholder="X1 UNIDAD:123, X2 UNIDADES:456 o X1 UNIDAD"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>SKU</Label>
+                                                <Input
+                                                    value={formData["SKU "] || ''}
+                                                    onChange={(e) => handleFormChange('SKU ', e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Precio</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={formData["PRECIO "] || ''}
+                                                    onChange={(e) => handleFormChange('PRECIO ', Number(e.target.value))}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Plataforma</Label>
+                                                <Select value={formData.PLATAFORMA || ''} onValueChange={(value) => handleFormChange('PLATAFORMA', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecciona una plataforma" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {plataformas.map((plat) => (
+                                                            <SelectItem key={plat} value={plat}>
+                                                                {plat}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label>Bodega</Label>
+                                                <Select value={formData.BODEGA || ''} onValueChange={(value) => handleFormChange('BODEGA', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecciona una bodega" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="INGENIO">INGENIO</SelectItem>
+                                                        <SelectItem value="LABORATORIO">LABORATORIO</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label>Comercial</Label>
+                                                <Select value={formData.COMERCIAL || ''} onValueChange={(value) => {
+                                                    const selectedUser = comercialUsers.find(u => u.name === value);
+                                                    if (selectedUser) {
+                                                        handleFormChange('COMERCIAL', selectedUser.name);
+                                                        handleFormChange('CODIGO COMERCIAL', selectedUser.code);
+                                                    }
+                                                }}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecciona un comercial" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {comercialUsers.map((user) => (
+                                                            <SelectItem key={user.name} value={user.name}>
+                                                                {user.name} ({user.code})
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label>Código Comercial</Label>
+                                                <Input
+                                                    value={formData["CODIGO COMERCIAL"] || ''}
+                                                    onChange={(e) => handleFormChange('CODIGO COMERCIAL', e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Privado/Público</Label>
+                                                <Select value={formData["PRIVADO_PUBLICO"] || ''} onValueChange={(value) => handleFormChange('PRIVADO_PUBLICO', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecciona una opción" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Publico">Publico</SelectItem>
+                                                        <SelectItem value="Privado">Privado</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label>Correo/Código (separados por coma)</Label>
+                                                <Textarea
+                                                    value={formData["CORREO_CODIGO"] || ''}
+                                                    onChange={(e) => handleFormChange('CORREO_CODIGO', e.target.value)}
+                                                    placeholder="email1@example.com, email2@example.com"
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Creado</Label>
+                                                <Select value={formData.CREADO || ''} onValueChange={(value) => handleFormChange('CREADO', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecciona una opción" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="SI">SI</SelectItem>
+                                                        <SelectItem value="NO">NO</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label>Solicitud</Label>
+                                                <Select value={formData.SOLICITUD || ''} onValueChange={(value) => handleFormChange('SOLICITUD', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecciona una opción" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="SUMA">SUMA</SelectItem>
+                                                        <SelectItem value="AJUSTE">AJUSTE</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label>Cantidad Previa</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={formData["CANTIDAD PREVIA"] || ''}
+                                                    onChange={(e) => handleFormChange('CANTIDAD PREVIA', Number(e.target.value))}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Cantidad Solicitada</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={formData["CANTIDAD SOLICITADA"] || ''}
+                                                    onChange={(e) => handleFormChange('CANTIDAD SOLICITADA', Number(e.target.value))}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>Cantidad Posterior</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={formData["CANTIDAD POSTERIOR"] || ''}
+                                                    disabled
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label>País * (Obligatorio)</Label>
+                                                <Select value={formData.PAIS || ''} onValueChange={(value) => handleFormChange('PAIS', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecciona un país" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {PAISES.map(pais => (
+                                                            <SelectItem key={pais} value={pais}>{pais}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end mt-4">
+                                            <Button onClick={editingItem ? handleEdit : handleCreate}>
+                                                {editingItem ? 'Actualizar' : 'Crear'}
+                                            </Button>
+                                        </div>
+                                    </DialogContent>
+                                </Dialog>
+                            )}
                         </div>
-                        <Button onClick={handleFilter}>Filtrar</Button>
-                        </div>
-                        {(user?.role === 'plataformas' || user?.role === 'admin') && (
-                            <Dialog open={dialogOpen} onOpenChange={(open) => {
-                                setDialogOpen(open);
-                                if (!open) {
-                                    setEditingItem(null);
-                                    resetForm();
-                                }
-                            }}>
-                                <DialogTrigger asChild>
-                                    <Button>Crear Nueva Modificación</Button>
-                                </DialogTrigger>
-                            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                                <DialogHeader>
-                                    <DialogTitle>{editingItem ? 'Editar Modificación' : 'Crear Nueva Modificación'}</DialogTitle>
-                                </DialogHeader>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <Label>ID</Label>
-                                        <Input
-                                            type="number"
-                                            value={formData.ID || ''}
-                                            onChange={(e) => handleFormChange('ID', Number(e.target.value))}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Producto</Label>
-                                        <Input
-                                            value={formData.PRODUCTO || ''}
-                                            onChange={(e) => handleFormChange('PRODUCTO', e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Variable (formato: Variable:SKU o solo Variable)</Label>
-                                        <Textarea
-                                            value={formData.VARIABLE || ''}
-                                            onChange={(e) => handleFormChange('VARIABLE', e.target.value)}
-                                            placeholder="X1 UNIDAD:123, X2 UNIDADES:456 o X1 UNIDAD"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>SKU</Label>
-                                        <Input
-                                            value={formData["SKU "] || ''}
-                                            onChange={(e) => handleFormChange('SKU ', e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Precio</Label>
-                                        <Input
-                                            type="number"
-                                            value={formData["PRECIO "] || ''}
-                                            onChange={(e) => handleFormChange('PRECIO ', Number(e.target.value))}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Plataforma</Label>
-                                        <Select value={formData.PLATAFORMA || ''} onValueChange={(value) => handleFormChange('PLATAFORMA', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecciona una plataforma" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {plataformas.map((plat) => (
-                                                    <SelectItem key={plat} value={plat}>
-                                                        {plat}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>Bodega</Label>
-                                        <Select value={formData.BODEGA || ''} onValueChange={(value) => handleFormChange('BODEGA', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecciona una bodega" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="INGENIO">INGENIO</SelectItem>
-                                                <SelectItem value="LABORATORIO">LABORATORIO</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>Comercial</Label>
-                                        <Select value={formData.COMERCIAL || ''} onValueChange={(value) => {
-                                            const selectedUser = comercialUsers.find(u => u.name === value);
-                                            if (selectedUser) {
-                                                handleFormChange('COMERCIAL', selectedUser.name);
-                                                handleFormChange('CODIGO COMERCIAL', selectedUser.code);
-                                            }
-                                        }}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecciona un comercial" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {comercialUsers.map((user) => (
-                                                    <SelectItem key={user.name} value={user.name}>
-                                                        {user.name} ({user.code})
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>Código Comercial</Label>
-                                        <Input
-                                            value={formData["CODIGO COMERCIAL"] || ''}
-                                            onChange={(e) => handleFormChange('CODIGO COMERCIAL', e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Privado/Público</Label>
-                                        <Select value={formData["PRIVADO_PUBLICO"] || ''} onValueChange={(value) => handleFormChange('PRIVADO_PUBLICO', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecciona una opción" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Publico">Publico</SelectItem>
-                                                <SelectItem value="Privado">Privado</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>Correo/Código (separados por coma)</Label>
-                                        <Textarea
-                                            value={formData["CORREO_CODIGO"] || ''}
-                                            onChange={(e) => handleFormChange('CORREO_CODIGO', e.target.value)}
-                                            placeholder="email1@example.com, email2@example.com"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Creado</Label>
-                                        <Select value={formData.CREADO || ''} onValueChange={(value) => handleFormChange('CREADO', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecciona una opción" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="SI">SI</SelectItem>
-                                                <SelectItem value="NO">NO</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>Solicitud</Label>
-                                        <Select value={formData.SOLICITUD || ''} onValueChange={(value) => handleFormChange('SOLICITUD', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecciona una opción" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="SUMA">SUMA</SelectItem>
-                                                <SelectItem value="AJUSTE">AJUSTE</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>Cantidad Previa</Label>
-                                        <Input
-                                            type="number"
-                                            value={formData["CANTIDAD PREVIA"] || ''}
-                                            onChange={(e) => handleFormChange('CANTIDAD PREVIA', Number(e.target.value))}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Cantidad Solicitada</Label>
-                                        <Input
-                                            type="number"
-                                            value={formData["CANTIDAD SOLICITADA"] || ''}
-                                            onChange={(e) => handleFormChange('CANTIDAD SOLICITADA', Number(e.target.value))}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Cantidad Posterior</Label>
-                                        <Input
-                                            type="number"
-                                            value={formData["CANTIDAD POSTERIOR"] || ''}
-                                            disabled
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end mt-4">
-                                    <Button onClick={editingItem ? handleEdit : handleCreate}>
-                                        {editingItem ? 'Actualizar' : 'Crear'}
-                                    </Button>
-                                </div>
-                            </DialogContent>
-                        </Dialog>
-                        )}
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -472,6 +618,7 @@ export function ModificacionesContent() {
                                             <TableHead>Cantidad Solicitada</TableHead>
                                             <TableHead>Cantidad Posterior</TableHead>
                                             <TableHead>ID Consecutivo</TableHead>
+                                            <TableHead>País</TableHead>
                                             <TableHead>Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -496,6 +643,7 @@ export function ModificacionesContent() {
                                                 <TableCell>{row["CANTIDAD SOLICITADA"]}</TableCell>
                                                 <TableCell>{row["CANTIDAD POSTERIOR"]}</TableCell>
                                                 <TableCell>{row["ID CONSECUTIVO"]}</TableCell>
+                                                <TableCell>{row.PAIS}</TableCell>
                                                 <TableCell>
                                                     <div className="flex gap-2">
                                                         {(user?.role === 'plataformas' || user?.role === 'admin') && (

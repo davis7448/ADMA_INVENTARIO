@@ -20,6 +20,7 @@ export type Modificacion = {
     "CANTIDAD SOLICITADA": number | null;
     "CANTIDAD POSTERIOR": number | null;
     "ID CONSECUTIVO": number | null;
+    PAIS: string | null;
 };
 
 export async function seedModificaciones(data: Modificacion[]) {
@@ -30,25 +31,46 @@ export async function seedModificaciones(data: Modificacion[]) {
     await Promise.all(batch);
 }
 
-export async function getModificaciones(startDate?: Date, endDate?: Date) {
+export async function getModificaciones(startDate?: Date, endDate?: Date, pais?: string, comercial?: string) {
     const now = new Date();
     const defaultStart = startDate || new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const defaultEnd = endDate || now;
 
-    const q = query(
+    let q = query(
         collection(db, 'modificaciones'),
         where('FECHA', '>=', defaultStart.getTime()),
         where('FECHA', '<=', defaultEnd.getTime()),
         orderBy('FECHA', 'desc'),
         orderBy('ID CONSECUTIVO', 'desc')
     );
+
+    // Firestore no permite múltiples filtros de desigualdad en campos diferentes
+    // así que obtendremos todos y filtraremos en memoria para país y comercial
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as (Modificacion & { id: string })[];
+    let results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as (Modificacion & { id: string })[];
+
+    // Filtrar por país si se especifica
+    if (pais && pais !== 'todos') {
+        results = results.filter(m => m.PAIS === pais);
+    }
+
+    // Filtrar por comercial si se especifica
+    if (comercial && comercial !== 'todos') {
+        results = results.filter(m => m["CODIGO COMERCIAL"] === comercial);
+    }
+
+    return results;
 }
 
 export async function createModificacion(data: Omit<Modificacion, 'ID CONSECUTIVO'>) {
+    // Validar que PAIS sea obligatorio
+    if (!data.PAIS || data.PAIS.trim() === '') {
+        throw new Error('El campo PAIS es obligatorio');
+    }
+
     const docRef = await addDoc(collection(db, 'modificaciones'), {
         ...data,
+        PAIS: data.PAIS,
         FECHA: data.FECHA || Date.now(),
         "ID CONSECUTIVO": Math.max(...(await getModificaciones()).map(m => m["ID CONSECUTIVO"] || 0)) + 1
     });
@@ -75,6 +97,35 @@ export async function getComercialUsers() {
         return { name: data.name || data.email, code: data.commercialCode || data.email };
     });
     return [...users, { name: 'Camilo Useche', code: 'Camilo Useche' }];
+}
+
+// Obtener TODAS las modificaciones sin paginación (para exportación a Excel)
+export async function getAllModificacionesForExport(startDate?: Date, endDate?: Date, pais?: string, comercial?: string) {
+    const now = new Date();
+    const defaultStart = startDate || new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // Default 30 días para exportación
+    const defaultEnd = endDate || now;
+
+    let q = query(
+        collection(db, 'modificaciones'),
+        where('FECHA', '>=', defaultStart.getTime()),
+        where('FECHA', '<=', defaultEnd.getTime()),
+        orderBy('FECHA', 'desc')
+    );
+
+    const querySnapshot = await getDocs(q);
+    let results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as (Modificacion & { id: string })[];
+
+    // Filtrar por país si se especifica
+    if (pais && pais !== 'todos') {
+        results = results.filter(m => m.PAIS === pais);
+    }
+
+    // Filtrar por comercial si se especifica
+    if (comercial && comercial !== 'todos') {
+        results = results.filter(m => m["CODIGO COMERCIAL"] === comercial);
+    }
+
+    return results;
 }
 
 export async function getPlataformas() {
