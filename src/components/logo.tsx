@@ -6,9 +6,9 @@ export function Logo() {
       <Image
         src="/NEGRO.png"
         alt="Logo ADMA"
-        width={64}
-        height={64}
-        className="h-16 w-16"
+        width={128}
+        height={128}
+        className="h-32 w-32"
       />
     </div>
   );
