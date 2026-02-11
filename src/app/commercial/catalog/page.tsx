@@ -396,7 +396,7 @@ export default function CatalogPage() {
                         <Sparkles className="h-4 w-4 text-yellow-500" /> Lo Más Nuevo
                     </TabsTrigger>
                     <TabsTrigger value="stuck" className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-blue-500" /> Lo Más Quedado
+                        <Clock className="h-4 w-4 text-blue-500" /> Por Activar
                     </TabsTrigger>
                     <TabsTrigger value="liquidating" className="flex items-center gap-2">
                         <AlertCircle className="h-4 w-4 text-red-500" /> Liquidación
