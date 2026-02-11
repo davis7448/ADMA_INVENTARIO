@@ -10,8 +10,16 @@ import {
     Trophy,
     Star,
     GraduationCap,
-    TrendingUp
+    TrendingUp,
+    Menu
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+    Sheet,
+    SheetContent,
+    SheetTrigger,
+} from '@/components/ui/sheet';
+import { useState } from 'react';
 
 const sidebarItems = [
     { href: '/commercial/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -22,11 +30,11 @@ const sidebarItems = [
     { href: '/commercial/academy', label: 'Academia', icon: GraduationCap },
 ];
 
-export function CommercialSidebar() {
+function SidebarContent() {
     const pathname = usePathname();
-
+    
     return (
-        <aside className="w-64 hidden lg:flex flex-col border-r bg-card/50 backdrop-blur-sm h-[calc(100vh-4rem)] sticky top-16">
+        <div className="flex flex-col h-full">
             <div className="p-6">
                 <h2 className="text-sm uppercase tracking-wider text-muted-foreground font-bold mb-4">
                     Comercial
@@ -40,13 +48,13 @@ export function CommercialSidebar() {
                                 key={item.href}
                                 href={item.href}
                                 className={cn(
-                                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm font-medium",
+                                    "flex items-center gap-3 px-3 py-3 rounded-lg transition-all text-base font-medium",
                                     isActive
-                                        ? "bg-primary/10 text-primary hover:bg-primary/20"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        ? "bg-primary/10 text-primary"
+                                        : "text-muted-foreground hover:bg-muted"
                                 )}
                             >
-                                <Icon className="h-4 w-4" />
+                                <Icon className="h-5 w-5" />
                                 {item.label}
                             </Link>
                         );
@@ -66,6 +74,34 @@ export function CommercialSidebar() {
                     <span className="text-xs text-white/90">70% Completado</span>
                 </div>
             </div>
-        </aside>
+        </div>
+    );
+}
+
+export function CommercialSidebar() {
+    const pathname = usePathname();
+    const [isOpen, setIsOpen] = useState(false);
+
+    return (
+        <>
+            {/* Botón de menú para móvil */}
+            <div className="lg:hidden fixed bottom-4 right-4 z-50">
+                <Sheet open={isOpen} onOpenChange={setIsOpen}>
+                    <SheetTrigger asChild>
+                        <Button size="lg" className="rounded-full shadow-lg">
+                            <Menu className="h-6 w-6" />
+                        </Button>
+                    </SheetTrigger>
+                    <SheetContent side="left" className="w-80">
+                        <SidebarContent />
+                    </SheetContent>
+                </Sheet>
+            </div>
+
+            {/* Sidebar para escritorio */}
+            <aside className="w-64 hidden lg:flex flex-col border-r bg-card/50 backdrop-blur-sm h-[calc(100vh-6rem)] sticky top-24">
+                <SidebarContent />
+            </aside>
+        </>
     );
 }

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { Bell, Menu, Package, Building } from 'lucide-react';
@@ -58,7 +57,7 @@ export default function AppHeader() {
   }
 
   return (
-    <header className="flex h-16 items-center gap-4 border-b bg-card px-4 lg:px-6 sticky top-0 z-20">
+    <header className="flex h-24 items-center gap-6 border-b bg-card px-6 lg:px-8 sticky top-0 z-20">
       <div className="flex items-center gap-4 md:hidden">
          <Sheet>
             <SheetTrigger asChild>
@@ -69,7 +68,7 @@ export default function AppHeader() {
             </SheetTrigger>
             <SheetContent side="left">
                 <div className="flex flex-col h-full">
-                    <div className="mb-6">
+                    <div className="mb-6 mt-4 pl-2">
                         <Logo />
                     </div>
                     <MainNav isMobile />
@@ -83,11 +82,11 @@ export default function AppHeader() {
           </Sheet>
       </div>
 
-      <div className="hidden md:flex">
+      <div className="hidden md:flex items-center pl-2">
         <Logo />
       </div>
       
-      <div className="hidden md:flex flex-1">
+      <div className="hidden md:flex flex-1 pl-4">
         <MainNav />
       </div>
 
@@ -124,13 +123,13 @@ export default function AppHeader() {
         )}
 
         <Button variant="ghost" size="icon" className="rounded-full">
-            <Bell className="h-4 w-4" />
+            <Bell className="h-5 w-5" />
             <span className="sr-only">Ver notificaciones</span>
         </Button>
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
-                <Avatar className="h-8 w-8">
+                <Avatar className="h-9 w-9">
                 <AvatarImage src={user.avatarUrl} alt={user.name} />
                 <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                 </Avatar>
