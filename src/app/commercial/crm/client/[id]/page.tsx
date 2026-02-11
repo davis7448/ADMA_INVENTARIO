@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Edit, Phone, Mail, MapPin, Calendar, DollarSign, Plus, FileText, Upload, Search, Users } from 'lucide-react';
 import Link from 'next/link';
-import { getClientById, updateClient, createClientTest, getClientTests } from '@/lib/commercial-api';
+import { getClientById, updateClient, createClientTest, getClientTests, addClientEvent, getClientEvents, initializeClientEventsFromHistory } from '@/lib/commercial-api';
 import { getProducts } from '@/lib/api';
 import { CommercialClient, ClientStatus, ClientCategory, ClientType } from '@/types/commercial';
 import { Product } from '@/lib/types';
@@ -120,59 +120,129 @@ export default function ClientDetailPage() {
     );
     const totalProductPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
 
-    // Función para agregar evento al historial
+    // Función para agregar evento al historial (usa nueva API)
     const addHistoryEvent = async (type: ClientHistoryEvent['type'], description: string, details?: string) => {
-        if (!client) return;
+        if (!client || !user) return;
         
+        // Optimistic update - add to local state immediately
         const newEvent: ClientHistoryEvent = {
-            id: Date.now().toString(),
+            id: `temp-${Date.now()}`,
             type,
             description,
             details,
             created_at: new Date(),
-            created_by: user?.name || 'Usuario',
+            created_by: user.name || 'Usuario',
         };
+        setHistory(prev => [newEvent, ...prev]);
         
-        const updatedHistory = [newEvent, ...history];
-        setHistory(updatedHistory);
-        
-        // Guardar en Firestore - usar updatedHistory que tiene todos los eventos
-        await updateClient(client.id!, { 
-            history: updatedHistory 
-        });
+        // Save to Firestore (new separate collection)
+        try {
+            await addClientEvent(
+                client!.id!,
+                type,
+                description,
+                user!.id,
+                user!.name || 'Usuario',
+                details
+            );
+            
+            // Refresh events from Firestore to get the real ID
+            const events = await getClientEvents(client!.id!);
+            const formattedEvents: ClientHistoryEvent[] = events.map(e => ({
+                id: e.id,
+                type: e.type,
+                description: e.description,
+                details: e.details,
+                created_at: e.created_at,
+                created_by: e.created_by_name || e.created_by
+            }));
+            setHistory(formattedEvents);
+        } catch (error) {
+            console.error('Error saving event:', error);
+            // Revert optimistic update on error
+            setHistory(prev => prev.filter(e => e.id !== newEvent.id));
+        }
     };
 
-    // Función para inicializar historial
-    const initHistory = (clientData: CommercialClient | null) => {
+    // Función para inicializar historial - migra eventos legacy si es necesario
+    const initHistory = async (clientData: CommercialClient | null) => {
         console.log('[DEBUG] initHistory - clientData?.history:', clientData?.history);
+        console.log('[DEBUG] initHistory - last_event_number:', clientData?.last_event_number);
         
+        // First, try to load events from new collection
+        if (clientData?.id) {
+            try {
+                const events = await getClientEvents(clientData.id);
+                
+                if (events.length > 0) {
+                    console.log('[DEBUG] initHistory - Found events in client_events:', events.length);
+                    const formattedEvents: ClientHistoryEvent[] = events.map(e => ({
+                        id: e.id,
+                        type: e.type,
+                        description: e.description,
+                        details: e.details,
+                        created_at: e.created_at,
+                        created_by: e.created_by_name || e.created_by
+                    }));
+                    setHistory(formattedEvents);
+                    return;
+                }
+            } catch (error) {
+                console.error('[DEBUG] initHistory - Error loading events:', error);
+            }
+        }
+        
+        // Fallback: use legacy history field and migrate if needed
         if (clientData?.history && Array.isArray(clientData.history) && clientData.history.length > 0) {
-            console.log('[DEBUG] initHistory - Events found:', clientData.history.length);
+            console.log('[DEBUG] initHistory - Using legacy history:', clientData.history.length);
             
-            // Convertir timestamps de Firestore a fechas si es necesario
+            // Convert timestamps
             const convertedHistory = clientData.history.map((event: any) => ({
                 ...event,
                 created_at: event.created_at?.toDate ? event.created_at.toDate() : 
                            event.created_at instanceof Date ? event.created_at :
                            new Date(event.created_at)
             }));
-            // Ordenar por fecha (más recientes primero)
             convertedHistory.sort((a: any, b: any) => 
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             );
-            console.log('[DEBUG] initHistory - convertedHistory:', convertedHistory);
             setHistory(convertedHistory);
+            
+            // Migrate to new collection if we have events
+            if (clientData.id && clientData.history.length > 0) {
+                console.log('[DEBUG] initHistory - Migrating legacy events to new collection');
+                await initializeClientEventsFromHistory(
+                    clientData.id, 
+                    clientData.history, 
+                    clientData.last_event_number || 0
+                );
+            }
         } else {
             console.log('[DEBUG] initHistory - No history found, creating initial event');
-            // Crear evento inicial de registro
             const initialEvent: ClientHistoryEvent = {
-                id: '1',
+                id: 'initial',
                 type: 'registered',
                 description: 'Cliente registrado',
                 created_at: clientData?.created_at ? new Date(clientData.created_at) : new Date(),
                 created_by: 'Sistema',
             };
             setHistory([initialEvent]);
+            
+            // Create initial event in new collection if client exists
+            if (clientData?.id) {
+                try {
+                    await addClientEvent(
+                        clientData.id,
+                        'registered',
+                        'Cliente registrado',
+                        'system',
+                        'Sistema',
+                        undefined
+                    );
+                } catch (error) {
+                    console.error('[DEBUG] initHistory - Error creating initial event:', error);
+                }
+            }
         }
     };
 
@@ -240,14 +310,20 @@ export default function ClientDetailPage() {
             }
             
             await updateClient(client.id!, {
-                ...editForm,
+                name: editForm.name,
+                email: editForm.email,
+                phone: editForm.phone,
+                city: editForm.city,
+                category: editForm.category,
+                type: editForm.type,
+                status: editForm.status,
                 avg_sales: Number(editForm.avg_sales),
             });
             
             const updated = await getClientById(client.id!);
             setClient(updated);
             
-            // Registrar en historial
+            // Registrar en historial usando nuevo sistema de eventos
             if (changes.length > 0) {
                 await addHistoryEvent('edit', 'Datos actualizados', changes.join(', '));
             }
@@ -273,7 +349,7 @@ export default function ClientDetailPage() {
         const updated = await getClientById(client.id!);
         setClient(updated);
         
-        // Registrar en historial
+        // Registrar en historial usando nuevo sistema de eventos
         await addHistoryEvent('note', 'Nota agregada', newNote.substring(0, 50) + (newNote.length > 50 ? '...' : ''));
         
         setNewNote('');
@@ -329,7 +405,7 @@ export default function ClientDetailPage() {
         
         setOrders([...orders, order]);
         
-        // Registrar en historial
+        // Registrar en historial usando nuevo sistema de eventos
         await addHistoryEvent('order', 'Pedido creado', `${order.product_name} x${order.quantity} - $${order.total.toLocaleString()}`);
         
         setNewOrder({ product_id: '', product_name: '', unit_price: 0, quantity: 1, total: 0, payment_proof: '' });
@@ -343,7 +419,7 @@ export default function ClientDetailPage() {
         
         // Guardar en Firestore
         const testId = await createClientTest({
-            clientId: client.id,
+            clientId: client!.id!,
             productId: newTest.product_id,
             productName: newTest.product_name,
             productSku: newTest.product_sku,
@@ -367,7 +443,7 @@ export default function ClientDetailPage() {
         
         setTests([test, ...tests]);
         
-        // Registrar en historial
+        // Registrar en historial usando nuevo sistema de eventos
         await addHistoryEvent('testing', `Activación de testeo: ${statusLabel}`, `${newTest.product_name} en ${newTest.platform}`);
         
         setNewTest({ product_id: '', product_name: '', product_sku: '', platform: '', status: 'test_new' });

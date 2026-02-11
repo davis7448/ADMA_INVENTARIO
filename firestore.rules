@@ -160,11 +160,70 @@ service cloud.firestore {
      }
 
      // Client Tests
-     match /client_tests/{testId} {
+      match /client_tests/{testId} {
+         allow read: if isSignedIn() || isAdminAccess();
+         allow create: if isSignedIn() || isAdminAccess();
+         allow update, delete: if isSignedIn() || isAdminAccess();
+      }
+
+     // 4DX System - MCI (Metas Crucialmente Importantes)
+     // Users can create/edit/delete MCIs when authenticated, but can read all
+     match /user_missions/{mciId} {
         allow read: if isSignedIn() || isAdminAccess();
-        allow create: if isSignedIn() || isAdminAccess();
-        allow update, delete: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn();
      }
 
+     // 4DX System - User Gamification Profiles
+     // Users can create their own profile and update it, but can read all
+     match /user_gamification_profiles/{profileId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn();
+        allow update: if isSignedIn();
+        allow delete: if false; // Never delete profiles
+     }
+
+     // 4DX System - Level Config (admin only)
+     match /settings/level_config {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow write: if isRole('admin') || isAdminAccess();
+     }
+
+     // TASK SYSTEM - Areas (admin only)
+     match /areas/{areaId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isRole('admin') || isAdminAccess();
+     }
+
+     // TASK SYSTEM - User Positions (admin writes, all read)
+     match /user_positions/{positionId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isRole('admin') || isAdminAccess();
+     }
+
+      // TASK SYSTEM - Tasks
+      // Simplified: allow read for all authenticated, filtering done in client
+      match /tasks/{taskId} {
+         allow read: if isSignedIn();
+         allow create: if isSignedIn();
+         allow update: if isSignedIn();
+         allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // TASK SYSTEM - Notifications
+      match /task_notifications/{notificationId} {
+         allow read: if isSignedIn();
+         allow create: if isSignedIn();
+         allow update: if isSignedIn();
+         allow delete: if isSignedIn();
+      }
+
+      // TASK SYSTEM - Rejection Tracker
+      match /task_rejection_tracker/{trackerId} {
+         allow read: if isSignedIn();
+         allow create, update: if isSignedIn();
+         allow delete: if false;
+      }
+
     }
- }
+  }

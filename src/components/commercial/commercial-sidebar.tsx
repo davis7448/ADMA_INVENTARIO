@@ -18,7 +18,7 @@ const sidebarItems = [
     { href: '/commercial/crm/dashboard', label: 'CRM / Clientes', icon: Users },
     { href: '/commercial/catalog', label: 'Catálogo', icon: ShoppingBag },
     { href: '/commercial/challenges', label: 'Retos y Misiones', icon: Trophy },
-    { href: '/commercial/ratings', label: 'Calificaciones', icon: Star },
+    { href: '/commercial/tareas', label: 'Tareas', icon: Star },
     { href: '/commercial/academy', label: 'Academia', icon: GraduationCap },
 ];
 
