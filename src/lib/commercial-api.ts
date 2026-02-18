@@ -25,6 +25,7 @@ import type {
     CommercialRating,
     AcademyResource,
     ClientStatus,
+    ClientTest,
     TaskPointsHistory
 } from "../types/commercial";
 import type { Product } from '@/lib/types';
@@ -481,19 +482,6 @@ export const fixUserProfile = async (user: any) => {
 };
 
 // --- CLIENT TESTS / TESTING ---
-
-export interface ClientTest {
-    id: string;
-    clientId: string;
-    productId: string;
-    productName: string;
-    productSku: string;
-    platform: string;
-    status: 'test_new' | 'active';
-    created_at: any;
-    created_by: string;
-    created_by_name?: string;
-}
 
 export const createClientTest = async (test: Omit<ClientTest, 'id' | 'created_at'>): Promise<string> => {
     try {
@@ -1781,5 +1769,342 @@ const getPointsByPriority = (priority: string | null): number => {
         case 'medium': return 5;
         case 'low': return 2;
         default: return 5;
+    }
+};
+
+// ============================================
+// CLIENT NOTES, ORDERS, TESTS - CRM Functions
+// ============================================
+
+import type { ClientNote, ClientOrder } from '@/types/commercial';
+
+// Helper: Transform legacy client data to new format
+interface LegacyHistoryEntry {
+    id: string;
+    type: 'note' | 'testing' | 'order';
+    description: string;
+    details: string;
+    created_at: any;
+    created_by: string;
+}
+
+function transformLegacyClientData(data: any): {
+    notes: ClientNote[];
+    orders: ClientOrder[];
+    tests: ClientTest[];
+} {
+    let notes: ClientNote[] = [];
+    let orders: ClientOrder[] = [];
+    let tests: ClientTest[] = [];
+
+    // 1. Handle legacy notes (string format)
+    if (typeof data.notes === 'string' && data.notes.trim()) {
+        const legacyNote = {
+            id: `legacy-note-${Date.now()}`,
+            clientId: '', // Will be set when assigning to client
+            content: data.notes.trim(),
+            created_at: data.updated_at || data.created_at || new Date(),
+            created_by: data.assigned_commercial_name || 'Usuario'
+        } as ClientNote;
+        notes.push(legacyNote);
+    }
+
+    // 2. Handle legacy history array
+    const legacyHistory: LegacyHistoryEntry[] = data.history || [];
+    for (const entry of legacyHistory) {
+        const entryDate = entry.created_at?.toDate ? entry.created_at.toDate() : 
+                          entry.created_at ? new Date(entry.created_at) : new Date();
+        const entryContent = entry.description && entry.details ? 
+            `${entry.description}: ${entry.details}` : 
+            (entry.details || entry.description || '');
+
+        switch (entry.type) {
+            case 'note':
+                notes.push({
+                    id: entry.id || `legacy-note-${Date.now()}`,
+                    clientId: '', // Will be set when assigning to client
+                    content: entryContent,
+                    created_at: entryDate,
+                    created_by: entry.created_by
+                } as ClientNote);
+                break;
+            case 'testing':
+                tests.push({
+                    id: entry.id || `legacy-test-${Date.now()}`,
+                    clientId: '',
+                    productId: '',
+                    productName: entry.description || 'Testeo legacy',
+                    product_name: entry.description || 'Testeo legacy',
+                    productSku: '',
+                    platform: '',
+                    status: 'completed',
+                    result: 'pending',
+                    notes: entry.details || '',
+                    created_at: entryDate,
+                    created_by: entry.created_by
+                } as ClientTest);
+                break;
+            case 'order':
+                orders.push({
+                    id: entry.id || `legacy-order-${Date.now()}`,
+                    clientId: '',
+                    items: [],
+                    total: 0,
+                    status: 'pending',
+                    created_at: entryDate,
+                    created_by: entry.created_by
+                });
+                break;
+        }
+    }
+
+    // 3. Merge with new format
+    const newNotes: ClientNote[] = Array.isArray(data.notes) ? data.notes : [];
+    const newOrders: ClientOrder[] = Array.isArray(data.orders) ? data.orders : [];
+    const newTests: ClientTest[] = Array.isArray(data.tests) ? data.tests : [];
+
+    return {
+        notes: [...notes, ...newNotes],
+        orders: [...orders, ...newOrders],
+        tests: [...tests, ...newTests]
+    };
+}
+
+export const addNoteToClient = async (clientId: string, content: string): Promise<string> => {
+    try {
+        const clientRef = doc(db, 'clients', clientId);
+        const snapshot = await getDoc(clientRef);
+        
+        if (!snapshot.exists()) {
+            throw new Error("Cliente no encontrado");
+        }
+        
+        const data = snapshot.data();
+        
+        // Handle both legacy (string) and new (array) format
+        let notes: ClientNote[];
+        if (typeof data.notes === 'string') {
+            if (data.notes.trim()) {
+                notes = [{
+                    id: `legacy-${Date.now()}`,
+                    clientId: '', // Will be set when assigning to client
+                    content: data.notes.trim(),
+                    created_at: data.updated_at?.toDate ? data.updated_at.toDate() : new Date(),
+                    created_by: data.assigned_commercial_name || 'Usuario'
+                } as ClientNote];
+            } else {
+                notes = [];
+            }
+        } else if (Array.isArray(data.notes)) {
+            notes = data.notes;
+        } else {
+            notes = [];
+        }
+        
+        const now = Timestamp.now().toDate();
+        const newNote: ClientNote = {
+            id: crypto.randomUUID(),
+            clientId, // Add clientId to the note
+            content,
+            created_at: now,
+            created_by: 'Usuario'
+        };
+        
+        notes.push(newNote);
+        
+        await updateDoc(clientRef, {
+            notes,
+            updated_at: serverTimestamp()
+        });
+        
+        return newNote.id;
+    } catch (error) {
+        console.error("Error adding note to client:", error);
+        throw new Error("Failed to add note");
+    }
+};
+
+export const addOrderToClient = async (
+    clientId: string, 
+    items: { product_id: string; product_name: string; quantity: number; unit_price: number }[],
+    status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' = 'pending'
+): Promise<string> => {
+    try {
+        const clientRef = doc(db, 'clients', clientId);
+        const snapshot = await getDoc(clientRef);
+        
+        if (!snapshot.exists()) {
+            throw new Error("Cliente no encontrado");
+        }
+        
+        const data = snapshot.data();
+        
+        let orders: ClientOrder[];
+        if (Array.isArray(data.orders)) {
+            orders = data.orders;
+        } else {
+            orders = [];
+        }
+        
+        const total = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+        const now = Timestamp.now().toDate();
+        
+        const newOrder: ClientOrder = {
+            id: crypto.randomUUID(),
+            clientId,
+            items: items.map(item => ({
+                ...item,
+                total: item.quantity * item.unit_price
+            })),
+            total,
+            status,
+            created_at: now,
+            created_by: 'Usuario'
+        };
+        
+        orders.push(newOrder);
+        
+        await updateDoc(clientRef, {
+            orders,
+            updated_at: serverTimestamp()
+        });
+        
+        return newOrder.id;
+    } catch (error) {
+        console.error("Error adding order to client:", error);
+        throw new Error("Failed to add order");
+    }
+};
+
+export const addTestToClient = async (
+    clientId: string,
+    productId: string,
+    productName: string,
+    status: 'pending' | 'in_progress' | 'completed' | 'failed' = 'pending',
+    result: 'positive' | 'negative' | 'neutral' | 'pending' = 'pending',
+    notes?: string
+): Promise<string> => {
+    try {
+        const clientRef = doc(db, 'clients', clientId);
+        const snapshot = await getDoc(clientRef);
+        
+        if (!snapshot.exists()) {
+            throw new Error("Cliente no encontrado");
+        }
+        
+        const data = snapshot.data();
+        
+        let tests: ClientTest[];
+        if (Array.isArray(data.tests)) {
+            tests = data.tests;
+        } else {
+            tests = [];
+        }
+        
+        const now = Timestamp.now().toDate();
+        const newTest: ClientTest = {
+            id: crypto.randomUUID(),
+            clientId,
+            productId,
+            productName,
+            productSku: '',
+            platform: '',
+            status,
+            result,
+            notes,
+            created_at: now,
+            created_by: 'Usuario'
+        };
+        
+        tests.push(newTest);
+        
+        await updateDoc(clientRef, {
+            tests,
+            updated_at: serverTimestamp()
+        });
+        
+        return newTest.id;
+    } catch (error) {
+        console.error("Error adding test to client:", error);
+        throw new Error("Failed to add test");
+    }
+};
+
+// Get all history (notes, orders, tests) from all clients
+export const getAllClientHistory = async (): Promise<{
+    clients: CommercialClient[];
+    allNotes: (ClientNote & { clientId: string; clientName: string })[];
+    allOrders: (ClientOrder & { clientId: string; clientName: string })[];
+    allTests: (ClientTest & { clientId: string; clientName: string })[];
+}> => {
+    try {
+        const clientsCol = collection(db, 'clients');
+        const snapshot = await getDocs(clientsCol);
+        
+        const clients: CommercialClient[] = [];
+        const allNotes: (ClientNote & { clientId: string; clientName: string })[] = [];
+        const allOrders: (ClientOrder & { clientId: string; clientName: string })[] = [];
+        const allTests: (ClientTest & { clientId: string; clientName: string })[] = [];
+        
+        for (const docSnap of snapshot.docs) {
+            const data = docSnap.data();
+            const { notes, orders, tests } = transformLegacyClientData(data);
+            
+            const client: CommercialClient = {
+                id: docSnap.id,
+                ...data,
+                name: data.name || '',
+                email: data.email || '',
+                phone: data.phone || '',
+                birthday: data.birthday || null,
+                category: data.category || 'laboratorio',
+                type: data.type || 'mixto',
+                avg_sales: data.avg_sales || 0,
+                city: data.city || '',
+                status: data.status || 'finding_winner',
+                assigned_commercial_id: data.assigned_commercial_id || '',
+                created_at: data.created_at?.toDate ? data.created_at.toDate() : data.created_at,
+                updated_at: data.updated_at?.toDate ? data.updated_at.toDate() : data.updated_at
+            };
+            
+            // Add notes, orders, and tests as extended properties
+            (client as any).notes = notes;
+            (client as any).orders = orders;
+            (client as any).tests = tests;
+            
+            clients.push(client);
+            
+            for (const note of notes) {
+                allNotes.push({
+                    ...note,
+                    clientId: client.id || '',
+                    clientName: client.name
+                });
+            }
+            for (const order of orders) {
+                allOrders.push({
+                    ...order,
+                    clientId: client.id || '',
+                    clientName: client.name
+                });
+            }
+            for (const test of tests) {
+                allTests.push({
+                    ...test,
+                    clientId: client.id || '',
+                    clientName: client.name
+                });
+            }
+        }
+        
+        // Sort by date descending
+        allNotes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        allTests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
+        return { clients, allNotes, allOrders, allTests };
+    } catch (error) {
+        console.error("Error fetching all client history:", error);
+        return { clients: [], allNotes: [], allOrders: [], allTests: [] };
     }
 };
