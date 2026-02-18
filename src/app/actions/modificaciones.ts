@@ -1,5 +1,9 @@
 import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { createReservation, deleteReservation } from '@/lib/api';
+
+export type TipoModificacion = 'RESERVA_INVENTARIO' | 'AJUSTE_STOCK' | 'BAJA_PLATAFORMA';
+export type EstadoSolicitud = 'pendiente' | 'completado';
 
 export type Modificacion = {
     FECHA: number | null;
@@ -21,6 +25,17 @@ export type Modificacion = {
     "CANTIDAD POSTERIOR": number | null;
     "ID CONSECUTIVO": number | null;
     PAIS: string | null;
+    // Nuevos campos para integración con reservas
+    tipoModificacion?: TipoModificacion;
+    productId?: string;
+    variantId?: string;
+    platformId?: string;
+    reservationId?: string;
+    estadoSolicitud?: EstadoSolicitud;
+    // Campos adicionales para reservas
+    vendedorId?: string;
+    customerEmail?: string;
+    externalId?: string;
 };
 
 export async function seedModificaciones(data: Modificacion[]) {
@@ -68,12 +83,84 @@ export async function createModificacion(data: Omit<Modificacion, 'ID CONSECUTIV
         throw new Error('El campo PAIS es obligatorio');
     }
 
-    const docRef = await addDoc(collection(db, 'modificaciones'), {
+    let reservationId: string | undefined;
+    let estadoSolicitud: 'pendiente' | 'completado' | undefined;
+
+    // Si es una reserva de inventario, crear la reserva
+    if (data.tipoModificacion === 'RESERVA_INVENTARIO') {
+        // Validar campos requeridos para reserva
+        if (!data.productId) {
+            throw new Error('Se requiere productId para crear una reserva de inventario');
+        }
+        if (!data.platformId) {
+            throw new Error('Se requiere platformId para crear una reserva de inventario');
+        }
+        if (!data.customerEmail && !data['CORREO_CODIGO']) {
+            throw new Error('Se requiere email del cliente (customerEmail o CORREO_CODIGO) para crear una reserva');
+        }
+        if (!data["CANTIDAD SOLICITADA"] || data["CANTIDAD SOLICITADA"] <= 0) {
+            throw new Error('Se requiere una cantidad válida para crear una reserva de inventario');
+        }
+
+        // Usar CODIGO COMERCIAL como vendedorId
+        const vendedorId = data["CODIGO COMERCIAL"] || data.vendedorId;
+        if (!vendedorId) {
+            throw new Error('Se requiere el código comercial (vendedor) para crear una reserva');
+        }
+
+        // Email del cliente
+        const customerEmail = data.customerEmail || data['CORREO_CODIGO'] || '';
+
+        // External ID - usar ID consecutivo o generar uno
+        const externalId = data.externalId || `MOD-${Date.now()}`;
+
+        try {
+            // Crear la reserva en Firestore y obtener los IDs
+            const reservationResult = await createReservation({
+                productId: data.productId,
+                variantId: data.variantId,
+                platformId: data.platformId,
+                vendedorId: vendedorId,
+                customerEmail: customerEmail,
+                externalId: externalId,
+                quantity: data["CANTIDAD SOLICITADA"] || 0,
+            });
+
+            // Guardar el ID del documento de Firestore para poder eliminar la reserva
+            reservationId = reservationResult.docId;
+            estadoSolicitud = 'completado';
+        } catch (error) {
+            console.error('Error al crear reserva:', error);
+            throw new Error(`Error al crear la reserva de inventario: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+        }
+    }
+
+    // Calcular ID consecutivo
+    const existingModificaciones = await getModificaciones();
+    const maxId = existingModificaciones.length > 0 
+        ? Math.max(...existingModificaciones.map(m => m["ID CONSECUTIVO"] || 0)) 
+        : 0;
+    const nuevoIdConsecutivo = maxId + 1;
+
+    // Preparar datos para guardar
+    const modificacionData = {
         ...data,
         PAIS: data.PAIS,
         FECHA: data.FECHA || Date.now(),
-        "ID CONSECUTIVO": Math.max(...(await getModificaciones()).map(m => m["ID CONSECUTIVO"] || 0)) + 1
-    });
+        "ID CONSECUTIVO": nuevoIdConsecutivo,
+    };
+
+    // Agregar reservationId si se creó una reserva
+    if (reservationId) {
+        (modificacionData as any).reservationId = reservationId;
+    }
+
+    // Agregar estado de solicitud si aplica
+    if (estadoSolicitud) {
+        (modificacionData as any).estadoSolicitud = estadoSolicitud;
+    }
+
+    const docRef = await addDoc(collection(db, 'modificaciones'), modificacionData);
     return docRef.id;
 }
 
@@ -84,7 +171,25 @@ export async function updateModificacion(id: string, data: Partial<Modificacion>
 }
 
 export async function deleteModificacion(id: string) {
+    // Obtener la modificación antes de eliminarla para verificar si tiene una reserva
     const docRef = doc(db, 'modificaciones', id);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+        const data = docSnap.data() as Modificacion;
+        
+        // Si es una reserva de inventario, intentar cancelar la reserva
+        if (data.tipoModificacion === 'RESERVA_INVENTARIO' && data.reservationId) {
+            try {
+                await deleteReservation(data.reservationId);
+                console.log(`Reserva ${data.reservationId} eliminada correctamente`);
+            } catch (error) {
+                console.error('Error al eliminar la reserva:', error);
+                // No lanzamos el error para permitir eliminar la modificación aunque falle la reserva
+            }
+        }
+    }
+    
     await deleteDoc(docRef);
     return id;
 }
