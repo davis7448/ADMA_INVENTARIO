@@ -243,10 +243,16 @@ export const getClientById = async (clientId: string): Promise<CommercialClient 
                 }));
             }
             
+            // Transformar datos legacy (notes, orders, tests)
+            const { notes, orders, tests } = transformLegacyClientData(data);
+            
             return {
                 id: clientSnap.id,
                 ...data,
                 history: convertedHistory,
+                notes,
+                orders,
+                tests,
                 created_at: data.created_at?.toDate(),
                 updated_at: data.updated_at?.toDate(),
                 birthday: data.birthday?.toDate ? data.birthday.toDate() : data.birthday
@@ -1978,12 +1984,10 @@ export const addOrderToClient = async (
 
 export const addTestToClient = async (
     clientId: string,
-    productId: string,
-    productName: string,
+    items: { product_id: string; product_name: string; notes: string }[],
     status: 'pending' | 'in_progress' | 'completed' | 'failed' = 'pending',
-    result: 'positive' | 'negative' | 'neutral' | 'pending' = 'pending',
-    notes?: string
-): Promise<string> => {
+    result: 'positive' | 'negative' | 'neutral' | 'pending' = 'pending'
+): Promise<string[]> => {
     try {
         const clientRef = doc(db, 'clients', clientId);
         const snapshot = await getDoc(clientRef);
@@ -2002,28 +2006,41 @@ export const addTestToClient = async (
         }
         
         const now = Timestamp.now().toDate();
-        const newTest: ClientTest = {
-            id: crypto.randomUUID(),
-            clientId,
-            productId,
-            productName,
-            productSku: '',
-            platform: '',
-            status,
-            result,
-            notes,
-            created_at: now,
-            created_by: 'Usuario'
-        };
+        const newTestIds: string[] = [];
         
-        tests.push(newTest);
+        // Create a test entry for each product
+        for (const item of items) {
+            if (!item.product_id || !item.product_name) continue;
+            
+            const newTest: ClientTest = {
+                id: crypto.randomUUID(),
+                clientId,
+                productId: item.product_id,
+                productName: item.product_name,
+                product_name: item.product_name, // Legacy field support
+                productSku: '',
+                platform: '',
+                status,
+                result,
+                notes: item.notes || '',
+                created_at: now,
+                created_by: 'Usuario'
+            };
+            
+            tests.push(newTest);
+            newTestIds.push(newTest.id);
+        }
+        
+        if (newTestIds.length === 0) {
+            throw new Error("No hay productos válidos para crear el test");
+        }
         
         await updateDoc(clientRef, {
             tests,
             updated_at: serverTimestamp()
         });
         
-        return newTest.id;
+        return newTestIds;
     } catch (error) {
         console.error("Error adding test to client:", error);
         throw new Error("Failed to add test");
@@ -2106,5 +2123,55 @@ export const getAllClientHistory = async (): Promise<{
     } catch (error) {
         console.error("Error fetching all client history:", error);
         return { clients: [], allNotes: [], allOrders: [], allTests: [] };
+    }
+};
+
+// ============================================
+// PRODUCTS FOR ORDER SELECTION
+// ============================================
+
+export interface ProductForOrder {
+    id: string;
+    name: string;
+    stock: number;
+    salePrice: number;
+}
+
+/**
+ * Get products with available stock for order selection
+ * Filters products that have stock > 0 and returns essential fields
+ */
+export const getProductsWithStock = async (): Promise<ProductForOrder[]> => {
+    try {
+        const productsCol = collection(db, 'products');
+        const snapshot = await getDocs(productsCol);
+        
+        const products: ProductForOrder[] = [];
+        
+        for (const doc of snapshot.docs) {
+            const data = doc.data();
+            const stock = data.stock ?? 0;
+            
+            // Only include products with stock > 0
+            if (stock > 0) {
+                // Try to get salePrice - check multiple possible field names
+                const salePrice = data.salePrice ?? data.priceDropshipping ?? data.priceWholesale ?? 0;
+                
+                products.push({
+                    id: doc.id,
+                    name: data.name || data.product_name || 'Sin nombre',
+                    stock: stock,
+                    salePrice: salePrice
+                });
+            }
+        }
+        
+        // Sort alphabetically by name
+        products.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        
+        return products;
+    } catch (error) {
+        console.error("Error fetching products with stock:", error);
+        return [];
     }
 };

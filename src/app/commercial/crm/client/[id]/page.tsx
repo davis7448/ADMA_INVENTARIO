@@ -3,470 +3,285 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Edit, Phone, Mail, MapPin, Calendar, DollarSign, Plus, FileText, Upload, Search, Users } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Package, TestTube, FileText, Trash2, Check, ChevronsUpDown } from 'lucide-react';
 import Link from 'next/link';
-import { getClientById, updateClient, createClientTest, getClientTests, addClientEvent, getClientEvents, initializeClientEventsFromHistory } from '@/lib/commercial-api';
-import { getProducts } from '@/lib/api';
-import { CommercialClient, ClientStatus, ClientCategory, ClientType } from '@/types/commercial';
-import { Product } from '@/lib/types';
-import { useAuth } from '@/hooks/use-auth';
-
-type ClientNote = {
-    id: string;
-    content: string;
-    created_at: any;
-    created_by: string;
-};
-
-type ClientHistoryEvent = {
-    id: string;
-    type: 'status_change' | 'edit' | 'note' | 'order' | 'registered' | 'testing';
-    description: string;
-    created_at: any;
-    created_by: string;
-    details?: string;
-};
-
-type ClientTest = {
-    id: string;
-    productId: string;
-    productName: string;
-    productSku: string;
-    platform: string;
-    status: 'test_new' | 'active';
-    created_at: any;
-    created_by: string;
-    created_by_name?: string;
-};
-
-type ClientOrder = {
-    id: string;
-    product_id: string;
-    product_name: string;
-    unit_price: number;
-    quantity: number;
-    total: number;
-    status: 'quotation' | 'pending' | 'paid';
-    payment_proof?: string;
-    created_at: any;
-};
+import { getClientById, addNoteToClient, addOrderToClient, addTestToClient, getProductsWithStock, type ProductForOrder } from '@/lib/commercial-api';
+import type { CommercialClient, ClientNote, ClientOrder, ClientTest } from '@/types/commercial';
 
 export default function ClientDetailPage() {
     const params = useParams();
-    const { user } = useAuth();
     const [client, setClient] = useState<CommercialClient | null>(null);
     const [loading, setLoading] = useState(true);
-    const [notes, setNotes] = useState<ClientNote[]>([]);
-    const [history, setHistory] = useState<ClientHistoryEvent[]>([]);
-    const [orders, setOrders] = useState<ClientOrder[]>([]);
-    const [tests, setTests] = useState<ClientTest[]>([]);
-    const [products, setProducts] = useState<Product[]>([]);
-    const [editOpen, setEditOpen] = useState(false);
-    const [noteOpen, setNoteOpen] = useState(false);
-    const [orderOpen, setOrderOpen] = useState(false);
-    const [testOpen, setTestOpen] = useState(false);
-    const [saving, setSaving] = useState(false);
-
-    const [editForm, setEditForm] = useState({
-        name: '',
-        email: '',
-        phone: '',
-        city: '',
-        category: '' as ClientCategory,
-        type: '' as ClientType,
-        status: '' as ClientStatus,
-        avg_sales: 0,
-        notes: '',
-    });
-
-    const [newNote, setNewNote] = useState('');
-    const [newOrder, setNewOrder] = useState({
-        product_id: '',
-        product_name: '',
-        unit_price: 0,
-        quantity: 1,
-        total: 0,
-        payment_proof: '',
-    });
     
-    const [newTest, setNewTest] = useState({
-        product_id: '',
-        product_name: '',
-        product_sku: '',
-        platform: '',
-        status: 'test_new' as 'test_new' | 'active',
-    });
+    // Estados para notas
+    const [newNoteContent, setNewNoteContent] = useState('');
+    const [isAddingNote, setIsAddingNote] = useState(false);
     
-    const [productSearch, setProductSearch] = useState('');
-    const [productPage, setProductPage] = useState(0);
-    const [editingPrice, setEditingPrice] = useState(false);
-    const [tempUnitPrice, setTempUnitPrice] = useState(0);
-    const PRODUCTS_PER_PAGE = 20;
-
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(productSearch.toLowerCase())
-    );
-    const paginatedProducts = filteredProducts.slice(
-        productPage * PRODUCTS_PER_PAGE,
-        (productPage + 1) * PRODUCTS_PER_PAGE
-    );
-    const totalProductPages = Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE);
-
-    // Función para agregar evento al historial (usa nueva API)
-    const addHistoryEvent = async (type: ClientHistoryEvent['type'], description: string, details?: string) => {
-        if (!client || !user) return;
-        
-        // Optimistic update - add to local state immediately
-        const newEvent: ClientHistoryEvent = {
-            id: `temp-${Date.now()}`,
-            type,
-            description,
-            details,
-            created_at: new Date(),
-            created_by: user.name || 'Usuario',
-        };
-        setHistory(prev => [newEvent, ...prev]);
-        
-        // Save to Firestore (new separate collection)
-        try {
-            await addClientEvent(
-                client!.id!,
-                type,
-                description,
-                user!.id,
-                user!.name || 'Usuario',
-                details
-            );
-            
-            // Refresh events from Firestore to get the real ID
-            const events = await getClientEvents(client!.id!);
-            const formattedEvents: ClientHistoryEvent[] = events.map(e => ({
-                id: e.id,
-                type: e.type,
-                description: e.description,
-                details: e.details,
-                created_at: e.created_at,
-                created_by: e.created_by_name || e.created_by
-            }));
-            setHistory(formattedEvents);
-        } catch (error) {
-            console.error('Error saving event:', error);
-            // Revert optimistic update on error
-            setHistory(prev => prev.filter(e => e.id !== newEvent.id));
-        }
-    };
-
-    // Función para inicializar historial - migra eventos legacy si es necesario
-    const initHistory = async (clientData: CommercialClient | null) => {
-        console.log('[DEBUG] initHistory - clientData?.history:', clientData?.history);
-        console.log('[DEBUG] initHistory - last_event_number:', clientData?.last_event_number);
-        
-        // First, try to load events from new collection
-        if (clientData?.id) {
-            try {
-                const events = await getClientEvents(clientData.id);
-                
-                if (events.length > 0) {
-                    console.log('[DEBUG] initHistory - Found events in client_events:', events.length);
-                    const formattedEvents: ClientHistoryEvent[] = events.map(e => ({
-                        id: e.id,
-                        type: e.type,
-                        description: e.description,
-                        details: e.details,
-                        created_at: e.created_at,
-                        created_by: e.created_by_name || e.created_by
-                    }));
-                    setHistory(formattedEvents);
-                    return;
-                }
-            } catch (error) {
-                console.error('[DEBUG] initHistory - Error loading events:', error);
-            }
-        }
-        
-        // Fallback: use legacy history field and migrate if needed
-        if (clientData?.history && Array.isArray(clientData.history) && clientData.history.length > 0) {
-            console.log('[DEBUG] initHistory - Using legacy history:', clientData.history.length);
-            
-            // Convert timestamps
-            const convertedHistory = clientData.history.map((event: any) => ({
-                ...event,
-                created_at: event.created_at?.toDate ? event.created_at.toDate() : 
-                           event.created_at instanceof Date ? event.created_at :
-                           new Date(event.created_at)
-            }));
-            convertedHistory.sort((a: any, b: any) => 
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            );
-            setHistory(convertedHistory);
-            
-            // Migrate to new collection if we have events
-            if (clientData.id && clientData.history.length > 0) {
-                console.log('[DEBUG] initHistory - Migrating legacy events to new collection');
-                await initializeClientEventsFromHistory(
-                    clientData.id, 
-                    clientData.history, 
-                    clientData.last_event_number || 0
-                );
-            }
-        } else {
-            console.log('[DEBUG] initHistory - No history found, creating initial event');
-            const initialEvent: ClientHistoryEvent = {
-                id: 'initial',
-                type: 'registered',
-                description: 'Cliente registrado',
-                created_at: clientData?.created_at ? new Date(clientData.created_at) : new Date(),
-                created_by: 'Sistema',
-            };
-            setHistory([initialEvent]);
-            
-            // Create initial event in new collection if client exists
-            if (clientData?.id) {
-                try {
-                    await addClientEvent(
-                        clientData.id,
-                        'registered',
-                        'Cliente registrado',
-                        'system',
-                        'Sistema',
-                        undefined
-                    );
-                } catch (error) {
-                    console.error('[DEBUG] initHistory - Error creating initial event:', error);
-                }
-            }
-        }
-    };
+    // Estados para pedidos
+    const [isAddingOrder, setIsAddingOrder] = useState(false);
+    const [orderItems, setOrderItems] = useState([{ product_id: '', product_name: '', quantity: 1, unit_price: 0 }]);
+    const [orderStatus, setOrderStatus] = useState<'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled'>('pending');
+    const [availableProducts, setAvailableProducts] = useState<ProductForOrder[]>([]);
+    const [productsLoading, setProductsLoading] = useState(false);
+    const [productComboboxOpen, setProductComboboxOpen] = useState<boolean[]>([]);
+    
+    // Estados para testeos
+    const [isAddingTest, setIsAddingTest] = useState(false);
+    const [testItems, setTestItems] = useState([{ product_id: '', product_name: '', notes: '' }]);
+    const [testStatus, setTestStatus] = useState<'pending' | 'in_progress' | 'completed' | 'failed'>('pending');
+    const [testResult, setTestResult] = useState<'positive' | 'negative' | 'neutral' | 'pending'>('pending');
+    const [testProductComboboxOpen, setTestProductComboboxOpen] = useState<boolean[]>([]);
 
     useEffect(() => {
-        async function loadClient() {
-            const id = params.id as string;
-            if (!id) return;
-            
+        const fetchClient = async () => {
             try {
-                const [data, testsData] = await Promise.all([
-                    getClientById(id),
-                    getClientTests(id)
-                ]);
-                setClient(data);
-                if (data) {
-                    setEditForm({
-                        name: data.name || '',
-                        email: data.email || '',
-                        phone: data.phone || '',
-                        city: data.city || '',
-                        category: data.category || 'laboratorio',
-                        type: data.type || 'mixto',
-                        status: data.status || 'finding_winner',
-                        avg_sales: data.avg_sales || 0,
-                        notes: data.notes || '',
-                    });
-                    initHistory(data);
-                }
-                
-                const productsData = await getProducts({ fetchAll: true });
-                setProducts(productsData.products);
-                setTests(testsData);
+                const clientId = params.id as string;
+                console.log('[DEBUG] fetchClient - clientId:', clientId);
+                const clientData = await getClientById(clientId);
+                console.log('[DEBUG] fetchClient - clientData:', {
+                    id: clientData?.id,
+                    name: clientData?.name,
+                    notes_count: clientData?.notes?.length,
+                    orders_count: clientData?.orders?.length,
+                    tests_count: clientData?.tests?.length
+                });
+                setClient(clientData);
             } catch (error) {
-                console.error('Error loading client:', error);
+                console.error('Error fetching client:', error);
             } finally {
                 setLoading(false);
             }
+        };
+
+        if (params.id) {
+            fetchClient();
         }
-        loadClient();
     }, [params.id]);
 
-    const handleSaveEdit = async () => {
-        if (!client) return;
-        setSaving(true);
-        try {
-            const changes: string[] = [];
-            
-            // Detectar cambios
-            if (editForm.name !== client.name) changes.push(`Nombre: ${client.name} → ${editForm.name}`);
-            if (editForm.email !== client.email) changes.push(`Email: ${client.email} → ${editForm.email}`);
-            if (editForm.phone !== client.phone) changes.push(`Teléfono: ${client.phone} → ${editForm.phone}`);
-            if (editForm.city !== client.city) changes.push(`Ciudad: ${client.city} → ${editForm.city}`);
-            if (editForm.category !== client.category) changes.push(`Categoría: ${client.category} → ${editForm.category}`);
-            if (editForm.type !== client.type) changes.push(`Tipo: ${client.type} → ${editForm.type}`);
-            
-            // Detectar cambio de estado
-            if (editForm.status !== client.status) {
-                const statusLabels: Record<string, string> = {
-                    finding_winner: 'Encontrando Winner',
-                    testing: 'Testeando',
-                    selling: 'Vendiendo',
-                    scaling: 'Escalando'
-                };
-                changes.push(`Estado: ${statusLabels[client.status] || client.status} → ${statusLabels[editForm.status] || editForm.status}`);
-            }
-            
-            await updateClient(client.id!, {
-                name: editForm.name,
-                email: editForm.email,
-                phone: editForm.phone,
-                city: editForm.city,
-                category: editForm.category,
-                type: editForm.type,
-                status: editForm.status,
-                avg_sales: Number(editForm.avg_sales),
-            });
-            
-            const updated = await getClientById(client.id!);
-            setClient(updated);
-            
-            // Registrar en historial usando nuevo sistema de eventos
-            if (changes.length > 0) {
-                await addHistoryEvent('edit', 'Datos actualizados', changes.join(', '));
-            }
-            
-            setEditOpen(false);
-        } catch (error) {
-            console.error('Error updating client:', error);
-        } finally {
-            setSaving(false);
-        }
-    };
-
     const handleAddNote = async () => {
-        if (!newNote.trim() || !client) return;
-        const note: ClientNote = {
-            id: Date.now().toString(),
-            content: newNote,
-            created_at: new Date(),
-            created_by: user?.name || 'Usuario',
-        };
-        setNotes([note, ...notes]);
-        await updateClient(client.id!, { notes: (client.notes || '') + '\n' + newNote });
-        const updated = await getClientById(client.id!);
-        setClient(updated);
+        if (!client?.id || !newNoteContent.trim()) return;
         
-        // Registrar en historial usando nuevo sistema de eventos
-        await addHistoryEvent('note', 'Nota agregada', newNote.substring(0, 50) + (newNote.length > 50 ? '...' : ''));
-        
-        setNewNote('');
-        setNoteOpen(false);
-    };
-
-    const handleProductChange = (productId: string) => {
-        const product = products.find(p => p.id === productId);
-        if (product) {
-            setNewOrder({
-                ...newOrder,
-                product_id: productId,
-                product_name: product.name,
-                unit_price: product.priceDropshipping || 0,
-                total: (product.priceDropshipping || 0) * newOrder.quantity,
-            });
-        }
-    };
-
-    const handleQuantityChange = (quantity: number) => {
-        const qty = Math.max(1, quantity);
-        setNewOrder({
-            ...newOrder,
-            quantity: qty,
-            total: newOrder.unit_price * qty,
-        });
-    };
-
-    const handlePaymentProof = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setNewOrder({
-                ...newOrder,
-                payment_proof: file.name,
-            });
+        setIsAddingNote(true);
+        try {
+            await addNoteToClient(client.id, newNoteContent);
+            // Refresh client data
+            const updatedClient = await getClientById(client.id);
+            setClient(updatedClient);
+            setNewNoteContent('');
+        } catch (error) {
+            console.error('Error adding note:', error);
+        } finally {
+            setIsAddingNote(false);
         }
     };
 
     const handleAddOrder = async () => {
-        if (!newOrder.product_id.trim() || !client) return;
+        if (!client?.id || orderItems.length === 0) return;
         
-        const order: ClientOrder = {
-            id: Date.now().toString(),
-            product_id: newOrder.product_id,
-            product_name: newOrder.product_name,
-            unit_price: newOrder.unit_price,
-            quantity: newOrder.quantity,
-            total: newOrder.total,
-            status: newOrder.payment_proof ? 'pending' : 'quotation',
-            payment_proof: newOrder.payment_proof || undefined,
-            created_at: new Date(),
-        };
-        
-        setOrders([...orders, order]);
-        
-        // Registrar en historial usando nuevo sistema de eventos
-        await addHistoryEvent('order', 'Pedido creado', `${order.product_name} x${order.quantity} - $${order.total.toLocaleString()}`);
-        
-        setNewOrder({ product_id: '', product_name: '', unit_price: 0, quantity: 1, total: 0, payment_proof: '' });
-        setOrderOpen(false);
+        setIsAddingOrder(true);
+        try {
+            await addOrderToClient(client.id, orderItems, orderStatus);
+            // Refresh client data
+            const updatedClient = await getClientById(client.id);
+            setClient(updatedClient);
+            setOrderItems([{ product_id: '', product_name: '', quantity: 1, unit_price: 0 }]);
+            setOrderStatus('pending');
+            setProductComboboxOpen([]);
+        } catch (error) {
+            console.error('Error adding order:', error);
+        } finally {
+            setIsAddingOrder(false);
+        }
     };
 
     const handleAddTest = async () => {
-        if (!newTest.product_id.trim() || !newTest.platform.trim() || !client) return;
+        if (!client?.id || testItems.length === 0 || testItems.every(item => !item.product_id)) return;
         
-        const statusLabel = newTest.status === 'active' ? 'Ya Activo' : 'Testeo Nuevo';
-        
-        // Guardar en Firestore
-        const testId = await createClientTest({
-            clientId: client!.id!,
-            productId: newTest.product_id,
-            productName: newTest.product_name,
-            productSku: newTest.product_sku,
-            platform: newTest.platform,
-            status: newTest.status,
-            created_by: user?.id || 'unknown',
-            created_by_name: user?.name || 'Usuario'
-        });
-        
-        const test: ClientTest = {
-            id: testId,
-            productId: newTest.product_id,
-            productName: newTest.product_name,
-            productSku: newTest.product_sku,
-            platform: newTest.platform,
-            status: newTest.status,
-            created_at: new Date(),
-            created_by: user?.id || 'unknown',
-            created_by_name: user?.name || 'Usuario'
+        setIsAddingTest(true);
+        try {
+            await addTestToClient(client.id, testItems, testStatus, testResult);
+            // Refresh client data
+            const updatedClient = await getClientById(client.id);
+            setClient(updatedClient);
+            setTestItems([{ product_id: '', product_name: '', notes: '' }]);
+            setTestStatus('pending');
+            setTestResult('pending');
+            setTestProductComboboxOpen([]);
+        } catch (error) {
+            console.error('Error adding test:', error);
+        } finally {
+            setIsAddingTest(false);
+        }
+    };
+
+    const addOrderItem = () => {
+        setOrderItems([...orderItems, { product_id: '', product_name: '', quantity: 1, unit_price: 0 }]);
+        setProductComboboxOpen([...productComboboxOpen, false]);
+    };
+
+    const loadProducts = async () => {
+        if (availableProducts.length > 0) return; // Already loaded
+        setProductsLoading(true);
+        try {
+            const products = await getProductsWithStock();
+            setAvailableProducts(products);
+            // Initialize combobox states for existing items
+            setProductComboboxOpen(new Array(orderItems.length).fill(false));
+        } catch (error) {
+            console.error('Error loading products:', error);
+        } finally {
+            setProductsLoading(false);
+        }
+    };
+
+    const handleProductSelect = (index: number, product: ProductForOrder) => {
+        const updated = [...orderItems];
+        updated[index] = {
+            product_id: product.id,
+            product_name: product.name,
+            quantity: 1,
+            unit_price: product.salePrice
         };
+        setOrderItems(updated);
         
-        setTests([test, ...tests]);
-        
-        // Registrar en historial usando nuevo sistema de eventos
-        await addHistoryEvent('testing', `Activación de testeo: ${statusLabel}`, `${newTest.product_name} en ${newTest.platform}`);
-        
-        setNewTest({ product_id: '', product_name: '', product_sku: '', platform: '', status: 'test_new' });
-        setTestOpen(false);
+        // Close the combobox for this item
+        const newComboboxState = [...productComboboxOpen];
+        newComboboxState[index] = false;
+        setProductComboboxOpen(newComboboxState);
     };
 
-    const handleProductTestChange = (productId: string, productName: string, productSku: string) => {
-        setNewTest({
-            ...newTest,
-            product_id: productId,
-            product_name: productName,
-            product_sku: productSku,
-        });
+    const updateOrderItem = (index: number, field: string, value: string | number) => {
+        const updated = [...orderItems];
+        (updated[index] as any)[field] = value;
+        setOrderItems(updated);
     };
 
-    const formatDate = (date: any) => {
-        if (!date) return 'No especificado';
-        if (typeof date === 'string') return new Date(date).toLocaleDateString('es-CO');
-        if (date.toDate) return date.toDate().toLocaleDateString('es-CO');
-        return String(date);
+    const removeOrderItem = (index: number) => {
+        setOrderItems(orderItems.filter((_, i) => i !== index));
     };
 
-    if (loading) return <div className="p-8 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
+    const addTestItem = () => {
+        setTestItems([...testItems, { product_id: '', product_name: '', notes: '' }]);
+        setTestProductComboboxOpen([...testProductComboboxOpen, false]);
+    };
+
+    const handleTestProductSelect = (index: number, product: ProductForOrder) => {
+        const updated = [...testItems];
+        updated[index] = {
+            ...updated[index],
+            product_id: product.id,
+            product_name: product.name
+        };
+        setTestItems(updated);
+        
+        // Close the combobox for this item
+        const newComboboxState = [...testProductComboboxOpen];
+        newComboboxState[index] = false;
+        setTestProductComboboxOpen(newComboboxState);
+    };
+
+    const updateTestItem = (index: number, field: string, value: string) => {
+        const updated = [...testItems];
+        (updated[index] as any)[field] = value;
+        setTestItems(updated);
+    };
+
+    const removeTestItem = (index: number) => {
+        setTestItems(testItems.filter((_, i) => i !== index));
+    };
+
+    const formatDate = (date: Date | any) => {
+        if (!date) return 'Sin fecha';
+        try {
+            // Handle Firestore Timestamp
+            if (date && typeof date === 'object' && 'toDate' in date) {
+                date = date.toDate();
+            }
+            const d = new Date(date);
+            if (isNaN(d.getTime())) return 'Fecha inválida';
+            return d.toLocaleDateString('es-CO', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (e) {
+            return 'Error de fecha';
+        }
+    };
+
+    // Función para formatear tiempo relativo
+    const getRelativeTime = (date: Date | any): string => {
+        if (!date) return '';
+        const now = new Date();
+        const d = new Date(date);
+        const diffMs = now.getTime() - d.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        const diffWeeks = Math.floor(diffDays / 7);
+        const diffMonths = Math.floor(diffDays / 30);
+
+        if (diffMins < 1) return 'Hace un momento';
+        if (diffMins < 60) return `Hace ${diffMins} minuto${diffMins > 1 ? 's' : ''}`;
+        if (diffHours < 24) return `Hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+        if (diffDays < 7) return `Hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
+        if (diffWeeks < 4) return `Hace ${diffWeeks} semana${diffWeeks > 1 ? 's' : ''}`;
+        if (diffMonths < 12) return `Hace ${diffMonths} mes${diffMonths > 1 ? 'es' : ''}`;
+        return formatDate(date);
+    };
+
+    const getStatusBadgeVariant = (status: string) => {
+        switch (status) {
+            case 'selling':
+            case 'delivered':
+            case 'completed':
+            case 'positive':
+                return 'default';
+            case 'testing':
+            case 'confirmed':
+            case 'in_progress':
+                return 'secondary';
+            case 'pending':
+            case 'neutral':
+                return 'outline';
+            case 'cancelled':
+            case 'failed':
+            case 'negative':
+                return 'destructive';
+            default:
+                return 'secondary';
+        }
+    };
+
+    const getStatusLabel = (status: string) => {
+        const labels: Record<string, string> = {
+            'pending': 'Pendiente',
+            'confirmed': 'Confirmado',
+            'shipped': 'Enviado',
+            'delivered': 'Entregado',
+            'cancelled': 'Cancelado',
+            'in_progress': 'En Progreso',
+            'completed': 'Completado',
+            'failed': 'Fallido',
+            'positive': 'Positivo',
+            'negative': 'Negativo',
+            'neutral': 'Neutral'
+        };
+        return labels[status] || status;
+    };
+
+    if (loading) return <div className="p-8">Cargando...</div>;
     if (!client) return <div className="p-8">Cliente no encontrado</div>;
 
     return (
@@ -481,96 +296,15 @@ export default function ClientDetailPage() {
                     <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Badge variant={client.status === 'selling' ? 'default' : 'secondary'}>
-                            {client.status?.toUpperCase()}
+                            {client.status.toUpperCase()}
                         </Badge>
                         <span>• {client.category}</span>
-                        {client.assigned_commercial_name && (
-                            <>
-                                <span>•</span>
-                                <span className="flex items-center gap-1">
-                                    <Users className="h-3 w-3" />
-                                    {client.assigned_commercial_name}
-                                </span>
-                            </>
-                        )}
                     </div>
                 </div>
                 <div className="ml-auto">
-                    <Dialog open={editOpen} onOpenChange={setEditOpen}>
-                        <DialogTrigger asChild>
-                            <Button variant="outline">
-                                <Edit className="mr-2 h-4 w-4" /> Editar
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px]">
-                            <DialogHeader>
-                                <DialogTitle>Editar Cliente</DialogTitle>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                                <div className="grid gap-2">
-                                    <Label>Nombre</Label>
-                                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Email</Label>
-                                    <Input value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Teléfono</Label>
-                                    <Input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Ciudad</Label>
-                                    <Input value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="grid gap-2">
-                                        <Label>Categoría</Label>
-                                        <Select value={editForm.category} onValueChange={v => setEditForm({...editForm, category: v as ClientCategory})}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="laboratorio">Laboratorio</SelectItem>
-                                                <SelectItem value="chino">Chino</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label>Tipo</Label>
-                                        <Select value={editForm.type} onValueChange={v => setEditForm({...editForm, type: v as ClientType})}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="dropshipper">Dropshipper</SelectItem>
-                                                <SelectItem value="mixto">Mixto</SelectItem>
-                                                <SelectItem value="ecommerce">Ecommerce</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Estado</Label>
-                                    <Select value={editForm.status} onValueChange={v => setEditForm({...editForm, status: v as ClientStatus})}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="finding_winner">Encontrando Winner</SelectItem>
-                                            <SelectItem value="testing">Testeando</SelectItem>
-                                            <SelectItem value="selling">Vendiendo</SelectItem>
-                                            <SelectItem value="scaling">Escalando</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Notas</Label>
-                                    <Textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})} />
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
-                                <Button onClick={handleSaveEdit} disabled={saving}>
-                                    {saving ? 'Guardando...' : 'Guardar'}
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                    <Button variant="outline">
+                        <Package className="mr-2 h-4 w-4" /> Editar
+                    </Button>
                 </div>
             </div>
 
@@ -582,515 +316,484 @@ export default function ClientDetailPage() {
                     <CardContent className="space-y-4">
                         <div className="flex items-center gap-3">
                             <Mail className="h-4 w-4 text-muted-foreground" />
-                            <span>{client.email || 'No especificado'}</span>
+                            <span>{client.email}</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <Phone className="h-4 w-4 text-muted-foreground" />
-                            <span>{client.phone || 'No especificado'}</span>
+                            <span>{client.phone}</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span>{client.city || 'No especificado'}</span>
+                            <span>{client.city}</span>
                         </div>
                         <div className="flex items-center gap-3">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span>Cumpleaños: {formatDate(client.birthday)}</span>
+                            <span>Cumpleaños: {client.birthday ? new Date(client.birthday).toLocaleDateString() : 'N/A'}</span>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span>Comercial: {client.assigned_commercial_name || 'No asignado'}</span>
+                        <div className="flex items-center gap-3 pt-4 border-t">
+                            <DollarSign className="h-4 w-4 text-green-600" />
+                            <span className="font-bold text-lg">${(client.avg_sales || 0).toLocaleString()}</span>
+                            <span className="text-xs text-muted-foreground">Ventas Promedio</span>
                         </div>
-                        {client.avg_sales !== undefined && (
-                            <div className="flex items-center gap-3 pt-4 border-t">
-                                <DollarSign className="h-4 w-4 text-green-600" />
-                                <span className="font-bold text-lg">${client.avg_sales.toLocaleString()}</span>
-                                <span className="text-xs text-muted-foreground">Ventas Promedio</span>
-                            </div>
-                        )}
                     </CardContent>
                 </Card>
 
                 <div className="md:col-span-2 space-y-6">
-                    <Tabs defaultValue="activity">
+                    <Tabs defaultValue="notes">
                         <TabsList>
-                            <TabsTrigger value="activity">Actividad</TabsTrigger>
-                            <TabsTrigger value="notes">Notas</TabsTrigger>
-                            <TabsTrigger value="orders">Pedidos</TabsTrigger>
-                            <TabsTrigger value="testing">Testeos</TabsTrigger>
+                            <TabsTrigger value="notes" className="gap-2">
+                                <FileText className="h-4 w-4" /> Notas
+                            </TabsTrigger>
+                            <TabsTrigger value="orders" className="gap-2">
+                                <Package className="h-4 w-4" /> Pedidos
+                            </TabsTrigger>
+                            <TabsTrigger value="tests" className="gap-2">
+                                <TestTube className="h-4 w-4" /> Testeos
+                            </TabsTrigger>
                         </TabsList>
-                        <TabsContent value="activity" className="space-y-4 pt-4">
+                        
+                        {/* Pestaña de Notas */}
+                        <TabsContent value="notes" className="space-y-4 pt-4">
                             <Card>
-                                <CardHeader>
-                                    <CardTitle className="text-base">Historial de Actividad</CardTitle>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-base">Notas del Cliente</CardTitle>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button size="sm" variant="outline" className="gap-2">
+                                                <Plus className="h-4 w-4" /> Nueva Nota
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogHeader>
+                                                <DialogTitle>Agregar Nota</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="space-y-4 pt-4">
+                                                <Textarea 
+                                                    placeholder="Escribe una nota..." 
+                                                    value={newNoteContent}
+                                                    onChange={(e) => setNewNoteContent(e.target.value)}
+                                                    rows={4}
+                                                />
+                                                <Button 
+                                                    onClick={handleAddNote} 
+                                                    disabled={isAddingNote || !newNoteContent.trim()}
+                                                    className="w-full"
+                                                >
+                                                    {isAddingNote ? 'Guardando...' : 'Guardar Nota'}
+                                                </Button>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
                                 </CardHeader>
                                 <CardContent>
-                                    {history.length === 0 ? (
-                                        <p className="text-muted-foreground text-sm">No hay actividad registrada</p>
+                                    {client.notes && Array.isArray(client.notes) && client.notes.length > 0 ? (
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-blue-200" />
+                                            <div className="space-y-6 max-h-[400px] overflow-y-auto pr-4">
+                                                {(client.notes as ClientNote[])
+                                                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                                    .map((note: ClientNote, index: number) => (
+                                                        <div key={note.id} className="relative pl-10">
+                                                            <div className="absolute left-2 top-2 h-4 w-4 rounded-full bg-blue-500 border-2 border-white" />
+                                                            <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                                                                <p className="font-medium text-gray-900">{note.content}</p>
+                                                                <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                                                                    <Calendar className="h-3 w-3" />
+                                                                    <span>{formatDate(note.created_at)}</span>
+                                                                    <span className="text-blue-600 font-medium">• {getRelativeTime(note.created_at)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        </div>
                                     ) : (
-                                        <div className="relative pl-4 border-l-2 border-muted space-y-6">
-                                            {history.map((event) => (
-                                                <div key={event.id} className="relative">
-                                                    <div className={`absolute -left-[21px] top-1 h-4 w-4 rounded-full ${
-                                                        event.type === 'registered' ? 'bg-green-500' :
-                                                        event.type === 'status_change' ? 'bg-blue-500' :
-                                                        event.type === 'edit' ? 'bg-yellow-500' :
-                                                        event.type === 'note' ? 'bg-purple-500' :
-                                                        event.type === 'order' ? 'bg-orange-500' :
-                                                        'bg-primary'
-                                                    }`} />
-                                                    <p className="font-medium">{event.description}</p>
-                                                    {event.details && (
-                                                        <p className="text-sm text-muted-foreground mt-1">{event.details}</p>
-                                                    )}
-                                                    <p className="text-xs text-muted-foreground mt-1">
-                                                        {event.created_by} • {formatDate(event.created_at)}
+                                        <div className="text-center p-8 text-muted-foreground">
+                                            No hay notas registradas aún.
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                        
+                        {/* Pestaña de Pedidos */}
+                        <TabsContent value="orders" className="space-y-4 pt-4">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-base">Pedidos del Cliente</CardTitle>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button 
+                                                size="sm" 
+                                                variant="outline" 
+                                                className="gap-2"
+                                                onClick={() => {
+                                                    loadProducts();
+                                                }}
+                                            >
+                                                <Plus className="h-4 w-4" /> Nuevo Pedido
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="max-w-2xl">
+                                            <DialogHeader>
+                                                <DialogTitle>Agregar Pedido</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="space-y-4 pt-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium">Estado del Pedido</label>
+                                                    <Select value={orderStatus} onValueChange={(v: any) => setOrderStatus(v)}>
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="pending">Pendiente</SelectItem>
+                                                            <SelectItem value="confirmed">Confirmado</SelectItem>
+                                                            <SelectItem value="shipped">Enviado</SelectItem>
+                                                            <SelectItem value="delivered">Entregado</SelectItem>
+                                                            <SelectItem value="cancelled">Cancelado</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-sm font-medium">Productos</label>
+                                                        <Button size="sm" variant="outline" onClick={addOrderItem} type="button">
+                                                            <Plus className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                    {orderItems.map((item, index) => (
+                                                        <div key={`order-item-${index}-${item.product_id}`} className="flex gap-2 items-end">
+                                                            <div className="flex-1">
+                                                                <Popover open={productComboboxOpen[index]} onOpenChange={(open) => {
+                                                                    const newState = [...productComboboxOpen];
+                                                                    newState[index] = open;
+                                                                    setProductComboboxOpen(newState);
+                                                                }}>
+                                                                    <PopoverTrigger asChild>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            role="combobox"
+                                                                            className="w-full justify-between font-normal"
+                                                                        >
+                                                                            {item.product_name || "Seleccionar producto..."}
+                                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                        </Button>
+                                                                    </PopoverTrigger>
+                                                                    <PopoverContent className="w-[300px] p-0" align="start">
+                                                                        <Command>
+                                                                            <CommandInput placeholder="Buscar producto..." />
+                                                                            <CommandList>
+                                                                                {productsLoading ? (
+                                                                                    <CommandEmpty>Cargando productos...</CommandEmpty>
+                                                                                ) : availableProducts.length === 0 ? (
+                                                                                    <CommandEmpty>No hay productos disponibles</CommandEmpty>
+                                                                                ) : (
+                                                                                    availableProducts.map((product) => (
+                                                                                        <CommandItem
+                                                                                            key={product.id}
+                                                                                            value={product.name}
+                                                                                            onSelect={() => handleProductSelect(index, product)}
+                                                                                        >
+                                                                                            <Check
+                                                                                                className={`mr-2 h-4 w-4 ${
+                                                                            item.product_id === product.id ? "opacity-100" : "opacity-0"
+                                                                        }`}
+                                                                                            />
+                                                                                            <div className="flex flex-col">
+                                                                                                <span>{product.name}</span>
+                                                                                                <span className="text-xs text-muted-foreground">
+                                                                                                    Stock: {product.stock} | Precio: ${product.salePrice.toLocaleString()}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        </CommandItem>
+                                                                                    ))
+                                                                                )}
+                                                                            </CommandList>
+                                                                        </Command>
+                                                                    </PopoverContent>
+                                                                </Popover>
+                                                            </div>
+                                                            <div className="w-24 space-y-1">
+                                                                <label className="text-xs font-medium text-muted-foreground">Cant.</label>
+                                                                <Input 
+                                                                    type="number"
+                                                                    placeholder="Cant."
+                                                                    value={item.quantity}
+                                                                    onChange={(e) => updateOrderItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                                                                />
+                                                            </div>
+                                                            <div className="w-28 space-y-1">
+                                                                <label className="text-xs font-medium text-muted-foreground">Precio</label>
+                                                                <Input 
+                                                                    type="number"
+                                                                    placeholder="Precio"
+                                                                    value={item.unit_price}
+                                                                    onChange={(e) => updateOrderItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                                                                />
+                                                            </div>
+                                                            {orderItems.length > 1 && (
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    onClick={() => removeOrderItem(index)}
+                                                                    type="button"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                
+                                                <div className="pt-4 border-t">
+                                                    <p className="text-lg font-bold">
+                                                        Total: ${orderItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toLocaleString()}
                                                     </p>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </TabsContent>
-                        <TabsContent value="notes" className="pt-4">
-                            <div className="flex justify-end mb-4">
-                                <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
-                                    <DialogTrigger asChild>
-                                        <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Agregar Nota</Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>Nueva Nota</DialogTitle>
-                                        </DialogHeader>
-                                        <Textarea 
-                                            placeholder="Escribe una nota..." 
-                                            value={newNote}
-                                            onChange={e => setNewNote(e.target.value)}
-                                            className="min-h-[100px]"
-                                        />
-                                        <DialogFooter>
-                                            <Button variant="outline" onClick={() => setNoteOpen(false)}>Cancelar</Button>
-                                            <Button onClick={handleAddNote}>Agregar</Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            </div>
-                            <Card>
-                                <CardContent className="pt-6 space-y-4">
-                                    {notes.length === 0 ? (
-                                        <p className="text-muted-foreground text-center py-4">Sin notas</p>
-                                    ) : (
-                                        notes.map(note => (
-                                            <div key={note.id} className="border-b pb-3 last:border-0">
-                                                <p className="text-sm">{note.content}</p>
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    {note.created_by} • {formatDate(note.created_at)}
-                                                </p>
-                                            </div>
-                                        ))
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </TabsContent>
-                        <TabsContent value="orders" className="pt-4">
-                            <div className="flex justify-end mb-4">
-                                <Dialog open={orderOpen} onOpenChange={(open) => {
-                                    setOrderOpen(open);
-                                    if (!open) {
-                                        setProductSearch('');
-                                        setProductPage(0);
-                                        setEditingPrice(false);
-                                        setTempUnitPrice(0);
-                                    }
-                                }}>
-                                    <DialogTrigger asChild>
-                                        <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Agregar Pedido</Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="sm:max-w-[500px]">
-                                        <DialogHeader>
-                                            <DialogTitle>Nuevo Pedido</DialogTitle>
-                                        </DialogHeader>
-                                        <div className="grid gap-4 py-4">
-                                            <div className="grid gap-2">
-                                                <Label>Producto</Label>
-                                                <div className="relative">
-                                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                                    <Input
-                                                        placeholder="Buscar producto..."
-                                                        value={productSearch}
-                                                        onChange={e => {
-                                                            setProductSearch(e.target.value);
-                                                            setProductPage(0);
-                                                        }}
-                                                        className="pl-8"
-                                                    />
-                                                </div>
-                                                <div className="border rounded-md max-h-[200px] overflow-y-auto">
-                                                    {paginatedProducts.length === 0 ? (
-                                                        <div className="p-4 text-center text-muted-foreground text-sm">
-                                                            No se encontraron productos
-                                                        </div>
-                                                    ) : (
-                                                        paginatedProducts.map(product => (
-                                                            <div
-                                                                key={product.id}
-                                                                onClick={() => {
-                                                                    handleProductChange(product.id);
-                                                                    setProductSearch('');
-                                                                }}
-                                                                className={`p-3 cursor-pointer hover:bg-muted border-b last:border-0 ${
-                                                                    newOrder.product_id === product.id ? 'bg-primary/10' : ''
-                                                                }`}
-                                                            >
-                                                                <p className="font-medium text-sm">{product.name}</p>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    ${(product.priceDropshipping || 0).toLocaleString()}
-                                                                </p>
-                                                            </div>
-                                                        ))
-                                                    )}
-                                                </div>
-                                                {totalProductPages > 1 && (
-                                                    <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
-                                                        <span>
-                                                            {filteredProducts.length} producto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
-                                                        </span>
-                                                        <div className="flex gap-1">
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-6 text-xs"
-                                                                onClick={() => setProductPage(p => Math.max(0, p - 1))}
-                                                                disabled={productPage === 0}
-                                                            >
-                                                                Anterior
-                                                            </Button>
-                                                            <span className="px-2">
-                                                                {productPage + 1} / {totalProductPages}
-                                                            </span>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-6 text-xs"
-                                                                onClick={() => setProductPage(p => Math.min(totalProductPages - 1, p + 1))}
-                                                                disabled={productPage >= totalProductPages - 1}
-                                                            >
-                                                                Siguiente
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {newOrder.product_name && (
-                                                <div className="grid gap-2">
-                                                    <Label>Precio Unitario</Label>
-                                                    {editingPrice ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <Input 
-                                                                type="number"
-                                                                value={tempUnitPrice}
-                                                                onChange={e => setTempUnitPrice(Number(e.target.value))}
-                                                                className="w-32"
-                                                                autoFocus
-                                                            />
-                                                            <Button 
-                                                                size="sm" 
-                                                                onClick={() => {
-                                                                    setNewOrder(prev => ({
-                                                                        ...prev,
-                                                                        unit_price: tempUnitPrice,
-                                                                        total: tempUnitPrice * prev.quantity
-                                                                    }));
-                                                                    setEditingPrice(false);
-                                                                }}
-                                                            >
-                                                                ✓
-                                                            </Button>
-                                                            <Button 
-                                                                size="sm" 
-                                                                variant="outline"
-                                                                onClick={() => {
-                                                                    setTempUnitPrice(newOrder.unit_price);
-                                                                    setEditingPrice(false);
-                                                                }}
-                                                            >
-                                                                ✕
-                                                            </Button>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2">
-                                                            <Input 
-                                                                type="text"
-                                                                value={`$${newOrder.unit_price.toLocaleString()}`}
-                                                                disabled
-                                                                className="w-32 bg-muted"
-                                                            />
-                                                            <Button 
-                                                                size="sm" 
-                                                                variant="outline"
-                                                                onClick={() => {
-                                                                    setTempUnitPrice(newOrder.unit_price);
-                                                                    setEditingPrice(true);
-                                                                }}
-                                                            >
-                                                                Editar
-                                                            </Button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="grid gap-2">
-                                                    <Label>Cantidad</Label>
-                                                    <Input 
-                                                        type="number" 
-                                                        min="1"
-                                                        value={newOrder.quantity}
-                                                        onChange={e => handleQuantityChange(Number(e.target.value))}
-                                                    />
-                                                </div>
-                                                <div className="grid gap-2">
-                                                    <Label>Total</Label>
-                                                    <Input 
-                                                        type="text"
-                                                        value={`$${newOrder.total.toLocaleString()}`}
-                                                        disabled
-                                                        className="bg-muted font-bold"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="grid gap-2">
-                                                <Label>Comprobante de Pago (Opcional)</Label>
-                                                <div className="flex items-center gap-2">
-                                                    <Input 
-                                                        type="file"
-                                                        accept="image/*,.pdf"
-                                                        onChange={handlePaymentProof}
-                                                        className="hidden"
-                                                        id="payment-proof"
-                                                    />
-                                                    <Button 
-                                                        type="button" 
-                                                        variant="outline" 
-                                                        onClick={() => document.getElementById('payment-proof')?.click()}
-                                                        className="w-full"
-                                                    >
-                                                        <Upload className="mr-2 h-4 w-4" />
-                                                        {newOrder.payment_proof || 'Subir comprobante'}
-                                                    </Button>
-                                                </div>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {newOrder.payment_proof 
-                                                        ? 'Comprobante cargado - El pedido quedará como "Pendiente"' 
-                                                        : 'Sin comprobante - El pedido quedará como "Cotización"'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <DialogFooter>
-                                            <Button variant="outline" onClick={() => {
-                                                setNewOrder({ product_id: '', product_name: '', unit_price: 0, quantity: 1, total: 0, payment_proof: '' });
-                                                setProductSearch('');
-                                                setProductPage(0);
-                                                setOrderOpen(false);
-                                            }}>Cancelar</Button>
-                                            <Button onClick={handleAddOrder} disabled={!newOrder.product_id}>
-                                                Agregar Pedido
-                                            </Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            </div>
-                            <Card>
-                                <CardContent className="pt-6">
-                                    {orders.length === 0 ? (
-                                        <p className="text-muted-foreground text-center py-4">Sin pedidos</p>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {orders.map(order => (
-                                                <div key={order.id} className="border rounded-lg p-4 space-y-2">
-                                                    <div className="flex justify-between items-start">
-                                                        <div>
-                                                            <p className="font-medium">{order.product_name}</p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {order.quantity} x ${order.unit_price.toLocaleString()} • {formatDate(order.created_at)}
-                                                            </p>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <p className="font-bold text-lg">${order.total.toLocaleString()}</p>
-                                                            <Badge 
-                                                                variant={order.status === 'quotation' ? 'secondary' : order.status === 'pending' ? 'outline' : 'default'}
-                                                                className="text-xs"
-                                                            >
-                                                                {order.status === 'quotation' ? 'Cotización' : order.status === 'pending' ? 'Pendiente' : 'Pagado'}
-                                                            </Badge>
-                                                        </div>
-                                                    </div>
-                                                    {order.payment_proof && (
-                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                            <FileText className="h-3 w-3" />
-                                                            <span>{order.payment_proof}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </CardContent>
-                             </Card>
-                        </TabsContent>
-                        <TabsContent value="testing" className="pt-4">
-                            <div className="flex justify-end mb-4">
-                                <Dialog open={testOpen} onOpenChange={(open) => {
-                                    setTestOpen(open);
-                                    if (!open) {
-                                        setProductSearch('');
-                                        setProductPage(0);
-                                    }
-                                }}>
-                                    <DialogTrigger asChild>
-                                        <Button size="sm"><Plus className="mr-2 h-4 w-4" /> Solicitar Testeo</Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="sm:max-w-[500px]">
-                                        <DialogHeader>
-                                            <DialogTitle>Solicitar Activación de Testeo</DialogTitle>
-                                        </DialogHeader>
-                                        <div className="grid gap-4 py-4">
-                                            <div className="grid gap-2">
-                                                <Label>Producto</Label>
-                                                <div className="relative">
-                                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                                    <Input
-                                                        placeholder="Buscar producto..."
-                                                        value={productSearch}
-                                                        onChange={e => {
-                                                            setProductSearch(e.target.value);
-                                                            setProductPage(0);
-                                                        }}
-                                                        className="pl-8"
-                                                    />
-                                                </div>
-                                                <div className="border rounded-md max-h-[200px] overflow-y-auto">
-                                                    {paginatedProducts.length === 0 ? (
-                                                        <div className="p-4 text-center text-muted-foreground text-sm">
-                                                            No se encontraron productos
-                                                        </div>
-                                                    ) : (
-                                                        paginatedProducts.map(product => (
-                                                            <div
-                                                                key={product.id}
-                                                                onClick={() => {
-                                                                    handleProductTestChange(product.id, product.name, product.sku || '');
-                                                                    setProductSearch('');
-                                                                }}
-                                                                className={`p-3 cursor-pointer hover:bg-muted border-b last:border-0 ${
-                                                                    newTest.product_id === product.id ? 'bg-primary/10' : ''
-                                                                }`}
-                                                            >
-                                                                <p className="font-medium text-sm">{product.name}</p>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    {product.sku}
-                                                                </p>
-                                                            </div>
-                                                        ))
-                                                    )}
-                                                </div>
-                                                {Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) > 1 && (
-                                                    <div className="flex items-center justify-between text-xs text-muted-foreground mt-2">
-                                                        <span>
-                                                            {filteredProducts.length} producto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
-                                                        </span>
-                                                        <div className="flex gap-1">
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-6 text-xs"
-                                                                onClick={() => setProductPage(p => Math.max(0, p - 1))}
-                                                                disabled={productPage === 0}
-                                                            >
-                                                                Anterior
-                                                            </Button>
-                                                            <span className="px-2">
-                                                                {productPage + 1} / {Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE)}
-                                                            </span>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-6 text-xs"
-                                                                onClick={() => setProductPage(p => Math.min(Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) - 1, p + 1))}
-                                                                disabled={productPage >= Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) - 1}
-                                                            >
-                                                                Siguiente
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="grid gap-2">
-                                                <Label>Plataforma</Label>
-                                                <Input 
-                                                    placeholder="Ej: TikTok, Instagram, Facebook..."
-                                                    value={newTest.platform}
-                                                    onChange={e => setNewTest({...newTest, platform: e.target.value})}
-                                                />
-                                            </div>
-                                            <div className="grid gap-2">
-                                                <Label>Estado</Label>
-                                                <Select 
-                                                    value={newTest.status}
-                                                    onValueChange={(v: 'test_new' | 'active') => setNewTest({...newTest, status: v})}
+                                                
+                                                <Button 
+                                                    onClick={handleAddOrder} 
+                                                    disabled={isAddingOrder || orderItems.every(i => !i.product_name)}
+                                                    className="w-full"
                                                 >
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="test_new">Testeo Nuevo</SelectItem>
-                                                        <SelectItem value="active">Ya Activo</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                                    {isAddingOrder ? 'Guardando...' : 'Guardar Pedido'}
+                                                </Button>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                </CardHeader>
+                                <CardContent>
+                                    {client.orders && client.orders.length > 0 ? (
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-green-200" />
+                                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-4">
+                                                {[...client.orders]
+                                                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                                    .map((order: ClientOrder) => (
+                                                        <div key={order.id} className="relative pl-10">
+                                                            <div className="absolute left-2 top-2 h-4 w-4 rounded-full bg-green-500 border-2 border-white" />
+                                                            <div className="bg-green-50 rounded-lg p-4 border border-green-100 space-y-2">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Badge variant={getStatusBadgeVariant(order.status)}>
+                                                                            {getStatusLabel(order.status)}
+                                                                        </Badge>
+                                                                    </div>
+                                                                    <span className="font-bold text-green-700">${order.total.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="text-sm text-gray-600">
+                                                                    {order.items.map((item, i) => (
+                                                                        <div key={`${order.id}-item-${i}`} className="flex justify-between py-1">
+                                                                            <span>{item.product_name} x{item.quantity}</span>
+                                                                            <span className="font-medium">${item.total.toLocaleString()}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 pt-2 border-t border-green-200 text-sm text-muted-foreground">
+                                                                    <Calendar className="h-3 w-3" />
+                                                                    <span>{formatDate(order.created_at)}</span>
+                                                                    <span className="text-green-600 font-medium">• {getRelativeTime(order.created_at)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                             </div>
                                         </div>
-                                        <DialogFooter>
-                                            <Button variant="outline" onClick={() => {
-                                                setNewTest({ product_id: '', product_name: '', product_sku: '', platform: '', status: 'test_new' });
-                                                setProductSearch('');
-                                                setTestOpen(false);
-                                            }}>
-                                                Cancelar
-                                            </Button>
-                                            <Button 
-                                                onClick={handleAddTest}
-                                                disabled={!newTest.product_id || !newTest.platform.trim()}
-                                            >
-                                                Solicitar Testeo
-                                            </Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            </div>
-                            <Card>
-                                <CardContent className="pt-6">
-                                    {tests.length === 0 ? (
-                                        <p className="text-muted-foreground text-center py-4">Sin testeos registrados</p>
                                     ) : (
-                                        <div className="space-y-3">
-                                            {tests.map(test => (
-                                                <div key={test.id} className="border rounded-lg p-4 space-y-2">
-                                                    <div className="flex justify-between items-start">
-                                                        <div>
-                                                            <p className="font-medium">{test.productName}</p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {test.platform} • {formatDate(test.created_at)}
-                                                            </p>
-                                                        </div>
-                                                        <Badge 
-                                                            variant={test.status === 'active' ? 'default' : 'secondary'}
-                                                            className="text-xs"
-                                                        >
-                                                            {test.status === 'active' ? 'Ya Activo' : 'Testeo Nuevo'}
-                                                        </Badge>
-                                                    </div>
+                                        <div className="text-center p-8 text-muted-foreground">
+                                            No hay pedidos registrados aún.
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                        
+                        {/* Pestaña de Testeos */}
+                        <TabsContent value="tests" className="space-y-4 pt-4">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                                    <CardTitle className="text-base">Testeos del Cliente</CardTitle>
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button size="sm" variant="outline" className="gap-2">
+                                                <Plus className="h-4 w-4" /> Nuevo Test
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="max-w-2xl">
+                                            <DialogHeader>
+                                                <DialogTitle>Agregar Test</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="space-y-4 pt-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium">Estado</label>
+                                                    <Select value={testStatus} onValueChange={(v: any) => setTestStatus(v)}>
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="pending">Pendiente</SelectItem>
+                                                            <SelectItem value="in_progress">En Progreso</SelectItem>
+                                                            <SelectItem value="completed">Completado</SelectItem>
+                                                            <SelectItem value="failed">Fallido</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
                                                 </div>
-                                            ))}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium">Resultado</label>
+                                                    <Select value={testResult} onValueChange={(v: any) => setTestResult(v)}>
+                                                        <SelectTrigger>
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="pending">Pendiente</SelectItem>
+                                                            <SelectItem value="positive">Positivo</SelectItem>
+                                                            <SelectItem value="negative">Negativo</SelectItem>
+                                                            <SelectItem value="neutral">Neutral</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-sm font-medium">Productos</label>
+                                                        <Button size="sm" variant="outline" onClick={addTestItem} type="button">
+                                                            <Plus className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                    {testItems.map((item, index) => (
+                                                        <div key={`test-item-${index}-${item.product_id}`} className="flex gap-2 items-end">
+                                                            <div className="flex-1">
+                                                                <Popover open={testProductComboboxOpen[index]} onOpenChange={(open) => {
+                                                                    const newState = [...testProductComboboxOpen];
+                                                                    newState[index] = open;
+                                                                    setTestProductComboboxOpen(newState);
+                                                                }}>
+                                                                    <PopoverTrigger asChild>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            role="combobox"
+                                                                            className="w-full justify-between font-normal"
+                                                                            onClick={() => {
+                                                                                loadProducts();
+                                                                                const newState = [...testProductComboboxOpen];
+                                                                                newState[index] = true;
+                                                                                setTestProductComboboxOpen(newState);
+                                                                            }}
+                                                                        >
+                                                                            {item.product_name || "Seleccionar producto..."}
+                                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                                        </Button>
+                                                                    </PopoverTrigger>
+                                                                    <PopoverContent className="w-[350px] p-0" align="start">
+                                                                        <Command>
+                                                                            <CommandInput placeholder="Buscar producto..." />
+                                                                            <CommandList>
+                                                                                {productsLoading ? (
+                                                                                    <CommandEmpty>Cargando productos...</CommandEmpty>
+                                                                                ) : availableProducts.length === 0 ? (
+                                                                                    <CommandEmpty>No hay productos disponibles</CommandEmpty>
+                                                                                ) : (
+                                                                                    availableProducts.map((product) => (
+                                                                                        <CommandItem
+                                                                                            key={product.id}
+                                                                                            value={product.name}
+                                                                                            onSelect={() => handleTestProductSelect(index, product)}
+                                                                                        >
+                                                                                            <Check
+                                                                                                className={`mr-2 h-4 w-4 ${
+                                                                                                    item.product_id === product.id ? "opacity-100" : "opacity-0"
+                                                                                                }`}
+                                                                                            />
+                                                                                            <div className="flex flex-col">
+                                                                                                <span>{product.name}</span>
+                                                                                                <span className="text-xs text-muted-foreground">
+                                                                                                    Stock: {product.stock} | Precio: ${product.salePrice.toLocaleString()}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        </CommandItem>
+                                                                                    ))
+                                                                                )}
+                                                                            </CommandList>
+                                                                        </Command>
+                                                                    </PopoverContent>
+                                                                </Popover>
+                                                            </div>
+                                                            <div className="flex-1 space-y-1">
+                                                                <label className="text-xs font-medium text-muted-foreground">Notas</label>
+                                                                <Input 
+                                                                    placeholder="Notas..."
+                                                                    value={item.notes}
+                                                                    onChange={(e) => updateTestItem(index, 'notes', e.target.value)}
+                                                                />
+                                                            </div>
+                                                            {testItems.length > 1 && (
+                                                                <Button 
+                                                                    size="icon" 
+                                                                    variant="ghost" 
+                                                                    onClick={() => removeTestItem(index)}
+                                                                    type="button"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                
+                                                <Button 
+                                                    onClick={handleAddTest} 
+                                                    disabled={isAddingTest || testItems.every(item => !item.product_id)}
+                                                    className="w-full"
+                                                >
+                                                    {isAddingTest ? 'Guardando...' : 'Guardar Test'}
+                                                </Button>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                </CardHeader>
+                                <CardContent>
+                                    {client.tests && client.tests.length > 0 ? (
+                                        <div className="relative">
+                                            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-orange-200" />
+                                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-4">
+                                                {[...client.tests]
+                                                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                                    .map((test: ClientTest) => (
+                                                        <div key={test.id} className="relative pl-10">
+                                                            <div className="absolute left-2 top-2 h-4 w-4 rounded-full bg-orange-500 border-2 border-white" />
+                                                            <div className="bg-orange-50 rounded-lg p-4 border border-orange-100 space-y-2">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <TestTube className="h-4 w-4 text-orange-600" />
+                                                                        <span className="font-medium">{test.product_name}</span>
+                                                                    </div>
+                                                                    <Badge variant={getStatusBadgeVariant(test.status)}>
+                                                                        {getStatusLabel(test.status)}
+                                                                    </Badge>
+                                                                </div>
+                                                                <div className="flex items-center justify-between text-sm">
+                                                                    <span className="text-muted-foreground">Resultado:</span>
+                                                                    <Badge variant={getStatusBadgeVariant(test.result || 'pending')}>
+                                                                        {getStatusLabel(test.result || 'pending')}
+                                                                    </Badge>
+                                                                </div>
+                                                                {test.notes && (
+                                                                    <p className="text-sm text-gray-600 bg-white/50 rounded p-2">{test.notes}</p>
+                                                                )}
+                                                                <div className="flex items-center gap-2 pt-2 border-t border-orange-200 text-sm text-muted-foreground">
+                                                                    <Calendar className="h-3 w-3" />
+                                                                    <span>{formatDate(test.created_at)}</span>
+                                                                    <span className="text-orange-600 font-medium">• {getRelativeTime(test.created_at)}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center p-8 text-muted-foreground">
+                                            No hay testeos registrados aún.
                                         </div>
                                     )}
                                 </CardContent>
