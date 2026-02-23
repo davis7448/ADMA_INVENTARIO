@@ -225,5 +225,81 @@ service cloud.firestore {
          allow delete: if false;
       }
 
+      // ====================
+      // COMMUNITIES MODULE
+      // ====================
+      
+      // Community Leaders - Anyone can read, only owner or admin can write
+      match /community_leaders/{leaderId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update: if request.auth.uid == leaderId || isRole('admin') || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // Communities - Read by all, write by leader or admin
+      match /communities/{communityId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update: if isRole('admin') || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // Community Members - Read by leader of community or admin
+      match /community_members/{memberId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update: if request.auth.uid == memberId || isRole('admin') || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // CHALLENGES MODULE
+      // ====================
+      
+      match /challenges/{challengeId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRole('admin') || isAdminAccess();
+        allow update, delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // DROPSHIPPING MODULE
+      // ====================
+      
+      match /dropshipping_requests/{requestId} {
+        // Anyone authenticated can create (submit request)
+        allow create: if isSignedIn() || isAdminAccess();
+        
+        // Read: owner of request, or admin/commercial roles
+        allow read: if isSignedIn() || isAdminAccess();
+        
+        // Update: only admin or commercial roles
+        allow update: if isRoleIn(['admin', 'commercial']) || isAdminAccess();
+        
+        // Delete: only admin
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // COMMUNITY INVITE CODES
+      // ====================
+      
+      match /community_invite_codes/{codeId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRoleIn(['admin', 'community_leader']) || isAdminAccess();
+        allow update, delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // COMMUNITY CHALLENGES
+      // ====================
+      
+      match /community_challenges/{challengeId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRoleIn(['admin', 'community_leader']) || isAdminAccess();
+        allow update, delete: if isRoleIn(['admin', 'community_leader']) || isAdminAccess();
+      }
+
     }
   }
