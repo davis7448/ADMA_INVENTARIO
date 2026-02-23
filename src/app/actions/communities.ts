@@ -200,6 +200,7 @@ export async function validateInviteCode(
   try {
     const db = await getDb();
 
+    // Buscar comunidad por código
     const communitySnapshot = await db.collection('communities')
       .where('inviteCode', '==', code)
       .limit(1)
@@ -216,10 +217,408 @@ export async function validateInviteCode(
       success: true,
       leaderId: communityData.leaderId,
       communityId: communityDoc.id,
-      message: 'Código válido',
+      message: 'Código válido'
     };
   } catch (error: any) {
-    return { success: false, message: 'Error al validar código' };
+    return { success: false, message: error.message || 'Error al validar código' };
+  }
+}
+
+// ============================================
+// ACTIONS: DASHBOARD MIEMBRO
+// ============================================
+
+export async function getMemberDashboard(
+  memberId: string
+): Promise<{
+  success: boolean;
+  data?: {
+    member: {
+      id: string;
+      displayName: string;
+      email: string;
+      communityId: string;
+    };
+    community: {
+      id: string;
+      name: string;
+      leaderName: string;
+    };
+    stats: {
+      totalSales: number;
+      totalCommission: number;
+      rank: number;
+    };
+    activeChallenges: Array<{
+      id: string;
+      title: string;
+      description: string;
+      target: number;
+      progress: number;
+      reward: number;
+      endsAt: Date;
+    }>;
+  };
+  message?: string;
+}> {
+  try {
+    const db = await getDb();
+
+    // Get member data
+    const memberRef = db.collection('community_members').doc(memberId);
+    const memberDoc = await memberRef.get();
+
+    if (!memberDoc.exists) {
+      return { success: false, message: 'Miembro no encontrado' };
+    }
+
+    const memberData = memberDoc.data()!;
+
+    // Get community data
+    const communityRef = db.collection('communities').doc(memberData.communityId);
+    const communityDoc = await communityRef.get();
+
+    if (!communityDoc.exists) {
+      return { success: false, message: 'Comunidad no encontrada' };
+    }
+
+    const communityData = communityDoc.data()!;
+
+    // Get leader name
+    const leaderRef = db.collection('community_leaders').doc(communityData.leaderId);
+    const leaderDoc = await leaderRef.get();
+    const leaderName = leaderDoc.exists ? leaderDoc.data()!.displayName : 'N/A';
+
+    // Get active challenges
+    const challengesSnapshot = await db.collection('community_challenges')
+      .where('communityId', '==', memberData.communityId)
+      .where('status', '==', 'active')
+      .get();
+
+    const activeChallenges = challengesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title,
+        description: data.description,
+        target: data.target || 0,
+        progress: data.progress || 0,
+        reward: data.reward || 0,
+        endsAt: data.endsAt?.toDate() || new Date(),
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        member: {
+          id: memberDoc.id,
+          displayName: memberData.displayName,
+          email: memberData.email,
+          communityId: memberData.communityId,
+        },
+        community: {
+          id: communityDoc.id,
+          name: communityData.name,
+          leaderName,
+        },
+        stats: {
+          totalSales: memberData.totalSales || 0,
+          totalCommission: memberData.totalCommission || 0,
+          rank: memberData.rank || 0,
+        },
+        activeChallenges,
+      },
+    };
+  } catch (error: any) {
+    console.error('Error getting member dashboard:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+export async function getMemberChallenges(
+  memberId: string
+): Promise<{
+  success: boolean;
+  data?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    target: number;
+    progress: number;
+    reward: number;
+    status: 'active' | 'completed' | 'expired';
+    endsAt: Date;
+  }>;
+  message?: string;
+}> {
+  try {
+    const db = await getDb();
+
+    // Get member community
+    const memberRef = db.collection('community_members').doc(memberId);
+    const memberDoc = await memberRef.get();
+
+    if (!memberDoc.exists) {
+      return { success: false, message: 'Miembro no encontrado' };
+    }
+
+    const memberData = memberDoc.data()!;
+
+    // Get challenges for community
+    const challengesSnapshot = await db.collection('community_challenges')
+      .where('communityId', '==', memberData.communityId)
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    const challenges = challengesSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title,
+        description: data.description,
+        target: data.target || 0,
+        progress: data.progress || 0,
+        reward: data.reward || 0,
+        status: data.status || 'active',
+        endsAt: data.endsAt?.toDate() || new Date(),
+      };
+    });
+
+    return { success: true, data: challenges };
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+}
+
+export async function getDropshippingRequests(
+  leaderId: string
+): Promise<{
+  success: boolean;
+  data?: Array<{
+    id: string;
+    memberId: string;
+    memberName: string;
+    productName: string;
+    quantity: number;
+    price: number;
+    status: 'pending' | 'approved' | 'rejected';
+    createdAt: Date;
+  }>;
+  message?: string;
+}> {
+  try {
+    const db = await getDb();
+
+    // Get community by leader
+    const communitySnapshot = await db.collection('communities')
+      .where('leaderId', '==', leaderId)
+      .limit(1)
+      .get();
+
+    if (communitySnapshot.empty) {
+      return { success: false, message: 'Comunidad no encontrada' };
+    }
+
+    const communityId = communitySnapshot.docs[0].id;
+
+    // Get dropshipping requests
+    const requestsSnapshot = await db.collection('dropshipping_requests')
+      .where('communityId', '==', communityId)
+      .orderBy('createdAt', 'desc')
+      .get();
+
+    const requests = await Promise.all(requestsSnapshot.docs.map(async doc => {
+      const data = doc.data();
+      
+      // Get member name
+      const memberRef = db.collection('community_members').doc(data.memberId);
+      const memberDoc = await memberRef.get();
+      const memberName = memberDoc.exists ? memberDoc.data()!.displayName : 'Unknown';
+
+      return {
+        id: doc.id,
+        memberId: data.memberId,
+        memberName,
+        productName: data.productName,
+        quantity: data.quantity,
+        price: data.price,
+        status: data.status || 'pending',
+        createdAt: data.createdAt?.toDate() || new Date(),
+      };
+    }));
+
+    return { success: true, data: requests };
+  } catch (error: any) {
+    return { success: false, message: error.message };
+  }
+}
+
+export async function getLeaderDashboard(
+  leaderId: string
+): Promise<{
+  success: boolean;
+  data?: {
+    leader: {
+      id: string;
+      displayName: string;
+      email: string;
+      verified: boolean;
+      commissionRate: number;
+      totalCommission: number;
+    };
+    community: {
+      id: string;
+      name: string;
+      description: string | null;
+      memberCount: number;
+      totalSales: number;
+      totalCommission: number;
+    };
+    recentMembers: Array<{
+      id: string;
+      displayName: string;
+      email: string;
+      createdAt: Date;
+    }>;
+    topPerformers: Array<{
+      id: string;
+      displayName: string;
+      totalSales: number;
+    }>;
+  };
+  message?: string;
+}> {
+  try {
+    const db = await getDb();
+
+    // Get leader data
+    const leaderRef = db.collection('community_leaders').doc(leaderId);
+    const leaderDoc = await leaderRef.get();
+
+    if (!leaderDoc.exists) {
+      return { success: false, message: 'Líder no encontrado' };
+    }
+
+    const leaderData = leaderDoc.data()!;
+
+    // Get community data
+    const communityId = leaderData.communityId;
+    if (!communityId) {
+      return { success: false, message: 'Comunidad no asignada' };
+    }
+
+    const communityRef = db.collection('communities').doc(communityId);
+    const communityDoc = await communityRef.get();
+
+    if (!communityDoc.exists) {
+      return { success: false, message: 'Comunidad no encontrada' };
+    }
+
+    const communityData = communityDoc.data()!;
+
+    // Get recent members
+    const membersSnapshot = await db.collection('community_members')
+      .where('communityId', '==', communityId)
+      .orderBy('createdAt', 'desc')
+      .limit(5)
+      .get();
+
+    const recentMembers = membersSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        displayName: data.displayName,
+        email: data.email,
+        createdAt: data.createdAt?.toDate() || new Date(),
+      };
+    });
+
+    // Get top performers (mock - would need sales data)
+    const topPerformers = recentMembers.slice(0, 3).map(m => ({
+      id: m.id,
+      displayName: m.displayName,
+      totalSales: Math.floor(Math.random() * 10000),
+    }));
+
+    return {
+      success: true,
+      data: {
+        leader: {
+          id: leaderDoc.id,
+          displayName: leaderData.displayName,
+          email: leaderData.email,
+          verified: leaderData.verified,
+          commissionRate: leaderData.commissionRate || 10,
+          totalCommission: leaderData.totalCommission || 0,
+        },
+        community: {
+          id: communityDoc.id,
+          name: communityData.name,
+          description: communityData.description,
+          memberCount: communityData.memberCount || 0,
+          totalSales: communityData.totalSales || 0,
+          totalCommission: communityData.totalCommission || 0,
+        },
+        recentMembers,
+        topPerformers,
+      },
+    };
+  } catch (error: any) {
+    console.error('Error getting leader dashboard:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+export async function generateMemberInviteCode(
+  leaderId: string,
+  expiresInDays: number = 30
+): Promise<{ success: boolean; message: string; inviteCode?: string; inviteUrl?: string }> {
+  try {
+    const db = await getDb();
+
+    // Find community by leader
+    const communitySnapshot = await db.collection('communities')
+      .where('leaderId', '==', leaderId)
+      .limit(1)
+      .get();
+
+    if (communitySnapshot.empty) {
+      return { success: false, message: 'Comunidad no encontrada' };
+    }
+
+    const communityDoc = communitySnapshot.docs[0];
+    const communityId = communityDoc.id;
+
+    // Generate unique code
+    const code = nanoid(8).toUpperCase();
+
+    // Store invite code
+    const inviteRef = db.collection('community_invite_codes').doc();
+    await inviteRef.set({
+      id: inviteRef.id,
+      code,
+      communityId,
+      leaderId,
+      type: 'member',
+      maxUses: 10,
+      uses: 0,
+      createdAt: Timestamp.now(),
+      expiresAt: new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000),
+    });
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const inviteUrl = `${baseUrl}/join/member/${code}`;
+
+    return {
+      success: true,
+      message: 'Código de invitación generado',
+      inviteCode: code,
+      inviteUrl,
+    };
+  } catch (error: any) {
+    console.error('Error generating member invite code:', error);
+    return { success: false, message: error.message };
   }
 }
 

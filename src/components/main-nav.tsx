@@ -75,6 +75,16 @@ const navItems: NavItem[] = [
     href: '/commercial/dashboard',
     label: 'Módulo Comercial',
     roles: ['admin', 'commercial', 'commercial_director', 'logistics', 'plataformas']
+  },
+  {
+    label: 'Comunidades',
+    roles: ['admin', 'community_leader', 'community_member'],
+    children: [
+      { href: '/admin/communities', label: 'Admin Comunidades', roles: ['admin'] },
+      { href: '/leader/dashboard', label: 'Dashboard Líder', roles: ['community_leader'] },
+      { href: '/member/retos', label: 'Mis Retos', roles: ['community_member'] },
+      { href: '/member/dropshipping', label: 'Dropshipping', roles: ['community_member'] },
+    ]
   }
 ];
 

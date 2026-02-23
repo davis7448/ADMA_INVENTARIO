@@ -281,5 +281,25 @@ service cloud.firestore {
         allow delete: if isRole('admin') || isAdminAccess();
       }
 
+      // ====================
+      // COMMUNITY INVITE CODES
+      // ====================
+      
+      match /community_invite_codes/{codeId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRoleIn(['admin', 'community_leader']) || isAdminAccess();
+        allow update, delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // COMMUNITY CHALLENGES
+      // ====================
+      
+      match /community_challenges/{challengeId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRoleIn(['admin', 'community_leader']) || isAdminAccess();
+        allow update, delete: if isRoleIn(['admin', 'community_leader']) || isAdminAccess();
+      }
+
     }
   }

@@ -2,16 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
 import { getApp } from '@/lib/firebase-admin';
 
+// Rutas públicas que no requieren auth
+const publicRoutes = [
+  '/join',
+  '/join/member',
+  '/login',
+];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Skip middleware for API routes, static files, and login page
+  // Skip middleware for API routes, static files
   if (
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
-    pathname.includes('.') ||
-    pathname === '/login'
+    pathname.includes('.')
   ) {
+    return NextResponse.next();
+  }
+
+  // Check if it's a public route
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  if (isPublicRoute) {
     return NextResponse.next();
   }
 

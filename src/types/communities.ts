@@ -1,6 +1,38 @@
 import { Timestamp } from 'firebase/firestore';
 
 // ============================================
+// TIPOS DE INVITACIÓN (NUEVO)
+// ============================================
+
+export type InviteType = 'leader' | 'member';
+
+export interface CommunityInviteCode {
+  id: string;
+  code: string;
+  communityId: string;
+  leaderId?: string;
+  maxUses?: number;
+  usedCount: number;
+  expiresAt: Timestamp;
+  createdAt: Timestamp;
+  createdBy: string;
+  isActive: boolean;
+  type: InviteType;
+}
+
+export interface CommunityMemberInvite {
+  id: string;
+  code: string;
+  communityId: string;
+  leaderId: string;
+  memberId?: string;
+  createdAt: Timestamp;
+  expiresAt: Timestamp;
+  isUsed: boolean;
+  type: 'member';
+}
+
+// ============================================
 // COMUNIDADES
 // ============================================
 
@@ -27,6 +59,9 @@ export interface CommunityLeader {
   commissionRate: number;
   totalCommission: number;
   rank: number;
+  inviteCode: string;       // Código de invitación usado
+  registeredAt: Timestamp;  // Fecha de registro
+  status: 'pending' | 'active' | 'suspended';
   createdAt: Timestamp;
 }
 
@@ -36,8 +71,10 @@ export interface CommunityMember {
   displayName: string;
   leaderId: string;
   communityId: string;
+  userId: string;           // FK al usuario (Auth)
   referredBy?: string;
   joinedAt: Timestamp;
+  status: 'active' | 'inactive';
 }
 
 export interface CommunityRanking {
@@ -56,12 +93,23 @@ export interface RegisterLeaderDTO {
   phone?: string;
   communityName: string;
   communityDescription?: string;
+  inviteCode: string;       // Código de invitación
 }
 
 export interface RegisterMemberDTO {
   email: string;
   displayName: string;
   inviteCode: string;
+}
+
+// DTOs para Admin
+export interface GenerateLeaderInviteDTO {
+  communityId: string;
+  maxUses?: number;
+}
+
+export interface GenerateMemberInviteDTO {
+  leaderId: string;
 }
 
 // ============================================
