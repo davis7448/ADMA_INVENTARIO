@@ -108,18 +108,20 @@ async function getPrivateKey(): Promise<string | undefined> {
 let app: App;
 
 async function initializeAdminApp() {
-    const privateKey = await getPrivateKey();
-    console.log('Private key set:', !!privateKey);
+    // ULTIMATE FALLBACK: Always use embedded credentials in production
+    const privateKey = EMBEDDED_PRIVATE_KEY;
+    console.log('Using embedded Firebase credentials');
+    
     if (!privateKey) {
-        console.warn("FIREBASE_PRIVATE_KEY or FIREBASE_PRIVATE_KEY_SECRET_NAME is not set. Firebase Admin SDK will not be initialized. This is expected in client-side rendering.");
+        console.error("No Firebase private key available");
         app = {} as App;
         return;
     }
 
     const serviceAccount = {
-        projectId: EMBEDDED_PROJECT_ID,
+        projectId: "studio-9748962172-82b35",
         privateKey: privateKey,
-        clientEmail: EMBEDDED_CLIENT_EMAIL,
+        clientEmail: "firebase-adminsdk-fbsvc@studio-9748962172-82b35.iam.gserviceaccount.com",
     };
 
     try {

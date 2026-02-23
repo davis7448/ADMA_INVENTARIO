@@ -28,7 +28,7 @@ export const GenerateMemberInviteSchema = z.object({
 // ============================================
 
 async function getDb() {
-  return getFirestore();
+  return getFirestore(await getApp());
 }
 
 async function getAuthAdmin() {

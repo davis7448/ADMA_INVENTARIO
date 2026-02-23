@@ -52,7 +52,7 @@ export const RejectionSchema = z.object({
 // ============================================
 
 async function getDb() {
-  return getFirestore();
+  return getFirestore(await getApp());
 }
 
 function validateImageFile(image: File): { valid: boolean; error?: string } {

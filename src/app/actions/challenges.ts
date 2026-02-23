@@ -34,7 +34,7 @@ export const UpdateChallengeSchema = z.object({
 // ============================================
 
 async function getDb() {
-  return getFirestore();
+  return getFirestore(await getApp());
 }
 
 // ============================================
