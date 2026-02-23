@@ -13,6 +13,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "seed": "tsx src/lib/seed.ts",
+    "seed:organigrama": "tsx scripts/seed-organigrama/index.ts",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:storage": "firebase deploy --only storage",
     "deploy:cors": "gsutil cors set cors.json gs://studio-9748962172-82b35.firebasestorage.app"

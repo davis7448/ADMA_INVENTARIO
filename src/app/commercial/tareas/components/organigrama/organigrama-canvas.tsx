@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { Area, UserPosition } from '@/types/commercial';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getAllAreas, getAllUserPositions } from '@/lib/commercial-api';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, Users, Trash2 } from 'lucide-react';
+import { AssignUserModal } from './assign-user-modal';
+import { removeUserFromAreaAction } from '@/app/actions/organigrama';
+import { useToast } from '@/hooks/use-toast';
 
 interface OrganigramaCanvasProps {
   onUserClick?: (userId: string) => void;
@@ -17,6 +20,8 @@ export function OrganigramaCanvas({ onUserClick, highlightedUserId, users = [] }
   const [areas, setAreas] = useState<Area[]>([]);
   const [userPositions, setUserPositions] = useState<UserPosition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
+  const { toast } = useToast();
 
   useEffect(() => {
     loadData();
@@ -37,6 +42,27 @@ export function OrganigramaCanvas({ onUserClick, highlightedUserId, users = [] }
     }
   };
 
+  const handleRemoveUser = async (userId: string, userName: string) => {
+    if (!confirm(`¿Estás seguro de eliminar a ${userName} del área?`)) return;
+    
+    startTransition(async () => {
+      const result = await removeUserFromAreaAction(userId);
+      if (result.success) {
+        toast({
+          title: "Usuario eliminado",
+          description: `${userName} ha sido eliminado del área`,
+        });
+        loadData();
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -45,10 +71,13 @@ export function OrganigramaCanvas({ onUserClick, highlightedUserId, users = [] }
     );
   }
 
-  // Agrupar usuarios por área
+  // Agrupar usuarios por área (solo usuarios válidos)
+  const validUserIds = new Set(users.map(u => u.id));
   const usersByArea = areas.map(area => ({
     area,
-    users: userPositions.filter(up => up.areaId === area.id)
+    users: userPositions
+      .filter(up => up.areaId === area.id)
+      .filter(up => validUserIds.has(up.userId)) // Filtrar usuarios eliminados
   }));
 
   // Helper para obtener nombre de usuario
@@ -69,6 +98,15 @@ export function OrganigramaCanvas({ onUserClick, highlightedUserId, users = [] }
 
   return (
     <div className="space-y-8 p-6">
+      {/* Header with Assign Button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Users className="h-6 w-6 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Organigrama</h2>
+        </div>
+        <AssignUserModal onSuccess={loadData} />
+      </div>
+
       {usersByArea.map(({ area, users }) => (
         <div key={area.id} className="space-y-4">
           {/* Header del Área */}
@@ -124,6 +162,19 @@ export function OrganigramaCanvas({ onUserClick, highlightedUserId, users = [] }
                         Nivel {userPos.nivel}
                       </span>
                     </div>
+                    
+                    {/* Botón eliminar */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveUser(userPos.userId, getUserName(userPos.userId));
+                      }}
+                      disabled={isPending}
+                      className="mt-2 p-1 rounded-full hover:bg-red-100 text-red-500 transition-colors"
+                      title="Eliminar del área"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </Card>
               ))}

@@ -1105,8 +1105,8 @@ export const processDispatch = async (
             const orderData = orderSnap.data() as DispatchOrder;
     
             const allProductIds = new Set<string>();
-            orderData.products.forEach(p => allProductIds.add(p.productId));
-            newExceptions.forEach(ex => ex.products.forEach(p => allProductIds.add(p.productId)));
+            orderData.products.forEach((p: DispatchOrderProduct) => allProductIds.add(p.productId));
+            newExceptions.forEach(ex => ex.products.forEach((p: DispatchExceptionProduct) => allProductIds.add(p.productId)));
     
             const productRefs = Array.from(allProductIds).map(id => doc(db, 'products', id));
             const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
@@ -1759,9 +1759,16 @@ export const getReservationsByProductId = async (productId: string): Promise<Res
     });
 };
 
-export const createReservation = async (reservationData: Omit<Reservation, 'id' | 'reservationId' | 'date'>) => {
+export interface CreateReservationResult {
+    docId: string;       // Firestore document ID
+    reservationId: string; // Human-readable ID (RES-123456)
+}
+
+export const createReservation = async (reservationData: Omit<Reservation, 'id' | 'reservationId' | 'date'>): Promise<CreateReservationResult> => {
     const productRef = doc(db, 'products', reservationData.productId);
     const reservationsCol = collection(db, 'reservations');
+    let createdReservationId = '';
+    let createdReservationDocId = '';
     
     await runTransaction(db, async (transaction) => {
         const productSnap = await transaction.get(productRef);
@@ -1793,6 +1800,8 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
 
         const newReservationRef = doc(reservationsCol);
         const reservationId = `RES-${Date.now()}`;
+        createdReservationDocId = newReservationRef.id; // Firestore document ID
+        createdReservationId = reservationId; // Human-readable ID
         
         const dataToSet: Record<string, any> = {
             ...reservationData,
@@ -1807,6 +1816,11 @@ export const createReservation = async (reservationData: Omit<Reservation, 'id' 
         
         transaction.set(newReservationRef, dataToSet);
     });
+    
+    return {
+        docId: createdReservationDocId,
+        reservationId: createdReservationId
+    };
 };
 
 export const deleteReservation = async (reservationId: string) => {
@@ -2050,7 +2064,7 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
                         reservedStock: totalReserved,
                         availableForSale,
                         dailyAverageSales,
-                        message,
+                        alertMessage: message,
                         warehouseId: product.warehouseId,
                     });
                 }
@@ -2094,7 +2108,7 @@ export const generateAndCacheStockAlerts = async (warehouseId?: string): Promise
                             reservedStock: variantReserved,
                             availableForSale,
                             dailyAverageSales,
-                            message,
+                            alertMessage: message,
                             warehouseId: product.warehouseId,
                         });
                     }
@@ -2433,7 +2447,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     const salesByProduct: Record<string, { total: number; variants: Record<string, number> }> = {};
     let totalItemsSold = 0;
     ordersInPeriod.forEach(order => {
-        order.products.forEach(p => {
+        order.products.forEach((p: DispatchOrderProduct) => {
             const product = productInfoMap[p.productId];
             if (!product) return;
             if (!salesByProduct[p.productId]) {
@@ -2454,7 +2468,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     ordersInPeriod.forEach(order => {
         if (order.cancelledExceptions) {
             order.cancelledExceptions.forEach(ex => {
-                ex.products.forEach(p => {
+                ex.products.forEach((p: DispatchExceptionProduct) => {
                     if (salesByProduct[p.productId]) {
                         salesByProduct[p.productId].total -= p.quantity;
                         if (p.variantId && salesByProduct[p.productId].variants[p.variantId] !== undefined) {
@@ -2496,7 +2510,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
     })).sort((a, b) => b.value - a.value);
 
     const platformCarrierMap: { [platformName: string]: { [carrierName: string]: number } } = {};
-    allPlatforms.forEach(p => {
+    allPlatforms.forEach((p: Platform) => {
         platformCarrierMap[p.name] = {};
     });
 
@@ -2551,7 +2565,7 @@ export async function getDashboardData(filters: { dateRange?: { from?: Date; to?
                 quantity: p.quantity - (cancelledMap.get(p.productId) || 0)
             })).filter(p => p.quantity > 0);
         }
-        netProducts.forEach(p => {
+        netProducts.forEach((p: { productId: string; name: string; quantity: number }) => {
             if (!dailyProductDispatch[day][p.productId]) {
                 dailyProductDispatch[day][p.productId] = { name: p.name, quantity: 0 };
             }
