@@ -46,10 +46,13 @@ export function OrganigramaCanvas({ onUserClick, highlightedUserId, users = [] }
     );
   }
 
-  // Agrupar usuarios por área
+  // Agrupar usuarios por área (solo usuarios válidos)
+  const validUserIds = new Set(users.map(u => u.id));
   const usersByArea = areas.map(area => ({
     area,
-    users: userPositions.filter(up => up.areaId === area.id)
+    users: userPositions
+      .filter(up => up.areaId === area.id)
+      .filter(up => validUserIds.has(up.userId)) // Filtrar usuarios eliminados
   }));
 
   // Helper para obtener nombre de usuario

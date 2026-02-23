@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import { getUnassignedUsers, getAllAreas, setUserPosition, getAllUserPositions, type UserBasic } from '@/lib/commercial-api';
+import { getUnassignedUsers, getAllAreas, setUserPosition, getAllUserPositions, deleteUserPosition, type UserBasic } from '@/lib/commercial-api';
 
 // Schema para asignar usuario a área
 const AssignUserSchema = z.object({
@@ -103,6 +103,30 @@ export async function assignUserToAreaAction(
     return {
       message: 'Error al asignar el usuario. Intenta de nuevo.',
       success: false,
+    };
+  }
+}
+
+/**
+ * Elimina la posición de un usuario del organigrama
+ * Se debe llamar cuando se elimina un usuario
+ */
+export async function removeUserFromAreaAction(userId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    await deleteUserPosition(userId);
+    
+    revalidatePath('/commercial/tareas');
+    revalidatePath('/commercial/tareas?tab=organigrama');
+    
+    return {
+      success: true,
+      message: 'Usuario eliminado del organigrama correctamente',
+    };
+  } catch (error) {
+    console.error("Error removing user from area:", error);
+    return {
+      success: false,
+      message: 'Error al eliminar usuario del organigrama.',
     };
   }
 }

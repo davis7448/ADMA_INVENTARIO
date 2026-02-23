@@ -1164,6 +1164,15 @@ export const getUserPosition = async (userId: string): Promise<UserPosition | nu
     }
 };
 
+export const deleteUserPosition = async (userId: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, USER_POSITIONS_COLLECTION, userId));
+    } catch (error) {
+        console.error("Error deleting user position:", error);
+        throw error;
+    }
+};
+
 export const getAllUserPositions = async (): Promise<UserPosition[]> => {
     try {
         const q = query(collection(db, USER_POSITIONS_COLLECTION));
