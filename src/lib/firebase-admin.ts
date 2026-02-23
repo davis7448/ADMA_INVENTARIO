@@ -109,7 +109,7 @@ let app: App;
 
 async function initializeAdminApp() {
     // ULTIMATE FALLBACK: Always use embedded credentials in production
-    const privateKey = EMBEDDED_PRIVATE_KEY;
+    const privateKey = EMBEDDED_PRIVATE_KEY.replace(/\\n/g, '\n');
     console.log('Using embedded Firebase credentials');
     
     if (!privateKey) {

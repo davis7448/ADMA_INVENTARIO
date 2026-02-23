@@ -24,3 +24,13 @@ env:
      availability:
        - BUILD
        - RUNTIME
+
+   # Fallback: Direct Firebase credentials for runtime
+   - variable: FIREBASE_PROJECT_ID
+     value: studio-9748962172-82b35
+     availability:
+       - RUNTIME
+   - variable: FIREBASE_CLIENT_EMAIL
+     value: firebase-adminsdk-fbsvc@studio-9748962172-82b35.iam.gserviceaccount.com
+     availability:
+       - RUNTIME
