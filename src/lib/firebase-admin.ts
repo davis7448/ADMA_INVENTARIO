@@ -54,14 +54,6 @@ async function getPrivateKey(): Promise<string | undefined> {
                     }
                 }
             }
-            // Try to require the file directly
-            try {
-                const keyData = require('../studio-9748962172-82b35-firebase-adminsdk-fbsvc-0ab934a6b7.json');
-                if (keyData.private_key) {
-                    console.log('Using required service account file');
-                    return keyData.private_key.replace(/\\n/g, '\n');
-                }
-            } catch (e) { /* ignore */ }
         } catch (localError) {
             console.warn('Could not read local service account file:', localError instanceof Error ? localError.message : String(localError));
         }
