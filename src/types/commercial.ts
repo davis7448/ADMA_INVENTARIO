@@ -217,6 +217,14 @@ export interface Area {
   updatedAt: Date | any;
 }
 
+// Usuario básico (sin datos sensibles)
+export interface UserBasic {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+}
+
 // Posición de usuario en área (asignado por admin)
 export interface UserPosition {
   id: string;

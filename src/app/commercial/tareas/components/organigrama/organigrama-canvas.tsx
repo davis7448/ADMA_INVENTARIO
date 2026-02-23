@@ -5,7 +5,8 @@ import { Area, UserPosition } from '@/types/commercial';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getAllAreas, getAllUserPositions } from '@/lib/commercial-api';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, Users } from 'lucide-react';
+import { AssignUserModal } from './assign-user-modal';
 
 interface OrganigramaCanvasProps {
   onUserClick?: (userId: string) => void;
@@ -69,6 +70,15 @@ export function OrganigramaCanvas({ onUserClick, highlightedUserId, users = [] }
 
   return (
     <div className="space-y-8 p-6">
+      {/* Header with Assign Button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Users className="h-6 w-6 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Organigrama</h2>
+        </div>
+        <AssignUserModal onSuccess={loadData} />
+      </div>
+
       {usersByArea.map(({ area, users }) => (
         <div key={area.id} className="space-y-4">
           {/* Header del Área */}

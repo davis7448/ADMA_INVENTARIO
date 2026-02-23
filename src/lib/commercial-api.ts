@@ -1071,6 +1071,7 @@ import type { Area, UserPosition, Task, TaskNotification, TaskRejectionTracker, 
 const AREAS_COLLECTION = 'areas';
 const USER_POSITIONS_COLLECTION = 'user_positions';
 const TASKS_COLLECTION = 'tasks';
+const USERS_COLLECTION = 'users';
 const TASK_NOTIFICATIONS_COLLECTION = 'task_notifications';
 const TASK_REJECTION_TRACKER_COLLECTION = 'task_rejection_tracker';
 
@@ -1184,6 +1185,52 @@ export const getUsersByArea = async (areaId: string): Promise<UserPosition[]> =>
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as UserPosition);
     } catch (error) {
         console.error("Error getting users by area:", error);
+        return [];
+    }
+};
+
+// ============================================
+// UNASSIGNED USERS
+// ============================================
+
+export interface UserBasic {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string;
+}
+
+export const getAllUsers = async (): Promise<UserBasic[]> => {
+    try {
+        const q = query(collection(db, USERS_COLLECTION), orderBy('name'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        })) as UserBasic[];
+    } catch (error) {
+        console.error("Error getting all users:", error);
+        return [];
+    }
+};
+
+export const getUnassignedUsers = async (): Promise<UserBasic[]> => {
+    try {
+        // Get all users
+        const usersSnapshot = await getDocs(query(collection(db, USERS_COLLECTION), orderBy('name')));
+        const allUsers = usersSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        })) as UserBasic[];
+
+        // Get all user positions
+        const positionsSnapshot = await getDocs(query(collection(db, USER_POSITIONS_COLLECTION)));
+        const assignedUserIds = new Set(positionsSnapshot.docs.map(doc => doc.id));
+
+        // Filter users without position
+        return allUsers.filter(user => !assignedUserIds.has(user.id));
+    } catch (error) {
+        console.error("Error getting unassigned users:", error);
         return [];
     }
 };
