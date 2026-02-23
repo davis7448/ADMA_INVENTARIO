@@ -30,6 +30,29 @@ async function getPrivateKey(): Promise<string | undefined> {
             }
         }
 
+        // Fallback: Try to read from local service account file
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            // Try multiple possible locations
+            const possiblePaths = [
+                path.join(process.cwd(), 'studio-9748962172-82b35-firebase-adminsdk-fbsvc-0ab934a6b7.json'),
+                path.join(__dirname, '..', 'studio-9748962172-82b35-firebase-adminsdk-fbsvc-0ab934a6b7.json'),
+                '/workspace/studio-9748962172-82b35-firebase-adminsdk-fbsvc-0ab934a6b7.json',
+            ];
+            for (const keyFile of possiblePaths) {
+                if (fs.existsSync(keyFile)) {
+                    console.log('Using local service account file:', keyFile);
+                    const keyData = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+                    if (keyData.private_key) {
+                        return keyData.private_key.replace(/\\n/g, '\n');
+                    }
+                }
+            }
+        } catch (localError) {
+            console.warn('Could not read local service account file:', localError instanceof Error ? localError.message : String(localError));
+        }
+
         // Fallback: Try to access secret directly from Secret Manager
         try {
             const client = new SecretManagerServiceClient();
