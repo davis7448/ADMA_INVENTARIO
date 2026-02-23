@@ -28,7 +28,14 @@ export const GenerateMemberInviteSchema = z.object({
 // ============================================
 
 async function getDb() {
-  return getFirestore(await getApp());
+  try {
+    const app = await getApp();
+    console.log('getApp returned:', app ? 'app instance' : 'undefined');
+    return getFirestore(app);
+  } catch (error) {
+    console.error('Error getting Firestore:', error);
+    throw error;
+  }
 }
 
 async function getAuthAdmin() {

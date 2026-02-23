@@ -141,7 +141,12 @@ async function initializeAdminApp() {
 
 export async function getApp(): Promise<App> {
     if (!app) {
-        await initializeAdminApp();
+        try {
+            await initializeAdminApp();
+        } catch (initError) {
+            console.error('Failed to initialize Firebase Admin:', initError);
+            throw initError;
+        }
     }
     return app;
 }
