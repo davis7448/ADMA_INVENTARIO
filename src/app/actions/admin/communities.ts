@@ -5,37 +5,14 @@ import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getApp } from '@/lib/firebase-admin';
 import { nanoid } from 'nanoid';
-
-// ============================================
-// ESQUEMAS DE VALIDACIÓN
-// ============================================
-
-// Generar código de invitación para líder
-export const GenerateLeaderInviteSchema = z.object({
-  communityId: z.string().min(1, 'Community ID requerido'),
-  maxUses: z.number().int().positive().optional(),
-  expiresInDays: z.number().int().positive().default(30),
-});
-
-// Generar código de invitación para miembro
-export const GenerateMemberInviteSchema = z.object({
-  leaderId: z.string().min(1, 'Leader ID requerido'),
-  expiresInDays: z.number().int().positive().default(30),
-});
+import { GenerateLeaderInviteSchema, GenerateMemberInviteSchema } from '@/lib/schemas/communities';
 
 // ============================================
 // HELPERS
 // ============================================
 
 async function getDb() {
-  try {
-    const app = await getApp();
-    console.log('getApp returned:', app ? 'app instance' : 'undefined');
-    return getFirestore(app);
-  } catch (error) {
-    console.error('Error getting Firestore:', error);
-    throw error;
-  }
+  return getFirestore(await getApp());
 }
 
 async function getAuthAdmin() {
