@@ -9,9 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { getModificaciones, createModificacion, updateModificacion, deleteModificacion, getComercialUsers, getPlataformas, getAllModificacionesForExport, type Modificacion } from '@/app/actions/modificaciones';
+import { getModificaciones, createModificacion, updateModificacion, deleteModificacion, getComercialUsers, getPlataformas, getAllModificacionesForExport, type Modificacion, type TipoModificacion } from '@/app/actions/modificaciones';
+import { getProducts } from '@/lib/api';
 import { Textarea } from '@/components/ui/textarea';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const PAISES = [
@@ -26,6 +27,18 @@ const PAISES = [
     'República Dominicana',
     'Uruguay'
 ].sort();
+
+const TIPOS_MODIFICACION: { value: TipoModificacion; label: string }[] = [
+    { value: 'RESERVA_INVENTARIO', label: 'Reserva de Inventario' },
+    { value: 'AJUSTE_STOCK', label: 'Ajuste de Stock' },
+    { value: 'BAJA_PLATAFORMA', label: 'Baja de Plataforma' },
+];
+
+interface ProductOption {
+    id: string;
+    name: string;
+    sku: string | undefined;
+}
 
 export function ModificacionesContent() {
     const { user } = useAuth();
@@ -43,6 +56,15 @@ export function ModificacionesContent() {
     const [comercialUsers, setComercialUsers] = useState<{ name: string; code: string }[]>([]);
     const [plataformas, setPlataformas] = useState<string[]>([]);
     const [formError, setFormError] = useState<string>('');
+    
+    // Estados para el selector de productos
+    const [products, setProducts] = useState<ProductOption[]>([]);
+    const [productSearch, setProductSearch] = useState('');
+    const [showProductDropdown, setShowProductDropdown] = useState(false);
+    
+    // Estado para el tipo de modificación
+    const [tipoModificacion, setTipoModificacion] = useState<TipoModificacion>('AJUSTE_STOCK');
+
     const [formData, setFormData] = useState<Partial<Modificacion>>({
         FECHA: Date.now(),
         ID: null,
@@ -62,6 +84,12 @@ export function ModificacionesContent() {
         "CANTIDAD SOLICITADA": null,
         "CANTIDAD POSTERIOR": null,
         PAIS: '',
+        // Nuevos campos para reservas
+        tipoModificacion: 'AJUSTE_STOCK',
+        productId: '',
+        variantId: '',
+        platformId: '',
+        customerEmail: '',
     });
 
     const fetchData = async (start?: Date, end?: Date) => {
@@ -74,6 +102,22 @@ export function ModificacionesContent() {
             console.error('Error fetching modificaciones:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Función para cargar productos
+    const fetchProducts = async (search: string = '') => {
+        try {
+            const result = await getProducts({ page: 1, limit: 50, fetchAll: true, filters: search ? { search } : {} });
+            const productOptions: ProductOption[] = result.products.map(p => ({
+                id: p.id,
+                name: p.name,
+                sku: p.sku,
+            }));
+            setProducts(productOptions);
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            setProducts([]);
         }
     };
 
@@ -99,6 +143,8 @@ export function ModificacionesContent() {
         };
         fetchComercialUsers();
         fetchPlataformas();
+        // Cargar productos inicialmente
+        fetchProducts();
     }, []);
 
     const handleFilter = () => {
@@ -138,6 +184,37 @@ export function ModificacionesContent() {
         });
     };
 
+    // Manejar cambio de tipo de modificación
+    const handleTipoModificacionChange = (value: TipoModificacion) => {
+        setTipoModificacion(value);
+        setFormData(prev => ({
+            ...prev,
+            tipoModificacion: value,
+        }));
+    };
+
+    // Manejar búsqueda de productos
+    const handleProductSearch = (value: string) => {
+        setProductSearch(value);
+        if (value.length >= 2) {
+            fetchProducts(value);
+            setShowProductDropdown(true);
+        } else {
+            setShowProductDropdown(false);
+        }
+    };
+
+    // Seleccionar producto
+    const handleSelectProduct = (product: ProductOption) => {
+        setFormData(prev => ({
+            ...prev,
+            productId: product.id,
+            PRODUCTO: product.name,
+        }));
+        setProductSearch(product.name);
+        setShowProductDropdown(false);
+    };
+
     const handleCreate = async () => {
         setFormError('');
         
@@ -145,6 +222,30 @@ export function ModificacionesContent() {
         if (!formData.PAIS || formData.PAIS.trim() === '') {
             setFormError('El campo PAÍS es obligatorio');
             return;
+        }
+
+        // Validaciones específicas para reservas de inventario
+        if (tipoModificacion === 'RESERVA_INVENTARIO') {
+            if (!formData.productId) {
+                setFormError('Debe seleccionar un producto para crear una reserva de inventario');
+                return;
+            }
+            if (!formData.platformId) {
+                setFormError('Debe seleccionar una plataforma para crear una reserva de inventario');
+                return;
+            }
+            if (!formData.customerEmail && !formData['CORREO_CODIGO']) {
+                setFormError('Debe ingresar el correo del cliente para crear una reserva de inventario');
+                return;
+            }
+            if (!formData["CANTIDAD SOLICITADA"] || formData["CANTIDAD SOLICITADA"] <= 0) {
+                setFormError('Debe ingresar una cantidad válida para crear una reserva de inventario');
+                return;
+            }
+            if (!formData["CODIGO COMERCIAL"]) {
+                setFormError('Debe seleccionar un comercial (vendedor) para crear una reserva de inventario');
+                return;
+            }
         }
 
         try {
@@ -159,6 +260,7 @@ export function ModificacionesContent() {
                         VARIABLE: varName,
                         "SKU ": sku,
                         "CORREO_CODIGO": email,
+                        tipoModificacion: tipoModificacion,
                     };
                     await createModificacion(record as Omit<Modificacion, 'ID CONSECUTIVO'>);
                 }
@@ -218,12 +320,22 @@ export function ModificacionesContent() {
             "CANTIDAD SOLICITADA": null,
             "CANTIDAD POSTERIOR": null,
             PAIS: '',
+            tipoModificacion: 'AJUSTE_STOCK',
+            productId: '',
+            variantId: '',
+            platformId: '',
+            customerEmail: '',
         });
+        setTipoModificacion('AJUSTE_STOCK');
+        setProductSearch('');
         setFormError('');
     };
 
     const openEditDialog = (item: Modificacion & { id: string }) => {
         setEditingItem(item);
+        const itemTipoModificacion = item.tipoModificacion || 'AJUSTE_STOCK';
+        setTipoModificacion(itemTipoModificacion);
+        
         const newFormData = {
             FECHA: item.FECHA,
             ID: item.ID,
@@ -243,11 +355,28 @@ export function ModificacionesContent() {
             "CANTIDAD SOLICITADA": item["CANTIDAD SOLICITADA"] || null,
             "CANTIDAD POSTERIOR": item["CANTIDAD POSTERIOR"] || null,
             PAIS: item.PAIS || '',
+            // Nuevos campos
+            tipoModificacion: itemTipoModificacion,
+            productId: item.productId || '',
+            variantId: item.variantId || '',
+            platformId: item.platformId || '',
+            customerEmail: item.customerEmail || '',
         };
         const previa = Number(newFormData["CANTIDAD PREVIA"] || 0);
         const solicitada = Number(newFormData["CANTIDAD SOLICITADA"] || 0);
         newFormData["CANTIDAD POSTERIOR"] = previa + solicitada;
         setFormData(newFormData);
+        
+        // Si tiene productId, buscar el nombre del producto
+        if (item.productId && !item.PRODUCTO) {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+                setProductSearch(product.name);
+            }
+        } else {
+            setProductSearch(item.PRODUCTO || '');
+        }
+        
         setDialogOpen(true);
     };
 
@@ -287,6 +416,9 @@ export function ModificacionesContent() {
                 'Cantidad Posterior': row["CANTIDAD POSTERIOR"] || '',
                 'ID Consecutivo': row["ID CONSECUTIVO"] || '',
                 'País': row.PAIS || '',
+                'Tipo Modificación': row.tipoModificacion || '',
+                'ID Reserva': row.reservationId || '',
+                'Estado Solicitud': row.estadoSolicitud || '',
             }));
 
             // Crear workbook
@@ -401,6 +533,61 @@ export function ModificacionesContent() {
                                                 {formError}
                                             </div>
                                         )}
+                                        
+                                        {/* Selector de Tipo de Modificación */}
+                                        <div className="mb-6">
+                                            <Label>Tipo de Modificación</Label>
+                                            <div className="flex gap-4 mt-2">
+                                                {TIPOS_MODIFICACION.map((tipo) => (
+                                                    <label key={tipo.value} className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="radio"
+                                                            name="tipoModificacion"
+                                                            value={tipo.value}
+                                                            checked={tipoModificacion === tipo.value}
+                                                            onChange={() => handleTipoModificacionChange(tipo.value)}
+                                                            className="w-4 h-4"
+                                                        />
+                                                        <span>{tipo.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Selector de Producto - Solo para RESERVA_INVENTARIO */}
+                                        {tipoModificacion === 'RESERVA_INVENTARIO' && (
+                                            <div className="mb-4">
+                                                <Label>Producto * (Requerido para reservas)</Label>
+                                                <div className="relative">
+                                                    <Input
+                                                        value={productSearch}
+                                                        onChange={(e) => handleProductSearch(e.target.value)}
+                                                        onFocus={() => {
+                                                            if (productSearch.length >= 2) {
+                                                                setShowProductDropdown(true);
+                                                            }
+                                                        }}
+                                                        placeholder="Buscar producto por nombre o SKU..."
+                                                    />
+                                                    <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                                    {showProductDropdown && products.length > 0 && (
+                                                        <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                                                            {products.map((product) => (
+                                                                <div
+                                                                    key={product.id}
+                                                                    className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                                                                    onClick={() => handleSelectProduct(product)}
+                                                                >
+                                                                    <div className="font-medium">{product.name}</div>
+                                                                    <div className="text-sm text-gray-500">SKU: {product.sku}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <Label>ID</Label>
@@ -410,13 +597,15 @@ export function ModificacionesContent() {
                                                     onChange={(e) => handleFormChange('ID', Number(e.target.value))}
                                                 />
                                             </div>
-                                            <div>
-                                                <Label>Producto</Label>
-                                                <Input
-                                                    value={formData.PRODUCTO || ''}
-                                                    onChange={(e) => handleFormChange('PRODUCTO', e.target.value)}
-                                                />
-                                            </div>
+                                            {tipoModificacion !== 'RESERVA_INVENTARIO' && (
+                                                <div>
+                                                    <Label>Producto</Label>
+                                                    <Input
+                                                        value={formData.PRODUCTO || ''}
+                                                        onChange={(e) => handleFormChange('PRODUCTO', e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
                                             <div>
                                                 <Label>Variable (formato: Variable:SKU o solo Variable)</Label>
                                                 <Textarea
@@ -507,6 +696,48 @@ export function ModificacionesContent() {
                                                     </SelectContent>
                                                 </Select>
                                             </div>
+                                            
+                                            {/* Campos específicos para RESERVA_INVENTARIO */}
+                                            {tipoModificacion === 'RESERVA_INVENTARIO' && (
+                                                <>
+                                                    <div>
+                                                        <Label>Plataforma de Venta *</Label>
+                                                        <Select 
+                                                            value={formData.platformId || ''} 
+                                                            onValueChange={(value) => handleFormChange('platformId', value)}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Selecciona la plataforma" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {plataformas.map((plat) => (
+                                                                    <SelectItem key={plat} value={plat}>
+                                                                        {plat}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div>
+                                                        <Label>Correo del Cliente *</Label>
+                                                        <Input
+                                                            type="email"
+                                                            value={formData.customerEmail || ''}
+                                                            onChange={(e) => handleFormChange('customerEmail', e.target.value)}
+                                                            placeholder="cliente@ejemplo.com"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <Label>Variante (opcional)</Label>
+                                                        <Input
+                                                            value={formData.variantId || ''}
+                                                            onChange={(e) => handleFormChange('variantId', e.target.value)}
+                                                            placeholder="ID de variante si aplica"
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
+                                            
                                             <div>
                                                 <Label>Correo/Código (separados por coma)</Label>
                                                 <Textarea
@@ -619,6 +850,9 @@ export function ModificacionesContent() {
                                             <TableHead>Cantidad Posterior</TableHead>
                                             <TableHead>ID Consecutivo</TableHead>
                                             <TableHead>País</TableHead>
+                                            <TableHead>Tipo</TableHead>
+                                            <TableHead>ID Reserva</TableHead>
+                                            <TableHead>Estado</TableHead>
                                             <TableHead>Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -644,6 +878,18 @@ export function ModificacionesContent() {
                                                 <TableCell>{row["CANTIDAD POSTERIOR"]}</TableCell>
                                                 <TableCell>{row["ID CONSECUTIVO"]}</TableCell>
                                                 <TableCell>{row.PAIS}</TableCell>
+                                                <TableCell>
+                                                    {row.tipoModificacion === 'RESERVA_INVENTARIO' && 'Reserva'}
+                                                    {row.tipoModificacion === 'AJUSTE_STOCK' && 'Ajuste'}
+                                                    {row.tipoModificacion === 'BAJA_PLATAFORMA' && 'Baja'}
+                                                    {!row.tipoModificacion && '-'}
+                                                </TableCell>
+                                                <TableCell>{row.reservationId || '-'}</TableCell>
+                                                <TableCell>
+                                                    {row.estadoSolicitud === 'completado' && 'Completado'}
+                                                    {row.estadoSolicitud === 'pendiente' && 'Pendiente'}
+                                                    {!row.estadoSolicitud && '-'}
+                                                </TableCell>
                                                 <TableCell>
                                                     <div className="flex gap-2">
                                                         {(user?.role === 'plataformas' || user?.role === 'admin') && (
