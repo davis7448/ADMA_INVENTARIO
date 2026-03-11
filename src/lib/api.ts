@@ -10,9 +10,9 @@ import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
 const storage = getStorage();
+// Google Cloud Storage - use credentials from environment (App Hosting) or ADC
 const gcsStorage = new Storage({
   projectId: 'studio-9748962172-82b35',
-  keyFilename: './studio-9748962172-82b35-firebase-adminsdk-fbsvc-0ab934a6b7.json'
 });
 const DEFAULT_WAREHOUSE_ID = 'wh-bog';
 
