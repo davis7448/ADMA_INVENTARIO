@@ -26,6 +26,24 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env
+
+# credentials
+*.json
+!components.json
+!tsconfig.json
+!next.config.js
+!tailwind.config.ts
+!vitest.config.ts
+!postcss.config.mjs
+!package.json
+!package-lock.json
+!firebase.json
+!firestore.rules
+!firestore.indexes.json
+!storage.rules
+!cors.json
+!.firebaserc
 
 # vercel
 .vercel
