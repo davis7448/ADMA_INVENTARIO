@@ -112,9 +112,9 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
 
     // Auto-redirect logistics users to their warehouse URL
     useEffect(() => {
-        if (!redirectedRef.current && user?.role === 'logistics' && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
+        if (!redirectedRef.current && (user?.role === 'logistics' || user?.role === 'mercado_libre') && (user.warehouseId || 'wh-bog') && !searchParams.get('warehouse')) {
             const warehouse = user.warehouseId || 'wh-bog';
-            console.log('Redirecting logistics user to products warehouse URL:', warehouse);
+            console.log('Redirecting logistics/mercado_libre user to products warehouse URL:', warehouse);
             redirectedRef.current = true;
             router.push(`${pathname}?warehouse=${warehouse}`);
         }
@@ -237,7 +237,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         params.set('page', String(newPage));
 
         // Asegurar que warehouse esté presente para usuarios de logística
-        if (user?.role === 'logistics' && !params.get('warehouse')) {
+        if ((user?.role === 'logistics' || user?.role === 'mercado_libre') && !params.get('warehouse')) {
             params.set('warehouse', user.warehouseId || 'wh-bog');
         }
 
@@ -280,7 +280,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         setNoWarehouse(false);
     };
 
-    const canEdit = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
+    const canEdit = user?.role === 'admin' || user?.role === 'plataformas';
     const canDelete = user?.role === 'admin';
     const canAudit = user?.role === 'admin' || user?.role === 'logistics';
     const canBulkUpdate = user?.role === 'admin';
