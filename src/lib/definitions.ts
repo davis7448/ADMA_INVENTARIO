@@ -217,7 +217,7 @@ export const CreateUserFormSchema = z.object({
     name: z.string().min(1, 'El nombre es requerido.'),
     email: z.string().email('Dirección de correo electrónico inválida.'),
     password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres.'),
-    role: z.enum(['admin', 'logistics', 'commercial', 'plataformas'], {
+    role: z.enum(['admin', 'logistics', 'commercial', 'plataformas', 'mercado_libre'], {
         required_error: 'El rol es requerido.',
     }),
     commercialCode: z.string().optional(),

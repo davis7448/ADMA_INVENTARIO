@@ -97,7 +97,7 @@ export type ReturnRequest = {
   date: string;
 };
 
-export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas';
+export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre';
 
 export type User = {
   id: string;
