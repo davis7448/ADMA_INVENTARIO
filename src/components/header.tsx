@@ -91,7 +91,7 @@ export default function AppHeader() {
       </div>
 
       <div className="flex items-center gap-4 ml-auto">
-        {user.role !== 'logistics' && (
+        {user.role !== 'logistics' && user.role !== 'mercado_libre' && (
           <div className="flex items-center gap-2">
               <Building className="h-5 w-5 text-muted-foreground" />
               <Select
@@ -115,7 +115,7 @@ export default function AppHeader() {
               </Select>
           </div>
         )}
-        {user.role === 'logistics' && currentWarehouse && (
+        {(user.role === 'logistics' || user.role === 'mercado_libre') && currentWarehouse && (
           <div className="flex items-center gap-2">
               <Building className="h-5 w-5 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">{currentWarehouse.name}</span>

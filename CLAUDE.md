@@ -8,27 +8,31 @@
 
 | Capa | Tecnología | Notas |
 |------|------------|-------|
-| Frontend | Next.js 14 + React 18 | App Router |
-| UI | Shadcn/UI + Tailwind | Componentes accesibles |
+| Frontend | Next.js 14.2.5 + React 18.3.1 | App Router |
+| UI | Shadcn/UI + Radix UI + Tailwind 3.4 | Componentes accesibles |
 | Backend | Firebase (Firestore + Auth) | NoSQL real-time |
-| IA | Genkit AI (Google) | Alertas de restock |
+| IA | Genkit AI 1.19 + @genkit-ai/googleai | Alertas de restock |
 | Deploy | Firebase App Hosting | Hosting serverless |
-| Testing | Vitest | Unit tests |
+| Testing | Vitest 3.2 | Unit tests |
+| Forms | React Hook Form + Zod | Validación |
+| PDF | jspdf + jspdf-autotable | Generación PDFs |
+| Excel | xlsx | Import/Export Excel |
 
 ### Dependencias clave
 
 ```json
 {
-  "firebase": "^11.x",
-  "genkit": "^0.x",
-  "@genkit-ai/google-ai": "^0.x",
-  "next": "14.x",
-  "react": "18.x",
+  "firebase": "^12.3.0",
+  "genkit": "^1.19.3",
+  "@genkit-ai/googleai": "1.19.1",
+  "next": "14.2.5",
+  "react": "18.3.1",
   "shadcn-ui": "latest",
-  "tailwindcss": "3.x",
-  "zod": "^3.x",
-  "react-hook-form": "^7.x",
-  "@hookform/resolvers": "^3.x"
+  "tailwindcss": "^3.4.1",
+  "zod": "^3.24.2",
+  "react-hook-form": "^7.54.2",
+  "@hookform/resolvers": "^4.1.3",
+  "firebase-admin": "^12.2.0"
 }
 ```
 
@@ -81,8 +85,13 @@ docs/
 
 ### Autenticación
 - Firebase Auth (Email/Password)
-- Session gestionada via cookies
-- Middleware: `src/middleware.ts`
+- Session gestionada via cookies (cookie `__session`)
+- **Middleware** en `middleware.ts`:
+  - Verifica sesión cookie en cada request
+  - Skip: `/api/`, `/_next/`, archivos estáticos, `/login`
+  - Usa Firebase Admin SDK (`getAuth(app)`)
+  - Agrega headers `x-user-email` y `x-user-role` a requests autenticados
+  - Redirect a `/login` si no hay sesión válida
 
 ---
 
@@ -91,6 +100,7 @@ docs/
 ### Archivos y ubicación
 - Server Actions → `src/app/actions/`
 - Componentes UI → `src/components/`
+- Componentes Shadcn/UI → `src/components/ui/` (30+ componentes)
 - API Routes → `src/app/api/`
 - AI Flows → `src/ai/flows/`
 
@@ -100,10 +110,30 @@ docs/
 - **@hookform/resolvers** para integrar Zod
 
 ### Firebase
-- **Server**: Firebase Admin SDK (servidor)
-- **Cliente**: Firebase Client SDK (navegador)
+- **Server**: Firebase Admin SDK (`src/lib/firebase-admin.ts`)
+- **Cliente**: Firebase Client SDK
 - Firestore Rules en `firestore.rules`
 - Storage Rules en `storage.rules`
+- Colecciones Firestore principales:
+  - `products` — Catálogo de productos
+  - `categories` — Categorías de productos
+  - `warehouses` — Almacenes
+  - `suppliers` — Proveedores
+  - `carriers` — Transportadoras
+  - `platforms` — Plataformas de venta
+  - `users` — Usuarios del sistema
+  - `vendedores` — Vendedores
+  - `inventoryMovements` — Movimientos de inventario
+  - `dispatchOrders` — Órdenes de despacho
+  - `dropshipping_requests` — Solicitudes de dropshipping
+  - `challenges` — Desafíos comerciales
+  - `communities` — Comunidades
+  - `community_leaders` — Líderes de comunidad
+  - `community_members` — Miembros de comunidad
+  - `modificaciones` — Modificaciones de inventario
+  - `restock-alerts` — Alertas de restock
+  - `audit-alerts` — Auditoría y alertas
+  - `counters` — Contadores sequence
 
 ### Nomenclatura
 - Archivos: kebab-case (`add-product-form.tsx`)
@@ -250,6 +280,26 @@ curl -s -X POST https://agent-control-panel.vercel.app/api/agent/errors \
   -H "Authorization: Bearer acp_itC2shbBc-0kM505QAirEigZKElVbQadeGGt0pd46rs" \
   -H "Content-Type: application/json" \
   -d '{"title": "...", "severity": "high", "description": "..."}'
+```
+
+---
+
+## Scripts disponibles (npm)
+
+```bash
+npm run dev              # Desarrollo local
+npm run build            # Build producción
+npm run start            # Iniciar producción
+npm run lint             # ESLint
+npm run typecheck        # TypeScript check
+npm run test             # Vitest (watch mode)
+npm run test:ui          # Vitest UI
+npm run genkit:dev       # Genkit AI dev
+npm run genkit:watch     # Genkit AI watch
+npm run seed             # Seed base de datos
+npm run seed:organigrama # Seed organigrama
+npm run deploy:rules     # Deploy Firestore rules
+npm run deploy:storage   # Deploy Storage rules
 ```
 
 ---

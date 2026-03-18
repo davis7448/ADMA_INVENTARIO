@@ -134,7 +134,7 @@ export default async function ProductsPage({
 
     return (
       <Suspense>
-        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas', 'logistics']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas', 'logistics', 'mercado_libre']}>
           <ProductsContent 
             initialProducts={productsWithRotation}
             totalPages={productsResult.totalPages}
