@@ -33,8 +33,8 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
-  { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'consulta', 'plataformas', 'logistics'] },
+  { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas', 'mercado_libre'] },
+  { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'consulta', 'plataformas', 'logistics', 'mercado_libre'] },
   {
     label: 'Activos',
     roles: ['admin', 'plataformas'],
@@ -80,8 +80,13 @@ const navItems: NavItem[] = [
 
 export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [staleAlertsCount, setStaleAlertsCount] = useState(0);
+
+  // Don't render nav until user is loaded
+  if (loading || !user) {
+    return null;
+  }
 
   useEffect(() => {
     async function fetchAlerts() {

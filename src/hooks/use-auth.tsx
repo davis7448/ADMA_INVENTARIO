@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   
   // Determine the effective warehouseId for data fetching
   const effectiveWarehouseId = useMemo(() => {
-      if (user?.role === 'logistics') {
+      if (user?.role === 'logistics' || user?.role === 'mercado_libre') {
           return user.warehouseId || null;
       }
       return searchParams.get('warehouse');
