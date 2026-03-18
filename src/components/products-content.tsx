@@ -280,7 +280,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         setNoWarehouse(false);
     };
 
-    const canEdit = user?.role === 'admin' || user?.role === 'plataformas';
+    const canEdit = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'logistics';
     const canDelete = user?.role === 'admin';
     const canAudit = user?.role === 'admin' || user?.role === 'logistics';
     const canBulkUpdate = user?.role === 'admin';
