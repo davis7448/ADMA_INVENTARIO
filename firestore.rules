@@ -7,19 +7,20 @@ service cloud.firestore {
       return request.auth != null;
     }
     function isAdminAccess() {
-      // Allow access when there's no auth (server-side admin operations)
-      return request.auth == null;
+      // Firestore Rules are only for client SDK traffic.
+      // Admin SDK/server traffic bypasses rules automatically.
+      // Never grant client access when request.auth is null.
+      return false;
     }
-    // Funciones de rol deshabilitadas temporalmente - usar verificación por email
-    // El rol se verifica en el cliente leyendo el documento de usuario por email
     function isRole(role) {
-      // Temporalmente permitir a todos los usuarios autenticados
-      // La validación real se hace en el cliente
-      return isSignedIn();
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
     function isRoleIn(roles) {
-      // Temporalmente permitir a todos los usuarios autenticados
-      return isSignedIn();
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in roles;
     }
     
     // -- COMMERCIAL MODULE HELPER --
