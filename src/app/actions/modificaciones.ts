@@ -1,5 +1,6 @@
-import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { app, db } from '@/lib/firebase';
+import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, updateDoc, deleteDoc, limit } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { createReservation, deleteReservation } from '@/lib/api';
 
 export type TipoModificacion = 'RESERVA_INVENTARIO' | 'AJUSTE_STOCK' | 'BAJA_PLATAFORMA';
@@ -37,6 +38,36 @@ export type Modificacion = {
     customerEmail?: string;
     externalId?: string;
 };
+
+const MODIFICACIONES_EDIT_ROLES = new Set(['admin', 'plataformas']);
+
+async function assertModificacionesRole(canDelete: boolean = false) {
+    const auth = getAuth(app);
+    const currentUser = auth.currentUser;
+
+    if (!currentUser?.email) {
+        throw new Error('No tienes permiso para realizar esta acción.');
+    }
+
+    const userQuery = query(
+        collection(db, 'users'),
+        where('email', '==', currentUser.email),
+        limit(1)
+    );
+    const userSnapshot = await getDocs(userQuery);
+    const role = userSnapshot.docs[0]?.data()?.role;
+
+    if (canDelete) {
+        if (role !== 'admin') {
+            throw new Error('Solo los administradores pueden eliminar modificaciones.');
+        }
+        return;
+    }
+
+    if (!MODIFICACIONES_EDIT_ROLES.has(role)) {
+        throw new Error('No tienes permiso para crear o editar modificaciones.');
+    }
+}
 
 export async function seedModificaciones(data: Modificacion[]) {
     const batch = [];
@@ -78,6 +109,8 @@ export async function getModificaciones(startDate?: Date, endDate?: Date, pais?:
 }
 
 export async function createModificacion(data: Omit<Modificacion, 'ID CONSECUTIVO'>) {
+    await assertModificacionesRole(false);
+
     // Validar que PAIS sea obligatorio
     if (!data.PAIS || data.PAIS.trim() === '') {
         throw new Error('El campo PAIS es obligatorio');
@@ -165,12 +198,16 @@ export async function createModificacion(data: Omit<Modificacion, 'ID CONSECUTIV
 }
 
 export async function updateModificacion(id: string, data: Partial<Modificacion>) {
+    await assertModificacionesRole(false);
+
     const docRef = doc(db, 'modificaciones', id);
     await updateDoc(docRef, data);
     return id;
 }
 
 export async function deleteModificacion(id: string) {
+    await assertModificacionesRole(true);
+
     // Obtener la modificación antes de eliminarla para verificar si tiene una reserva
     const docRef = doc(db, 'modificaciones', id);
     const docSnap = await getDoc(docRef);
@@ -182,7 +219,6 @@ export async function deleteModificacion(id: string) {
         if (data.tipoModificacion === 'RESERVA_INVENTARIO' && data.reservationId) {
             try {
                 await deleteReservation(data.reservationId);
-                console.log(`Reserva ${data.reservationId} eliminada correctamente`);
             } catch (error) {
                 console.error('Error al eliminar la reserva:', error);
                 // No lanzamos el error para permitir eliminar la modificación aunque falle la reserva
