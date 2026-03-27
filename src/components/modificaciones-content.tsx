@@ -14,6 +14,7 @@ import { getProducts } from '@/lib/api';
 import { Textarea } from '@/components/ui/textarea';
 import { Download, Loader2, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useToast } from '@/hooks/use-toast';
 
 const PAISES = [
     'Argentina',
@@ -34,6 +35,42 @@ const TIPOS_MODIFICACION: { value: TipoModificacion; label: string }[] = [
     { value: 'BAJA_PLATAFORMA', label: 'Baja de Plataforma' },
 ];
 
+const ROLE_ALIASES: Record<string, string> = {
+    plataforma: 'plataformas',
+    plataformas: 'plataformas',
+    platform: 'plataformas',
+    platforms: 'plataformas',
+    administrador: 'admin',
+    admin: 'admin',
+};
+
+const normalizeRole = (role?: string | null): string => {
+    if (!role) return '';
+    const sanitizedRole = role
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .trim();
+
+    return ROLE_ALIASES[sanitizedRole] ?? sanitizedRole;
+};
+
+const getPermissionDeniedMessage = (error: unknown, actionLabel: string): string => {
+    const rawMessage = error instanceof Error ? error.message : String(error || '');
+    const normalizedMessage = rawMessage.toLowerCase();
+
+    if (
+        normalizedMessage.includes('no tienes permiso') ||
+        normalizedMessage.includes('solo los administradores') ||
+        normalizedMessage.includes('permission-denied') ||
+        normalizedMessage.includes('missing or insufficient permissions')
+    ) {
+        return `No tienes permisos para ${actionLabel} en Modificaciones.`;
+    }
+
+    return rawMessage || `No se pudo ${actionLabel}. Intenta nuevamente.`;
+};
+
 interface ProductOption {
     id: string;
     name: string;
@@ -42,6 +79,11 @@ interface ProductOption {
 
 export function ModificacionesContent() {
     const { user } = useAuth();
+    const { toast } = useToast();
+    const normalizedUserRole = normalizeRole(user?.role);
+    const canCreateOrUpdate = normalizedUserRole === 'admin' || normalizedUserRole === 'plataformas';
+    const canDelete = normalizedUserRole === 'admin';
+
     const [data, setData] = useState<(Modificacion & { id: string })[]>([]);
     const [loading, setLoading] = useState(true);
     const [exporting, setExporting] = useState(false);
@@ -269,9 +311,9 @@ export function ModificacionesContent() {
             setDialogOpen(false);
             resetForm();
             fetchData();
-        } catch (error: any) {
+        } catch (error) {
             console.error('Error creating modificacion:', error);
-            setFormError(error.message || 'Error al crear modificación');
+            setFormError(getPermissionDeniedMessage(error, 'crear modificaciones'));
         }
     };
 
@@ -286,6 +328,7 @@ export function ModificacionesContent() {
             fetchData();
         } catch (error) {
             console.error('Error updating modificacion:', error);
+            setFormError(getPermissionDeniedMessage(error, 'editar modificaciones'));
         }
     };
 
@@ -297,6 +340,11 @@ export function ModificacionesContent() {
             fetchData();
         } catch (error) {
             console.error('Error deleting modificacion:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Permiso denegado',
+                description: getPermissionDeniedMessage(error, 'eliminar modificaciones'),
+            });
         }
     };
 
@@ -513,7 +561,7 @@ export function ModificacionesContent() {
                                 )}
                                 Exportar Excel
                             </Button>
-                            {(user?.role === 'plataformas' || user?.role === 'admin') && (
+                            {canCreateOrUpdate && (
                                 <Dialog open={dialogOpen} onOpenChange={(open) => {
                                     setDialogOpen(open);
                                     if (!open) {
@@ -892,7 +940,7 @@ export function ModificacionesContent() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex gap-2">
-                                                        {(user?.role === 'plataformas' || user?.role === 'admin') && (
+                                                        {canCreateOrUpdate && (
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
@@ -901,7 +949,7 @@ export function ModificacionesContent() {
                                                                 Editar
                                                             </Button>
                                                         )}
-                                                        {user?.role === 'admin' && (
+                                                        {canDelete && (
                                                             <Button
                                                                 variant="destructive"
                                                                 size="sm"
