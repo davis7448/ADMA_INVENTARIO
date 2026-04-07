@@ -265,6 +265,28 @@ service cloud.firestore {
       }
 
       // ====================
+      // EXTERNAL WAREHOUSES MODULE
+      // ====================
+
+      match /externalProductMappings/{mappingId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      match /externalStockSnapshots/{snapshotId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      match /externalStockSnapshotItems/{itemId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
       // DROPSHIPPING MODULE
       // ====================
       

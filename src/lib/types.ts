@@ -306,9 +306,65 @@ export type CancellationRequest = {
   warehouseId?: string;
 };
 
+export type ExternalColumnConfig = {
+  identifierColumn: string;
+  nameColumn: string;
+  stockColumn: string;
+};
+
 export type Warehouse = {
   id: string;
   name: string;
+  type?: 'internal' | 'external';
+  externalProvider?: string;
+  columnConfig?: ExternalColumnConfig;
+};
+
+export type ExternalProductMapping = {
+  id: string;
+  warehouseId: string;
+  externalIdentifier: string;
+  externalName: string;
+  internalProductId: string;
+  internalSku: string;
+  internalProductName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ExternalStockSnapshot = {
+  id: string;
+  warehouseId: string;
+  uploadedAt: string;
+  uploadedBy: { id: string; name: string };
+  fileName: string;
+  totalProducts: number;
+  mappedProducts: number;
+  unmappedProducts: number;
+  status: 'complete' | 'partial';
+};
+
+export type ExternalStockSnapshotItem = {
+  id: string;
+  snapshotId: string;
+  warehouseId: string;
+  externalIdentifier: string;
+  externalName: string;
+  stockQuantity: number;
+  mappingId: string | null;
+  internalProductId: string | null;
+  internalSku: string | null;
+  rawData: Record<string, string | number | boolean | null>;
+};
+
+export type ExternalRotationItem = {
+  externalIdentifier: string;
+  externalName: string;
+  internalSku: string | null;
+  internalProductName: string | null;
+  previousStock: number;
+  currentStock: number;
+  difference: number;
 };
 
 export type Location = {

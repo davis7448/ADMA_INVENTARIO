@@ -47,6 +47,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { getVendedores } from '@/lib/api';
 import type { Product, RotationCategory, Vendedor, Location } from '@/lib/types';
+import { getExternalStockSummaryAction } from '@/app/actions/external-warehouses';
+import type { ExternalStockSummaryMap } from '@/lib/api';
 import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
@@ -88,6 +90,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
     const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+    const [externalStockMap, setExternalStockMap] = useState<ExternalStockSummaryMap>({});
     const redirectedRef = useRef(false);
 
     // Filter states from URL
@@ -109,6 +112,14 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     useEffect(() => {
         getVendedores().then(setVendedores);
     }, []);
+
+    useEffect(() => {
+        if (initialProducts.length === 0) return;
+        const ids = initialProducts.map(p => p.id);
+        getExternalStockSummaryAction(ids).then(res => {
+            if (res.success) setExternalStockMap(res.summary);
+        });
+    }, [initialProducts]);
 
     // Auto-redirect logistics users to their warehouse URL
     useEffect(() => {
@@ -505,6 +516,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <TableHead>SKU</TableHead>
                             <TableHead>Categoría</TableHead>
                             <TableHead>Stock</TableHead>
+                            <TableHead>Ext.</TableHead>
                             <TableHead>Disponible</TableHead>
                             <TableHead>Pendiente</TableHead>
                             <TableHead>Averiado</TableHead>
@@ -636,6 +648,29 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                             <Badge variant="outline">{initialCategoryNames[product.categoryId] || 'Desconocida'}</Badge>
                                         </TableCell>
                                         <TableCell>{product.stock}</TableCell>
+                                        <TableCell>
+                                            {(() => {
+                                                const extEntries = externalStockMap[product.id];
+                                                if (!extEntries || extEntries.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+                                                const total = extEntries.reduce((acc, e) => acc + e.stock, 0);
+                                                return (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="font-semibold text-blue-600 cursor-default underline decoration-dotted">{total}</span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="text-xs space-y-1 max-w-[220px]">
+                                                            <p className="font-semibold mb-1">Stock en bodegas externas</p>
+                                                            {extEntries.map(e => (
+                                                                <div key={e.warehouseId} className="flex justify-between gap-3">
+                                                                    <span className="text-muted-foreground truncate">{e.warehouseName}</span>
+                                                                    <span className="font-medium shrink-0">{e.stock} u.</span>
+                                                                </div>
+                                                            ))}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                );
+                                            })()}
+                                        </TableCell>
                                         <TableCell className="font-semibold text-green-600">
                                             {calculateAvailableStock(product)}
                                         </TableCell>

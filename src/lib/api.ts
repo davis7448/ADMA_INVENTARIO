@@ -5,7 +5,7 @@ import { db } from './firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, serverTimestamp, type Query, type DocumentSnapshot } from "firebase/firestore";
 import { Storage } from '@google-cloud/storage';
-import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest, ImportRequest } from './types';
+import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest, ImportRequest, ExternalProductMapping, ExternalStockSnapshot, ExternalStockSnapshotItem, ExternalColumnConfig, ExternalRotationItem } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 
@@ -2283,11 +2283,13 @@ export const getWarehouses = async (): Promise<Warehouse[]> => {
     return warehouseList;
 };
 
-export const addWarehouse = async (name: string): Promise<string> => {
+export const addWarehouse = async (name: string, type: 'internal' | 'external' = 'internal', externalProvider?: string): Promise<string> => {
     const warehousesCol = collection(db, 'warehouses');
     const newId = `wh-${name.toLowerCase().replace(/\s+/g, '-').slice(0, 10)}`;
     const docRef = doc(warehousesCol, newId);
-    await setDoc(docRef, { name });
+    const data: Record<string, unknown> = { name, type };
+    if (externalProvider) data.externalProvider = externalProvider;
+    await setDoc(docRef, data);
     return newId;
 };
 
@@ -2956,5 +2958,181 @@ export const getReturnGuides = async (filters?: {
     console.error("Error fetching return guides:", error);
     return [];
   }
+};
+
+// ==========================================
+// EXTERNAL WAREHOUSES
+// ==========================================
+
+export const updateWarehouseColumnConfig = async (warehouseId: string, config: ExternalColumnConfig): Promise<void> => {
+  const warehouseRef = doc(db, 'warehouses', warehouseId);
+  await updateDoc(warehouseRef, { columnConfig: config });
+};
+
+export const getExternalWarehouses = async (): Promise<Warehouse[]> => {
+  const warehousesCol = collection(db, 'warehouses');
+  const snapshot = await getDocs(warehousesCol);
+  return snapshot.docs
+    .map(d => ({ id: d.id, ...d.data() } as Warehouse))
+    .filter(wh => wh.type === 'external');
+};
+
+// External Product Mappings
+export const getExternalProductMappings = async (warehouseId: string): Promise<ExternalProductMapping[]> => {
+  const col = collection(db, 'externalProductMappings');
+  const q = query(col, where('warehouseId', '==', warehouseId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data(),
+    createdAt: d.data().createdAt?.toDate?.()?.toISOString() || d.data().createdAt,
+    updatedAt: d.data().updatedAt?.toDate?.()?.toISOString() || d.data().updatedAt,
+  } as ExternalProductMapping));
+};
+
+export const addExternalProductMappings = async (mappings: Omit<ExternalProductMapping, 'id' | 'createdAt' | 'updatedAt'>[]): Promise<string[]> => {
+  const col = collection(db, 'externalProductMappings');
+  const now = Timestamp.now();
+  const ids: string[] = [];
+  const batch = writeBatch(db);
+  for (const mapping of mappings) {
+    const newRef = doc(col);
+    batch.set(newRef, { ...mapping, createdAt: now, updatedAt: now });
+    ids.push(newRef.id);
+  }
+  await batch.commit();
+  return ids;
+};
+
+export const deleteExternalProductMapping = async (mappingId: string): Promise<void> => {
+  await deleteDoc(doc(db, 'externalProductMappings', mappingId));
+};
+
+export const updateExternalProductMapping = async (mappingId: string, data: Partial<Pick<ExternalProductMapping, 'internalProductId' | 'internalSku' | 'internalProductName'>>): Promise<void> => {
+  await updateDoc(doc(db, 'externalProductMappings', mappingId), { ...data, updatedAt: Timestamp.now() });
+};
+
+// External Stock Snapshots
+export const addExternalStockSnapshot = async (snapshot: Omit<ExternalStockSnapshot, 'id' | 'uploadedAt'>): Promise<string> => {
+  const col = collection(db, 'externalStockSnapshots');
+  const docRef = await addDoc(col, { ...snapshot, uploadedAt: Timestamp.now() });
+  return docRef.id;
+};
+
+export const addExternalStockSnapshotItems = async (items: Omit<ExternalStockSnapshotItem, 'id'>[]): Promise<void> => {
+  const col = collection(db, 'externalStockSnapshotItems');
+  const batch = writeBatch(db);
+  for (const item of items) {
+    batch.set(doc(col), item);
+  }
+  await batch.commit();
+};
+
+export const getExternalStockSnapshots = async (warehouseId: string, limitCount = 20): Promise<ExternalStockSnapshot[]> => {
+  const col = collection(db, 'externalStockSnapshots');
+  const q = query(col, where('warehouseId', '==', warehouseId), orderBy('uploadedAt', 'desc'), limit(limitCount));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data(),
+    uploadedAt: d.data().uploadedAt?.toDate?.()?.toISOString() || d.data().uploadedAt,
+  } as ExternalStockSnapshot));
+};
+
+export const getExternalStockSnapshotItems = async (snapshotId: string): Promise<ExternalStockSnapshotItem[]> => {
+  const col = collection(db, 'externalStockSnapshotItems');
+  const q = query(col, where('snapshotId', '==', snapshotId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExternalStockSnapshotItem));
+};
+
+export const updateSnapshotItemMapping = async (snapshotId: string, externalIdentifier: string, mappingId: string, internalProductId: string, internalSku: string): Promise<void> => {
+  const col = collection(db, 'externalStockSnapshotItems');
+  const q = query(col, where('snapshotId', '==', snapshotId), where('externalIdentifier', '==', externalIdentifier));
+  const snapshot = await getDocs(q);
+  const batch = writeBatch(db);
+  snapshot.docs.forEach(d => {
+    batch.update(d.ref, { mappingId, internalProductId, internalSku });
+  });
+  await batch.commit();
+};
+
+export type ExternalStockByWarehouse = {
+  warehouseId: string;
+  warehouseName: string;
+  stock: number;
+  uploadedAt: string;
+};
+
+export type ExternalStockSummaryMap = Record<string, ExternalStockByWarehouse[]>;
+
+export const getLatestExternalStockByProductIds = async (productIds: string[]): Promise<ExternalStockSummaryMap> => {
+  if (productIds.length === 0) return {};
+
+  const externalWhs = await getExternalWarehouses();
+  if (externalWhs.length === 0) return {};
+
+  // For each external warehouse, get the latest snapshot
+  const latestSnapshotPromises = externalWhs.map(async (wh) => {
+    const col = collection(db, 'externalStockSnapshots');
+    const q = query(col, where('warehouseId', '==', wh.id), orderBy('uploadedAt', 'desc'), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return { wh, snapshotId: snap.docs[0].id, uploadedAt: snap.docs[0].data().uploadedAt?.toDate?.()?.toISOString() || '' };
+  });
+
+  const latestSnapshots = (await Promise.all(latestSnapshotPromises)).filter(Boolean) as { wh: Warehouse; snapshotId: string; uploadedAt: string }[];
+
+  if (latestSnapshots.length === 0) return {};
+
+  const result: ExternalStockSummaryMap = {};
+
+  const productIdsSet = new Set(productIds);
+
+  await Promise.all(
+    latestSnapshots.map(async ({ wh, snapshotId, uploadedAt }) => {
+      const itemsCol = collection(db, 'externalStockSnapshotItems');
+      // Only filter by snapshotId — avoids composite index requirement for != null
+      const q = query(itemsCol, where('snapshotId', '==', snapshotId));
+      const snap = await getDocs(q);
+      snap.docs.forEach(d => {
+        const data = d.data();
+        // Filter in JS: must have a mapped internalProductId that matches our list
+        if (!data.internalProductId || !productIdsSet.has(data.internalProductId)) return;
+        const entry: ExternalStockByWarehouse = { warehouseId: wh.id, warehouseName: wh.name, stock: data.stockQuantity ?? 0, uploadedAt };
+        if (!result[data.internalProductId]) result[data.internalProductId] = [];
+        result[data.internalProductId].push(entry);
+      });
+    })
+  );
+
+  return result;
+};
+
+export const getExternalRotationData = async (warehouseId: string, currentSnapshotId: string): Promise<ExternalRotationItem[]> => {
+  const snapshots = await getExternalStockSnapshots(warehouseId, 20);
+  const currentIndex = snapshots.findIndex(s => s.id === currentSnapshotId);
+  if (currentIndex === -1 || currentIndex === snapshots.length - 1) return [];
+  const previousSnapshot = snapshots[currentIndex + 1];
+
+  const [currentItems, previousItems] = await Promise.all([
+    getExternalStockSnapshotItems(currentSnapshotId),
+    getExternalStockSnapshotItems(previousSnapshot.id),
+  ]);
+
+  const previousMap = new Map(previousItems.map(i => [i.externalIdentifier, i]));
+
+  return currentItems.map(curr => {
+    const prev = previousMap.get(curr.externalIdentifier);
+    return {
+      externalIdentifier: curr.externalIdentifier,
+      externalName: curr.externalName,
+      internalSku: curr.internalSku,
+      internalProductName: curr.internalSku,
+      previousStock: prev?.stockQuantity ?? 0,
+      currentStock: curr.stockQuantity,
+      difference: curr.stockQuantity - (prev?.stockQuantity ?? 0),
+    };
+  }).filter(item => item.previousStock !== item.currentStock || item.previousStock === 0);
 };
 

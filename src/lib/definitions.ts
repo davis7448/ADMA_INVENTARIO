@@ -306,3 +306,23 @@ export type ImportProductsFormState = {
     success: boolean;
     count: number;
 };
+
+// External Warehouse Schemas
+export const ExternalColumnConfigSchema = z.object({
+  identifierColumn: z.string().min(1, 'La columna de identificador es requerida.'),
+  nameColumn: z.string().min(1, 'La columna de nombre es requerida.'),
+  stockColumn: z.string().min(1, 'La columna de stock es requerida.'),
+});
+
+export const AddExternalWarehouseSchema = z.object({
+  name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres.'),
+  externalProvider: z.string().min(1, 'El nombre del operador es requerido.'),
+});
+
+export type AddExternalWarehouseValues = z.infer<typeof AddExternalWarehouseSchema>;
+
+export const ExternalProductMappingSchema = z.object({
+  externalIdentifier: z.string().min(1),
+  externalName: z.string().min(1),
+  internalProductId: z.string().min(1, 'Debe seleccionar un producto interno.'),
+});

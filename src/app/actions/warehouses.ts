@@ -19,11 +19,14 @@ export async function updateWarehouseAction(
 }
 
 export async function addWarehouseAction(
-    name: string
+    name: string,
+    type: 'internal' | 'external' = 'internal',
+    externalProvider?: string
   ): Promise<{ success: boolean; message: string; newId?: string }> {
     try {
-      const newId = await addWarehouse(name);
+      const newId = await addWarehouse(name, type, externalProvider);
       revalidatePath('/settings');
+      revalidatePath('/external-warehouses');
       return { success: true, message: 'Bodega añadida correctamente.', newId };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';

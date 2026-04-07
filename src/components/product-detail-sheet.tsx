@@ -19,12 +19,17 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { getProductById, getProductPerformanceData } from '@/lib/api';
 import type { Product, ProductPerformanceData } from '@/lib/types';
+import { getExternalStockSummaryAction } from '@/app/actions/external-warehouses';
+import type { ExternalStockSummaryMap } from '@/lib/api';
+import { subDays, format, startOfDay } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { Warehouse } from 'lucide-react';
 import SalesChart from './sales-chart';
 import CarrierChart from './carrier-chart';
 import ReturnsChart from './returns-chart';
-import { subDays, format, startOfDay } from 'date-fns';
 
 interface ProductDetailDialogProps {
   productId: string;
@@ -36,10 +41,12 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
   const [product, setProduct] = useState<Product | null>(null);
   const [performanceData, setPerformanceData] = useState<ProductPerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [externalStock, setExternalStock] = useState<ExternalStockSummaryMap>({});
 
   useEffect(() => {
     if (productId && open) {
       setLoading(true);
+      setExternalStock({});
       Promise.all([
         getProductById(productId),
         getProductPerformanceData(productId),
@@ -47,6 +54,9 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
         setProduct(productData);
         setPerformanceData(perfData);
         setLoading(false);
+      });
+      getExternalStockSummaryAction([productId]).then(res => {
+        if (res.success) setExternalStock(res.summary);
       });
     }
   }, [productId, open]);
@@ -165,6 +175,39 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                   </div>
                 </CardContent>
               </Card>
+
+              {(() => {
+                const extEntries = externalStock[productId];
+                if (!extEntries || extEntries.length === 0) return null;
+                const total = extEntries.reduce((acc, e) => acc + e.stock, 0);
+                return (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-2">
+                        <Warehouse className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-base">Stock en Bodegas Externas</CardTitle>
+                        <Badge variant="secondary" className="ml-auto">{total} u. total</Badge>
+                      </div>
+                      <CardDescription>Inventario reportado por operadores logísticos externos (último snapshot).</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="divide-y border rounded-md">
+                        {extEntries.map(e => (
+                          <div key={e.warehouseId} className="flex items-center justify-between px-4 py-3">
+                            <div>
+                              <p className="text-sm font-medium">{e.warehouseName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Actualizado: {format(new Date(e.uploadedAt), "d MMM yyyy, HH:mm", { locale: es })}
+                              </p>
+                            </div>
+                            <span className="text-lg font-bold text-blue-600">{e.stock}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>

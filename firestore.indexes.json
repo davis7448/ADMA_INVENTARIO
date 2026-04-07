@@ -315,6 +315,38 @@
       ]
     },
     {
+      "collectionGroup": "externalProductMappings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "warehouseId", "order": "ASCENDING" },
+        { "fieldPath": "externalIdentifier", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "externalStockSnapshots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "warehouseId", "order": "ASCENDING" },
+        { "fieldPath": "uploadedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "externalStockSnapshotItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "snapshotId", "order": "ASCENDING" },
+        { "fieldPath": "warehouseId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "externalStockSnapshotItems",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "snapshotId", "order": "ASCENDING" },
+        { "fieldPath": "externalIdentifier", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "dropshipping_requests",
       "queryScope": "COLLECTION",
       "fields": [

@@ -23,13 +23,15 @@ import {
 import React, { useEffect, useState } from 'react';
 import { getStaleReservationAlerts } from '@/lib/api';
 import { Badge } from './ui/badge';
+import { collection, onSnapshot, query, where, Query } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 type NavItem = {
   href?: string;
   label: string;
   roles: string[];
   children?: NavItem[];
-  badge?: 'stale_alerts';
+  badge?: 'stale_alerts' | 'low_stock';
 };
 
 const navItems: NavItem[] = [
@@ -45,6 +47,7 @@ const navItems: NavItem[] = [
       { href: '/platforms', label: 'Plataformas', roles: ['admin', 'plataformas'] },
       { href: '/vendedores', label: 'Vendedores', roles: ['admin', 'plataformas'] },
       { href: '/normalize-warehouses', label: 'Normalizar Bodegas', roles: ['admin'] },
+      { href: '/external-warehouses', label: 'Bodegas Externas', roles: ['admin', 'plataformas'] },
       { href: '/salary-management', label: 'Gestión de Salarios', roles: ['admin'] },
     ],
   },
@@ -64,6 +67,7 @@ const navItems: NavItem[] = [
   {
     label: 'Alertas',
     roles: ['admin', 'logistics', 'commercial', 'plataformas'],
+    badge: 'low_stock',
     children: [
       { href: '/audit-alerts', label: 'Auditoría', roles: ['admin', 'plataformas'] },
       { href: '/stale-reservations', label: 'Alertas de Reservas', roles: ['admin', 'plataformas'], badge: 'stale_alerts' },
@@ -80,8 +84,9 @@ const navItems: NavItem[] = [
 
 export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
   const pathname = usePathname();
-  const { user, loading } = useAuth();
+  const { user, loading, effectiveWarehouseId } = useAuth();
   const [staleAlertsCount, setStaleAlertsCount] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
 
   // Don't render nav until user is loaded
   if (loading || !user) {
@@ -98,6 +103,87 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
     fetchAlerts();
   }, [user, pathname]); // Re-check on path change too
 
+  useEffect(() => {
+    if (!user) {
+      setLowStockCount(0);
+      return;
+    }
+
+    const hasAlertsAccess = ['admin', 'logistics', 'commercial', 'plataformas'].includes(user.role);
+    if (!hasAlertsAccess) {
+      setLowStockCount(0);
+      return;
+    }
+
+    const productsCollection = collection(db, 'products');
+    const warehouseId = user.role === 'logistics' ? user.warehouseId : effectiveWarehouseId;
+
+    const countLowStock = (docs: Array<{ stock?: number }>) => {
+      const count = docs.reduce((acc, item) => (typeof item.stock === 'number' && item.stock <= 0 ? acc + 1 : acc), 0);
+      setLowStockCount(count);
+    };
+
+    if (!warehouseId || warehouseId === 'all') {
+      const unsubscribe = onSnapshot(
+        productsCollection,
+        (snapshot) => countLowStock(snapshot.docs.map((doc) => doc.data() as { stock?: number })),
+        () => setLowStockCount(0)
+      );
+
+      return () => unsubscribe();
+    }
+
+    if (warehouseId === 'wh-bog') {
+      const byWarehouse = query(productsCollection, where('warehouseId', '==', 'wh-bog'));
+      const withoutWarehouse = query(productsCollection, where('warehouseId', '==', null));
+
+      let warehouseDocs: Array<{ stock?: number }> = [];
+      let nullWarehouseDocs: Array<{ stock?: number }> = [];
+
+      const updateCombinedCount = () => {
+        countLowStock([...warehouseDocs, ...nullWarehouseDocs]);
+      };
+
+      const unsubscribeWarehouse = onSnapshot(
+        byWarehouse,
+        (snapshot) => {
+          warehouseDocs = snapshot.docs.map((doc) => doc.data() as { stock?: number });
+          updateCombinedCount();
+        },
+        () => {
+          warehouseDocs = [];
+          updateCombinedCount();
+        }
+      );
+
+      const unsubscribeNullWarehouse = onSnapshot(
+        withoutWarehouse,
+        (snapshot) => {
+          nullWarehouseDocs = snapshot.docs.map((doc) => doc.data() as { stock?: number });
+          updateCombinedCount();
+        },
+        () => {
+          nullWarehouseDocs = [];
+          updateCombinedCount();
+        }
+      );
+
+      return () => {
+        unsubscribeWarehouse();
+        unsubscribeNullWarehouse();
+      };
+    }
+
+    const productQuery: Query = query(productsCollection, where('warehouseId', '==', warehouseId));
+    const unsubscribe = onSnapshot(
+      productQuery,
+      (snapshot) => countLowStock(snapshot.docs.map((doc) => doc.data() as { stock?: number })),
+      () => setLowStockCount(0)
+    );
+
+    return () => unsubscribe();
+  }, [user, effectiveWarehouseId]);
+
   const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
 
   const linkClass = (href?: string) => cn(
@@ -110,10 +196,15 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
       : "text-muted-foreground"
   );
 
-  const renderBadge = (badgeType?: 'stale_alerts') => {
+  const renderBadge = (badgeType?: 'stale_alerts' | 'low_stock') => {
     if (badgeType === 'stale_alerts' && staleAlertsCount > 0) {
       return <Badge variant="destructive" className="ml-2">{staleAlertsCount}</Badge>;
     }
+
+    if (badgeType === 'low_stock' && lowStockCount > 0) {
+      return <Badge variant="destructive" className="ml-2">{lowStockCount}</Badge>;
+    }
+
     return null;
   }
 
@@ -127,7 +218,10 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
           <Collapsible key={item.label} className="w-full">
             <CollapsibleTrigger asChild>
               <div className={cn(linkClass(), "flex justify-between items-center cursor-pointer")}>
-                {item.label}
+                <div className="flex items-center">
+                  {item.label}
+                  {renderBadge(item.badge)}
+                </div>
                 <ChevronRight className="h-4 w-4 transition-transform [&[data-state=open]]:rotate-90" />
               </div>
             </CollapsibleTrigger>
@@ -142,7 +236,10 @@ export default function MainNav({ isMobile = false }: { isMobile?: boolean }) {
         <DropdownMenu key={item.label}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className={cn(linkClass(), "flex items-center gap-1 hover:bg-black hover:text-primary")}>
-              {item.label}
+              <span className="flex items-center">
+                {item.label}
+                {renderBadge(item.badge)}
+              </span>
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>

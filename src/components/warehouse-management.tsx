@@ -37,7 +37,11 @@ import {
     FormLabel,
     FormMessage,
 } from '@/components/ui/form';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { Label } from './ui/label';
+import { ExternalWarehouseColumnConfigDialog } from './external-warehouse-column-config-dialog';
 
 interface WarehouseManagementProps {
     initialWarehouses: Warehouse[];
@@ -47,6 +51,12 @@ interface WarehouseManagementProps {
 
 const AddWarehouseSchema = z.object({
     name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres.'),
+    type: z.enum(['internal', 'external']),
+    externalProvider: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.type === 'external' && (!data.externalProvider || data.externalProvider.trim().length === 0)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'El nombre del operador es requerido.', path: ['externalProvider'] });
+    }
 });
 type AddWarehouseValues = z.infer<typeof AddWarehouseSchema>;
 
@@ -58,17 +68,18 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
     const { toast } = useToast();
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [configWarehouse, setConfigWarehouse] = useState<Warehouse | null>(null);
 
     useEffect(() => {
         setWarehouses(initialWarehouses);
     }, [initialWarehouses]);
-    
+
     const form = useForm<AddWarehouseValues>({
         resolver: zodResolver(AddWarehouseSchema),
-        defaultValues: {
-            name: '',
-        },
+        defaultValues: { name: '', type: 'internal', externalProvider: '' },
     });
+
+    const warehouseType = form.watch('type');
 
     const totalPages = Math.ceil(warehouses.length / ITEMS_PER_PAGE);
     const paginatedWarehouses = useMemo(() => {
@@ -79,7 +90,7 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
     const handleNameChange = (id: string, value: string) => {
         setWarehouses(prev => prev.map(wh => wh.id === id ? { ...wh, name: value } : wh));
     };
-    
+
     const handleUpdateName = (id: string, name: string) => {
         if (!name.trim()) {
             toast({ title: 'Error', description: 'El nombre no puede estar vacío.', variant: 'destructive' });
@@ -98,7 +109,11 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
 
     const handleAddWarehouse = async (values: AddWarehouseValues) => {
         startTransition(async () => {
-            const result = await addWarehouseAction(values.name);
+            const result = await addWarehouseAction(
+                values.name,
+                values.type,
+                values.type === 'external' ? values.externalProvider : undefined
+            );
             if (result.success) {
                 toast({ title: '¡Éxito!', description: 'Bodega creada con éxito.' });
                 setIsAddDialogOpen(false);
@@ -111,6 +126,7 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
     };
 
     return (
+        <>
         <Card>
             <CardHeader className="flex flex-row justify-between items-start">
                 <div>
@@ -119,7 +135,7 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                         Crea y renombra las bodegas de tu operación.
                     </CardDescription>
                 </div>
-                <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <Dialog open={isAddDialogOpen} onOpenChange={open => { setIsAddDialogOpen(open); if (!open) form.reset(); }}>
                     <DialogTrigger asChild>
                         <Button>Crear Bodega</Button>
                     </DialogTrigger>
@@ -127,7 +143,7 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                         <DialogHeader>
                             <DialogTitle>Crear Nueva Bodega</DialogTitle>
                             <DialogDescription>
-                               Define el nombre para la nueva bodega. El ID se generará automáticamente.
+                               Define el nombre y tipo de la nueva bodega.
                             </DialogDescription>
                         </DialogHeader>
                         <Form {...form}>
@@ -145,6 +161,47 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                                         </FormItem>
                                     )}
                                 />
+                                <FormField
+                                    control={form.control}
+                                    name="type"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Tipo de Bodega</FormLabel>
+                                            <FormControl>
+                                                <RadioGroup
+                                                    value={field.value}
+                                                    onValueChange={field.onChange}
+                                                    className="flex gap-6"
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <RadioGroupItem value="internal" id="type-internal" />
+                                                        <Label htmlFor="type-internal">Interna (propia)</Label>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <RadioGroupItem value="external" id="type-external" />
+                                                        <Label htmlFor="type-external">Externa (tercero)</Label>
+                                                    </div>
+                                                </RadioGroup>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                {warehouseType === 'external' && (
+                                    <FormField
+                                        control={form.control}
+                                        name="externalProvider"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Nombre del Operador / 3PL</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Ej: Coordinadora, Efecty Fulfillment..." {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
                                 <DialogFooter>
                                     <DialogClose asChild>
                                         <Button type="button" variant="secondary">Cancelar</Button>
@@ -160,26 +217,51 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                 <div className="grid gap-4">
                     {loading ? (
                         Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)
-                    ) : paginatedWarehouses.map((warehouse) => (
+                    ) : paginatedWarehouses.map((warehouse) => {
+                        const isExternal = warehouse.type === 'external';
+                        const isDefault = warehouse.id === 'wh-bog';
+                        return (
                         <div key={warehouse.id} className="flex items-center justify-between gap-4 p-2 border rounded-md">
                             <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Badge variant={isExternal ? 'secondary' : 'outline'} className="text-xs">
+                                        {isExternal ? 'Externa' : 'Interna'}
+                                    </Badge>
+                                    {isExternal && warehouse.externalProvider && (
+                                        <span className="text-xs text-muted-foreground">{warehouse.externalProvider}</span>
+                                    )}
+                                </div>
                                 <Input
                                     value={warehouse.name}
                                     onChange={(e) => handleNameChange(warehouse.id, e.target.value)}
                                     className="text-base"
-                                    disabled={isSaving || warehouse.id === 'wh-bog'}
+                                    disabled={isSaving || isDefault}
                                 />
                                 <p className="text-xs text-muted-foreground mt-1 ml-1">ID: <span className="font-mono">{warehouse.id}</span></p>
                             </div>
-                            <Button 
-                                size="sm" 
-                                onClick={() => handleUpdateName(warehouse.id, warehouse.name)}
-                                disabled={isSaving || initialWarehouses.find(wh => wh.id === warehouse.id)?.name === warehouse.name || warehouse.id === 'wh-bog'}
-                            >
-                                {isSaving ? 'Guardando...' : 'Guardar'}
-                            </Button>
+                            <div className="flex gap-2 items-center">
+                                {isExternal && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setConfigWarehouse(warehouse)}
+                                        title="Configurar columnas del Excel"
+                                    >
+                                        <Settings2 className="h-4 w-4 mr-1" />
+                                        Columnas
+                                    </Button>
+                                )}
+                                <Button
+                                    size="sm"
+                                    onClick={() => handleUpdateName(warehouse.id, warehouse.name)}
+                                    disabled={isSaving || initialWarehouses.find(wh => wh.id === warehouse.id)?.name === warehouse.name || isDefault}
+                                >
+                                    {isSaving ? 'Guardando...' : 'Guardar'}
+                                </Button>
+                            </div>
                         </div>
-                    ))}
+                        );
+                    })}
                      {warehouses.length === 0 && !loading && (
                         <p className="text-center text-muted-foreground py-4">No hay bodegas creadas.</p>
                      )}
@@ -211,5 +293,15 @@ export function WarehouseManagement({ initialWarehouses, loading, onWarehousesUp
                 </CardFooter>
             )}
         </Card>
+
+        {configWarehouse && (
+            <ExternalWarehouseColumnConfigDialog
+                warehouse={configWarehouse}
+                open={!!configWarehouse}
+                onClose={() => setConfigWarehouse(null)}
+                onSaved={() => { setConfigWarehouse(null); onWarehousesUpdate(); }}
+            />
+        )}
+        </>
     );
 }
