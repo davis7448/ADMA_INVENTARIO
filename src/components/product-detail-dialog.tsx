@@ -30,13 +30,17 @@ import {
 import { Skeleton } from './ui/skeleton';
 import { getProductById, getProductPerformanceData, getVendedores, getPlatforms } from '@/lib/api';
 import type { Product, ProductPerformanceData, Vendedor, Platform, ProductVariant } from '@/lib/types';
+import type { ExternalStockSummaryMap } from '@/lib/api';
+import { getExternalStockSummaryAction } from '@/app/actions/external-warehouses';
 import SalesChart from './sales-chart';
 import CarrierChart from './carrier-chart';
 import ReturnsChart from './returns-chart';
 import { subDays, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { ProductReservationDialog } from './product-reservation-dialog';
-import { LinkIcon } from 'lucide-react';
+import { LinkIcon, Warehouse } from 'lucide-react';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Label } from './ui/label';
@@ -56,6 +60,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
+  const [externalStock, setExternalStock] = useState<ExternalStockSummaryMap>({});
   const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string>('total');
 
@@ -64,6 +69,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   const refreshData = async () => {
     if (productId && open) {
         setLoading(true);
+        setExternalStock({});
         Promise.all([
             getProductById(productId),
             getProductPerformanceData(productId),
@@ -75,6 +81,9 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
             setVendedores(vendedorData);
             setPlatforms(platformData);
             setLoading(false);
+        });
+        getExternalStockSummaryAction([productId]).then(res => {
+            if (res.success) setExternalStock(res.summary);
         });
     }
   }
@@ -96,8 +105,9 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
 
   const availableStock = useMemo(() => {
     if (!product) return 0;
-    return product.stock - totalReservedStock;
-  }, [product, totalReservedStock]);
+    const externalTotal = (externalStock[productId] ?? []).reduce((sum, e) => sum + e.stock, 0);
+    return product.stock - totalReservedStock + externalTotal;
+  }, [product, totalReservedStock, externalStock, productId]);
 
   const getChartDataForRange = (dataSet: Record<string, number> = {}, key: 'sales' | 'returns') => {
     const data: any[] = [];
@@ -269,6 +279,44 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                   </DialogFooter>
                 )}
               </Card>
+
+              {(() => {
+                const extEntries = externalStock[productId];
+                if (!extEntries || extEntries.length === 0) return null;
+                const total = extEntries.reduce((acc, e) => acc + e.stock, 0);
+                return (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-2">
+                        <Warehouse className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-base">Stock en Bodegas Externas</CardTitle>
+                        <Badge variant="secondary" className="ml-auto">{total} u. total</Badge>
+                      </div>
+                      <CardDescription>Inventario reportado por operadores logísticos externos (último snapshot).</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="divide-y border rounded-md">
+                        {extEntries.map(e => (
+                          <div key={e.warehouseId} className="flex items-center justify-between px-4 py-3">
+                            <div>
+                              <p className="text-sm font-medium">{e.warehouseName}</p>
+                              {e.externalIdentifier && (
+                                <p className="text-xs text-muted-foreground font-mono">
+                                  {e.externalIdentifier}{e.externalName ? ` — ${e.externalName}` : ''}
+                                </p>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                Actualizado: {format(new Date(e.uploadedAt), "d MMM yyyy, HH:mm", { locale: es })}
+                              </p>
+                            </div>
+                            <span className="text-lg font-bold text-blue-600">{e.stock}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
 
               {product.productType === 'variable' && product.variants && product.variants.length > 0 && (
                 <Card>
