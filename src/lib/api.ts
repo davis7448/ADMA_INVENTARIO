@@ -3062,6 +3062,8 @@ export type ExternalStockByWarehouse = {
   warehouseName: string;
   stock: number;
   uploadedAt: string;
+  externalIdentifier: string;
+  externalName: string;
 };
 
 export type ExternalStockSummaryMap = Record<string, ExternalStockByWarehouse[]>;
@@ -3099,7 +3101,7 @@ export const getLatestExternalStockByProductIds = async (productIds: string[]): 
         const data = d.data();
         // Filter in JS: must have a mapped internalProductId that matches our list
         if (!data.internalProductId || !productIdsSet.has(data.internalProductId)) return;
-        const entry: ExternalStockByWarehouse = { warehouseId: wh.id, warehouseName: wh.name, stock: data.stockQuantity ?? 0, uploadedAt };
+        const entry: ExternalStockByWarehouse = { warehouseId: wh.id, warehouseName: wh.name, stock: data.stockQuantity ?? 0, uploadedAt, externalIdentifier: data.externalIdentifier ?? '', externalName: data.externalName ?? '' };
         if (!result[data.internalProductId]) result[data.internalProductId] = [];
         result[data.internalProductId].push(entry);
       });

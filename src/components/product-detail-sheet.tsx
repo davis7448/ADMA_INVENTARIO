@@ -196,6 +196,11 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                           <div key={e.warehouseId} className="flex items-center justify-between px-4 py-3">
                             <div>
                               <p className="text-sm font-medium">{e.warehouseName}</p>
+                              {e.externalIdentifier && (
+                                <p className="text-xs text-muted-foreground font-mono">
+                                  {e.externalIdentifier}{e.externalName ? ` — ${e.externalName}` : ''}
+                                </p>
+                              )}
                               <p className="text-xs text-muted-foreground">
                                 Actualizado: {format(new Date(e.uploadedAt), "d MMM yyyy, HH:mm", { locale: es })}
                               </p>

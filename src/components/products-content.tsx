@@ -377,13 +377,18 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
             // For a variable product's total, sum all its variant reservations
             return sum + res.quantity;
         }, 0) || 0;
-        
+
         let physicalStock = product.stock;
         if (variantId && product.variants) {
             physicalStock = product.variants.find(v => v.id === variantId)?.stock || 0;
         }
 
-        return physicalStock - totalReserved;
+        // Add external warehouse stock (only for simple products and variable product totals, not per-variant)
+        const externalTotal = !variantId
+            ? (externalStockMap[product.id] ?? []).reduce((sum, e) => sum + e.stock, 0)
+            : 0;
+
+        return physicalStock - totalReserved + externalTotal;
     };
 
 
