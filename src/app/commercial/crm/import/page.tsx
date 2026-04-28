@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Upload, CheckCircle, XCircle, AlertCircle, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { ArrowLeft, Upload, CheckCircle, XCircle, AlertCircle, FileSpreadsheet, Loader2, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { getUsers } from '@/lib/api';
 import { createClient, checkClientExists } from '@/lib/commercial-api';
@@ -267,6 +267,83 @@ export default function ImportClientsPage() {
         || commercials.find(c => c.id === selectedCommercialId)?.email
         || '—';
 
+    // ── Descarga de plantilla ─────────────────────────────────────────────
+
+    function downloadTemplate() {
+        const headers = [
+            'CORREO TIENDA',
+            'COMERCIO',
+            'CELULAR PRINCIPAL',
+            'ESTADO DE LOS COMERCIOS',
+            'CIUDAD',
+            'TIPO DE CLIENTE',
+            'CATEGORÍA',
+            'COMERCIAL QUE LO RECIBE',
+        ];
+
+        const examples = [
+            [
+                'cliente@ejemplo.com',
+                'Nombre del Comercio',
+                '3001234567',
+                'Vendiendo',
+                'Cali',
+                'Mixto',
+                'Chino',
+                'NOMBRE COMERCIAL',
+            ],
+            [
+                'otro@tienda.com',
+                'Tienda Ejemplo',
+                '3109876543',
+                'Testeando',
+                'Bogotá',
+                'Dropshipper',
+                'Laboratorio',
+                'NOMBRE COMERCIAL',
+            ],
+            [
+                'tercero@shop.com',
+                'Mi Shop',
+                '3201112233',
+                'Escalando',
+                'Medellín',
+                'Ecommerce',
+                'Chino',
+                'NOMBRE COMERCIAL',
+            ],
+        ];
+
+        const notes = [
+            [],
+            ['--- VALORES VÁLIDOS ---'],
+            ['ESTADO:', 'Vendiendo | Testeando | Escalando | Encontrando Winner'],
+            ['TIPO:', 'Mixto | Dropshipper | Ecommerce'],
+            ['CATEGORÍA:', 'Chino | Laboratorio'],
+            [],
+            ['* El campo COMERCIAL QUE LO RECIBE es informativo. La asignación se hace en la plataforma.'],
+            ['* CORREO TIENDA y CELULAR PRINCIPAL son obligatorios por fila.'],
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...examples, [], ...notes]);
+
+        // Ancho de columnas
+        ws['!cols'] = [
+            { wch: 30 }, // email
+            { wch: 30 }, // nombre
+            { wch: 20 }, // celular
+            { wch: 25 }, // estado
+            { wch: 15 }, // ciudad
+            { wch: 15 }, // tipo
+            { wch: 15 }, // categoría
+            { wch: 25 }, // comercial
+        ];
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Clientes');
+        XLSX.writeFile(wb, 'plantilla_clientes_crm.xlsx');
+    }
+
     // ─── Render ─────────────────────────────────────────────────────────
 
     return (
@@ -336,6 +413,19 @@ export default function ImportClientsPage() {
                                     ))}
                                 </SelectContent>
                             </Select>
+                        </div>
+
+                        <div className="flex items-center gap-3 p-4 bg-muted/40 rounded-lg border">
+                            <FileSpreadsheet className="h-5 w-5 text-muted-foreground shrink-0" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium">¿No tienes el formato correcto?</p>
+                                <p className="text-xs text-muted-foreground">
+                                    Descarga la plantilla con los encabezados y valores válidos de ejemplo.
+                                </p>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={downloadTemplate} className="shrink-0">
+                                <Download className="mr-2 h-4 w-4" /> Descargar plantilla
+                            </Button>
                         </div>
 
                         <div
