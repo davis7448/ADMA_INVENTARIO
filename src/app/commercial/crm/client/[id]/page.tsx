@@ -12,16 +12,60 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Package, TestTube, FileText, Trash2, Check, ChevronsUpDown } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Pencil, TestTube, FileText, Trash2, Check, ChevronsUpDown } from 'lucide-react';
 import Link from 'next/link';
-import { getClientById, addNoteToClient, addOrderToClient, addTestToClient, getProductsWithStock, type ProductForOrder } from '@/lib/commercial-api';
-import type { CommercialClient, ClientNote, ClientOrder, ClientTest } from '@/types/commercial';
+import { getClientById, updateClient, addNoteToClient, addOrderToClient, addTestToClient, getProductsWithStock, type ProductForOrder } from '@/lib/commercial-api';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
+import type { CommercialClient, ClientNote, ClientOrder, ClientTest, ClientStatus, ClientCategory, ClientType } from '@/types/commercial';
 
 export default function ClientDetailPage() {
     const params = useParams();
+    const { toast } = useToast();
     const [client, setClient] = useState<CommercialClient | null>(null);
     const [loading, setLoading] = useState(true);
-    
+
+    // Estado de edición
+    const [isEditOpen, setIsEditOpen] = useState(false);
+    const [editForm, setEditForm] = useState<Partial<CommercialClient>>({});
+    const [isSaving, setIsSaving] = useState(false);
+
+    const openEdit = () => {
+        if (!client) return;
+        setEditForm({
+            name: client.name,
+            email: client.email,
+            phone: client.phone,
+            city: client.city,
+            category: client.category,
+            type: client.type,
+            avg_sales: client.avg_sales,
+            birthday: client.birthday
+                ? new Date(client.birthday).toISOString().split('T')[0]
+                : '',
+        });
+        setIsEditOpen(true);
+    };
+
+    const handleEditSave = async () => {
+        if (!client?.id) return;
+        setIsSaving(true);
+        try {
+            await updateClient(client.id, {
+                ...editForm,
+                birthday: editForm.birthday ? new Date(editForm.birthday as string) : client.birthday,
+            });
+            const updated = await getClientById(client.id);
+            setClient(updated);
+            setIsEditOpen(false);
+            toast({ title: 'Cliente actualizado correctamente.' });
+        } catch {
+            toast({ title: 'Error al guardar', variant: 'destructive' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     // Estados para notas
     const [newNoteContent, setNewNoteContent] = useState('');
     const [isAddingNote, setIsAddingNote] = useState(false);
@@ -302,10 +346,109 @@ export default function ClientDetailPage() {
                     </div>
                 </div>
                 <div className="ml-auto">
-                    <Button variant="outline">
-                        <Package className="mr-2 h-4 w-4" /> Editar
+                    <Button variant="outline" onClick={openEdit}>
+                        <Pencil className="mr-2 h-4 w-4" /> Editar
                     </Button>
                 </div>
+
+                {/* Dialog de edición */}
+                <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle>Editar Cliente</DialogTitle>
+                        </DialogHeader>
+                        <div className="grid grid-cols-1 gap-4 pt-2">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label>Nombre</Label>
+                                    <Input
+                                        value={editForm.name ?? ''}
+                                        onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>Ciudad</Label>
+                                    <Input
+                                        value={editForm.city ?? ''}
+                                        onChange={e => setEditForm(p => ({ ...p, city: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label>Email</Label>
+                                    <Input
+                                        type="email"
+                                        value={editForm.email ?? ''}
+                                        onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>Teléfono</Label>
+                                    <Input
+                                        value={editForm.phone ?? ''}
+                                        onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label>Categoría</Label>
+                                    <Select
+                                        value={editForm.category}
+                                        onValueChange={v => setEditForm(p => ({ ...p, category: v as ClientCategory }))}
+                                    >
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="laboratorio">Laboratorio</SelectItem>
+                                            <SelectItem value="chino">Chino</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>Tipo</Label>
+                                    <Select
+                                        value={editForm.type}
+                                        onValueChange={v => setEditForm(p => ({ ...p, type: v as ClientType }))}
+                                    >
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="dropshipper">Dropshipper</SelectItem>
+                                            <SelectItem value="ecommerce">E-commerce</SelectItem>
+                                            <SelectItem value="mixto">Mixto</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label>Ventas promedio ($)</Label>
+                                    <Input
+                                        type="number"
+                                        value={editForm.avg_sales ?? 0}
+                                        onChange={e => setEditForm(p => ({ ...p, avg_sales: Number(e.target.value) }))}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>Cumpleaños</Label>
+                                    <Input
+                                        type="date"
+                                        value={editForm.birthday as string ?? ''}
+                                        onChange={e => setEditForm(p => ({ ...p, birthday: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+                                    Cancelar
+                                </Button>
+                                <Button onClick={handleEditSave} disabled={isSaving}>
+                                    {isSaving ? 'Guardando...' : 'Guardar cambios'}
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -345,7 +488,7 @@ export default function ClientDetailPage() {
                                 <FileText className="h-4 w-4" /> Notas
                             </TabsTrigger>
                             <TabsTrigger value="orders" className="gap-2">
-                                <Package className="h-4 w-4" /> Pedidos
+                                <DollarSign className="h-4 w-4" /> Pedidos
                             </TabsTrigger>
                             <TabsTrigger value="tests" className="gap-2">
                                 <TestTube className="h-4 w-4" /> Testeos

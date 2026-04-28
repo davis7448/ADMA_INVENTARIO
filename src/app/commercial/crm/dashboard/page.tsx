@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Filter } from 'lucide-react';
+import { Plus, Search, Filter, Upload } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { CommercialClient } from '@/types/commercial';
@@ -102,11 +102,20 @@ export default function CrmDashboardPage() {
                     <h1 className="text-3xl font-bold tracking-tight">CRM Clientes</h1>
                     <p className="text-muted-foreground">Gestiona y visualiza el estado de tus clientes en el pipeline.</p>
                 </div>
-                <Link href="/commercial/crm/register">
-                    <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-all hover:scale-105">
-                        <Plus className="mr-2 h-4 w-4" /> Registrar Cliente
-                    </Button>
-                </Link>
+                <div className="flex gap-2">
+                    {(user?.role === 'admin' || user?.role === 'commercial_director') && (
+                        <Link href="/commercial/crm/import">
+                            <Button variant="outline">
+                                <Upload className="mr-2 h-4 w-4" /> Importar Excel
+                            </Button>
+                        </Link>
+                    )}
+                    <Link href="/commercial/crm/register">
+                        <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 transition-all hover:scale-105">
+                            <Plus className="mr-2 h-4 w-4" /> Registrar Cliente
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <div className="flex items-center gap-2">
