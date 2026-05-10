@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Esta route es legacy. Las operaciones de escritura se hacen vía client SDK
+// en src/app/actions/modificaciones.ts. Solo se mantiene GET para uso externo.
+
 const API_URL = process.env.FIRESTORE_EMULATOR_HOST
   ? 'http://localhost:8080'
   : 'https://firestore.googleapis.com/v1';
@@ -19,45 +22,6 @@ async function getModificacionById(id: string) {
   return response.json();
 }
 
-async function createModificacion(data: any) {
-  const response = await fetch(`${BASE_URL}/modificaciones`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: formatFields(data) }),
-  });
-  return response.json();
-}
-
-async function updateModificacion(id: string, data: any) {
-  const response = await fetch(`${BASE_URL}/modificaciones/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: formatFields(data) }),
-  });
-  return response.json();
-}
-
-async function deleteModificacion(id: string) {
-  await fetch(`${BASE_URL}/modificaciones/${id}`, { method: 'DELETE' });
-}
-
-function formatFields(data: any) {
-  const fields: any = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (value === null || value === undefined) continue;
-    if (typeof value === 'string') {
-      fields[key] = { stringValue: value };
-    } else if (typeof value === 'number') {
-      fields[key] = { integerValue: value };
-    } else if (typeof value === 'boolean') {
-      fields[key] = { booleanValue: value };
-    } else {
-      fields[key] = { stringValue: String(value) };
-    }
-  }
-  return fields;
-}
-
 function parseFields(doc: any) {
   if (!doc || !doc.fields) return { id: doc.name?.split('/').pop() };
   const fields: any = { id: doc.name?.split('/').pop() };
@@ -73,6 +37,11 @@ function parseFields(doc: any) {
 }
 
 export async function GET(request: NextRequest) {
+  const role = request.headers.get('x-user-role');
+  if (!role) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -91,51 +60,5 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching modificaciones:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const doc = await createModificacion(body);
-    return NextResponse.json(parseFields(doc));
-  } catch (error) {
-    console.error('Error creating modificacion:', error);
-    return NextResponse.json({ error: 'Failed to create' }, { status: 500 });
-  }
-}
-
-export async function PUT(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    const body = await request.json();
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID required' }, { status: 400 });
-    }
-
-    const doc = await updateModificacion(id, body);
-    return NextResponse.json(parseFields(doc));
-  } catch (error) {
-    console.error('Error updating modificacion:', error);
-    return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID required' }, { status: 400 });
-    }
-
-    await deleteModificacion(id);
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting modificacion:', error);
-    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }
 }
