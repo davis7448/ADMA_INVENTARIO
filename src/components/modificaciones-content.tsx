@@ -194,6 +194,7 @@ export function ModificacionesContent() {
     // Stats
     const countTipo = (tipo: TipoModificacion) => data.filter(d => d.tipoModificacion === tipo).length;
     const countAjuste = data.filter(d => !d.tipoModificacion || d.tipoModificacion === 'AJUSTE_STOCK').length;
+    const countBajas = data.filter(d => d["CANTIDAD POSTERIOR"] === 0).length;
 
     // Form handlers
     const handleFormChange = (field: keyof Modificacion, value: any) => {
@@ -454,8 +455,8 @@ export function ModificacionesContent() {
                         <div className="flex items-center gap-3">
                             <XCircle className="h-8 w-8 text-red-500" />
                             <div>
-                                <p className="text-2xl font-bold">{countTipo('BAJA_PLATAFORMA')}</p>
-                                <p className="text-xs text-muted-foreground">Bajas</p>
+                                <p className="text-2xl font-bold">{countBajas}</p>
+                                <p className="text-xs text-muted-foreground">Bajas (cant. en 0)</p>
                             </div>
                         </div>
                     </CardContent>
