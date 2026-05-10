@@ -78,26 +78,22 @@ export async function seedModificaciones(data: Modificacion[]) {
 }
 
 export async function getModificaciones(startDate?: Date, endDate?: Date, pais?: string, comercial?: string) {
-    let q;
+    const now = new Date();
+    const start = startDate || new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()); // 6 meses atrás por defecto
+    const end = endDate || now;
 
-    if (startDate && endDate) {
-        // Con rango de fechas: where + orderBy en el mismo campo — no requiere índice compuesto
-        q = query(
-            collection(db, 'modificaciones'),
-            where('FECHA', '>=', startDate.getTime()),
-            where('FECHA', '<=', endDate.getTime()),
-            orderBy('FECHA', 'desc')
-        );
-    } else {
-        // Sin rango: trae todos ordenados por fecha, límite de 1000 para no saturar
-        q = query(
-            collection(db, 'modificaciones'),
-            orderBy('FECHA', 'desc'),
-            limit(1000)
-        );
-    }
+    const q = query(
+        collection(db, 'modificaciones'),
+        where('FECHA', '>=', start.getTime()),
+        where('FECHA', '<=', end.getTime()),
+        orderBy('FECHA', 'desc')
+    );
 
-    const querySnapshot = await getDocs(q);
+    const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout: Firestore tardó demasiado en responder')), 15000)
+    );
+
+    const querySnapshot = await Promise.race([getDocs(q), timeout]);
     let results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as (Modificacion & { id: string })[];
 
     if (pais && pais !== 'todos') {
@@ -248,7 +244,7 @@ export async function getComercialUsers() {
 // Obtener TODAS las modificaciones sin paginación (para exportación a Excel)
 export async function getAllModificacionesForExport(startDate?: Date, endDate?: Date, pais?: string, comercial?: string) {
     const now = new Date();
-    const defaultStart = startDate || new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // Default 30 días para exportación
+    const defaultStart = startDate || new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
     const defaultEnd = endDate || now;
 
     let q = query(
