@@ -1662,8 +1662,7 @@ export const getProductPerformanceData = async (
         }
     }
     
-    const thirtyDaysAgo = subDays(new Date(), 30);
-    const returnMovements = movements.filter(m => 
+    const returnMovements = movements.filter(m =>
         (m.type === 'Entrada' || m.type === 'Averia') && 
         (m.notes.toLowerCase().includes('devolución') || m.notes.toLowerCase().includes('averia')) &&
         new Date(m.date) >= thirtyDaysAgo
