@@ -553,6 +553,7 @@ export function ModificacionesContent() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-muted/50">
+                                            <TableHead className="w-16">ID</TableHead>
                                             <TableHead className="w-28">Fecha</TableHead>
                                             <TableHead className="w-24">Tipo</TableHead>
                                             <TableHead>Producto / Variable</TableHead>
@@ -567,6 +568,7 @@ export function ModificacionesContent() {
                                     <TableBody>
                                         {paginatedData.map(row => (
                                             <TableRow key={row.id} className="hover:bg-muted/30 transition-colors">
+                                                <TableCell className="text-sm font-medium tabular-nums">{row.ID ?? '—'}</TableCell>
                                                 <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{formatFecha(row.FECHA)}</TableCell>
                                                 <TableCell>{tipoBadge(row.tipoModificacion)}</TableCell>
                                                 <TableCell>
