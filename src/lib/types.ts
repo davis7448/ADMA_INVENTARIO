@@ -129,7 +129,9 @@ export type InventoryMovement = {
   dispatchId?: string;
   userId?: string;
   userName?: string;
-  warehouseId?: string; // New field
+  warehouseId?: string;
+  variantId?: string;
+  variantSku?: string;
 };
 
 export type Carrier = {

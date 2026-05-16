@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const platformId = searchParams.get('platformId');
     const carrierId = searchParams.get('carrierId');
+    const productId = searchParams.get('productId');
     
     console.log('[API] Params:', { 
       cursor, 
@@ -36,11 +37,16 @@ export async function GET(request: NextRequest) {
       constraints.push(where('warehouseId', '==', warehouseId));
     }
     
+    // Optional: product filter
+    if (productId) {
+      constraints.push(where('productId', '==', productId));
+    }
+
     // Optional: platform filter (before orderBy for index efficiency)
     if (platformId && platformId !== 'all') {
       constraints.push(where('platformId', '==', platformId));
     }
-    
+
     // Optional: carrier filter (before orderBy for index efficiency)
     if (carrierId && carrierId !== 'all') {
       constraints.push(where('carrierId', '==', carrierId));

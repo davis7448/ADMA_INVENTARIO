@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const platformId = searchParams.get('platformId');
     const carrierId = searchParams.get('carrierId');
     const status = searchParams.get('status');
+    const productId = searchParams.get('productId');
     
     console.log('[API] Orders params:', { 
       cursor, 
@@ -76,19 +77,21 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Limit results
-    constraints.push(limit(itemsPerPage));
-    
+    // When filtering by product we need to fetch more and filter client-side
+    // (Firestore can't filter on nested array of objects)
+    const fetchLimit = productId ? itemsPerPage * 20 : itemsPerPage;
+    constraints.push(limit(fetchLimit));
+
     // Execute query
     console.log('[API] Orders executing query with', constraints.length, 'constraints');
     const ordersRef = collection(db, 'dispatchOrders');
     const ordersQuery = query(ordersRef, ...constraints);
-    
+
     const snapshot = await getDocs(ordersQuery);
     console.log(`[API] Orders query returned ${snapshot.docs.length} documents`);
-    
+
     // Map results
-    const orders = snapshot.docs.map(docSnapshot => {
+    let orders = snapshot.docs.map(docSnapshot => {
       const data = docSnapshot.data();
       return {
         id: docSnapshot.id,
@@ -96,13 +99,25 @@ export async function GET(request: NextRequest) {
         date: data.date?.toDate?.() ? data.date.toDate().toISOString() : data.date,
       };
     });
-    
-    // Get next cursor (last document ID)
+
+    // Client-side product filter (Firestore limitation with nested arrays)
+    if (productId) {
+      orders = orders.filter((o: any) =>
+        Array.isArray(o.products) && o.products.some((p: any) => p.productId === productId)
+      );
+    }
+
+    // Paginate after client-side filter
+    const pageOffset = productId ? (targetPage - 1) * itemsPerPage : 0;
+    const pagedOrders = productId ? orders.slice(pageOffset, pageOffset + itemsPerPage) : orders;
+
+    // Get next cursor (last document ID from Firestore snapshot, not paged slice)
     const lastDoc = snapshot.docs[snapshot.docs.length - 1];
     const nextCursor = lastDoc?.id || null;
-    
-    // Check if there are more results
-    const hasMore = snapshot.docs.length === itemsPerPage;
+
+    const hasMore = productId
+      ? orders.length > pageOffset + itemsPerPage
+      : snapshot.docs.length === itemsPerPage;
     
     console.log('[API] Orders response:', { 
       count: orders.length, 
@@ -112,7 +127,7 @@ export async function GET(request: NextRequest) {
     });
     
     return NextResponse.json({
-      orders,
+      orders: pagedOrders,
       hasMore,
       nextCursor,
       page: targetPage

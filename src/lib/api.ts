@@ -912,6 +912,8 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             userId: createdBy?.id,
             userName: createdBy?.name,
             warehouseId,
+            variantId: product.variantId,
+            variantSku: product.variantSku,
         });
     }
 
@@ -1594,9 +1596,8 @@ export const getProductPerformanceData = async (
     opts?: { product?: Product | null; platforms?: Platform[] }
 ): Promise<ProductPerformanceData> => {
     const thirtyDaysAgo = subDays(new Date(), 30);
-    const [product, dispatchOrdersResult, movements, carriers, platforms] = await Promise.all([
+    const [product, movements, carriers, platforms] = await Promise.all([
         opts?.product !== undefined ? Promise.resolve(opts.product) : getProductById(productId),
-        getDispatchOrders({ limit: 1000, filters: { startDate: thirtyDaysAgo.toISOString() } }),
         getInventoryMovementsByProductId(productId),
         getCarriers(),
         opts?.platforms ? Promise.resolve(opts.platforms) : getPlatforms(),
@@ -1614,10 +1615,10 @@ export const getProductPerformanceData = async (
     const salesByDay: Record<string, number> = {};
     const returnsByDay: Record<string, number> = {};
     const returnsByCarrier: Record<string, number> = {};
-    
+
     const salesByVariant: NonNullable<ProductPerformanceData['salesByVariant']> = {};
     const returnsByVariant: NonNullable<ProductPerformanceData['returnsByVariant']> = {};
-    
+
     const initializeVariantData = (variantId: string) => {
         if (!salesByVariant[variantId]) {
             salesByVariant[variantId] = { byCarrier: [], byPlatform: [], byDay: {} };
@@ -1631,31 +1632,33 @@ export const getProductPerformanceData = async (
         product.variants.forEach(v => initializeVariantData(v.id));
     }
 
-    for (const order of dispatchOrdersResult.orders) {
-        for (const p of order.products) {
-            if (p.productId === productId) {
-                const carrierName = carrierMap.get(order.carrierId) || 'Unknown Carrier';
-                const platformName = platformMap.get(order.platformId) || 'Unknown Platform';
-                const day = format(startOfDay(order.date), 'yyyy-MM-dd');
-                const qty = p.quantity;
+    // Sales: built from inventory movements type 'Salida' (filtrado por productId en Firestore)
+    for (const movement of movements) {
+        if (movement.type !== 'Salida') continue;
+        if (new Date(movement.date) < thirtyDaysAgo) continue;
 
-                salesByCarrier[carrierName] = (salesByCarrier[carrierName] || 0) + qty;
-                salesByPlatform[platformName] = (salesByPlatform[platformName] || 0) + qty;
-                salesByDay[day] = (salesByDay[day] || 0) + qty;
+        const carrierName = movement.carrierId ? carrierMap.get(movement.carrierId) || 'Unknown Carrier' : 'Unknown Carrier';
+        const platformName = movement.platformId ? platformMap.get(movement.platformId) || 'Unknown Platform' : 'Unknown Platform';
+        const day = format(startOfDay(new Date(movement.date)), 'yyyy-MM-dd');
+        const qty = movement.quantity;
 
-                if (p.variantId && salesByVariant[p.variantId]) {
-                    const variantSales = salesByVariant[p.variantId];
-                    variantSales.byDay[day] = (variantSales.byDay[day] || 0) + qty;
+        salesByCarrier[carrierName] = (salesByCarrier[carrierName] || 0) + qty;
+        salesByPlatform[platformName] = (salesByPlatform[platformName] || 0) + qty;
+        salesByDay[day] = (salesByDay[day] || 0) + qty;
 
-                    const carrierRecord = variantSales.byCarrier.find(c => c.name === carrierName);
-                    if (carrierRecord) carrierRecord.value += qty;
-                    else variantSales.byCarrier.push({ name: carrierName, value: qty });
-                    
-                    const platformRecord = variantSales.byPlatform.find(pl => pl.name === platformName);
-                    if (platformRecord) platformRecord.value += qty;
-                    else variantSales.byPlatform.push({ name: platformName, value: qty });
-                }
-            }
+        const variantId = movement.variantId;
+        if (variantId) {
+            if (!salesByVariant[variantId]) initializeVariantData(variantId);
+            const variantSales = salesByVariant[variantId];
+            variantSales.byDay[day] = (variantSales.byDay[day] || 0) + qty;
+
+            const carrierRecord = variantSales.byCarrier.find(c => c.name === carrierName);
+            if (carrierRecord) carrierRecord.value += qty;
+            else variantSales.byCarrier.push({ name: carrierName, value: qty });
+
+            const platformRecord = variantSales.byPlatform?.find(pl => pl.name === platformName);
+            if (platformRecord) platformRecord.value += qty;
+            else variantSales.byPlatform.push({ name: platformName, value: qty });
         }
     }
     

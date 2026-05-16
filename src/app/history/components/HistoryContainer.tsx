@@ -119,7 +119,10 @@ export function HistoryContainer({
       if (carrierId !== 'all') {
         params.set('carrierId', carrierId);
       }
-      
+      if (selectedProductId) {
+        params.set('productId', selectedProductId);
+      }
+
       console.log('[Client] Fetching movements page', targetPage, 'cursor:', cursor);
       
       const response = await fetch(`/api/history/movements?${params.toString()}`);
@@ -154,7 +157,7 @@ export function HistoryContainer({
     } finally {
       setMovementsLoading(false);
     }
-  }, [movementsCursors, startDate, endDate, platformId, carrierId, warehouseId, movementsLoading]);
+  }, [movementsCursors, startDate, endDate, platformId, carrierId, warehouseId, movementsLoading, selectedProductId]);
 
   // Fetch orders for current page
   const fetchOrders = useCallback(async (targetPage: number = 1) => {
@@ -191,7 +194,10 @@ export function HistoryContainer({
       if (status !== 'all') {
         params.set('status', status);
       }
-      
+      if (selectedProductId) {
+        params.set('productId', selectedProductId);
+      }
+
       console.log('[Client] Fetching orders page', targetPage, 'cursor:', cursor);
       
       const response = await fetch(`/api/history/orders?${params.toString()}`);
@@ -226,7 +232,7 @@ export function HistoryContainer({
     } finally {
       setOrdersLoading(false);
     }
-  }, [ordersCursors, startDate, endDate, platformId, carrierId, status, warehouseId, ordersLoading]);
+  }, [ordersCursors, startDate, endDate, platformId, carrierId, status, warehouseId, ordersLoading, selectedProductId]);
 
   // Initial load - only once per tab
   useEffect(() => {
@@ -403,8 +409,8 @@ export function HistoryContainer({
     }
   };
 
-  const hasActiveFilters = startDate || endDate || platformId !== 'all' || 
-                          carrierId !== 'all' || status !== 'all' || selectedProductId;
+  const hasActiveFilters = startDate || endDate || platformId !== 'all' ||
+                          carrierId !== 'all' || status !== 'all' || !!selectedProductId;
 
   // Get status badge variant
   const getStatusBadgeVariant = (status: string) => {
@@ -604,6 +610,12 @@ export function HistoryContainer({
                     <Badge variant="secondary" className="gap-1">
                       {status}
                       <X className="h-3 w-3 cursor-pointer" onClick={() => setStatus('all')} />
+                    </Badge>
+                  )}
+                  {selectedProductId && (
+                    <Badge variant="secondary" className="gap-1">
+                      {productSearch}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => { setSelectedProductId(null); setProductSearch(''); }} />
                     </Badge>
                   )}
                 </>
