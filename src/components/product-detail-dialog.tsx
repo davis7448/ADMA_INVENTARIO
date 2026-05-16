@@ -59,7 +59,8 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   const [performanceData, setPerformanceData] = useState<ProductPerformanceData | null>(null);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingProduct, setLoadingProduct] = useState(true);
+  const [loadingPerformance, setLoadingPerformance] = useState(true);
   const [externalStock, setExternalStock] = useState<ExternalStockSummaryMap>({});
   const [isReservationDialogOpen, setIsReservationDialogOpen] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string>('total');
@@ -68,20 +69,27 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
 
   const refreshData = async () => {
     if (productId && open) {
-        setLoading(true);
+        setLoadingProduct(true);
+        setLoadingPerformance(true);
+        setPerformanceData(null);
         setExternalStock({});
-        Promise.all([
+
+        // Fase 1: datos rápidos — el dialog se muestra de inmediato
+        const [productData, vendedorData, platformData] = await Promise.all([
             getProductById(productId),
-            getProductPerformanceData(productId),
             getVendedores(),
             getPlatforms(),
-        ]).then(([productData, perfData, vendedorData, platformData]) => {
-            setProduct(productData);
-            setPerformanceData(perfData);
-            setVendedores(vendedorData);
-            setPlatforms(platformData);
-            setLoading(false);
-        });
+        ]);
+        setProduct(productData);
+        setVendedores(vendedorData);
+        setPlatforms(platformData);
+        setLoadingProduct(false);
+
+        // Fase 2: datos lentos — charts cargan en background
+        getProductPerformanceData(productId, { product: productData, platforms: platformData })
+            .then(setPerformanceData)
+            .finally(() => setLoadingPerformance(false));
+
         getExternalStockSummaryAction([productId]).then(res => {
             if (res.success) setExternalStock(res.summary);
         });
@@ -180,7 +188,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
           <DialogDescription>Detailed information and performance for the selected product.</DialogDescription>
         </DialogHeader>
         <div className="py-6 space-y-6">
-          {loading || !product ? (
+          {loadingProduct || !product ? (
             <div className="space-y-4">
               <Skeleton className="h-48 w-full rounded-lg" />
               <Skeleton className="h-8 w-3/4" />
@@ -425,6 +433,15 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                 </div>
               )}
 
+              {loadingPerformance ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                </div>
+              ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
@@ -476,6 +493,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                     </CardContent>
                 </Card>
               </div>
+              )}
             </>
           )}
         </div>

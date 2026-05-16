@@ -40,21 +40,28 @@ interface ProductDetailDialogProps {
 export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDetailDialogProps) {
   const [product, setProduct] = useState<Product | null>(null);
   const [performanceData, setPerformanceData] = useState<ProductPerformanceData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingProduct, setLoadingProduct] = useState(true);
+  const [loadingPerformance, setLoadingPerformance] = useState(true);
   const [externalStock, setExternalStock] = useState<ExternalStockSummaryMap>({});
 
   useEffect(() => {
     if (productId && open) {
-      setLoading(true);
+      setLoadingProduct(true);
+      setLoadingPerformance(true);
+      setPerformanceData(null);
       setExternalStock({});
-      Promise.all([
-        getProductById(productId),
-        getProductPerformanceData(productId),
-      ]).then(([productData, perfData]) => {
+
+      // Fase 1: producto inmediato
+      getProductById(productId).then(productData => {
         setProduct(productData);
-        setPerformanceData(perfData);
-        setLoading(false);
+        setLoadingProduct(false);
+
+        // Fase 2: charts en background, reutilizando el producto ya cargado
+        getProductPerformanceData(productId, { product: productData })
+          .then(setPerformanceData)
+          .finally(() => setLoadingPerformance(false));
       });
+
       getExternalStockSummaryAction([productId]).then(res => {
         if (res.success) setExternalStock(res.summary);
       });
@@ -101,7 +108,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
           <DialogDescription>Detailed information and performance for the selected product.</DialogDescription>
         </DialogHeader>
         <div className="py-6 space-y-6">
-          {loading || !product ? (
+          {loadingProduct || !product ? (
             <div className="space-y-4">
               <Skeleton className="h-48 w-full rounded-lg" />
               <Skeleton className="h-8 w-3/4" />
@@ -214,6 +221,14 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                 );
               })()}
 
+              {loadingPerformance ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                  <Skeleton className="h-64 w-full rounded-lg" />
+                </div>
+              ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
@@ -255,6 +270,7 @@ export function ProductDetailDialog({ productId, open, onOpenChange }: ProductDe
                     </CardContent>
                 </Card>
               </div>
+              )}
             </>
           )}
         </div>

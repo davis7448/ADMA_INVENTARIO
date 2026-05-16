@@ -1589,13 +1589,17 @@ export const updateEntryReasons = async (reasons: EntryReason[]): Promise<void> 
 
 // ... other functions remain unchanged
 
-export const getProductPerformanceData = async (productId: string): Promise<ProductPerformanceData> => {
+export const getProductPerformanceData = async (
+    productId: string,
+    opts?: { product?: Product | null; platforms?: Platform[] }
+): Promise<ProductPerformanceData> => {
+    const thirtyDaysAgo = subDays(new Date(), 30);
     const [product, dispatchOrdersResult, movements, carriers, platforms] = await Promise.all([
-        getProductById(productId),
-        getDispatchOrders({ limit: 1000 }), 
+        opts?.product !== undefined ? Promise.resolve(opts.product) : getProductById(productId),
+        getDispatchOrders({ limit: 1000, filters: { startDate: thirtyDaysAgo.toISOString() } }),
         getInventoryMovementsByProductId(productId),
         getCarriers(),
-        getPlatforms(),
+        opts?.platforms ? Promise.resolve(opts.platforms) : getPlatforms(),
     ]);
 
     if (!product) {
