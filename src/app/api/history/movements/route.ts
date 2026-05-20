@@ -57,7 +57,9 @@ export async function GET(request: NextRequest) {
       constraints.push(where('date', '>=', new Date(startDate)));
     }
     if (endDate) {
-      constraints.push(where('date', '<=', new Date(endDate)));
+      const endDateObj = new Date(endDate);
+      endDateObj.setHours(23, 59, 59, 999);
+      constraints.push(where('date', '<=', endDateObj));
     }
     
     // Order by date desc (newest first)

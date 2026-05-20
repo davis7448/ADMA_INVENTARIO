@@ -21,7 +21,8 @@ import {
     TableRow,
   } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { getDashboardData, getProducts, getCarriers, getCategories, getPlatforms } from '@/lib/api';
+import { getDashboardRawData, getProducts, getCarriers, getCategories, getPlatforms } from '@/lib/api';
+import { computeDashboardData, type DashboardRawData } from '@/lib/dashboard-utils';
 import type { DashboardData } from '@/lib/types';
 import type { Product, Carrier, Category, Platform, ProductVariant } from '@/lib/types';
 import { CalendarIcon, PackageCheck, PackageX, CornerDownLeft, Check, ChevronsUpDown, X, PlusCircle, ChevronDown, ArchiveX, Settings, Edit } from 'lucide-react';
@@ -69,6 +70,78 @@ const SKELETON_DASHBOARD_DATA: DashboardData = {
     dailyProductDispatch: {},
 };
 
+interface MultiSelectFilterProps<T extends { id: string; name: string }> {
+  title: string;
+  options: T[];
+  selected: string[];
+  onSelectedChange: (selected: string[]) => void;
+}
+
+const MultiSelectFilter = React.memo(<T extends { id: string; name: string }>({
+  title,
+  options,
+  selected,
+  onSelectedChange,
+}: MultiSelectFilterProps<T>) => {
+  const [open, setOpen] = useState(false);
+
+  const handleSelect = (id: string) => {
+    const isSelected = selected.includes(id);
+    if (isSelected) {
+      onSelectedChange(selected.filter((s) => s !== id));
+    } else {
+      onSelectedChange([...selected, id]);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full justify-start font-normal">
+          <PlusCircle className="mr-2 h-4 w-4" />
+          {title}
+          {selected.length > 0 && (
+            <Badge variant="secondary" className="ml-auto rounded-sm px-2">
+              {selected.length}
+            </Badge>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Buscar..." />
+          <CommandList>
+            <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.id}
+                  onSelect={() => {
+                    handleSelect(option.id);
+                    setOpen(true);
+                  }}
+                >
+                  <div
+                    className={cn(
+                      "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                      selected.includes(option.id)
+                        ? "bg-primary text-primary-foreground"
+                        : "opacity-50 [&_svg]:invisible"
+                    )}
+                  >
+                    <Check className="h-4 w-4" />
+                  </div>
+                  <span>{option.name}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+});
+
 function NewDashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -80,7 +153,7 @@ function NewDashboardContent() {
     return { from, to };
   });
 
-  const [dashboardData, setDashboardData] = useState<DashboardData>(SKELETON_DASHBOARD_DATA);
+  const [rawData, setRawData] = useState<DashboardRawData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterOptionsLoading, setFilterOptionsLoading] = useState(true);
   const [expandedDashboardRow, setExpandedDashboardRow] = useState<string | null>(null);
@@ -159,24 +232,32 @@ function NewDashboardContent() {
       if (!dateRange?.from || !dateRange?.to) return;
       setLoading(true);
       try {
-        const data = await getDashboardData({
+        const data = await getDashboardRawData({
           warehouseId,
           dateRange: { from: dateRange.from, to: dateRange.to },
-          platformIds: filterPlatforms,
-          carrierIds: filterCarriers,
-          categoryIds: filterCategories,
-          productIds: filterProducts,
         });
-        setDashboardData(data);
+        setRawData(data);
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
-        setDashboardData(SKELETON_DASHBOARD_DATA); // Reset data on error
+        setRawData(null);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [warehouseId, dateRange, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
+  }, [warehouseId, dateRange]);
+
+  const dashboardData = useMemo<DashboardData>(() => {
+    if (!rawData || !dateRange?.from || !dateRange?.to) return SKELETON_DASHBOARD_DATA;
+    return computeDashboardData(rawData, {
+      warehouseId,
+      dateRange: { from: dateRange.from, to: dateRange.to },
+      platformIds: filterPlatforms,
+      carrierIds: filterCarriers,
+      categoryIds: filterCategories,
+      productIds: filterProducts,
+    });
+  }, [rawData, warehouseId, dateRange, filterPlatforms, filterCarriers, filterCategories, filterProducts]);
 
   const handleToggleDashboardRow = (productId: string) => {
     setExpandedDashboardRow(prev => (prev === productId ? null : productId));
@@ -195,77 +276,6 @@ function NewDashboardContent() {
     [filterPlatforms, filterCarriers, filterCategories, filterProducts]
   );
 
-
-  interface MultiSelectFilterProps<T extends { id: string; name: string }> {
-    title: string;
-    options: T[];
-    selected: string[];
-    onSelectedChange: (selected: string[]) => void;
-  }
-
-  const MultiSelectFilter = React.memo(<T extends { id: string; name: string }>({
-    title,
-    options,
-    selected,
-    onSelectedChange,
-  }: MultiSelectFilterProps<T>) => {
-    const [open, setOpen] = useState(false);
-
-    const handleSelect = (id: string) => {
-      const isSelected = selected.includes(id);
-      if (isSelected) {
-        onSelectedChange(selected.filter((s) => s !== id));
-      } else {
-        onSelectedChange([...selected, id]);
-      }
-    };
-
-    return (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className="w-full justify-start font-normal">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            {title}
-            {selected.length > 0 && (
-              <Badge variant="secondary" className="ml-auto rounded-sm px-2">
-                {selected.length}
-              </Badge>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <Command>
-            <CommandList>
-              <CommandEmpty>No se encontraron resultados.</CommandEmpty>
-              <CommandGroup>
-                {options.map((option) => (
-                  <CommandItem
-                    key={option.id}
-                    onSelect={() => {
-                        handleSelect(option.id);
-                        setOpen(true);
-                    }}
-                  >
-                    <div
-                      className={cn(
-                        "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                        selected.includes(option.id)
-                          ? "bg-primary text-primary-foreground"
-                          : "opacity-50 [&_svg]:invisible"
-                      )}
-                    >
-                      <Check className="h-4 w-4" />
-                    </div>
-                    <span>{option.name}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    );
-  });
 
   return (
     <div className="flex flex-col gap-8">

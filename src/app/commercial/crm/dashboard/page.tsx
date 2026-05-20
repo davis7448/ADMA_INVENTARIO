@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +37,7 @@ export default function CrmDashboardPage() {
     const { user } = useAuth();
     const [clients, setClients] = useState<CommercialClient[]>([]);
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
 
     useEffect(() => {
         async function loadClients() {
@@ -87,6 +88,15 @@ export default function CrmDashboardPage() {
         }
     };
 
+    const filteredClients = useMemo(() => {
+        if (!search.trim()) return clients;
+        const q = search.toLowerCase();
+        return clients.filter(c =>
+            c.name?.toLowerCase().includes(q) ||
+            c.email?.toLowerCase().includes(q)
+        );
+    }, [clients, search]);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[calc(100vh-200px)]">
@@ -125,6 +135,8 @@ export default function CrmDashboardPage() {
                         type="search"
                         placeholder="Buscar cliente..."
                         className="pl-8 bg-background/50 backdrop-blur-sm"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
                     />
                 </div>
                 <Button variant="outline" size="icon">
@@ -135,7 +147,7 @@ export default function CrmDashboardPage() {
             <DragDropContext onDragEnd={onDragEnd}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-[calc(100vh-250px)] overflow-x-auto">
                     {columns.map(col => {
-                        const colClients = clients.filter(c => c.status === col.id);
+                        const colClients = filteredClients.filter(c => c.status === col.id);
                         return (
                             <Droppable key={col.id} droppableId={col.id}>
                                 {(provided, snapshot) => (
