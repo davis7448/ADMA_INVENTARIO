@@ -2,11 +2,19 @@ import { format, getDate } from 'date-fns';
 import type { DashboardRawData } from './dashboard-utils';
 import type { DispatchOrderProduct, DispatchExceptionProduct } from './types';
 
+export type DayData = {
+  despachado: number;
+  devoluciones: number;
+  averias: number;
+  estimacion: number;
+};
+
 export type WeekData = {
   despachado: number;
   devoluciones: number;
   averias: number;
   estimacion: number;
+  dias: Record<string, DayData>; // key: 'yyyy-MM-dd'
 };
 
 export type ProductionProductData = {
@@ -35,6 +43,10 @@ function weekOfMonth(date: Date): string {
 }
 
 function emptyWeekData(): WeekData {
+  return { despachado: 0, devoluciones: 0, averias: 0, estimacion: 0, dias: {} };
+}
+
+function emptyDayData(): DayData {
   return { despachado: 0, devoluciones: 0, averias: 0, estimacion: 0 };
 }
 
@@ -64,6 +76,7 @@ export function computeProductionReport(
     const date = new Date(order.date);
     const month = format(date, 'yyyy-MM');
     const week = weekOfMonth(date);
+    const day = format(date, 'yyyy-MM-dd');
 
     const monthData = getOrInit(result, month, () => ({
       porProducto: {},
@@ -112,6 +125,8 @@ export function computeProductionReport(
       prod.despachado += p.quantity;
       const wk = getOrInit(prod.semanas, week, emptyWeekData);
       wk.despachado += p.quantity;
+      const dk = getOrInit(wk.dias, day, emptyDayData);
+      dk.despachado += p.quantity;
     }
   }
 
@@ -122,6 +137,7 @@ export function computeProductionReport(
     const date = new Date(m.date);
     const month = format(date, 'yyyy-MM');
     const week = weekOfMonth(date);
+    const day = format(date, 'yyyy-MM-dd');
 
     const isDevolucion =
       m.type === 'Entrada' &&
@@ -146,13 +162,16 @@ export function computeProductionReport(
     }));
 
     const wk = getOrInit(prod.semanas, week, emptyWeekData);
+    const dk = getOrInit(wk.dias, day, emptyDayData);
 
     if (isDevolucion) {
       prod.devoluciones += m.quantity;
       wk.devoluciones += m.quantity;
+      dk.devoluciones += m.quantity;
     } else {
       prod.averias += m.quantity;
       wk.averias += m.quantity;
+      dk.averias += m.quantity;
     }
   }
 
@@ -162,6 +181,9 @@ export function computeProductionReport(
       prod.estimacion = prod.despachado + prod.averias - prod.devoluciones;
       for (const wk of Object.values(prod.semanas)) {
         wk.estimacion = wk.despachado + wk.averias - wk.devoluciones;
+        for (const dk of Object.values(wk.dias)) {
+          dk.estimacion = dk.despachado + dk.averias - dk.devoluciones;
+        }
       }
     }
     monthData.totales = Object.values(monthData.porProducto).reduce(

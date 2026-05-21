@@ -110,16 +110,29 @@ function ReporteProduccionContent() {
         rows.push({
           Producto: prod.name,
           Semana: semana,
+          Día: '',
           Despachado: wk.despachado,
           Devoluciones: wk.devoluciones,
           Averías: wk.averias,
           Estimación: wk.estimacion,
         });
+        const sortedDays = Object.entries(wk.dias).sort(([a], [b]) => a.localeCompare(b));
+        for (const [dateKey, dk] of sortedDays) {
+          rows.push({
+            Producto: prod.name,
+            Semana: semana,
+            Día: format(new Date(dateKey + 'T12:00:00'), 'EEE dd MMM', { locale: es }),
+            Despachado: dk.despachado,
+            Devoluciones: dk.devoluciones,
+            Averías: dk.averias,
+            Estimación: dk.estimacion,
+          });
+        }
       }
     }
 
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 40 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 }];
+    ws['!cols'] = [{ wch: 40 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, monthLabel.slice(0, 31));
     XLSX.writeFile(wb, `produccion_${month}.xlsx`);
@@ -170,11 +183,11 @@ function ReporteProduccionContent() {
     }
 
     // Per-product table
-    const head = [['Producto', 'Semana', 'Despachado', 'Devoluciones', 'Averías', 'Estimación', 'Δ Desp.']];
+    const head = [['Producto', 'Semana', 'Día', 'Despachado', 'Devoluciones', 'Averías', 'Estimación', 'Δ Desp.']];
     const body: (string | number)[][] = [];
 
     for (const prod of products) {
-      body.push([prod.name, 'TOTAL', prod.despachado, prod.devoluciones, prod.averias, prod.estimacion, '']);
+      body.push([prod.name, 'TOTAL', '', prod.despachado, prod.devoluciones, prod.averias, prod.estimacion, '']);
       let prevDesp: number | null = null;
       for (const semana of WEEKS) {
         const wk = prod.semanas[semana];
@@ -182,8 +195,18 @@ function ReporteProduccionContent() {
         const delta = prevDesp !== null && prevDesp !== 0
           ? `${wk.despachado >= prevDesp ? '▲' : '▼'} ${Math.abs(Math.round(((wk.despachado - prevDesp) / prevDesp) * 100))}%`
           : '';
-        body.push([prod.name, semana, wk.despachado, wk.devoluciones, wk.averias, wk.estimacion, delta]);
+        body.push([prod.name, semana, '', wk.despachado, wk.devoluciones, wk.averias, wk.estimacion, delta]);
         prevDesp = wk.despachado;
+        const sortedDays = Object.entries(wk.dias).sort(([a], [b]) => a.localeCompare(b));
+        let prevDayDesp: number | null = null;
+        for (const [dateKey, dk] of sortedDays) {
+          const dayLabel = format(new Date(dateKey + 'T12:00:00'), 'EEE dd', { locale: es });
+          const dayDelta = prevDayDesp !== null && prevDayDesp !== 0
+            ? `${dk.despachado >= prevDayDesp ? '▲' : '▼'} ${Math.abs(Math.round(((dk.despachado - prevDayDesp) / prevDayDesp) * 100))}%`
+            : '';
+          body.push([prod.name, semana, dayLabel, dk.despachado, dk.devoluciones, dk.averias, dk.estimacion, dayDelta]);
+          prevDayDesp = dk.despachado;
+        }
       }
     }
 
@@ -192,20 +215,24 @@ function ReporteProduccionContent() {
       head,
       body,
       startY: y,
-      styles: { fontSize: 7.5, cellPadding: 1.5 },
+      styles: { fontSize: 7, cellPadding: 1.2 },
       headStyles: { fillColor: [30, 30, 30] },
       columnStyles: {
-        0: { cellWidth: 70 },
-        6: { halign: 'center' },
+        0: { cellWidth: 60 },
+        7: { halign: 'center' },
       },
       didParseCell: (data: any) => {
-        if (data.section === 'body' && data.column.index === 6) {
+        if (data.section === 'body' && data.column.index === 7) {
           const val = String(data.cell.raw);
           if (val.startsWith('▲')) data.cell.styles.textColor = [22, 163, 74];
           if (val.startsWith('▼')) data.cell.styles.textColor = [220, 38, 38];
         }
         if (data.section === 'body' && data.column.index === 1 && data.cell.raw === 'TOTAL') {
           data.cell.styles.fontStyle = 'bold';
+        }
+        // Indent day rows visually
+        if (data.section === 'body' && data.column.index === 2 && data.cell.raw !== '') {
+          data.cell.styles.textColor = [100, 100, 100];
         }
       },
     });
@@ -362,31 +389,53 @@ function ReporteProduccionContent() {
                       </AccordionTrigger>
                       <AccordionContent>
                         <div className="pt-2">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Semana</TableHead>
-                                <TableHead className="text-right">Despachado</TableHead>
-                                <TableHead className="text-right">Devoluciones</TableHead>
-                                <TableHead className="text-right">Averías</TableHead>
-                                <TableHead className="text-right">Estimación</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {WEEKS.filter(w => prod.semanas[w]).map(semana => {
-                                const wk = prod.semanas[semana];
-                                return (
-                                  <TableRow key={semana}>
-                                    <TableCell className="font-medium">{semana}</TableCell>
-                                    <TableCell className="text-right">{wk.despachado}</TableCell>
-                                    <TableCell className="text-right">{wk.devoluciones}</TableCell>
-                                    <TableCell className="text-right">{wk.averias}</TableCell>
-                                    <TableCell className="text-right font-semibold">{wk.estimacion}</TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
+                          <Accordion type="multiple" className="w-full space-y-1">
+                            {WEEKS.filter(w => prod.semanas[w]).map(semana => {
+                              const wk = prod.semanas[semana];
+                              const sortedDays = Object.entries(wk.dias).sort(([a], [b]) => a.localeCompare(b));
+                              return (
+                                <AccordionItem key={semana} value={semana} className="border rounded-md px-3">
+                                  <AccordionTrigger>
+                                    <div className="flex justify-between items-center w-full pr-2 gap-4 flex-wrap text-sm">
+                                      <span className="font-semibold">{semana}</span>
+                                      <div className="flex gap-3 text-muted-foreground">
+                                        <span>Desp: <strong>{wk.despachado}</strong></span>
+                                        <span>Dev: <strong>{wk.devoluciones}</strong></span>
+                                        <span>Av: <strong>{wk.averias}</strong></span>
+                                        <span>Est: <strong>{wk.estimacion}</strong></span>
+                                      </div>
+                                    </div>
+                                  </AccordionTrigger>
+                                  <AccordionContent>
+                                    <Table className="mt-1">
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Día</TableHead>
+                                          <TableHead className="text-right">Despachado</TableHead>
+                                          <TableHead className="text-right">Devoluciones</TableHead>
+                                          <TableHead className="text-right">Averías</TableHead>
+                                          <TableHead className="text-right">Estimación</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {sortedDays.map(([dateKey, dk]) => (
+                                          <TableRow key={dateKey}>
+                                            <TableCell className="font-medium">
+                                              {format(new Date(dateKey + 'T12:00:00'), 'EEE dd', { locale: es })}
+                                            </TableCell>
+                                            <TableCell className="text-right">{dk.despachado}</TableCell>
+                                            <TableCell className="text-right">{dk.devoluciones}</TableCell>
+                                            <TableCell className="text-right">{dk.averias}</TableCell>
+                                            <TableCell className="text-right font-semibold">{dk.estimacion}</TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              );
+                            })}
+                          </Accordion>
                         </div>
                       </AccordionContent>
                     </AccordionItem>
