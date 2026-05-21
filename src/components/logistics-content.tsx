@@ -939,6 +939,21 @@ export function LogisticsContent({ initialProducts, initialCarriers, initialPlat
                                     </Select>
                                 </div>
                                 <div>
+                                    <Label htmlFor="entry-reason">Motivo de Entrada</Label>
+                                    <Select value={entryReason} onValueChange={setEntryReason}>
+                                        <SelectTrigger id="entry-reason">
+                                            <SelectValue placeholder="Seleccionar motivo" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="reception">Recepción de Proveedor</SelectItem>
+                                            <SelectItem value="Devolución de Cliente">Devolución de Cliente</SelectItem>
+                                            {entryReasons
+                                                .filter(r => r.value !== 'reception' && r.value !== 'Devolución de Cliente')
+                                                .map(r => <SelectItem key={r.id} value={r.value}>{r.label}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
                                     <Label htmlFor="barcode-entrada">Escanear o Buscar Producto</Label>
                                     <div className="flex gap-2">
                                         <div className="relative flex-grow">
