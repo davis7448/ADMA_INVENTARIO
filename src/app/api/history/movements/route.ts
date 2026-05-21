@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
     const platformId = searchParams.get('platformId');
     const carrierId = searchParams.get('carrierId');
     const productId = searchParams.get('productId');
+    const movementType = searchParams.get('type');
+    const userId = searchParams.get('userId');
     
     console.log('[API] Params:', { 
       cursor, 
@@ -51,7 +53,15 @@ export async function GET(request: NextRequest) {
     if (carrierId && carrierId !== 'all') {
       constraints.push(where('carrierId', '==', carrierId));
     }
-    
+
+    if (movementType && movementType !== 'all') {
+      constraints.push(where('type', '==', movementType));
+    }
+
+    if (userId && userId !== 'all') {
+      constraints.push(where('userId', '==', userId));
+    }
+
     // Date filters
     if (startDate) {
       constraints.push(where('date', '>=', new Date(startDate)));

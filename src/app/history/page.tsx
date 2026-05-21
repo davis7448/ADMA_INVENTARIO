@@ -40,23 +40,31 @@ export default async function HistoryPage({
     redirect(`?warehouse=${effectiveWarehouseId}`);
   }
 
-  // Fetch static data only (platforms and carriers)
+  // Fetch static data only (platforms, carriers, users)
   // Movements will be fetched client-side with cursor pagination
   let platforms: any[] = [];
   let carriers: any[] = [];
-  
+  let users: any[] = [];
+
   try {
     platforms = await getPlatforms();
   } catch (error) {
     console.error('Error fetching platforms:', error);
     platforms = [];
   }
-  
+
   try {
     carriers = await getCarriers();
   } catch (error) {
     console.error('Error fetching carriers:', error);
     carriers = [];
+  }
+
+  try {
+    users = await getUsers();
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    users = [];
   }
 
   return (
@@ -68,10 +76,11 @@ export default async function HistoryPage({
             Consulta el historial de movimientos de inventario
           </p>
         </div>
-        
-        <HistoryContainer 
+
+        <HistoryContainer
           initialPlatforms={platforms}
           initialCarriers={carriers}
+          initialUsers={users}
           warehouseId={effectiveWarehouseId}
         />
       </div>

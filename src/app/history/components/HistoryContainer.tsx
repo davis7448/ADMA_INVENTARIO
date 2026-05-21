@@ -20,13 +20,17 @@ import { OrderDetailDrawer } from './OrderDetailDrawer';
 interface HistoryContainerProps {
   initialPlatforms: any[];
   initialCarriers: any[];
+  initialUsers?: any[];
   warehouseId?: string;
 }
 
-export function HistoryContainer({ 
-  initialPlatforms, 
+const MOVEMENT_TYPES = ['Entrada', 'Salida', 'Averia', 'Anulado', 'Eliminación', 'Ajuste de Salida', 'Ajuste de Entrada'] as const;
+
+export function HistoryContainer({
+  initialPlatforms,
   initialCarriers,
-  warehouseId 
+  initialUsers = [],
+  warehouseId
 }: HistoryContainerProps) {
   // Active tab state
   const [activeTab, setActiveTab] = useState<'movements' | 'orders'>('movements');
@@ -65,6 +69,8 @@ export function HistoryContainer({
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [userFilter, setUserFilter] = useState<string>('all');
 
   // Order detail drawer state
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
@@ -122,6 +128,12 @@ export function HistoryContainer({
       if (selectedProductId) {
         params.set('productId', selectedProductId);
       }
+      if (typeFilter !== 'all') {
+        params.set('type', typeFilter);
+      }
+      if (userFilter !== 'all') {
+        params.set('userId', userFilter);
+      }
 
       console.log('[Client] Fetching movements page', targetPage, 'cursor:', cursor);
       
@@ -157,7 +169,7 @@ export function HistoryContainer({
     } finally {
       setMovementsLoading(false);
     }
-  }, [movementsCursors, startDate, endDate, platformId, carrierId, warehouseId, movementsLoading, selectedProductId]);
+  }, [movementsCursors, startDate, endDate, platformId, carrierId, warehouseId, movementsLoading, selectedProductId, typeFilter, userFilter]);
 
   // Fetch orders for current page
   const fetchOrders = useCallback(async (targetPage: number = 1) => {
@@ -197,6 +209,9 @@ export function HistoryContainer({
       if (selectedProductId) {
         params.set('productId', selectedProductId);
       }
+      if (userFilter !== 'all') {
+        params.set('userId', userFilter);
+      }
 
       console.log('[Client] Fetching orders page', targetPage, 'cursor:', cursor);
       
@@ -232,7 +247,7 @@ export function HistoryContainer({
     } finally {
       setOrdersLoading(false);
     }
-  }, [ordersCursors, startDate, endDate, platformId, carrierId, status, warehouseId, ordersLoading, selectedProductId]);
+  }, [ordersCursors, startDate, endDate, platformId, carrierId, status, warehouseId, ordersLoading, selectedProductId, userFilter]);
 
   // Initial load - only once per tab
   useEffect(() => {
@@ -381,6 +396,8 @@ export function HistoryContainer({
     setPlatformId('all');
     setCarrierId('all');
     setStatus('all');
+    setTypeFilter('all');
+    setUserFilter('all');
     setProductSearch('');
     setSelectedProductId(null);
     setSearchResults([]);
@@ -410,7 +427,8 @@ export function HistoryContainer({
   };
 
   const hasActiveFilters = startDate || endDate || platformId !== 'all' ||
-                          carrierId !== 'all' || status !== 'all' || !!selectedProductId;
+                          carrierId !== 'all' || status !== 'all' || !!selectedProductId ||
+                          typeFilter !== 'all' || userFilter !== 'all';
 
   // Get status badge variant
   const getStatusBadgeVariant = (status: string) => {
@@ -436,7 +454,7 @@ export function HistoryContainer({
           <CardTitle className="text-lg">Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
             {/* Date Range */}
             <div className="space-y-2">
               <Label>Fecha Inicio</Label>
@@ -539,8 +557,40 @@ export function HistoryContainer({
               </Select>
             </div>
 
+            {/* Movement Type - Only for movements tab */}
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={typeFilter} onValueChange={setTypeFilter} disabled={activeTab === 'orders'}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {MOVEMENT_TYPES.map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* User */}
+            <div className="space-y-2">
+              <Label>Usuario</Label>
+              <Select value={userFilter} onValueChange={setUserFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {initialUsers.map((u: any) => (
+                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Product Search */}
-            <div className="space-y-2 relative lg:col-span-2">
+            <div className="space-y-2 relative xl:col-span-2">
               <Label>Producto</Label>
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -616,6 +666,18 @@ export function HistoryContainer({
                     <Badge variant="secondary" className="gap-1">
                       {productSearch}
                       <X className="h-3 w-3 cursor-pointer" onClick={() => { setSelectedProductId(null); setProductSearch(''); }} />
+                    </Badge>
+                  )}
+                  {typeFilter !== 'all' && activeTab === 'movements' && (
+                    <Badge variant="secondary" className="gap-1">
+                      {typeFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setTypeFilter('all')} />
+                    </Badge>
+                  )}
+                  {userFilter !== 'all' && (
+                    <Badge variant="secondary" className="gap-1">
+                      {initialUsers.find((u: any) => u.id === userFilter)?.name || userFilter}
+                      <X className="h-3 w-3 cursor-pointer" onClick={() => setUserFilter('all')} />
                     </Badge>
                   )}
                 </>

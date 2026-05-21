@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export async function GET(request: NextRequest) {
@@ -22,14 +22,7 @@ export async function GET(request: NextRequest) {
     const productsRef = collection(db, 'products');
     const searchLower = searchQuery.toLowerCase();
     
-    // Simple search by name (start with, for better performance)
-    // Note: Firestore doesn't support partial text search natively
-    // For production, consider Algolia or similar
-    let productsQuery = query(
-      productsRef,
-      orderBy('name'),
-      limit(20)
-    );
+    let productsQuery = query(productsRef, orderBy('name'));
     
     console.log('[API] Executing product search...');
     

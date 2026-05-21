@@ -36,7 +36,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: '/', label: 'Dashboard', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas', 'mercado_libre'] },
-  { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'consulta', 'plataformas', 'logistics', 'mercado_libre'] },
+  { href: '/products', label: 'Inventario', roles: ['admin', 'commercial', 'commercial_director', 'consulta', 'plataformas', 'logistics', 'mercado_libre'] },
   {
     label: 'Activos',
     roles: ['admin', 'plataformas'],
@@ -59,6 +59,7 @@ const navItems: NavItem[] = [
       { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics', 'plataformas'] },
       { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics', 'plataformas'] },
       { href: '/reporte-despachos', label: 'Reporte de Despachos', roles: ['admin', 'logistics', 'plataformas', 'commercial', 'consulta'] },
+      { href: '/reporte-produccion', label: 'Reporte de Producción', roles: ['admin', 'logistics', 'plataformas', 'commercial', 'consulta'] },
       { href: '/pending-inventory', label: 'Pendientes', roles: ['admin', 'logistics', 'plataformas', 'commercial', 'consulta'] },
       { href: '/cancellations', label: 'Anulaciones', roles: ['admin', 'commercial', 'consulta', 'logistics'] },
     ],

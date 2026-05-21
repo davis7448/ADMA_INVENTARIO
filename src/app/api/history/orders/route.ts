@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
     const carrierId = searchParams.get('carrierId');
     const status = searchParams.get('status');
     const productId = searchParams.get('productId');
+    const userId = searchParams.get('userId');
     
     console.log('[API] Orders params:', { 
       cursor, 
@@ -52,7 +53,11 @@ export async function GET(request: NextRequest) {
     if (status && status !== 'all') {
       constraints.push(where('status', '==', status));
     }
-    
+
+    if (userId && userId !== 'all') {
+      constraints.push(where('createdBy.id', '==', userId));
+    }
+
     // Date filters
     if (startDate) {
       constraints.push(where('date', '>=', new Date(startDate)));
