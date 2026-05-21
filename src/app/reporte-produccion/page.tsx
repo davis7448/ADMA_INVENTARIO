@@ -13,7 +13,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { cn } from '@/lib/utils';
 import { format, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -73,6 +74,55 @@ function ReporteProduccionContent() {
   }, [rawData, warehouseId]);
 
   const sortedMonths = Object.keys(reportData).sort((a, b) => b.localeCompare(a));
+
+  function exportMonth(month: string) {
+    const monthData = reportData[month];
+    const [year, m] = month.split('-');
+    const monthLabel = format(new Date(Number(year), Number(m) - 1, 1), 'MMMM yyyy', { locale: es });
+
+    const rows: Record<string, string | number>[] = [];
+
+    // Header row with totals
+    rows.push({
+      Producto: `TOTAL — ${monthLabel}`,
+      Semana: '',
+      Despachado: monthData.totales.despachado,
+      Devoluciones: monthData.totales.devoluciones,
+      Averías: monthData.totales.averias,
+      Estimación: monthData.totales.estimacion,
+    });
+
+    // Per-product rows
+    const products = Object.values(monthData.porProducto).sort((a, b) => b.despachado - a.despachado);
+    for (const prod of products) {
+      rows.push({
+        Producto: prod.name,
+        Semana: 'TOTAL',
+        Despachado: prod.despachado,
+        Devoluciones: prod.devoluciones,
+        Averías: prod.averias,
+        Estimación: prod.estimacion,
+      });
+      for (const semana of WEEKS) {
+        const wk = prod.semanas[semana];
+        if (!wk) continue;
+        rows.push({
+          Producto: prod.name,
+          Semana: semana,
+          Despachado: wk.despachado,
+          Devoluciones: wk.devoluciones,
+          Averías: wk.averias,
+          Estimación: wk.estimacion,
+        });
+      }
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 40 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, monthLabel.slice(0, 31));
+    XLSX.writeFile(wb, `produccion_${month}.xlsx`);
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -170,11 +220,15 @@ function ReporteProduccionContent() {
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle className="capitalize">{monthLabel}</CardTitle>
-                  <div className="flex gap-2 flex-wrap text-sm">
+                  <div className="flex items-center gap-2 flex-wrap text-sm">
                     <Badge variant="outline">Despachado: {totales.despachado}</Badge>
                     <Badge variant="outline">Devoluciones: {totales.devoluciones}</Badge>
                     <Badge variant="outline">Averías: {totales.averias}</Badge>
                     <Badge variant="secondary">Estimación: {totales.estimacion}</Badge>
+                    <Button variant="outline" size="sm" onClick={() => exportMonth(month)}>
+                      <Download className="h-4 w-4 mr-1" />
+                      Exportar
+                    </Button>
                   </div>
                 </div>
                 <CardDescription>
