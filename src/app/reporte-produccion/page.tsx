@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,7 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { CalendarIcon, Download } from 'lucide-react';
+import { CalendarIcon, Download, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { cn } from '@/lib/utils';
 import { format, addDays } from 'date-fns';
@@ -74,6 +74,7 @@ function ReporteProduccionContent() {
   }, [rawData, warehouseId]);
 
   const sortedMonths = Object.keys(reportData).sort((a, b) => b.localeCompare(a));
+  const chartRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   function exportMonth(month: string) {
     const monthData = reportData[month];
@@ -122,6 +123,94 @@ function ReporteProduccionContent() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, monthLabel.slice(0, 31));
     XLSX.writeFile(wb, `produccion_${month}.xlsx`);
+  }
+
+  async function exportMonthPDF(month: string) {
+    const [html2canvas, { default: jsPDF }] = await Promise.all([
+      import('html2canvas').then(m => m.default),
+      import('jspdf'),
+    ]);
+    await import('jspdf-autotable');
+
+    const monthData = reportData[month];
+    const [year, m] = month.split('-');
+    const monthLabel = format(new Date(Number(year), Number(m) - 1, 1), 'MMMM yyyy', { locale: es });
+    const products = Object.values(monthData.porProducto).sort((a, b) => b.despachado - a.despachado);
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const pageW = doc.internal.pageSize.getWidth();
+    let y = 14;
+
+    // Title
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Reporte de Producción — ${monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}`, pageW / 2, y, { align: 'center' });
+    y += 8;
+
+    // Totals row
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const { totales } = monthData;
+    doc.text(
+      `Despachado: ${totales.despachado}   Devoluciones: ${totales.devoluciones}   Averías: ${totales.averias}   Estimación: ${totales.estimacion}`,
+      pageW / 2, y, { align: 'center' }
+    );
+    y += 6;
+
+    // Chart capture
+    const chartEl = chartRefs.current[month];
+    if (chartEl) {
+      const canvas = await html2canvas(chartEl, { scale: 2, backgroundColor: '#ffffff', logging: false });
+      const imgData = canvas.toDataURL('image/png');
+      const imgH = 55;
+      const imgW = (canvas.width / canvas.height) * imgH;
+      const imgX = (pageW - imgW) / 2;
+      doc.addImage(imgData, 'PNG', imgX, y, imgW, imgH);
+      y += imgH + 6;
+    }
+
+    // Per-product table
+    const head = [['Producto', 'Semana', 'Despachado', 'Devoluciones', 'Averías', 'Estimación', 'Δ Desp.']];
+    const body: (string | number)[][] = [];
+
+    for (const prod of products) {
+      body.push([prod.name, 'TOTAL', prod.despachado, prod.devoluciones, prod.averias, prod.estimacion, '']);
+      let prevDesp: number | null = null;
+      for (const semana of WEEKS) {
+        const wk = prod.semanas[semana];
+        if (!wk) continue;
+        const delta = prevDesp !== null && prevDesp !== 0
+          ? `${wk.despachado >= prevDesp ? '▲' : '▼'} ${Math.abs(Math.round(((wk.despachado - prevDesp) / prevDesp) * 100))}%`
+          : '';
+        body.push([prod.name, semana, wk.despachado, wk.devoluciones, wk.averias, wk.estimacion, delta]);
+        prevDesp = wk.despachado;
+      }
+    }
+
+    // @ts-ignore
+    doc.autoTable({
+      head,
+      body,
+      startY: y,
+      styles: { fontSize: 7.5, cellPadding: 1.5 },
+      headStyles: { fillColor: [30, 30, 30] },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        6: { halign: 'center' },
+      },
+      didParseCell: (data: any) => {
+        if (data.section === 'body' && data.column.index === 6) {
+          const val = String(data.cell.raw);
+          if (val.startsWith('▲')) data.cell.styles.textColor = [22, 163, 74];
+          if (val.startsWith('▼')) data.cell.styles.textColor = [220, 38, 38];
+        }
+        if (data.section === 'body' && data.column.index === 1 && data.cell.raw === 'TOTAL') {
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+
+    doc.save(`produccion_${month}.pdf`);
   }
 
   return (
@@ -227,7 +316,11 @@ function ReporteProduccionContent() {
                     <Badge variant="secondary">Estimación: {totales.estimacion}</Badge>
                     <Button variant="outline" size="sm" onClick={() => exportMonth(month)}>
                       <Download className="h-4 w-4 mr-1" />
-                      Exportar
+                      Excel
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => exportMonthPDF(month)}>
+                      <FileText className="h-4 w-4 mr-1" />
+                      PDF
                     </Button>
                   </div>
                 </div>
@@ -237,6 +330,7 @@ function ReporteProduccionContent() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Weekly Trend Chart */}
+                <div ref={el => { chartRefs.current[month] = el; }}>
                 <ChartContainer config={chartConfig} className="h-[200px]">
                   <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -249,6 +343,7 @@ function ReporteProduccionContent() {
                     <Bar dataKey="estimacion" name="Estimación" fill="hsl(var(--chart-4))" radius={[2,2,0,0]} />
                   </BarChart>
                 </ChartContainer>
+                </div>
 
                 {/* Per-product table with weekly accordion */}
                 <Accordion type="multiple" className="w-full space-y-2">
