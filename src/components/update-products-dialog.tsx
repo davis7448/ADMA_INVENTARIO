@@ -111,6 +111,8 @@ export function UpdateProductsDialog({ onUpdateSuccess, disabled }: UpdateProduc
         pricedropshipping: 10000,
         pricewholesale: 8000,
         cost: 5000,
+        priceminsale: 7000,
+        priceoptimalsale: 8500,
         stock: 50,
         categoryid: 'category-id',
         vendorid: 'vendor-id',
@@ -123,6 +125,9 @@ export function UpdateProductsDialog({ onUpdateSuccess, disabled }: UpdateProduc
         variantname: 'Nombre de la Variante (opcional)',
         variantpricedropshipping: 12000,
         variantpricewholesale: 9000,
+        variantcost: 6000,
+        variantpriceminsale: 8000,
+        variantpriceoptimalsale: 9500,
         variantstock: 25,
       }
     ];

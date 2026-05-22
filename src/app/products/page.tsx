@@ -41,12 +41,15 @@ export default async function ProductsPage({
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
     const user = await getCurrentUser(sessionCookie);
-    const effectiveWarehouseId = user && user.role === 'logistics' ? (user.warehouseId || 'wh-bog') : undefined;
+    const effectiveWarehouseId = user && (user.role === 'logistics' || user.role === 'commercial_director') ? (user.warehouseId || 'wh-bog') : undefined;
     const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
 
     // Server-side redirect for logistics users
     if (user?.role === 'logistics' && !searchParams?.warehouse) {
         redirect(`?warehouse=${warehouseId}`);
+    }
+    if (user?.role === 'commercial_director' && warehouseId !== 'wh-bog') {
+        redirect('?warehouse=wh-bog');
     }
 
     const filters = {
@@ -134,7 +137,7 @@ export default async function ProductsPage({
 
     return (
       <Suspense>
-        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'plataformas', 'logistics', 'mercado_libre']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'commercial_director', 'plataformas', 'logistics', 'mercado_libre']}>
           <ProductsContent 
             initialProducts={productsWithRotation}
             totalPages={productsResult.totalPages}

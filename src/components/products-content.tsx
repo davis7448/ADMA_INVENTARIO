@@ -65,6 +65,8 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ImportProductsDialog } from './import-products-dialog';
 import { UpdateProductsDialog } from './update-products-dialog';
+import { CostPriceUpdateDialog } from './cost-price-update-dialog';
+import { WholesalePricingDialog } from './wholesale-pricing-dialog';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { auditProductStockAction, clearProductAuditAction, deleteProductAction, updateProductLocationAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
@@ -295,6 +297,14 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const canDelete = user?.role === 'admin';
     const canAudit = user?.role === 'admin' || user?.role === 'logistics';
     const canBulkUpdate = user?.role === 'admin';
+    const canCostPriceUpdate = user?.role === 'admin' || user?.role === 'plataformas';
+    const canViewCost = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'commercial_director';
+    const tableColumnCount = canViewCost ? 18 : 16;
+
+    const formatCurrency = (value?: number | null) => {
+        if (value === undefined || value === null) return '--';
+        return `$${value.toLocaleString('es-CO', { maximumFractionDigits: 0 })}`;
+    };
 
     const getRotationIcon = (categoryName?: string) => {
         if (!categoryName) return null;
@@ -324,7 +334,9 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                 'Rotación': p.rotationCategoryName || 'N/A',
                 'Stock Pendiente': p.pendingStock || 0,
                 'Stock Averiado': p.damagedStock || 0,
-                'Costo': user?.role === 'admin' ? p.cost : undefined,
+                'Costo': canViewCost ? p.cost : undefined,
+                'Precio Mínimo Venta': canViewCost ? p.priceMinSale : undefined,
+                'Precio Óptimo Venta': canViewCost ? p.priceOptimalSale : undefined,
                 'Proveedor': initialSupplierNames[p.vendorId] || 'Desconocido',
                 'Fecha Compra': p.purchaseDate ? format(new Date(p.purchaseDate), 'yyyy-MM-dd') : '',
                 'Link de Contenido': p.contentLink || '',
@@ -339,6 +351,8 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                     'Stock Físico': variant.stock,
                     'Precio Dropshipping': variant.priceDropshipping,
                     'Precio x Mayor': variant.priceWholesale,
+                    'Precio Mínimo Venta': canViewCost ? variant.priceMinSale : undefined,
+                    'Precio Óptimo Venta': canViewCost ? variant.priceOptimalSale : undefined,
                 }));
             } else {
                 return {
@@ -354,8 +368,10 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         });
 
         // If user is not admin, remove the Cost property from all objects
-        if (user?.role !== 'admin') {
+        if (!canViewCost) {
             dataToExport.forEach(item => delete (item as any).Costo);
+            dataToExport.forEach(item => delete (item as any)['Precio Mínimo Venta']);
+            dataToExport.forEach(item => delete (item as any)['Precio Óptimo Venta']);
         }
     
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -500,6 +516,8 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                 <ImportProductsDialog onImportSuccess={refreshProducts} />
                             </DropdownMenuItem>
                             <UpdateProductsDialog onUpdateSuccess={refreshProducts} disabled={!canBulkUpdate} />
+                            <CostPriceUpdateDialog onUpdateSuccess={refreshProducts} disabled={!canCostPriceUpdate} />
+                            <WholesalePricingDialog products={initialProducts} onUpdateSuccess={refreshProducts} disabled={!canCostPriceUpdate} />
                                 <DropdownMenuItem onClick={handleExportExcel}>
                                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                                 Exportar a Excel
@@ -525,7 +543,9 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <TableHead>Disponible</TableHead>
                             <TableHead>Pendiente</TableHead>
                             <TableHead>Averiado</TableHead>
-                            <TableHead>Precio</TableHead>
+                            <TableHead>Precios</TableHead>
+                            {canViewCost && <TableHead>Costo</TableHead>}
+                            {canViewCost && <TableHead>Guías</TableHead>}
                             <TableHead className="w-[50px]"><span className="sr-only">Acciones</span></TableHead>
                             <TableHead className="w-[50px] text-right pr-4"><span className="sr-only">Expandir</span></TableHead>
                         </TableRow>
@@ -535,7 +555,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <>
                             {Array.from({ length: 5 }).map((_, i) => (
                                 <TableRow key={i}>
-                                    <TableCell colSpan={15}>
+                                    <TableCell colSpan={tableColumnCount}>
                                         <Skeleton className="h-16 w-full" />
                                     </TableCell>
                                 </TableRow>
@@ -682,8 +702,32 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                         <TableCell className="text-orange-500 font-semibold">{product.pendingStock || 0}</TableCell>
                                         <TableCell className="text-destructive font-semibold">{product.damagedStock || 0}</TableCell>
                                         <TableCell>
-                                            {(product.productType === 'simple' && product.priceDropshipping) ? `$${product.priceDropshipping.toFixed(0)}` : '--'}
+                                            {product.productType === 'simple' ? (
+                                                <div className="space-y-0.5 text-xs">
+                                                    <div>Drop: {formatCurrency(product.priceDropshipping)}</div>
+                                                    <div>Mayor: {formatCurrency(product.priceWholesale)}</div>
+                                                </div>
+                                            ) : (
+                                                <span className="text-muted-foreground text-xs">Ver variantes</span>
+                                            )}
                                         </TableCell>
+                                        {canViewCost && (
+                                            <TableCell>
+                                                {product.productType === 'simple' ? formatCurrency(product.cost) : <span className="text-muted-foreground text-xs">Ver variantes</span>}
+                                            </TableCell>
+                                        )}
+                                        {canViewCost && (
+                                            <TableCell>
+                                                {product.productType === 'simple' ? (
+                                                    <div className="space-y-0.5 text-xs">
+                                                        <div>Min: {formatCurrency(product.priceMinSale)}</div>
+                                                        <div>Ópt: {formatCurrency(product.priceOptimalSale)}</div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">Ver variantes</span>
+                                                )}
+                                            </TableCell>
+                                        )}
                                         <TableCell className="w-[50px]" onClick={(e) => e.stopPropagation()}>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
@@ -747,7 +791,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                     </TableRow>
                                     {product.productType === 'variable' && expandedRow === product.id && (
                                         <TableRow className="bg-muted/20 hover:bg-muted/30">
-                                            <TableCell colSpan={15}>
+                                            <TableCell colSpan={tableColumnCount}>
                                                 <div className="p-4">
                                                     <h4 className="font-semibold mb-2 ml-4 text-sm">Variantes</h4>
                                                     <Table>
@@ -755,7 +799,10 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                             <TableRow className="hover:bg-transparent">
                                                                 <TableHead>Nombre</TableHead>
                                                                 <TableHead>SKU</TableHead>
-                                                                <TableHead>Precio</TableHead>
+                                                                <TableHead>Precio Drop</TableHead>
+                                                                <TableHead>Precio Mayor</TableHead>
+                                                                {canViewCost && <TableHead>Costo</TableHead>}
+                                                                {canViewCost && <TableHead>Guías</TableHead>}
                                                                 <TableHead>Stock Físico</TableHead>
                                                                 <TableHead>Stock Disponible</TableHead>
                                                                 <TableHead>Ubicación</TableHead>
@@ -766,7 +813,17 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                             <TableRow key={variant.id} className="border-b-0 hover:bg-transparent">
                                                                 <TableCell>{variant.name}</TableCell>
                                                                 <TableCell>{variant.sku}</TableCell>
-                                                                <TableCell>${variant.priceDropshipping.toFixed(0)}</TableCell>
+                                                                <TableCell>{formatCurrency(variant.priceDropshipping)}</TableCell>
+                                                                <TableCell>{formatCurrency(variant.priceWholesale)}</TableCell>
+                                                                {canViewCost && <TableCell>{formatCurrency(variant.cost)}</TableCell>}
+                                                                {canViewCost && (
+                                                                    <TableCell>
+                                                                        <div className="space-y-0.5 text-xs">
+                                                                            <div>Min: {formatCurrency(variant.priceMinSale)}</div>
+                                                                            <div>Ópt: {formatCurrency(variant.priceOptimalSale)}</div>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                )}
                                                                 <TableCell>{variant.stock}</TableCell>
                                                                 <TableCell className="font-semibold text-green-600">
                                                                     {calculateAvailableStock(product, variant.id)}
@@ -786,7 +843,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={15} className="text-center h-24">
+                                <TableCell colSpan={tableColumnCount} className="text-center h-24">
                                     No se encontraron productos con los filtros actuales.
                                 </TableCell>
                             </TableRow>

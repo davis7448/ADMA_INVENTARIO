@@ -6,6 +6,9 @@ export type ProductVariant = {
   sku: string;
   priceDropshipping: number;
   priceWholesale?: number;
+  cost?: number;
+  priceMinSale?: number;
+  priceOptimalSale?: number;
   stock: number;
 };
 
@@ -20,6 +23,8 @@ export type Product = {
   priceDropshipping: number;
   priceWholesale?: number;
   cost?: number;
+  priceMinSale?: number;
+  priceOptimalSale?: number;
   purchaseDate?: string;
   stock: number;
   pendingStock: number;

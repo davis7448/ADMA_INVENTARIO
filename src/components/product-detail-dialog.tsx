@@ -66,6 +66,12 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
   const [selectedVariantId, setSelectedVariantId] = useState<string>('total');
 
   const canManageReservations = user?.role === 'admin' || user?.role === 'plataformas';
+  const canViewCost = user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'commercial_director';
+
+  const formatCurrency = (value?: number | null) => {
+    if (value === undefined || value === null) return '--';
+    return `$${value.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const refreshData = async () => {
     if (productId && open) {
@@ -338,7 +344,11 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                 <TableRow>
                                     <TableHead>Nombre de Variante</TableHead>
                                     <TableHead>SKU</TableHead>
-                                    <TableHead className="text-right">Precio</TableHead>
+                                    <TableHead className="text-right">Precio Dropshipping</TableHead>
+                                    <TableHead className="text-right">Precio x Mayor</TableHead>
+                                    {canViewCost && <TableHead className="text-right">Costo</TableHead>}
+                                    {canViewCost && <TableHead className="text-right">Precio Mínimo</TableHead>}
+                                    {canViewCost && <TableHead className="text-right">Precio Óptimo</TableHead>}
                                     <TableHead className="text-right">Stock</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -347,7 +357,11 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                                     <TableRow key={variant.id}>
                                         <TableCell className="font-medium">{variant.name}</TableCell>
                                         <TableCell>{variant.sku}</TableCell>
-                                        <TableCell className="text-right">${variant.priceDropshipping.toFixed(2)}</TableCell>
+                                        <TableCell className="text-right">{formatCurrency(variant.priceDropshipping)}</TableCell>
+                                        <TableCell className="text-right">{formatCurrency(variant.priceWholesale)}</TableCell>
+                                        {canViewCost && <TableCell className="text-right">{formatCurrency(variant.cost)}</TableCell>}
+                                        {canViewCost && <TableCell className="text-right">{formatCurrency(variant.priceMinSale)}</TableCell>}
+                                        {canViewCost && <TableCell className="text-right">{formatCurrency(variant.priceOptimalSale)}</TableCell>}
                                         <TableCell className="text-right font-semibold">{variant.stock}</TableCell>
                                     </TableRow>
                                 ))}
@@ -366,12 +380,30 @@ export function ProductDetailDialog({ productId, open, onOpenChange, onProductUp
                         <TableBody>
                             <TableRow>
                                 <TableCell className="font-medium">Precio Dropshipping</TableCell>
-                                <TableCell className="text-right font-semibold text-lg">${(product.priceDropshipping || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                <TableCell className="text-right font-semibold text-lg">{formatCurrency(product.priceDropshipping)}</TableCell>
                             </TableRow>
                             <TableRow>
                                 <TableCell className="font-medium">Precio x Mayor</TableCell>
-                                <TableCell className="text-right font-semibold text-lg">${(product.priceWholesale || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                                <TableCell className="text-right font-semibold text-lg">{formatCurrency(product.priceWholesale)}</TableCell>
                             </TableRow>
+                            {canViewCost && (
+                                <TableRow>
+                                    <TableCell className="font-medium">Costo</TableCell>
+                                    <TableCell className="text-right font-semibold text-lg">{formatCurrency(product.cost)}</TableCell>
+                                </TableRow>
+                            )}
+                            {canViewCost && (
+                                <TableRow>
+                                    <TableCell className="font-medium">Precio mínimo de venta</TableCell>
+                                    <TableCell className="text-right font-semibold text-lg">{formatCurrency(product.priceMinSale)}</TableCell>
+                                </TableRow>
+                            )}
+                            {canViewCost && (
+                                <TableRow>
+                                    <TableCell className="font-medium">Precio óptimo de venta</TableCell>
+                                    <TableCell className="text-right font-semibold text-lg">{formatCurrency(product.priceOptimalSale)}</TableCell>
+                                </TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </CardContent>

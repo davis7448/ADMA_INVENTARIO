@@ -76,6 +76,9 @@ service cloud.firestore {
     match /auditAlerts/{alertId} {
       allow read, write: if isSignedIn() || isAdminAccess();
     }
+    match /auditRuns/{runId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
     match /staleReservationAlerts/{alertId} {
       allow read, write: if isSignedIn() || isAdminAccess();
     }

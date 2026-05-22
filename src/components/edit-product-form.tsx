@@ -193,13 +193,16 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
     const lines = importText.trim().split('\n');
     const newVariants = lines.map(line => {
       const parts = line.split(/[\t,]/); // Split by tab or comma
-      const [sku, name, priceDropshipping, priceWholesale, stock] = parts;
+      const [sku, name, priceDropshipping, priceWholesale, cost, priceMinSale, priceOptimalSale, stock] = parts;
       return {
         id: uuidv4(),
         sku: sku?.trim() || '',
         name: name?.trim() || '',
         priceDropshipping: parseFloat(priceDropshipping?.trim()) || 0,
         priceWholesale: parseFloat(priceWholesale?.trim()) || 0,
+        cost: parseFloat(cost?.trim()) || 0,
+        priceMinSale: parseFloat(priceMinSale?.trim()) || 0,
+        priceOptimalSale: parseFloat(priceOptimalSale?.trim()) || 0,
         stock: parseInt(stock?.trim(), 10) || 0,
       };
     }).filter(v => v.name && v.sku);
@@ -507,7 +510,7 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => append({ id: uuidv4(), sku: '', name: '', priceDropshipping: 0, priceWholesale: 0, stock: 0 })}
+                                    onClick={() => append({ id: uuidv4(), sku: '', name: '', priceDropshipping: 0, priceWholesale: 0, cost: 0, priceMinSale: 0, priceOptimalSale: 0, stock: 0 })}
                                 >
                                     Add Variant
                                 </Button>
@@ -515,85 +518,149 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="grid grid-cols-12 gap-2 items-start px-2">
-                            <Label className="col-span-3">SKU</Label>
-                            <Label className="col-span-3">Nombre</Label>
-                            <Label className="col-span-2">P. Drop</Label>
-                            <Label className="col-span-2">P. x Mayor</Label>
-                            <Label className="col-span-1">Stock</Label>
-                            <Label className="col-span-1 text-right">Acción</Label>
+                        <div className="px-2 space-y-1">
+                            <div className="grid grid-cols-12 gap-2">
+                                <Label className="col-span-3">SKU</Label>
+                                <Label className="col-span-6">Nombre</Label>
+                                <Label className="col-span-2">Stock</Label>
+                            </div>
+                            <div className="grid grid-cols-5 gap-2">
+                                <Label>P. Drop</Label>
+                                <Label>P. x Mayor</Label>
+                                <Label>Costo</Label>
+                                <Label>P. Mín</Label>
+                                <Label>P. Ópt</Label>
+                            </div>
                         </div>
                         {fields.map((field, index) => (
-                          <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
-                            <FormField
-                              control={form.control}
-                              name={`variants.${index}.sku`}
-                              render={({ field }) => (
-                                <FormItem className="col-span-3">
-                                  <FormControl>
-                                    <Input placeholder="SKU" {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`variants.${index}.name`}
-                              render={({ field }) => (
-                                <FormItem className="col-span-3">
-                                  <FormControl>
-                                    <Input placeholder="Variant Name" {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`variants.${index}.priceDropshipping`}
-                              render={({ field }) => (
-                                <FormItem className="col-span-2">
-                                  <FormControl>
-                                    <Input type="number" placeholder="Price" {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`variants.${index}.priceWholesale`}
-                              render={({ field }) => (
-                                <FormItem className="col-span-2">
-                                  <FormControl>
-                                    <Input type="number" placeholder="Price" {...field} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`variants.${index}.stock`}
-                              render={({ field }) => (
-                                <FormItem className="col-span-1">
-                                  <FormControl>
-                                    <Input type="number" placeholder="Stock" {...field} disabled={!canEditSensitiveData} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <div className="col-span-1 flex items-center justify-end">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => remove(index)}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
+                          <div key={field.id} className="border rounded-md p-2 space-y-2">
+                            <div className="grid grid-cols-12 gap-2 items-start">
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.sku`}
+                                render={({ field }) => (
+                                  <FormItem className="col-span-3">
+                                    <FormControl>
+                                      <Input placeholder="SKU" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.name`}
+                                render={({ field }) => (
+                                  <FormItem className="col-span-6">
+                                    <FormControl>
+                                      <Input placeholder="Nombre variante" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.stock`}
+                                render={({ field }) => (
+                                  <FormItem className="col-span-2">
+                                    <FormControl>
+                                      <Input type="number" placeholder="Stock" {...field} disabled={!canEditSensitiveData} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <div className="col-span-1 flex items-center justify-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => remove(index)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-5 gap-2 items-start">
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.priceDropshipping`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input type="number" placeholder="P. Drop" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.priceWholesale`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input type="number" placeholder="P. Mayor" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.cost`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        type={canEditSensitiveData ? "number" : "password"}
+                                        placeholder={canEditSensitiveData ? "Costo" : "****"}
+                                        {...field}
+                                        value={canEditSensitiveData ? field.value ?? '' : '****'}
+                                        disabled={!canEditSensitiveData}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.priceMinSale`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        type={canEditSensitiveData ? "number" : "password"}
+                                        placeholder={canEditSensitiveData ? "P. Mín" : "****"}
+                                        {...field}
+                                        value={canEditSensitiveData ? field.value ?? '' : '****'}
+                                        disabled={!canEditSensitiveData}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`variants.${index}.priceOptimalSale`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        type={canEditSensitiveData ? "number" : "password"}
+                                        placeholder={canEditSensitiveData ? "P. Ópt" : "****"}
+                                        {...field}
+                                        value={canEditSensitiveData ? field.value ?? '' : '****'}
+                                        disabled={!canEditSensitiveData}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             </div>
                           </div>
                         ))}
@@ -752,15 +819,15 @@ export function EditProductForm({ product, onProductUpdated, children }: EditPro
             <DialogTitle>Importar Variantes desde Texto</DialogTitle>
             <DialogDescription>
              Pega aquí los datos de tus variantes desde una hoja de cálculo (Excel, Google Sheets). 
-              Usa una línea por variante y asegúrate de que las columnas estén en el orden: SKU, Nombre, Precio Dropshipping, Precio x Mayor, Stock.
+              Usa una línea por variante y asegúrate de que las columnas estén en el orden: SKU, Nombre, Precio Dropshipping, Precio x Mayor, Costo, Precio Mínimo, Precio Óptimo, Stock.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Textarea
               placeholder="Ejemplo:
-CAM-01-R,Rojo,25.00,20.00,10
-CAM-01-A,Azul,25.00,20.00,15
-CAM-01-V,Verde,25.00,20.00,12"
+CAM-01-R,Rojo,25.00,20.00,12.00,7.00,8.50,10
+CAM-01-A,Azul,25.00,20.00,12.00,7.00,8.50,15
+CAM-01-V,Verde,25.00,20.00,12.00,7.00,8.50,12"
               rows={10}
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
