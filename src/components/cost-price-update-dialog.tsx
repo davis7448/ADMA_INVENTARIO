@@ -169,15 +169,28 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
       const purchaseYear = getPurchaseYear(rowIndex);
       const isLiquidation = purchaseYear !== null && purchaseYear <= 2023 && cost !== null && cost > 0;
 
-      const priceMaria = parseMoney(getCellValue(rowIndex, 'preciomaria'));
-      const priceDropshippingFromFile = priceMaria ?? parseMoney(getCellValue(rowIndex, 'preciodropshipping'));
+      // Dropshipping price: try multiple column name variants
+      const priceDropshippingFromFile =
+        parseMoney(getCellValue(rowIndex, 'preciomaria')) ??
+        parseMoney(getCellValue(rowIndex, 'preciodropshipping')) ??
+        parseMoney(getCellValue(rowIndex, 'preciodrop')) ??
+        parseMoney(getCellValue(rowIndex, 'drop')) ??
+        parseMoney(getCellValue(rowIndex, 'dropshipping'));
+
+      // Wholesale price: try multiple column name variants
+      const priceWholesaleFromFile =
+        parseMoney(getCellValue(rowIndex, 'preciomayor')) ??
+        parseMoney(getCellValue(rowIndex, 'preciomayorista')) ??
+        parseMoney(getCellValue(rowIndex, 'mayorista')) ??
+        parseMoney(getCellValue(rowIndex, 'mayor')) ??
+        parseMoney(getCellValue(rowIndex, 'wholesale'));
 
       parsedRows.push({
         rowNumber: rowIndex + 1,
         sku,
         cost,
         priceDropshipping: isLiquidation ? cost : priceDropshippingFromFile,
-        priceWholesale: isLiquidation ? cost : undefined,
+        priceWholesale: isLiquidation ? cost : (priceWholesaleFromFile ?? undefined),
         priceMinSale: parseMoney(getCellValue(rowIndex, 'preciominventa')),
         priceOptimalSale: parseMoney(getCellValue(rowIndex, 'preciooptimodeventa')),
         isLiquidation,
