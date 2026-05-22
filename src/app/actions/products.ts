@@ -94,7 +94,8 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
 
     productsSnapshot.docs.forEach(productDoc => {
         const product = { id: productDoc.id, ...productDoc.data() } as Product;
-        if (product.sku) {
+        // For variable products, only variant SKUs are valid targets — skip the parent SKU
+        if (product.sku && product.productType !== 'variable') {
             const sku = String(product.sku).trim();
             matchesBySku[sku] = matchesBySku[sku] || [];
             matchesBySku[sku].push({
