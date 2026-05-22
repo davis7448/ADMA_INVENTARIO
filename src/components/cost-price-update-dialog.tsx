@@ -34,7 +34,7 @@ import {
   type CostPriceUpdatePreview,
   type CostPriceUpdatePreviewRow,
 } from '@/app/actions/products';
-import { FileSpreadsheet, Upload } from 'lucide-react';
+import { AlertTriangle, FileSpreadsheet, Upload } from 'lucide-react';
 
 interface CostPriceUpdateDialogProps {
   onUpdateSuccess: () => void;
@@ -195,6 +195,29 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
     });
   };
 
+  const handleDownloadDuplicates = () => {
+    if (!preview) return;
+    const duplicateRows = preview.rows.filter(row => row.status === 'duplicate-system');
+    const report: Record<string, string | number>[] = [];
+    for (const row of duplicateRows) {
+      (row.conflicts ?? []).forEach((conflict, i) => {
+        report.push({
+          SKU: row.sku,
+          'Fila en archivo': row.rowNumber,
+          [`Coincidencia ${i + 1} — Producto`]: conflict.productName,
+          [`Coincidencia ${i + 1} — Variante`]: conflict.variantName ?? '',
+          [`Coincidencia ${i + 1} — Tipo`]: conflict.targetType === 'variant' ? 'Variante' : 'Producto simple',
+          [`Coincidencia ${i + 1} — ID Producto`]: conflict.productId,
+        });
+      });
+    }
+    const worksheet = XLSX.utils.json_to_sheet(report);
+    worksheet['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 40 }, { wch: 25 }, { wch: 18 }, { wch: 30 }, { wch: 40 }, { wch: 25 }, { wch: 18 }, { wch: 30 }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'SKU Duplicados');
+    XLSX.writeFile(workbook, `sku-duplicados-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const handleDownloadReport = () => {
     if (!preview) return;
     const report = preview.rows.map(row => ({
@@ -301,6 +324,12 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
+          {preview && preview.summary.duplicateSystem > 0 && (
+            <Button variant="outline" onClick={handleDownloadDuplicates} className="text-amber-600 border-amber-300 hover:bg-amber-50">
+              <AlertTriangle className="mr-2 h-4 w-4" />
+              Descargar {preview.summary.duplicateSystem} SKU duplicados
+            </Button>
+          )}
           <Button variant="outline" onClick={handleDownloadReport} disabled={!preview}>
             <FileSpreadsheet className="mr-2 h-4 w-4" />
             Descargar reporte

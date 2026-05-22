@@ -20,6 +20,14 @@ export type CostPriceUpdateInput = {
     priceOptimalSale?: number | null;
 };
 
+export type SkuConflict = {
+    productId: string;
+    productName: string;
+    variantId?: string;
+    variantName?: string;
+    targetType: 'product' | 'variant';
+};
+
 export type CostPriceUpdatePreviewRow = CostPriceUpdateInput & {
     productId?: string;
     productName?: string;
@@ -32,6 +40,7 @@ export type CostPriceUpdatePreviewRow = CostPriceUpdateInput & {
     currentPriceOptimalSale?: number | null;
     status: 'valid' | 'no-change' | 'not-found' | 'duplicate-file' | 'duplicate-system' | 'invalid';
     message: string;
+    conflicts?: SkuConflict[];
 };
 
 export type CostPriceUpdatePreview = {
@@ -138,7 +147,18 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
             return { ...row, status: 'not-found', message: 'SKU no encontrado en productos ni variantes.' };
         }
         if (matches.length > 1) {
-            return { ...row, status: 'duplicate-system', message: 'SKU duplicado en el sistema.' };
+            return {
+                ...row,
+                status: 'duplicate-system',
+                message: `SKU duplicado en el sistema (${matches.length} coincidencias).`,
+                conflicts: matches.map(m => ({
+                    productId: m.productId!,
+                    productName: m.productName!,
+                    variantId: m.variantId,
+                    variantName: m.variantName,
+                    targetType: m.targetType!,
+                })),
+            };
         }
 
         const match = matches[0];
