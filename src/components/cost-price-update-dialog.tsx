@@ -123,7 +123,8 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
       const col = headerMap.get(headerKey);
       if (col === undefined) return null;
       const cell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: col })];
-      return cell?.v ?? cell?.w ?? null;
+      if (!cell || cell.t === 'e') return null; // skip error cells (#N/A, #VALUE!, etc.)
+      return cell.v ?? cell.w ?? null;
     };
 
     const parsedRows: CostPriceUpdateInput[] = [];
