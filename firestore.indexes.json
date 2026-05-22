@@ -331,26 +331,6 @@
       ]
     },
     {
-      "collectionGroup": "communities",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "leaderId",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "communities",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "inviteCode",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "community_members",
       "queryScope": "COLLECTION",
       "fields": [
@@ -361,16 +341,6 @@
         {
           "fieldPath": "joinedAt",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "community_members",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "communityId",
-          "order": "ASCENDING"
         }
       ]
     },
