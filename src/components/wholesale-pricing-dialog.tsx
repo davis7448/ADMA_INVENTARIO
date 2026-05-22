@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,6 +59,7 @@ export function WholesalePricingDialog({ products, onUpdateSuccess, disabled }: 
   const [lowMargin, setLowMargin] = useState(15);
   const [liquidationMargin, setLiquidationMargin] = useState(8);
   const [quantity, setQuantity] = useState(12);
+  const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -114,13 +116,42 @@ export function WholesalePricingDialog({ products, onUpdateSuccess, disabled }: 
     return rows;
   }, [products, healthyMargin, lowMargin, liquidationMargin, quantityAdjustment]);
 
-  const changedSuggestions = suggestions.filter(row => row.currentWholesale !== row.suggestedWholesale);
+  const changedSuggestions = useMemo(
+    () => suggestions.filter(row => row.currentWholesale !== row.suggestedWholesale),
+    [suggestions]
+  );
+
+  // Auto-select all changed items whenever margin parameters change
+  useEffect(() => {
+    setSelectedSkus(new Set(changedSuggestions.map(r => r.sku)));
+  }, [healthyMargin, lowMargin, liquidationMargin, quantity]);
+
+  const selectedChanged = changedSuggestions.filter(r => selectedSkus.has(r.sku));
+  const allChangedSelected = changedSuggestions.length > 0 && changedSuggestions.every(r => selectedSkus.has(r.sku));
+  const someChangedSelected = changedSuggestions.some(r => selectedSkus.has(r.sku));
+
+  const toggleSku = (sku: string) => {
+    setSelectedSkus(prev => {
+      const next = new Set(prev);
+      if (next.has(sku)) next.delete(sku);
+      else next.add(sku);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allChangedSelected) {
+      setSelectedSkus(new Set());
+    } else {
+      setSelectedSkus(new Set(changedSuggestions.map(r => r.sku)));
+    }
+  };
 
   const handleApply = () => {
-    if (!user) return;
+    if (!user || selectedChanged.length === 0) return;
     startTransition(async () => {
       const result = await applyWholesalePriceUpdateAction(
-        changedSuggestions.map(row => ({ sku: row.sku, priceWholesale: row.suggestedWholesale })),
+        selectedChanged.map(row => ({ sku: row.sku, priceWholesale: row.suggestedWholesale })),
         user
       );
       if (result.success) {
@@ -144,7 +175,7 @@ export function WholesalePricingDialog({ products, onUpdateSuccess, disabled }: 
         <DialogHeader>
           <DialogTitle>Reglas de precio x mayor</DialogTitle>
           <DialogDescription>
-            Calcula sugerencias desde costo, rotación y cantidad. Aplicar cambios requiere confirmación explícita.
+            Calcula sugerencias desde costo, rotación y cantidad. Selecciona los productos a actualizar y confirma.
           </DialogDescription>
         </DialogHeader>
 
@@ -171,6 +202,15 @@ export function WholesalePricingDialog({ products, onUpdateSuccess, disabled }: 
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={allChangedSelected}
+                    data-state={someChangedSelected && !allChangedSelected ? 'indeterminate' : undefined}
+                    onCheckedChange={toggleAll}
+                    disabled={changedSuggestions.length === 0}
+                    aria-label="Seleccionar todos con cambios"
+                  />
+                </TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>Producto</TableHead>
                 <TableHead>Rotación</TableHead>
@@ -181,20 +221,43 @@ export function WholesalePricingDialog({ products, onUpdateSuccess, disabled }: 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {suggestions.slice(0, 250).map(row => (
-                <TableRow key={row.sku}>
-                  <TableCell className="font-mono text-xs">{row.sku}</TableCell>
-                  <TableCell>{row.name}</TableCell>
-                  <TableCell>{row.rotation}</TableCell>
-                  <TableCell>{formatCurrency(row.cost)}</TableCell>
-                  <TableCell>{formatCurrency(row.currentWholesale)}</TableCell>
-                  <TableCell className="font-semibold">{formatCurrency(row.suggestedWholesale)}</TableCell>
-                  <TableCell>{row.margin}%</TableCell>
-                </TableRow>
-              ))}
+              {suggestions.slice(0, 250).map(row => {
+                const hasChange = row.currentWholesale !== row.suggestedWholesale;
+                const isSelected = selectedSkus.has(row.sku);
+                return (
+                  <TableRow
+                    key={row.sku}
+                    className={isSelected && hasChange ? 'bg-amber-50 dark:bg-amber-950/20' : undefined}
+                    onClick={() => hasChange && toggleSku(row.sku)}
+                    style={{ cursor: hasChange ? 'pointer' : 'default' }}
+                  >
+                    <TableCell>
+                      {hasChange && (
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSku(row.sku)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Seleccionar ${row.name}`}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{row.sku}</TableCell>
+                    <TableCell>{row.name}</TableCell>
+                    <TableCell>{row.rotation}</TableCell>
+                    <TableCell>{formatCurrency(row.cost)}</TableCell>
+                    <TableCell className={hasChange ? 'text-muted-foreground line-through' : undefined}>
+                      {formatCurrency(row.currentWholesale)}
+                    </TableCell>
+                    <TableCell className={hasChange ? 'font-semibold text-amber-700 dark:text-amber-400' : 'font-semibold text-muted-foreground'}>
+                      {formatCurrency(row.suggestedWholesale)}
+                    </TableCell>
+                    <TableCell>{row.margin}%</TableCell>
+                  </TableRow>
+                );
+              })}
               {suggestions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={8} className="h-24 text-center">
                     No hay productos visibles con costo para calcular.
                   </TableCell>
                 </TableRow>
@@ -203,9 +266,12 @@ export function WholesalePricingDialog({ products, onUpdateSuccess, disabled }: 
           </Table>
         </ScrollArea>
 
-        <DialogFooter>
-          <Button onClick={handleApply} disabled={isPending || changedSuggestions.length === 0}>
-            {isPending ? 'Aplicando...' : `Aplicar ${changedSuggestions.length} sugerencias visibles`}
+        <DialogFooter className="items-center gap-2">
+          <p className="text-sm text-muted-foreground mr-auto">
+            {selectedChanged.length} de {changedSuggestions.length} con cambios seleccionados
+          </p>
+          <Button onClick={handleApply} disabled={isPending || selectedChanged.length === 0}>
+            {isPending ? 'Aplicando...' : `Aplicar ${selectedChanged.length} seleccionados`}
           </Button>
         </DialogFooter>
       </DialogContent>

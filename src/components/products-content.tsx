@@ -327,6 +327,48 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         }
     }
 
+    const handleExportNoCost = () => {
+        const rows: Record<string, string | number>[] = [];
+        initialProducts.forEach(p => {
+            if (p.productType === 'variable' && p.variants?.length) {
+                p.variants.forEach(v => {
+                    if (!v.cost || v.cost <= 0) {
+                        rows.push({
+                            Producto: p.name,
+                            Tipo: 'Variante',
+                            Variante: v.name,
+                            SKU: v.sku,
+                            'Precio Drop': v.priceDropshipping ?? '',
+                            'Precio Mayor': v.priceWholesale ?? '',
+                            Rotación: p.rotationCategoryName || 'N/A',
+                        });
+                    }
+                });
+            } else {
+                if (!p.cost || p.cost <= 0) {
+                    rows.push({
+                        Producto: p.name,
+                        Tipo: 'Simple',
+                        Variante: '',
+                        SKU: p.sku ?? '',
+                        'Precio Drop': p.priceDropshipping ?? '',
+                        'Precio Mayor': p.priceWholesale ?? '',
+                        Rotación: p.rotationCategoryName || 'N/A',
+                    });
+                }
+            }
+        });
+        if (rows.length === 0) {
+            toast({ title: 'Sin pendientes', description: 'Todos los productos visibles tienen costo registrado.' });
+            return;
+        }
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [{ wch: 40 }, { wch: 10 }, { wch: 25 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Sin Costo');
+        XLSX.writeFile(wb, `productos-sin-costo-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
     const handleExportExcel = () => {
         const dataToExport = initialProducts.flatMap(p => {
             const baseData = {
@@ -518,6 +560,10 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <UpdateProductsDialog onUpdateSuccess={refreshProducts} disabled={!canBulkUpdate} />
                             <CostPriceUpdateDialog onUpdateSuccess={refreshProducts} disabled={!canCostPriceUpdate} />
                             <WholesalePricingDialog products={initialProducts} onUpdateSuccess={refreshProducts} disabled={!canCostPriceUpdate} />
+                            <DropdownMenuItem onClick={handleExportNoCost} disabled={!canCostPriceUpdate}>
+                                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                Productos sin costo
+                            </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleExportExcel}>
                                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                                 Exportar a Excel
