@@ -127,6 +127,37 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
       return cell.v ?? cell.w ?? null;
     };
 
+    // Detect year/month/date columns for liquidation rule
+    const YEAR_KEYS = new Set(['ano', 'anio', 'year', 'anocompra', 'anodecompra', 'anopedido', 'anoadquirido', 'purchaseyear', 'yearofpurchase']);
+    const DATE_KEYS = new Set(['fecha', 'fechacompra', 'fechadecompra', 'fechapedido', 'purchasedate', 'dateofpurchase']);
+    let yearHeaderKey: string | undefined;
+    let dateHeaderKey: string | undefined;
+    for (const key of headerMap.keys()) {
+      if (!yearHeaderKey && YEAR_KEYS.has(key)) yearHeaderKey = key;
+      if (!dateHeaderKey && DATE_KEYS.has(key)) dateHeaderKey = key;
+    }
+
+    const getPurchaseYear = (rowIndex: number): number | null => {
+      if (yearHeaderKey) {
+        const val = getCellValue(rowIndex, yearHeaderKey);
+        if (val !== null) {
+          const y = typeof val === 'number' ? Math.trunc(val) : parseInt(String(val).trim(), 10);
+          if (y >= 2000 && y <= 2100) return y;
+        }
+      }
+      if (dateHeaderKey) {
+        const val = getCellValue(rowIndex, dateHeaderKey);
+        if (val !== null) {
+          if (val instanceof Date) return val.getFullYear();
+          if (typeof val === 'string') {
+            const m = val.trim().match(/^(\d{4})/);
+            if (m) { const y = parseInt(m[1], 10); if (y >= 2000 && y <= 2100) return y; }
+          }
+        }
+      }
+      return null;
+    };
+
     const parsedRows: CostPriceUpdateInput[] = [];
     for (let rowIndex = headerRowIndex + 1; rowIndex <= range.e.r; rowIndex += 1) {
       const skuCell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: skuCol })];
@@ -134,16 +165,22 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
       const sku = typeof skuValue === 'number' ? String(Math.trunc(skuValue)) : String(skuValue).trim();
       if (!sku) continue;
 
+      const cost = parseMoney(getCellValue(rowIndex, 'costo'));
+      const purchaseYear = getPurchaseYear(rowIndex);
+      const isLiquidation = purchaseYear !== null && purchaseYear <= 2023 && cost !== null && cost > 0;
+
       const priceMaria = parseMoney(getCellValue(rowIndex, 'preciomaria'));
-      const priceDropshipping = priceMaria ?? parseMoney(getCellValue(rowIndex, 'preciodropshipping'));
+      const priceDropshippingFromFile = priceMaria ?? parseMoney(getCellValue(rowIndex, 'preciodropshipping'));
 
       parsedRows.push({
         rowNumber: rowIndex + 1,
         sku,
-        cost: parseMoney(getCellValue(rowIndex, 'costo')),
-        priceDropshipping,
+        cost,
+        priceDropshipping: isLiquidation ? cost : priceDropshippingFromFile,
+        priceWholesale: isLiquidation ? cost : undefined,
         priceMinSale: parseMoney(getCellValue(rowIndex, 'preciominventa')),
         priceOptimalSale: parseMoney(getCellValue(rowIndex, 'preciooptimodeventa')),
+        isLiquidation,
       });
     }
 
@@ -225,13 +262,16 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
       Fila: row.rowNumber,
       SKU: row.sku,
       Estado: row.status,
+      Liquidación: row.isLiquidation ? 'Sí' : 'No',
       Mensaje: row.message,
       Producto: row.productName || '',
       Variante: row.variantName || '',
       'Costo actual': row.currentCost ?? '',
       'Costo nuevo': row.cost ?? '',
-      'Precio actual': row.currentPriceDropshipping ?? '',
-      'Precio nuevo': row.priceDropshipping ?? '',
+      'Precio Drop actual': row.currentPriceDropshipping ?? '',
+      'Precio Drop nuevo': row.priceDropshipping ?? '',
+      'Precio Mayor actual': row.currentPriceWholesale ?? '',
+      'Precio Mayor nuevo': row.priceWholesale ?? '',
       'Precio min actual': row.currentPriceMinSale ?? '',
       'Precio min nuevo': row.priceMinSale ?? '',
       'Precio opt actual': row.currentPriceOptimalSale ?? '',
@@ -269,7 +309,7 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
           )}
 
           {preview && (
-            <div className="grid grid-cols-2 md:grid-cols-7 gap-2 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-8 gap-2 text-sm">
               <Badge>Total: {preview.summary.total}</Badge>
               <Badge>Aplicables: {preview.summary.valid}</Badge>
               <Badge variant="secondary">Sin cambios: {preview.summary.noChange}</Badge>
@@ -277,6 +317,11 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
               <Badge variant="destructive">Duplicados archivo: {preview.summary.duplicateFile}</Badge>
               <Badge variant="destructive">Duplicados sistema: {preview.summary.duplicateSystem}</Badge>
               <Badge variant="destructive">Inválidos: {preview.summary.invalid}</Badge>
+              {preview.rows.some(r => r.isLiquidation) && (
+                <Badge variant="outline" className="text-blue-600 border-blue-300">
+                  Liq.: {preview.rows.filter(r => r.isLiquidation).length}
+                </Badge>
+              )}
             </div>
           )}
 
@@ -290,16 +335,20 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
                     <TableHead>SKU</TableHead>
                     <TableHead>Producto</TableHead>
                     <TableHead>Costo</TableHead>
-                    <TableHead>Precio</TableHead>
+                    <TableHead>Precio Drop</TableHead>
+                    <TableHead>X Mayor</TableHead>
                     <TableHead>Min/Óptimo</TableHead>
                     <TableHead>Mensaje</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {preview.rows.slice(0, 300).map((row) => (
-                    <TableRow key={`${row.rowNumber}-${row.sku}`}>
+                    <TableRow key={`${row.rowNumber}-${row.sku}`} className={row.isLiquidation ? 'bg-blue-50 dark:bg-blue-950/20' : undefined}>
                       <TableCell>
-                        <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+                          {row.isLiquidation && <Badge variant="outline" className="text-blue-600 border-blue-300 text-[10px]">liq.</Badge>}
+                        </div>
                       </TableCell>
                       <TableCell>{row.rowNumber}</TableCell>
                       <TableCell className="font-mono text-xs">{row.sku}</TableCell>
@@ -309,6 +358,7 @@ export function CostPriceUpdateDialog({ onUpdateSuccess, disabled }: CostPriceUp
                       </TableCell>
                       <TableCell>{formatCurrency(row.currentCost)} {'->'} {formatCurrency(row.cost)}</TableCell>
                       <TableCell>{formatCurrency(row.currentPriceDropshipping)} {'->'} {formatCurrency(row.priceDropshipping)}</TableCell>
+                      <TableCell>{formatCurrency(row.currentPriceWholesale)} {'->'} {formatCurrency(row.priceWholesale)}</TableCell>
                       <TableCell>{formatCurrency(row.priceMinSale)} / {formatCurrency(row.priceOptimalSale)}</TableCell>
                       <TableCell className="text-xs">{row.message}</TableCell>
                     </TableRow>

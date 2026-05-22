@@ -16,8 +16,10 @@ export type CostPriceUpdateInput = {
     sku: string;
     cost?: number | null;
     priceDropshipping?: number | null;
+    priceWholesale?: number | null;
     priceMinSale?: number | null;
     priceOptimalSale?: number | null;
+    isLiquidation?: boolean;
 };
 
 export type SkuConflict = {
@@ -36,6 +38,7 @@ export type CostPriceUpdatePreviewRow = CostPriceUpdateInput & {
     targetType?: 'product' | 'variant';
     currentCost?: number | null;
     currentPriceDropshipping?: number | null;
+    currentPriceWholesale?: number | null;
     currentPriceMinSale?: number | null;
     currentPriceOptimalSale?: number | null;
     status: 'valid' | 'no-change' | 'not-found' | 'duplicate-file' | 'duplicate-system' | 'invalid';
@@ -76,6 +79,7 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
         sku: String(row.sku || '').trim(),
         cost: normalizeUpdateNumber(row.cost),
         priceDropshipping: normalizeUpdateNumber(row.priceDropshipping),
+        priceWholesale: normalizeUpdateNumber(row.priceWholesale),
         priceMinSale: normalizeUpdateNumber(row.priceMinSale),
         priceOptimalSale: normalizeUpdateNumber(row.priceOptimalSale),
     }));
@@ -101,6 +105,7 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
                 targetType: 'product',
                 currentCost: product.cost ?? null,
                 currentPriceDropshipping: product.priceDropshipping ?? null,
+                currentPriceWholesale: product.priceWholesale ?? null,
                 currentPriceMinSale: product.priceMinSale ?? null,
                 currentPriceOptimalSale: product.priceOptimalSale ?? null,
                 status: 'valid',
@@ -122,6 +127,7 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
                 targetType: 'variant',
                 currentCost: variant.cost ?? null,
                 currentPriceDropshipping: variant.priceDropshipping ?? null,
+                currentPriceWholesale: variant.priceWholesale ?? null,
                 currentPriceMinSale: variant.priceMinSale ?? null,
                 currentPriceOptimalSale: variant.priceOptimalSale ?? null,
                 status: 'valid',
@@ -131,7 +137,7 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
     });
 
     const previewRows: CostPriceUpdatePreviewRow[] = sanitizedRows.map(row => {
-        const hasValue = row.cost !== undefined || row.priceDropshipping !== undefined || row.priceMinSale !== undefined || row.priceOptimalSale !== undefined;
+        const hasValue = row.cost !== undefined || row.priceDropshipping !== undefined || row.priceWholesale !== undefined || row.priceMinSale !== undefined || row.priceOptimalSale !== undefined;
         if (!row.sku) {
             return { ...row, status: 'invalid', message: 'Fila sin SKU.' };
         }
@@ -165,6 +171,7 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
         const noChange =
             (row.cost === undefined || valuesEqual(row.cost, match.currentCost)) &&
             (row.priceDropshipping === undefined || valuesEqual(row.priceDropshipping, match.currentPriceDropshipping)) &&
+            (row.priceWholesale === undefined || valuesEqual(row.priceWholesale, match.currentPriceWholesale)) &&
             (row.priceMinSale === undefined || valuesEqual(row.priceMinSale, match.currentPriceMinSale)) &&
             (row.priceOptimalSale === undefined || valuesEqual(row.priceOptimalSale, match.currentPriceOptimalSale));
 
@@ -177,10 +184,11 @@ async function buildCostPricePreview(rows: CostPriceUpdateInput[]): Promise<Cost
             targetType: match.targetType,
             currentCost: match.currentCost,
             currentPriceDropshipping: match.currentPriceDropshipping,
+            currentPriceWholesale: match.currentPriceWholesale,
             currentPriceMinSale: match.currentPriceMinSale,
             currentPriceOptimalSale: match.currentPriceOptimalSale,
             status: noChange ? 'no-change' : 'valid',
-            message: noChange ? 'Sin cambios.' : 'Listo para actualizar.',
+            message: noChange ? 'Sin cambios.' : row.isLiquidation ? 'Precio = costo (liquidación antiq.).' : 'Listo para actualizar.',
         };
     });
 
@@ -254,6 +262,7 @@ export async function applyCostPriceUpdateAction(
         for (const row of validRows) {
             const cost = normalizeUpdateNumber(row.cost);
             const priceDropshipping = normalizeUpdateNumber(row.priceDropshipping);
+            const priceWholesale = normalizeUpdateNumber(row.priceWholesale);
             const priceMinSale = normalizeUpdateNumber(row.priceMinSale);
             const priceOptimalSale = normalizeUpdateNumber(row.priceOptimalSale);
             const productRef = doc(db, 'products', row.productId!);
@@ -269,6 +278,7 @@ export async function applyCostPriceUpdateAction(
                     ...variants[variantIndex],
                     ...(cost !== undefined ? { cost } : {}),
                     ...(priceDropshipping !== undefined ? { priceDropshipping } : {}),
+                    ...(priceWholesale !== undefined ? { priceWholesale } : {}),
                     ...(priceMinSale !== undefined ? { priceMinSale } : {}),
                     ...(priceOptimalSale !== undefined ? { priceOptimalSale } : {}),
                 };
@@ -277,6 +287,7 @@ export async function applyCostPriceUpdateAction(
                 const updateData: Partial<Product> = {};
                 if (cost !== undefined) updateData.cost = cost;
                 if (priceDropshipping !== undefined) updateData.priceDropshipping = priceDropshipping;
+                if (priceWholesale !== undefined) updateData.priceWholesale = priceWholesale;
                 if (priceMinSale !== undefined) updateData.priceMinSale = priceMinSale;
                 if (priceOptimalSale !== undefined) updateData.priceOptimalSale = priceOptimalSale;
                 await updateDoc(productRef, updateData);
