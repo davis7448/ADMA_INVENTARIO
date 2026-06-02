@@ -193,7 +193,17 @@ async function main() {
     : `✅ ADMA Precios x Mayor — ${increased.length + decreased.length} actualizados · ${shortDate}`;
 
   await nodemailer.createTransport({ service:'gmail', auth:{ user:process.env.GMAIL_USER, pass:process.env.GMAIL_APP_PASSWORD } })
-    .sendMail({ from:`"ADMA Inventario" <${process.env.GMAIL_USER}>`, to:process.env.GMAIL_USER, subject, html:buildEmailHtml(increased,decreased,date,csvUrl) });
+    .sendMail({
+    from: `"ADMA Inventario" <${process.env.GMAIL_USER}>`,
+    to: [
+      process.env.GMAIL_USER,
+      'Mariagaray_15@hotmail.com',
+      'directoracomercialadma@gmail.com',
+      'coordinadoroperacionesadma@gmail.com',
+    ],
+    subject,
+    html: buildEmailHtml(increased, decreased, date, csvUrl),
+  });
 
   console.log(`✅ Correo enviado · Asunto: ${subject}`);
 }

@@ -151,7 +151,12 @@ async function sendSyncEmail(
 
     await transporter.sendMail({
         from: `"ADMA Inventario" <${gmailUser}>`,
-        to: gmailUser,
+        to: [
+            gmailUser,
+            'Mariagaray_15@hotmail.com',
+            'directoracomercialadma@gmail.com',
+            'coordinadoroperacionesadma@gmail.com',
+        ],
         subject,
         html: buildEmailHtml(updated, increased, decreased, date, sheetUrl),
     });
