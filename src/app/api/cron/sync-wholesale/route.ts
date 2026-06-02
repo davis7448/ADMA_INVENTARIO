@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { syncWholesaleMarginsAction, type SyncPriceChange } from '@/app/actions/products';
-import { uploadWholesaleReportCsv } from '@/lib/wholesale-sheet';
+import { uploadWholesaleReportExcel } from '@/lib/wholesale-sheet';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -94,7 +94,7 @@ function buildEmailHtml(
                     </td>
                     <td style="padding:8px 0 8px 24px;border-left:2px solid #e5e7eb;vertical-align:middle">
                         <a href="${sheetUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:13px">
-                            ⬇️ Descargar CSV completo
+                            ⬇️ Descargar Excel completo
                         </a>
                     </td>
                 </tr>
@@ -130,11 +130,11 @@ async function sendSyncEmail(
 
     const shortDate = new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' });
 
-    // Upload CSV to Firebase Storage
+    // Upload Excel to Firebase Storage
     let sheetUrl = '';
     try {
-        sheetUrl = await uploadWholesaleReportCsv(increased, decreased, shortDate);
-        console.log('[cron] CSV subido a Storage');
+        sheetUrl = await uploadWholesaleReportExcel(increased, decreased, shortDate);
+        console.log('[cron] Excel subido a Storage');
     } catch (err) {
         console.error('[cron] Error subiendo CSV:', err);
         sheetUrl = '#';

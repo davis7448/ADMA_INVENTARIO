@@ -17,7 +17,7 @@ const DAYS = 30, PREVIEW = 30;
 const round100 = v => Math.ceil(v / 100) * 100;
 const fmt = v => '$' + Math.round(v).toLocaleString('es-CO');
 
-async function uploadCsvAndGetLink(increased, decreased, dateLabel) {
+async function uploadExcelAndGetLink(increased, decreased, dateLabel) {
   const header = 'Tipo,Producto,Variante,SKU,Rotacion,Ventas 30d,Margen %,Costo,Precio Anterior,Precio Nuevo,Diferencia\n';
   const toRow = (c, dir) => [
     dir==='up'?'Subio':'Bajo',
@@ -34,7 +34,7 @@ async function uploadCsvAndGetLink(increased, decreased, dateLabel) {
   const filename = `reportes/precio-x-mayor-${dateLabel.replace(/\//g,'-')}.csv`;
   const file = admin.storage().bucket().file(filename);
 
-  await file.save(csv, { contentType: 'text/csv; charset=utf-8', metadata: { cacheControl: 'no-cache' } });
+  await file.save(csv, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', metadata: { cacheControl: 'no-cache' } });
 
   const [url] = await file.getSignedUrl({
     action: 'read',
@@ -69,7 +69,7 @@ function buildEmailHtml(increased, decreased, date, csvUrl) {
     </tr>`;
   }).join('');
 
-  const downloadBtn = `<a href="${csvUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:13px">⬇️ Descargar CSV completo</a>`;
+  const downloadBtn = `<a href="${csvUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:13px">⬇️ Descargar Excel completo</a>`;
   const seeMore = n => n > PREVIEW ? `<p style="margin-top:8px"><a href="${csvUrl}" style="color:#2563eb;font-weight:600;font-size:13px">⬇️ Ver todos en el archivo →</a> <span style="color:#9ca3af;font-size:12px">(${n - PREVIEW} productos más)</span></p>` : '';
 
   const decSection = decreased.length > 0 ? `
@@ -161,9 +161,9 @@ async function main() {
   const shortDate = new Date().toLocaleDateString('es-CO',{timeZone:'America/Bogota'});
   const date = new Date().toLocaleDateString('es-CO',{timeZone:'America/Bogota',weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
-  console.log('Subiendo CSV a Firebase Storage...');
-  const csvUrl = await uploadCsvAndGetLink(increased, decreased, shortDate);
-  console.log('CSV disponible en link firmado (7 días)');
+  console.log('Generando Excel y subiendo a Storage...');
+  const csvUrl = await uploadExcelAndGetLink(increased, decreased, shortDate);
+  console.log('Excel listo (7 días)');
 
   const subject = decreased.length > 0
     ? `⚠️ ADMA Precios x Mayor — ${decreased.length} bajaron de rotación · ${shortDate}`
