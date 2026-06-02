@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { syncWholesaleMarginsAction, type SyncPriceChange } from '@/app/actions/products';
+import { uploadWholesaleReportCsv } from '@/lib/wholesale-sheet';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -11,7 +12,8 @@ function buildEmailHtml(
     updated: number,
     increased: SyncPriceChange[],
     decreased: SyncPriceChange[],
-    date: string
+    date: string,
+    sheetUrl: string
 ): string {
     const tableStyle = 'border-collapse:collapse;width:100%;font-size:13px;';
     const thStyle = 'background:#1a1a2e;color:#fff;padding:8px 10px;text-align:left;';
@@ -45,24 +47,28 @@ function buildEmailHtml(
             <th style="${thStyle};text-align:right">Diferencia</th>
         </tr>`;
 
+    const PREVIEW = 30;
+
+    const seeAllLink = `<a href="${sheetUrl}" style="color:#2563eb;font-weight:600;font-size:13px">📊 Ver todos en Google Sheets →</a>`;
+
     const decreasedSection = decreased.length > 0 ? `
         <h2 style="color:#dc2626;margin-top:32px">⚠️ Bajaron de rotación — ${decreased.length} productos</h2>
-        <p style="color:#6b7280;font-size:13px">Estos productos tenían ventas antes y ahora están inactivos. Su precio x mayor bajó.</p>
+        <p style="color:#6b7280;font-size:13px">Tenían ventas antes y ahora están inactivos. Su precio x mayor bajó.</p>
         <table style="${tableStyle}">
             ${tableHeader}
             ${buildRows(decreased, 'down')}
         </table>
-        ${decreased.length > 50 ? `<p style="color:#6b7280;font-size:12px">... y ${decreased.length - 50} más</p>` : ''}
-    ` : '<p style="color:#16a34a">✅ Ningún producto bajó de rotación hoy.</p>';
+        ${decreased.length > PREVIEW ? `<p style="margin-top:8px">${seeAllLink} <span style="color:#9ca3af;font-size:12px">(${decreased.length - PREVIEW} productos más en el archivo)</span></p>` : ''}
+    ` : '<p style="color:#16a34a;margin-top:16px">✅ Ningún producto bajó de rotación hoy.</p>';
 
     const increasedSection = increased.length > 0 ? `
         <h2 style="color:#16a34a;margin-top:32px">🚀 Subieron de rotación — ${increased.length} productos</h2>
-        <p style="color:#6b7280;font-size:13px">Estos productos ganaron ventas. Su precio x mayor subió para reflejar el nuevo margen.</p>
+        <p style="color:#6b7280;font-size:13px">Ganaron ventas. Su precio x mayor subió para mantener el margen correcto.</p>
         <table style="${tableStyle}">
             ${tableHeader}
             ${buildRows(increased, 'up')}
         </table>
-        ${increased.length > 50 ? `<p style="color:#6b7280;font-size:12px">... y ${increased.length - 50} más</p>` : ''}
+        ${increased.length > PREVIEW ? `<p style="margin-top:8px">${seeAllLink} <span style="color:#9ca3af;font-size:12px">(${increased.length - PREVIEW} productos más en el archivo)</span></p>` : ''}
     ` : '';
 
     return `
@@ -72,25 +78,33 @@ function buildEmailHtml(
             <p style="color:#9ca3af;margin:4px 0 0;font-size:13px">${date} · ${updated} productos actualizados</p>
         </div>
         <div style="background:#f9fafb;padding:16px 24px;border:1px solid #e5e7eb;border-top:none">
-            <div style="display:flex;gap:24px">
-                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:12px 20px;text-align:center">
-                    <div style="font-size:24px;font-weight:700;color:#dc2626">${decreased.length}</div>
-                    <div style="font-size:12px;color:#6b7280">Bajaron precio</div>
-                </div>
-                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:12px 20px;text-align:center">
-                    <div style="font-size:24px;font-weight:700;color:#16a34a">${increased.length}</div>
-                    <div style="font-size:12px;color:#6b7280">Subieron precio</div>
-                </div>
-                <div style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:12px 20px;text-align:center">
-                    <div style="font-size:24px;font-weight:700;color:#6b7280">${updated - increased.length - decreased.length}</div>
-                    <div style="font-size:12px;color:#6b7280">Sin cambio neto</div>
-                </div>
-            </div>
+            <table style="border-collapse:collapse">
+                <tr>
+                    <td style="padding:8px 24px 8px 0;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#dc2626">${decreased.length}</div>
+                        <div style="font-size:12px;color:#6b7280">↓ Bajaron precio</div>
+                    </td>
+                    <td style="padding:8px 24px;border-left:2px solid #e5e7eb;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#16a34a">${increased.length}</div>
+                        <div style="font-size:12px;color:#6b7280">↑ Subieron precio</div>
+                    </td>
+                    <td style="padding:8px 24px;border-left:2px solid #e5e7eb;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#111">${updated}</div>
+                        <div style="font-size:12px;color:#6b7280">Total actualizados</div>
+                    </td>
+                    <td style="padding:8px 0 8px 24px;border-left:2px solid #e5e7eb;vertical-align:middle">
+                        <a href="${sheetUrl}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-weight:600;font-size:13px">
+                            ⬇️ Descargar CSV completo
+                        </a>
+                    </td>
+                </tr>
+            </table>
         </div>
         <div style="padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
             ${decreasedSection}
             ${increasedSection}
-            <p style="margin-top:32px;font-size:12px;color:#9ca3af">
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0 16px">
+            <p style="font-size:12px;color:#9ca3af;margin:0">
                 Generado automáticamente cada día a las 3am (Bogotá) · ADMA Inventario
             </p>
         </div>
@@ -109,25 +123,37 @@ async function sendSyncEmail(
         return;
     }
 
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: gmailUser, pass: gmailPass },
-    });
-
     const date = new Date().toLocaleDateString('es-CO', {
         timeZone: 'America/Bogota',
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
 
+    const shortDate = new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' });
+
+    // Upload CSV to Firebase Storage
+    let sheetUrl = '';
+    try {
+        sheetUrl = await uploadWholesaleReportCsv(increased, decreased, shortDate);
+        console.log('[cron] CSV subido a Storage');
+    } catch (err) {
+        console.error('[cron] Error subiendo CSV:', err);
+        sheetUrl = '#';
+    }
+
     const subject = decreased.length > 0
-        ? `⚠️ ADMA Precios x Mayor — ${decreased.length} bajaron de rotación · ${new Date().toLocaleDateString('es-CO')}`
-        : `✅ ADMA Precios x Mayor — ${updated} actualizados · ${new Date().toLocaleDateString('es-CO')}`;
+        ? `⚠️ ADMA Precios x Mayor — ${decreased.length} bajaron de rotación · ${shortDate}`
+        : `✅ ADMA Precios x Mayor — ${updated} actualizados · ${shortDate}`;
+
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: gmailUser, pass: gmailPass },
+    });
 
     await transporter.sendMail({
         from: `"ADMA Inventario" <${gmailUser}>`,
         to: gmailUser,
         subject,
-        html: buildEmailHtml(updated, increased, decreased, date),
+        html: buildEmailHtml(updated, increased, decreased, date, sheetUrl),
     });
 
     console.log(`[cron] Email enviado a ${gmailUser}`);
