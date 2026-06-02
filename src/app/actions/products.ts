@@ -911,11 +911,25 @@ function roundToHundred(value: number): number {
     return Math.ceil(value / 100) * 100;
 }
 
+export type SyncPriceChange = {
+    product: string;
+    sku: string;
+    category: string;
+    sales: number;
+    marginPct: number;
+    cost: number;
+    oldPrice: number;
+    newPrice: number;
+    direction: 'up' | 'down';
+};
+
 export type SyncWholesaleMarginsResult = {
     success: boolean;
     message: string;
     updated: number;
     skipped: number;
+    increased: SyncPriceChange[];
+    decreased: SyncPriceChange[];
 };
 
 export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMarginsResult> {
@@ -946,12 +960,12 @@ export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMargins
             if (m.productId) salesByProduct[m.productId] = (salesByProduct[m.productId] || 0) + (m.quantity || 0);
         }
 
-        const getMarginForProduct = (productId: string): number => {
+        const getCategoryInfo = (productId: string): { marginPct: number; name: string; sales: number } => {
             const sales = salesByProduct[productId] || 0;
             for (const cat of categories) {
-                if (sales >= cat.salesThreshold) return cat.marginPct ?? 8;
+                if (sales >= cat.salesThreshold) return { marginPct: cat.marginPct ?? 8, name: cat.name, sales };
             }
-            return categories[categories.length - 1]?.marginPct ?? 8;
+            return { marginPct: categories[categories.length - 1]?.marginPct ?? 8, name: 'Inactivo', sales: 0 };
         };
 
         // 3. Load all products and compute new wholesale prices
@@ -959,6 +973,8 @@ export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMargins
 
         let updated = 0;
         let skipped = 0;
+        const increased: SyncPriceChange[] = [];
+        const decreased: SyncPriceChange[] = [];
         const BATCH_SIZE = 400;
         let batch = adminDb.batch();
         let batchCount = 0;
@@ -971,25 +987,45 @@ export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMargins
             }
         };
 
+        const recordChange = (
+            productName: string, sku: string,
+            catInfo: { marginPct: number; name: string; sales: number },
+            cost: number, oldPrice: number, newPrice: number
+        ) => {
+            const change: SyncPriceChange = {
+                product: productName, sku,
+                category: catInfo.name, sales: catInfo.sales,
+                marginPct: catInfo.marginPct,
+                cost, oldPrice, newPrice,
+                direction: newPrice > oldPrice ? 'up' : 'down',
+            };
+            if (change.direction === 'up') increased.push(change);
+            else decreased.push(change);
+        };
+
         for (const docSnap of productsSnap.docs) {
             const data = docSnap.data();
-            const marginPct = getMarginForProduct(docSnap.id);
+            const catInfo = getCategoryInfo(docSnap.id);
             const updates: Record<string, any> = {};
 
             if (data.productType === 'variable' && Array.isArray(data.variants)) {
                 let variantsDirty = false;
                 const newVariants = data.variants.map((v: any) => {
                     if (!v.cost || v.cost <= 0 || !v.priceWholesale || v.priceWholesale <= 0) return v;
-                    const suggested = roundToHundred(v.cost / (1 - marginPct / 100));
+                    const suggested = roundToHundred(v.cost / (1 - catInfo.marginPct / 100));
                     if (suggested === v.priceWholesale) return v;
                     variantsDirty = true;
+                    recordChange(`${data.name} — ${v.name}`, v.sku ?? '', catInfo, v.cost, v.priceWholesale, suggested);
                     return { ...v, priceWholesale: suggested };
                 });
                 if (variantsDirty) updates.variants = newVariants;
             } else {
                 if (data.cost > 0 && data.priceWholesale > 0) {
-                    const suggested = roundToHundred(data.cost / (1 - marginPct / 100));
-                    if (suggested !== data.priceWholesale) updates.priceWholesale = suggested;
+                    const suggested = roundToHundred(data.cost / (1 - catInfo.marginPct / 100));
+                    if (suggested !== data.priceWholesale) {
+                        recordChange(data.name, data.sku ?? '', catInfo, data.cost, data.priceWholesale, suggested);
+                        updates.priceWholesale = suggested;
+                    }
                 }
             }
 
@@ -1008,9 +1044,11 @@ export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMargins
 
         return {
             success: true,
-            message: `Sincronización completada: ${updated} productos actualizados, ${skipped} sin cambios.`,
+            message: `Sincronización completada: ${updated} actualizados (↑${increased.length} subieron, ↓${decreased.length} bajaron), ${skipped} sin cambios.`,
             updated,
             skipped,
+            increased,
+            decreased,
         };
     } catch (error) {
         console.error('[syncWholesaleMargins]', error);
@@ -1019,6 +1057,8 @@ export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMargins
             message: error instanceof Error ? error.message : 'Error inesperado en la sincronización.',
             updated: 0,
             skipped: 0,
+            increased: [],
+            decreased: [],
         };
     }
 }
