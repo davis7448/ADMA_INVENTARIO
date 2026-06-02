@@ -5,7 +5,7 @@ const XLSX = require('xlsx');
 
 // ─────────────────────────────────────────────
 const STORAGE_BUCKET = 'studio-9748962172-82b35.firebasestorage.app';
-const TEST_MODE = true; // ← false para enviar a todos
+const TEST_MODE = false; // ← false para enviar a todos
 
 const RECIPIENTS = TEST_MODE
   ? ['camilouseche22@gmail.com']
