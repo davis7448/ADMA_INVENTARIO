@@ -18,27 +18,50 @@ const round100 = v => Math.ceil(v / 100) * 100;
 const fmt = v => '$' + Math.round(v).toLocaleString('es-CO');
 
 async function uploadExcelAndGetLink(increased, decreased, dateLabel) {
-  const header = 'Tipo,Producto,Variante,SKU,Rotacion,Ventas 30d,Margen %,Costo,Precio Anterior,Precio Nuevo,Diferencia\n';
-  const toRow = (c, dir) => [
-    dir==='up'?'Subio':'Bajo',
-    `"${c.product}"`, '', c.sku, c.category, c.sales, c.marginPct+'%',
-    Math.round(c.cost), Math.round(c.oldPrice), Math.round(c.newPrice),
-    Math.round(c.newPrice - c.oldPrice)
-  ].join(',');
+  const XLSX = require('xlsx');
 
-  const csv = header
-    + decreased.map(c => toRow(c,'down')).join('\n')
-    + (decreased.length && increased.length ? '\n' : '')
-    + increased.map(c => toRow(c,'up')).join('\n');
+  const toRow = (c, dir) => ({
+    'Tipo':            dir === 'up' ? '↑ Subio' : '↓ Bajo',
+    'Producto':        c.product,
+    'SKU':             c.sku,
+    'Rotacion':        c.category,
+    'Ventas 30d':      c.sales,
+    'Margen %':        c.marginPct,
+    'Costo':           Math.round(c.cost),
+    'Precio Anterior': Math.round(c.oldPrice),
+    'Precio Nuevo':    Math.round(c.newPrice),
+    'Diferencia':      Math.round(c.newPrice - c.oldPrice),
+  });
 
-  const filename = `reportes/precio-x-mayor-${dateLabel.replace(/\//g,'-')}.csv`;
+  const rows = [
+    ...decreased.map(c => toRow(c, 'down')),
+    ...increased.map(c => toRow(c, 'up')),
+  ];
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 10 }, { wch: 42 }, { wch: 14 }, { wch: 14 },
+    { wch: 10 }, { wch: 9 },  { wch: 12 }, { wch: 16 },
+    { wch: 13 }, { wch: 12 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cambios');
+
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  const slug = dateLabel.replace(/\//g, '-');
+  const filename = `reportes/precio-x-mayor-${slug}.xlsx`;
   const file = admin.storage().bucket().file(filename);
 
-  await file.save(csv, { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', metadata: { cacheControl: 'no-cache' } });
+  await file.save(buffer, {
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    metadata: { cacheControl: 'no-cache' },
+  });
 
   const [url] = await file.getSignedUrl({
     action: 'read',
-    expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
   });
 
   return url;
