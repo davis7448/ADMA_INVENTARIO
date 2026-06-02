@@ -930,15 +930,19 @@ export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMargins
         })).sort((a, b) => b.salesThreshold - a.salesThreshold);
 
         // 2. Load sales (Salida movements) in last WHOLESALE_SALES_WINDOW_DAYS days
-        const since = new Date(Date.now() - WHOLESALE_SALES_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        // Uses existing (type ASC, date DESC) index — date filter applied in memory
+        const sinceMs = Date.now() - WHOLESALE_SALES_WINDOW_DAYS * 24 * 60 * 60 * 1000;
         const movSnap = await adminDb.collection('inventoryMovements')
             .where('type', '==', 'Salida')
-            .where('date', '>=', since.toISOString())
+            .orderBy('date', 'desc')
             .get();
 
         const salesByProduct: Record<string, number> = {};
         for (const d of movSnap.docs) {
             const m = d.data();
+            // date can be a Firestore Timestamp or ISO string — normalize to ms
+            const dateMs = m.date?.toMillis ? m.date.toMillis() : new Date(m.date).getTime();
+            if (dateMs < sinceMs) continue;
             if (m.productId) salesByProduct[m.productId] = (salesByProduct[m.productId] || 0) + (m.quantity || 0);
         }
 
