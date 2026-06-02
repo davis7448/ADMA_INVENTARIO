@@ -10,6 +10,8 @@ import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';
 import { AddProductFormSchema, EditProductFormSchema, CreateReservationFormSchema, ImportProductSchema, UpdateProductSchema } from '@/lib/definitions';
 import { v4 as uuidv4 } from 'uuid';
+import { getApp } from '@/lib/firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 
 export type CostPriceUpdateInput = {
     rowNumber: number;
@@ -895,6 +897,124 @@ export async function updateProductsAction(
             message: errorMessage,
             success: false,
             count: 0
+        };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sync wholesale prices based on rotation margins
+// ---------------------------------------------------------------------------
+
+const WHOLESALE_SALES_WINDOW_DAYS = 30;
+
+function roundToHundred(value: number): number {
+    return Math.ceil(value / 100) * 100;
+}
+
+export type SyncWholesaleMarginsResult = {
+    success: boolean;
+    message: string;
+    updated: number;
+    skipped: number;
+};
+
+export async function syncWholesaleMarginsAction(): Promise<SyncWholesaleMarginsResult> {
+    try {
+        const adminApp = await getApp();
+        const adminDb = getFirestore(adminApp);
+
+        // 1. Load rotation categories with marginPct
+        const catSnap = await adminDb.collection('rotationCategories').get();
+        const categories = catSnap.docs.map(d => ({ id: d.id, ...d.data() } as {
+            id: string; name: string; salesThreshold: number; marginPct: number;
+        })).sort((a, b) => b.salesThreshold - a.salesThreshold);
+
+        // 2. Load sales (Salida movements) in last WHOLESALE_SALES_WINDOW_DAYS days
+        const since = new Date(Date.now() - WHOLESALE_SALES_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        const movSnap = await adminDb.collection('inventoryMovements')
+            .where('type', '==', 'Salida')
+            .where('date', '>=', since.toISOString())
+            .get();
+
+        const salesByProduct: Record<string, number> = {};
+        for (const d of movSnap.docs) {
+            const m = d.data();
+            if (m.productId) salesByProduct[m.productId] = (salesByProduct[m.productId] || 0) + (m.quantity || 0);
+        }
+
+        const getMarginForProduct = (productId: string): number => {
+            const sales = salesByProduct[productId] || 0;
+            for (const cat of categories) {
+                if (sales >= cat.salesThreshold) return cat.marginPct ?? 8;
+            }
+            return categories[categories.length - 1]?.marginPct ?? 8;
+        };
+
+        // 3. Load all products and compute new wholesale prices
+        const productsSnap = await adminDb.collection('products').get();
+
+        let updated = 0;
+        let skipped = 0;
+        const BATCH_SIZE = 400;
+        let batch = adminDb.batch();
+        let batchCount = 0;
+
+        const flushBatch = async () => {
+            if (batchCount > 0) {
+                await batch.commit();
+                batch = adminDb.batch();
+                batchCount = 0;
+            }
+        };
+
+        for (const docSnap of productsSnap.docs) {
+            const data = docSnap.data();
+            const marginPct = getMarginForProduct(docSnap.id);
+            const updates: Record<string, any> = {};
+
+            if (data.productType === 'variable' && Array.isArray(data.variants)) {
+                let variantsDirty = false;
+                const newVariants = data.variants.map((v: any) => {
+                    if (!v.cost || v.cost <= 0 || !v.priceWholesale || v.priceWholesale <= 0) return v;
+                    const suggested = roundToHundred(v.cost / (1 - marginPct / 100));
+                    if (suggested === v.priceWholesale) return v;
+                    variantsDirty = true;
+                    return { ...v, priceWholesale: suggested };
+                });
+                if (variantsDirty) updates.variants = newVariants;
+            } else {
+                if (data.cost > 0 && data.priceWholesale > 0) {
+                    const suggested = roundToHundred(data.cost / (1 - marginPct / 100));
+                    if (suggested !== data.priceWholesale) updates.priceWholesale = suggested;
+                }
+            }
+
+            if (Object.keys(updates).length > 0) {
+                batch.update(docSnap.ref, updates);
+                batchCount++;
+                updated++;
+                if (batchCount >= BATCH_SIZE) await flushBatch();
+            } else {
+                skipped++;
+            }
+        }
+
+        await flushBatch();
+        revalidatePath('/products');
+
+        return {
+            success: true,
+            message: `Sincronización completada: ${updated} productos actualizados, ${skipped} sin cambios.`,
+            updated,
+            skipped,
+        };
+    } catch (error) {
+        console.error('[syncWholesaleMargins]', error);
+        return {
+            success: false,
+            message: error instanceof Error ? error.message : 'Error inesperado en la sincronización.',
+            updated: 0,
+            skipped: 0,
         };
     }
 }

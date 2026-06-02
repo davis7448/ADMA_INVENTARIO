@@ -24,3 +24,8 @@ env:
      availability:
        - BUILD
        - RUNTIME
+
+   - variable: CRON_SECRET
+     secret: CRON_SECRET
+     availability:
+       - RUNTIME

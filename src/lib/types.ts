@@ -219,6 +219,7 @@ export type RotationCategory = {
   name: string;
   description: string;
   salesThreshold: number;
+  marginPct?: number;
 };
 
 export interface ProductPerformanceData {

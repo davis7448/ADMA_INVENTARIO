@@ -49,7 +49,7 @@ import { getVendedores } from '@/lib/api';
 import type { Product, RotationCategory, Vendedor, Location } from '@/lib/types';
 import { getExternalStockSummaryAction } from '@/app/actions/external-warehouses';
 import type { ExternalStockSummaryMap } from '@/lib/api';
-import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight, Calculator } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { AddProductForm } from '@/components/add-product-form';
 import { useAuth } from '@/hooks/use-auth';
@@ -68,7 +68,7 @@ import { UpdateProductsDialog } from './update-products-dialog';
 import { CostPriceUpdateDialog } from './cost-price-update-dialog';
 import { WholesalePricingDialog } from './wholesale-pricing-dialog';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { auditProductStockAction, clearProductAuditAction, deleteProductAction, updateProductLocationAction } from '@/app/actions/products';
+import { auditProductStockAction, clearProductAuditAction, deleteProductAction, updateProductLocationAction, syncWholesaleMarginsAction } from '@/app/actions/products';
 import { useToast } from '@/hooks/use-toast';
 import { formatToTimeZone } from '@/lib/utils';
 import { AlertDialogTrigger } from './ui/alert-dialog';
@@ -464,7 +464,21 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
         XLSX.writeFile(workbook, `Productos-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
       };
 
-      const calculateAvailableStock = (product: Product, variantId?: string) => {
+    const [isSyncingMargins, startSyncMargins] = useTransition();
+
+    const handleSyncWholesaleMargins = () => {
+        startSyncMargins(async () => {
+            const result = await syncWholesaleMarginsAction();
+            if (result.success) {
+                toast({ title: 'Márgenes sincronizados', description: result.message });
+                refreshProducts();
+            } else {
+                toast({ title: 'Error en sincronización', description: result.message, variant: 'destructive' });
+            }
+        });
+    };
+
+    const calculateAvailableStock = (product: Product, variantId?: string) => {
         const totalReserved = product.reservations?.reduce((sum, res) => {
             if (variantId) {
                 // If checking a variant, only count reservations for that variant
@@ -602,6 +616,10 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                             <UpdateProductsDialog onUpdateSuccess={refreshProducts} disabled={!canBulkUpdate} />
                             <CostPriceUpdateDialog onUpdateSuccess={refreshProducts} disabled={!canCostPriceUpdate} />
                             <WholesalePricingDialog products={initialProducts} onUpdateSuccess={refreshProducts} disabled={!canCostPriceUpdate} />
+                            <DropdownMenuItem onClick={handleSyncWholesaleMargins} disabled={!canCostPriceUpdate || isSyncingMargins}>
+                                <Calculator className="mr-2 h-4 w-4" />
+                                {isSyncingMargins ? 'Sincronizando...' : 'Sincronizar márgenes x mayor'}
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={handleExportNoCost} disabled={!canCostPriceUpdate}>
                                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                                 Productos sin costo
