@@ -269,6 +269,7 @@ async function main() {
 
   const prods = await db.collection('products').get();
   const increased = [], decreased = [], lowStock = [];
+  const writeUpdates = []; // { ref, data }
 
   for (const doc of prods.docs) {
     const d = doc.data();
@@ -293,20 +294,37 @@ async function main() {
 
     // ── Ajustes de precio ──
     if (d.productType === 'variable' && Array.isArray(d.variants)) {
-      for (const v of d.variants) {
-        if (!v.cost || v.cost <= 0 || !v.priceWholesale || v.priceWholesale <= 0) continue;
+      let changed = false;
+      const updatedVariants = d.variants.map(v => {
+        if (!v.cost || v.cost <= 0 || !v.priceWholesale || v.priceWholesale <= 0) return v;
         const sug = round100(v.cost / (1 - m / 100));
-        if (sug === v.priceWholesale) continue;
+        if (sug === v.priceWholesale) return v;
         const c = { product: `${d.name} — ${v.name}`, sku: v.sku ?? '', category: cat, sales30, sales7, sales1, marginPct: m, cost: v.cost, oldPrice: v.priceWholesale, newPrice: sug };
         if (sug > v.priceWholesale) increased.push(c); else decreased.push(c);
-      }
+        changed = true;
+        return { ...v, priceWholesale: sug };
+      });
+      if (changed) writeUpdates.push({ ref: doc.ref, data: { variants: updatedVariants } });
     } else {
       if (!d.cost || d.cost <= 0 || !d.priceWholesale || d.priceWholesale <= 0) continue;
       const sug = round100(d.cost / (1 - m / 100));
       if (sug === d.priceWholesale) continue;
       const c = { product: d.name, sku: d.sku ?? '', category: cat, sales30, sales7, sales1, marginPct: m, cost: d.cost, oldPrice: d.priceWholesale, newPrice: sug };
       if (sug > d.priceWholesale) increased.push(c); else decreased.push(c);
+      writeUpdates.push({ ref: doc.ref, data: { priceWholesale: sug } });
     }
+  }
+
+  // ── Escribir precios actualizados en Firestore ──
+  if (writeUpdates.length > 0) {
+    console.log(`Actualizando ${writeUpdates.length} productos en Firestore...`);
+    const BATCH_SIZE = 400;
+    for (let i = 0; i < writeUpdates.length; i += BATCH_SIZE) {
+      const batch = db.batch();
+      writeUpdates.slice(i, i + BATCH_SIZE).forEach(({ ref, data }) => batch.update(ref, data));
+      await batch.commit();
+    }
+    console.log(`✅ Precios actualizados en Firestore`);
   }
 
   increased.sort((a, b) => b.sales30 - a.sales30);
