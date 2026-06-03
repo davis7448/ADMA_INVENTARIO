@@ -24,7 +24,7 @@ const WAREHOUSES = {
     name: 'Bodega INGENIO',
     recipients: TEST_MODE
       ? ['camilouseche22@gmail.com']
-      : ['camilouseche22@gmail.com', 'Mariagaray_15@hotmail.com'],
+      : ['camilouseche22@gmail.com', 'Mariagaray_15@hotmail.com', 'coordinadoroperacionesadma@gmail.com', 'directoracomercialadma@gmail.com'],
   },
   'wh-med': {
     name: 'Bodega LABORATORIO',
@@ -36,7 +36,7 @@ const WAREHOUSES = {
     name: 'CASCAJAL',
     recipients: TEST_MODE
       ? ['camilouseche22@gmail.com']
-      : ['camilouseche22@gmail.com', 'Mariagaray_15@hotmail.com'],
+      : ['camilouseche22@gmail.com', 'Mariagaray_15@hotmail.com', 'coordinadoroperacionesadma@gmail.com', 'directoracomercialadma@gmail.com'],
     external: true,
   },
 };
