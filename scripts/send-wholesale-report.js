@@ -7,7 +7,8 @@ const XLSX = require('xlsx');
 const STORAGE_BUCKET = 'studio-9748962172-82b35.firebasestorage.app';
 const TEST_MODE = false; // ← false para enviar a todos
 
-const RECIPIENTS = TEST_MODE
+// Destinatarios del Email 1 (ajustes de precio) — siempre los 4
+const PRICE_RECIPIENTS = TEST_MODE
   ? ['camilouseche22@gmail.com']
   : [
       'camilouseche22@gmail.com',
@@ -15,6 +16,30 @@ const RECIPIENTS = TEST_MODE
       'directoracomercialadma@gmail.com',
       'coordinadoroperacionesadma@gmail.com',
     ];
+
+// Config de bodegas: qué bodegas existen y a quiénes va cada correo de stock
+// Cuando tengas los emails de coordinador/comercial, agrega sus bodegas aquí.
+const WAREHOUSES = {
+  'wh-bog': {
+    name: 'Bodega INGENIO',
+    recipients: TEST_MODE
+      ? ['camilouseche22@gmail.com']
+      : ['camilouseche22@gmail.com', 'Mariagaray_15@hotmail.com'],
+  },
+  'wh-med': {
+    name: 'Bodega LABORATORIO',
+    recipients: TEST_MODE
+      ? ['camilouseche22@gmail.com']
+      : ['camilouseche22@gmail.com', 'Mariagaray_15@hotmail.com'],
+  },
+  'wh-cascajal': {
+    name: 'CASCAJAL',
+    recipients: TEST_MODE
+      ? ['camilouseche22@gmail.com']
+      : ['camilouseche22@gmail.com', 'Mariagaray_15@hotmail.com'],
+    external: true,
+  },
+};
 // ─────────────────────────────────────────────
 
 if (!admin.apps.length) {
@@ -79,11 +104,51 @@ async function uploadExcel(sheets, dateLabel) {
   return url;
 }
 
-function sendMail(subject, html) {
+function sendMail(subject, html, recipients) {
+  const to = recipients ?? PRICE_RECIPIENTS;
   return nodemailer.createTransport({
     service: 'gmail',
     auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
-  }).sendMail({ from: `"ADMA Inventario" <${process.env.GMAIL_USER}>`, to: RECIPIENTS, subject, html });
+  }).sendMail({ from: `"ADMA Inventario" <${process.env.GMAIL_USER}>`, to, subject, html });
+}
+
+async function getCascajalAlerts(s30, s7, s1) {
+  // Último snapshot por uploadedAt
+  const snaps = await db.collection('externalStockSnapshots').get();
+  if (snaps.empty) return [];
+  const latest = snaps.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(s => s.warehouseId === 'wh-cascajal')
+    .sort((a, b) => (b.uploadedAt?._seconds ?? 0) - (a.uploadedAt?._seconds ?? 0))[0];
+  if (!latest) return [];
+
+  const items = await db.collection('externalStockSnapshotItems')
+    .where('snapshotId', '==', latest.id).get();
+
+  const alerts = [];
+  for (const doc of items.docs) {
+    const it = doc.data();
+    const stock = it.stockQuantity || 0;
+    if (stock <= 0) continue;
+    const pid = it.internalProductId;
+    const sales30 = pid ? (s30[pid] || 0) : 0;
+    const sales7  = pid ? (s7[pid]  || 0) : 0;
+    const sales1  = pid ? (s1[pid]  || 0) : 0;
+    if (sales30 === 0) continue; // sin ventas no hay alerta de stock
+    const dias = getDias(stock, sales30);
+    if (dias !== null && dias <= 15) {
+      alerts.push({
+        product: it.externalName || it.internalSku || it.externalIdentifier,
+        sku: it.internalSku || it.externalIdentifier || '',
+        category: '—',
+        sales30, sales7, sales1,
+        stock,
+        diasStock: dias,
+        warehouseId: 'wh-cascajal',
+      });
+    }
+  }
+  return alerts.sort((a, b) => a.diasStock - b.diasStock);
 }
 
 // ── Email 1: Ajustes de Precio ───────────────────────────────────────────────
@@ -177,7 +242,7 @@ function priceEmailHtml(increased, decreased, date, excelUrl) {
 
 // ── Email 2: Alerta de Stock ──────────────────────────────────────────────────
 
-function stockEmailHtml(red, amber, date, excelUrl) {
+function stockEmailHtml(red, amber, date, excelUrl, warehouseName = '') {
   const ts = 'border-collapse:collapse;width:100%;font-size:12px;';
   const th = 'background:#1a1a2e;color:#fff;padding:7px 8px;text-align:left;white-space:nowrap;font-size:11px';
   const td = 'padding:6px 8px;border-bottom:1px solid #e5e7eb;white-space:nowrap;';
@@ -218,7 +283,7 @@ function stockEmailHtml(red, amber, date, excelUrl) {
 
   return `<div style="font-family:Arial,sans-serif;max-width:960px;margin:0 auto;color:#111">
     <div style="background:#7f1d1d;padding:20px 24px;border-radius:8px 8px 0 0">
-      <h1 style="color:#fff;margin:0;font-size:19px">ADMA — ⚠️ Alerta de Stock</h1>
+      <h1 style="color:#fff;margin:0;font-size:19px">ADMA — ⚠️ Alerta de Stock${warehouseName ? ` · ${warehouseName}` : ''}</h1>
       <p style="color:#fca5a5;margin:5px 0 0;font-size:12px">${date}${TEST_MODE ? ' · <b style="color:#fbbf24">TEST</b>' : ''}</p>
     </div>
     <div style="background:#fff7f7;padding:14px 24px;border:1px solid #fecaca;border-top:none">
@@ -287,7 +352,7 @@ async function main() {
       for (const item of items) {
         const dias = getDias(item.stock, sales30);
         if (dias !== null && dias <= 15) {
-          lowStock.push({ product: item.name, sku: item.sku, category: cat, sales30, sales7, sales1, stock: item.stock, diasStock: dias });
+          lowStock.push({ product: item.name, sku: item.sku, category: cat, sales30, sales7, sales1, stock: item.stock, diasStock: dias, warehouseId: d.warehouseId || 'wh-bog' });
         }
       }
     }
@@ -330,16 +395,14 @@ async function main() {
   increased.sort((a, b) => b.sales30 - a.sales30);
   decreased.sort((a, b) => b.sales30 - a.sales30);
   lowStock.sort((a, b) => a.diasStock - b.diasStock);
-  const red   = lowStock.filter(p => p.diasStock <= 7);
-  const amber = lowStock.filter(p => p.diasStock > 7);
 
   console.log(`↑ Subieron: ${increased.length} | ↓ Bajaron: ${decreased.length}`);
-  console.log(`🔴 Crítico: ${red.length} | 🟠 Bajo: ${amber.length}`);
+  console.log(`Alertas de stock (bodegas internas): ${lowStock.length}`);
 
   const shortDate = new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' });
   const date = new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  // ── Email 1: Ajustes de precio ──
+  // ── Email 1: Ajustes de precio (todos los destinatarios) ──
   console.log('\nGenerando Excel de precios...');
   const priceExcelUrl = await uploadExcel([{
     name: 'Cambios Precio',
@@ -356,29 +419,52 @@ async function main() {
       ? `⚠️ ADMA Precio x Mayor — ${decreased.length} bajaron · ${shortDate}`
       : `✅ ADMA Precio x Mayor — ${increased.length + decreased.length} actualizados · ${shortDate}`;
 
-  await sendMail(priceSubject, priceEmailHtml(increased, decreased, date, priceExcelUrl));
-  console.log(`✅ Email 1 enviado: ${priceSubject}`);
+  await sendMail(priceSubject, priceEmailHtml(increased, decreased, date, priceExcelUrl), PRICE_RECIPIENTS);
+  console.log(`✅ Email precios enviado: ${priceSubject}`);
 
-  // ── Email 2: Alertas de stock ──
-  if (red.length > 0 || amber.length > 0) {
-    console.log('\nGenerando Excel de stock...');
-    const stockExcelUrl = await uploadExcel([{
+  // ── Emails de stock: uno por bodega ──
+  // Bodegas internas: agrupar lowStock por warehouseId
+  const stockByWh = {};
+  for (const item of lowStock) {
+    (stockByWh[item.warehouseId] ||= []).push(item);
+  }
+
+  // Cascajal: bodega externa
+  console.log('\nCargando alertas de Cascajal...');
+  const cascajalAlerts = await getCascajalAlerts(s30, s7, s1);
+  if (cascajalAlerts.length > 0) stockByWh['wh-cascajal'] = cascajalAlerts;
+  console.log(`Alertas Cascajal: ${cascajalAlerts.length}`);
+
+  let stockEmailCount = 0;
+  for (const [whId, whConfig] of Object.entries(WAREHOUSES)) {
+    const alerts = stockByWh[whId] || [];
+    if (alerts.length === 0) {
+      console.log(`\n✅ ${whConfig.name} — sin alertas de stock`);
+      continue;
+    }
+    const red   = alerts.filter(p => p.diasStock <= 7);
+    const amber = alerts.filter(p => p.diasStock > 7);
+    console.log(`\n${whConfig.name}: 🔴 ${red.length} | 🟠 ${amber.length}`);
+
+    const excelUrl = await uploadExcel([{
       name: 'Alerta Stock',
       rows: [...red, ...amber].map(p => ({ 'Alerta': p.diasStock <= 7 ? '🔴 Crítico' : '🟠 Bajo', 'Días restantes': p.diasStock, 'Producto': p.product, 'SKU': p.sku, 'Rotación': p.category, 'Ventas 30d': p.sales30, 'Ventas 7d': p.sales7, 'Ventas ayer': p.sales1, 'Stock actual': p.stock })),
       colWidths: [11,14,42,14,14,10,8,8,12],
-    }], `stock-${shortDate}`);
+    }], `stock-${whId}-${shortDate}`);
 
-    const stockSubject = TEST_MODE
-      ? `[TEST] ADMA Alerta Stock — ${red.length} críticos · ${shortDate}`
-      : `⚠️ ADMA Alerta Stock — ${red.length} críticos, ${amber.length} bajos · ${shortDate}`;
+    const subject = TEST_MODE
+      ? `[TEST] ADMA Alerta Stock ${whConfig.name} — ${red.length} críticos · ${shortDate}`
+      : `⚠️ ADMA Alerta Stock ${whConfig.name} — ${red.length} críticos, ${amber.length} bajos · ${shortDate}`;
 
-    await sendMail(stockSubject, stockEmailHtml(red, amber, date, stockExcelUrl));
-    console.log(`✅ Email 2 enviado: ${stockSubject}`);
-  } else {
-    console.log('\n✅ Sin alertas de stock — email 2 no enviado');
+    await sendMail(subject, stockEmailHtml(red, amber, date, excelUrl, whConfig.name), whConfig.recipients);
+    console.log(`✅ Email stock enviado: ${subject}`);
+    stockEmailCount++;
   }
 
-  console.log(`\nDestinatarios: ${RECIPIENTS.join(', ')}`);
+  if (stockEmailCount === 0) console.log('\n✅ Sin alertas de stock en ninguna bodega');
+
+  const allRecipients = [...new Set([...PRICE_RECIPIENTS, ...Object.values(WAREHOUSES).flatMap(w => w.recipients)])];
+  console.log(`\nDestinatarios globales: ${allRecipients.join(', ')}`);
 }
 
 main().catch(e => { console.error(e.message); process.exit(1); });
