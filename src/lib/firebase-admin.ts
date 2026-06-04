@@ -2,7 +2,7 @@
 import { config } from 'dotenv';
 config(); // Load environment variables from .env file
 
-import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
+import { initializeApp, getApps, App, cert, applicationDefault } from 'firebase-admin/app';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 // IMPORTANT: This service account is for demo purposes ONLY.
@@ -90,10 +90,13 @@ async function initializeAdminApp() {
                 databaseURL: "https://studio-9748962172-82b35-default-rtdb.firebaseio.com",
             }, 'admin');
         } else {
-            // Cloud Run: use Application Default Credentials (firebase-app-hosting-compute SA)
-            app = initializeApp({ projectId: "studio-9748962172-82b35" }, 'admin');
+            // Cloud Run: explicit Application Default Credentials via metadata server
+            app = initializeApp({
+                credential: applicationDefault(),
+                projectId: "studio-9748962172-82b35",
+            }, 'admin');
         }
-        console.log('Firebase Admin initialized, credentials:', privateKey ? 'service-account' : 'ADC');
+        console.log('[firebase-admin] initialized, mode:', privateKey ? 'service-account' : 'ADC');
     } catch (e: any) {
         console.error('Error initializing Firebase Admin:', e.message);
         throw e;
