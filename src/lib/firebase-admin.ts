@@ -70,31 +70,32 @@ async function getPrivateKey(): Promise<string | undefined> {
 let app: App;
 
 async function initializeAdminApp() {
-    const privateKey = await getPrivateKey();
-    console.log('Private key set:', !!privateKey);
-    if (!privateKey) {
-        console.warn("FIREBASE_PRIVATE_KEY or FIREBASE_PRIVATE_KEY_SECRET_NAME is not set. Firebase Admin SDK will not be initialized. This is expected in client-side rendering.");
-        app = {} as App;
+    const existingApp = getApps().find(a => a.name === 'admin');
+    if (existingApp) {
+        app = existingApp;
         return;
     }
 
-    const serviceAccount = {
-        projectId: "studio-9748962172-82b35",
-        privateKey: privateKey,
-        clientEmail: "firebase-adminsdk-fbsvc@studio-9748962172-82b35.iam.gserviceaccount.com",
-    };
+    const privateKey = await getPrivateKey();
 
     try {
-        app = getApps().find(app => app.name === 'admin') || initializeApp({
-            credential: cert(serviceAccount),
-            databaseURL: "https://studio-9748962172-82b35-default-rtdb.firebaseio.com"
-        }, 'admin');
-        console.log('Firebase Admin app initialized');
-    } catch(e: any) {
-        console.error('Error initializing Firebase Admin:', e.message);
-        if (e.message.includes('Failed to parse private key')) {
-            throw new Error("FIREBASE_PRIVATE_KEY is invalid. Please check your .env file or secret.");
+        if (privateKey) {
+            // Local dev or explicit service account key
+            app = initializeApp({
+                credential: cert({
+                    projectId: "studio-9748962172-82b35",
+                    privateKey,
+                    clientEmail: "firebase-adminsdk-fbsvc@studio-9748962172-82b35.iam.gserviceaccount.com",
+                }),
+                databaseURL: "https://studio-9748962172-82b35-default-rtdb.firebaseio.com",
+            }, 'admin');
+        } else {
+            // Cloud Run: use Application Default Credentials (firebase-app-hosting-compute SA)
+            app = initializeApp({ projectId: "studio-9748962172-82b35" }, 'admin');
         }
+        console.log('Firebase Admin initialized, credentials:', privateKey ? 'service-account' : 'ADC');
+    } catch (e: any) {
+        console.error('Error initializing Firebase Admin:', e.message);
         throw e;
     }
 }
