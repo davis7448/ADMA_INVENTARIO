@@ -27,8 +27,8 @@ import { CalendarIcon, Download, ChevronLeft, ChevronRight, Search, Loader2 } fr
 import { format, subDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
-import { getReturnsByProduct, getDamagesReport, getWarehouses, getInventoryMovements, getReturnGuidesPaginated, getReturnGuidesForExport } from '@/lib/api';
-import type { ReturnsByProduct, DamagesReport, Warehouse, InventoryMovement } from '@/lib/types';
+import { getReturnsByProduct, getDamagesReport, getWarehouses, getInventoryMovements, getReturnGuidesPaginated, getReturnGuidesForExport, getCarriers } from '@/lib/api';
+import type { ReturnsByProduct, DamagesReport, Warehouse, InventoryMovement, Carrier } from '@/lib/types';
 import type { ReturnGuide } from '@/lib/api';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
@@ -73,7 +73,7 @@ function ReturnsDamagesPageContent() {
   const [guidesPagination, setGuidesPagination] = useState({ totalCount: 0, currentPage: 1, hasMore: false });
   const [guidesCarrierFilter, setGuidesCarrierFilter] = useState('all');
   const [guidesSearch, setGuidesSearch] = useState('');
-  const [carriers, setCarriers] = useState<{ id: string; name: string }[]>([]);
+  const [carriers, setCarriers] = useState<Carrier[]>([]);
 
   // Filter damages data based on tracking search
   const filteredDamagesData = damagesData.filter(item =>
@@ -103,10 +103,8 @@ function ReturnsDamagesPageContent() {
 
   const loadCarriers = async () => {
     try {
-      const { db: firestoreDb } = await import('@/lib/firebase');
-      const { collection: col, getDocs: get } = await import('firebase/firestore');
-      const snap = await get(col(firestoreDb, 'carriers'));
-      setCarriers(snap.docs.map(d => ({ id: d.id, name: (d.data() as any).name as string })).sort((a, b) => a.name.localeCompare(b.name)));
+      const data = await getCarriers();
+      setCarriers(data.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (e) {
       console.error('Error loading carriers:', e);
     }
@@ -143,7 +141,7 @@ function ReturnsDamagesPageContent() {
         endDate: dateRange.to,
       });
       const carrierMap = Object.fromEntries(carriers.map(c => [c.id, c.name]));
-      const warehouseMap = Object.fromEntries(warehouses.map(w => [w.id, w.name]));
+      const warehouseMap = Object.fromEntries(warehouses.map(w => [w.id ?? '', w.name]));
       const rows = all.map(g => ({
         'Fecha': g.createdAt instanceof Date ? format(g.createdAt, 'dd/MM/yyyy HH:mm') : '',
         'Número de Guía': g.trackingNumber,
@@ -580,7 +578,7 @@ function ReturnsDamagesPageContent() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="returns" className="space-y-4" onValueChange={(v) => { if (v === 'guides' && guides.length === 0) loadGuides(1); }}>
+      <Tabs defaultValue="returns" className="space-y-4" onValueChange={(v) => { if (v === 'guides') loadGuides(1); }}>
         <TabsList>
           <TabsTrigger value="returns">Devoluciones por Producto</TabsTrigger>
           <TabsTrigger value="damages">Averías Reportadas</TabsTrigger>
