@@ -23,12 +23,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { CalendarIcon, Download, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { CalendarIcon, Download, ChevronLeft, ChevronRight, Search, Loader2 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
-import { getReturnsByProduct, getDamagesReport, getWarehouses, getInventoryMovements } from '@/lib/api';
+import { getReturnsByProduct, getDamagesReport, getWarehouses, getInventoryMovements, getReturnGuidesPaginated, getReturnGuidesForExport } from '@/lib/api';
 import type { ReturnsByProduct, DamagesReport, Warehouse, InventoryMovement } from '@/lib/types';
+import type { ReturnGuide } from '@/lib/api';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
 import * as XLSX from 'xlsx';
@@ -65,6 +66,15 @@ function ReturnsDamagesPageContent() {
   const [globalSearchPagination, setGlobalSearchPagination] = useState({ totalCount: 0, totalPages: 0, currentPage: 1 });
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
 
+  // ── Guías recibidas ──
+  const [guides, setGuides] = useState<ReturnGuide[]>([]);
+  const [guidesLoading, setGuidesLoading] = useState(false);
+  const [guidesExporting, setGuidesExporting] = useState(false);
+  const [guidesPagination, setGuidesPagination] = useState({ totalCount: 0, currentPage: 1, hasMore: false });
+  const [guidesCarrierFilter, setGuidesCarrierFilter] = useState('all');
+  const [guidesSearch, setGuidesSearch] = useState('');
+  const [carriers, setCarriers] = useState<{ id: string; name: string }[]>([]);
+
   // Filter damages data based on tracking search
   const filteredDamagesData = damagesData.filter(item =>
     item.damageMovements.some(movement => {
@@ -79,6 +89,7 @@ function ReturnsDamagesPageContent() {
   useEffect(() => {
     loadData();
     loadWarehouses();
+    loadCarriers();
   }, []);
 
   const loadWarehouses = async () => {
@@ -87,6 +98,68 @@ function ReturnsDamagesPageContent() {
       setWarehouses(warehousesData);
     } catch (error) {
       console.error('Error loading warehouses:', error);
+    }
+  };
+
+  const loadCarriers = async () => {
+    try {
+      const { db: firestoreDb } = await import('@/lib/firebase');
+      const { collection: col, getDocs: get } = await import('firebase/firestore');
+      const snap = await get(col(firestoreDb, 'carriers'));
+      setCarriers(snap.docs.map(d => ({ id: d.id, name: (d.data() as any).name as string })).sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (e) {
+      console.error('Error loading carriers:', e);
+    }
+  };
+
+  const loadGuides = async (page = 1) => {
+    setGuidesLoading(true);
+    try {
+      const result = await getReturnGuidesPaginated({
+        warehouseId: selectedWarehouse !== 'all' ? selectedWarehouse : undefined,
+        carrierId: guidesCarrierFilter !== 'all' ? guidesCarrierFilter : undefined,
+        startDate: dateRange.from,
+        endDate: dateRange.to,
+        trackingSearch: guidesSearch.trim() || undefined,
+        page,
+        pageSize: 50,
+      });
+      setGuides(result.guides);
+      setGuidesPagination({ totalCount: result.totalCount, currentPage: page, hasMore: result.hasMore });
+    } catch (e) {
+      console.error('Error loading guides:', e);
+    } finally {
+      setGuidesLoading(false);
+    }
+  };
+
+  const exportGuides = async () => {
+    setGuidesExporting(true);
+    try {
+      const all = await getReturnGuidesForExport({
+        warehouseId: selectedWarehouse !== 'all' ? selectedWarehouse : undefined,
+        carrierId: guidesCarrierFilter !== 'all' ? guidesCarrierFilter : undefined,
+        startDate: dateRange.from,
+        endDate: dateRange.to,
+      });
+      const carrierMap = Object.fromEntries(carriers.map(c => [c.id, c.name]));
+      const warehouseMap = Object.fromEntries(warehouses.map(w => [w.id, w.name]));
+      const rows = all.map(g => ({
+        'Fecha': g.createdAt instanceof Date ? format(g.createdAt, 'dd/MM/yyyy HH:mm') : '',
+        'Número de Guía': g.trackingNumber,
+        'Transportadora': carrierMap[g.carrierId] ?? g.carrierId,
+        'Bodega': warehouseMap[g.warehouseId ?? ''] ?? g.warehouseId ?? '',
+        'Registrado por': g.registeredByName,
+      }));
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 24 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'Guías');
+      XLSX.writeFile(wb, `guias-devolucion-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    } catch (e) {
+      console.error('Error exporting guides:', e);
+    } finally {
+      setGuidesExporting(false);
     }
   };
 
@@ -507,10 +580,11 @@ function ReturnsDamagesPageContent() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="returns" className="space-y-4">
+      <Tabs defaultValue="returns" className="space-y-4" onValueChange={(v) => { if (v === 'guides' && guides.length === 0) loadGuides(1); }}>
         <TabsList>
           <TabsTrigger value="returns">Devoluciones por Producto</TabsTrigger>
           <TabsTrigger value="damages">Averías Reportadas</TabsTrigger>
+          <TabsTrigger value="guides">Guías Recibidas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="returns" className="space-y-4">
@@ -713,6 +787,138 @@ function ReturnsDamagesPageContent() {
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   {trackingSearch ? 'No se encontraron averías que coincidan con la búsqueda.' : 'No se encontraron averías en el período seleccionado.'}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Guías Recibidas ── */}
+        <TabsContent value="guides" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
+              <div>
+                <CardTitle>Guías Recibidas como Devolución</CardTitle>
+                <CardDescription>
+                  {guidesPagination.totalCount > 0
+                    ? `${guidesPagination.totalCount.toLocaleString('es-CO')} guías encontradas con los filtros actuales`
+                    : 'Guías registradas en bodega como devolución de transportadora'}
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                onClick={exportGuides}
+                disabled={guidesExporting}
+              >
+                {guidesExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Exportar Excel
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Filtros específicos de guías */}
+              <div className="flex flex-wrap gap-3">
+                {/* Búsqueda por número */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                  <input
+                    type="text"
+                    placeholder="Buscar número de guía..."
+                    value={guidesSearch}
+                    onChange={e => setGuidesSearch(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && loadGuides(1)}
+                    className="pl-9 pr-4 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring w-[220px]"
+                  />
+                </div>
+
+                {/* Filtro transportadora */}
+                <Select value={guidesCarrierFilter} onValueChange={v => { setGuidesCarrierFilter(v); }}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Transportadora" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las transportadoras</SelectItem>
+                    {carriers.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button onClick={() => loadGuides(1)} variant="default" size="sm">
+                  Buscar
+                </Button>
+
+                {(guidesSearch || guidesCarrierFilter !== 'all') && (
+                  <Button variant="ghost" size="sm" onClick={() => { setGuidesSearch(''); setGuidesCarrierFilter('all'); }}>
+                    Limpiar
+                  </Button>
+                )}
+              </div>
+
+              {/* Tabla */}
+              {guidesLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : guides.length > 0 ? (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Número de Guía</TableHead>
+                        <TableHead>Transportadora</TableHead>
+                        <TableHead>Bodega</TableHead>
+                        <TableHead>Registrado por</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {guides.map(g => {
+                        const carrier = carriers.find(c => c.id === g.carrierId);
+                        const warehouse = warehouses.find(w => w.id === g.warehouseId);
+                        const date = g.createdAt instanceof Date
+                          ? g.createdAt
+                          : new Date((g.createdAt as any)?._seconds * 1000);
+                        return (
+                          <TableRow key={g.id}>
+                            <TableCell className="text-sm">{format(date, 'dd/MM/yyyy HH:mm')}</TableCell>
+                            <TableCell className="font-mono font-medium">{g.trackingNumber}</TableCell>
+                            <TableCell>{carrier?.name ?? g.carrierId}</TableCell>
+                            <TableCell>{warehouse?.name ?? g.warehouseId ?? '—'}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{g.registeredByName}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+
+                  {/* Paginación */}
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="text-sm text-muted-foreground">
+                      Página {guidesPagination.currentPage} · mostrando {guides.length} de {guidesPagination.totalCount.toLocaleString('es-CO')} resultados
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline" size="sm"
+                        onClick={() => loadGuides(guidesPagination.currentPage - 1)}
+                        disabled={guidesPagination.currentPage === 1 || guidesLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" /> Anterior
+                      </Button>
+                      <Button
+                        variant="outline" size="sm"
+                        onClick={() => loadGuides(guidesPagination.currentPage + 1)}
+                        disabled={!guidesPagination.hasMore || guidesLoading}
+                      >
+                        Siguiente <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  {guides.length === 0 && !guidesLoading
+                    ? 'Haz clic en "Buscar" para cargar las guías con los filtros seleccionados.'
+                    : 'No se encontraron guías con los filtros aplicados.'}
                 </div>
               )}
             </CardContent>

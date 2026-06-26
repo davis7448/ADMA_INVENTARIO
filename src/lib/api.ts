@@ -2636,8 +2636,8 @@ export const registerReturnGuides = async (
   }
 };
 
-export const getReturnGuides = async (filters?: { 
-  warehouseId?: string; 
+export const getReturnGuides = async (filters?: {
+  warehouseId?: string;
   carrierId?: string;
   startDate?: Date;
   endDate?: Date;
@@ -2646,19 +2646,19 @@ export const getReturnGuides = async (filters?: {
   try {
     const returnGuidesCol = collection(db, 'return_guides');
     let q = query(returnGuidesCol, orderBy('createdAt', 'desc'));
-    
+
     if (filters?.warehouseId) {
       q = query(q, where('warehouseId', '==', filters.warehouseId));
     }
-    
+
     if (filters?.carrierId) {
       q = query(q, where('carrierId', '==', filters.carrierId));
     }
-    
+
     if (filters?.limit) {
       q = query(q, limit(filters.limit));
     }
-    
+
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({
       id: doc.id,
@@ -2667,6 +2667,120 @@ export const getReturnGuides = async (filters?: {
     })) as ReturnGuide[];
   } catch (error) {
     console.error("Error fetching return guides:", error);
+    return [];
+  }
+};
+
+export const getReturnGuidesPaginated = async (filters: {
+  warehouseId?: string;
+  carrierId?: string;
+  startDate?: Date;
+  endDate?: Date;
+  trackingSearch?: string;
+  page: number;
+  pageSize?: number;
+  lastDocId?: string;
+}): Promise<{ guides: ReturnGuide[]; totalCount: number; hasMore: boolean }> => {
+  try {
+    const pageSize = filters.pageSize ?? 50;
+    const returnGuidesCol = collection(db, 'return_guides');
+
+    let baseQ = query(returnGuidesCol, orderBy('createdAt', 'desc'));
+    if (filters.warehouseId) baseQ = query(baseQ, where('warehouseId', '==', filters.warehouseId));
+    if (filters.carrierId)   baseQ = query(baseQ, where('carrierId',   '==', filters.carrierId));
+
+    // Para búsqueda por número de guía: cargamos un bloque mayor y filtramos client-side
+    const isSearching = !!filters.trackingSearch?.trim();
+    const fetchLimit = isSearching ? 2000 : pageSize + 1;
+
+    let q = query(baseQ, limit(fetchLimit));
+
+    // Cursor-based pagination (solo cuando no hay búsqueda)
+    if (!isSearching && filters.lastDocId && filters.page > 1) {
+      const lastSnap = await getDoc(doc(db, 'return_guides', filters.lastDocId));
+      if (lastSnap.exists()) q = query(baseQ, startAfter(lastSnap), limit(fetchLimit));
+    }
+
+    const snapshot = await getDocs(q);
+    let docs = snapshot.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.() ?? d.data().createdAt,
+    })) as ReturnGuide[];
+
+    // Filtro de fecha en memoria (evita índice compuesto)
+    if (filters.startDate) {
+      const from = filters.startDate.getTime();
+      docs = docs.filter(g => {
+        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
+        return ts >= from;
+      });
+    }
+    if (filters.endDate) {
+      const to = new Date(filters.endDate);
+      to.setHours(23, 59, 59, 999);
+      const toMs = to.getTime();
+      docs = docs.filter(g => {
+        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
+        return ts <= toMs;
+      });
+    }
+
+    // Filtro por número de guía
+    if (isSearching) {
+      const term = filters.trackingSearch!.toLowerCase();
+      docs = docs.filter(g => g.trackingNumber.toLowerCase().includes(term));
+    }
+
+    const totalCount = docs.length;
+    const start = (filters.page - 1) * pageSize;
+    const page = docs.slice(start, start + pageSize);
+
+    return { guides: page, totalCount, hasMore: start + pageSize < totalCount };
+  } catch (error) {
+    console.error('Error fetching return guides paginated:', error);
+    return { guides: [], totalCount: 0, hasMore: false };
+  }
+};
+
+export const getReturnGuidesForExport = async (filters: {
+  warehouseId?: string;
+  carrierId?: string;
+  startDate?: Date;
+  endDate?: Date;
+}): Promise<ReturnGuide[]> => {
+  try {
+    const returnGuidesCol = collection(db, 'return_guides');
+    let q = query(returnGuidesCol, orderBy('createdAt', 'desc'), limit(10000));
+    if (filters.warehouseId) q = query(q, where('warehouseId', '==', filters.warehouseId));
+    if (filters.carrierId)   q = query(q, where('carrierId',   '==', filters.carrierId));
+
+    const snapshot = await getDocs(q);
+    let docs = snapshot.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      createdAt: d.data().createdAt?.toDate?.() ?? d.data().createdAt,
+    })) as ReturnGuide[];
+
+    if (filters.startDate) {
+      const from = filters.startDate.getTime();
+      docs = docs.filter(g => {
+        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
+        return ts >= from;
+      });
+    }
+    if (filters.endDate) {
+      const to = new Date(filters.endDate);
+      to.setHours(23, 59, 59, 999);
+      const toMs = to.getTime();
+      docs = docs.filter(g => {
+        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
+        return ts <= toMs;
+      });
+    }
+    return docs;
+  } catch (error) {
+    console.error('Error exporting return guides:', error);
     return [];
   }
 };
