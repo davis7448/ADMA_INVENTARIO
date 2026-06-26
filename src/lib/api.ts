@@ -2705,10 +2705,10 @@ export const getReturnGuidesPaginated = async (filters: {
 
     constraints.push(orderBy('createdAt', 'desc'));
 
-    // For tracking search we need to fetch a large block and filter client-side.
-    // For normal browsing, fetch one extra to detect hasMore.
-    const fetchLimit = isSearching ? 3000 : pageSize * filters.page + 1;
-    constraints.push(limit(fetchLimit));
+    // Fetch 500 docs max per request. The date filter is already applied in Firestore
+    // so this window covers the selected range. Client-side pagination slices them.
+    // For tracking search we need a bigger block to find matches.
+    constraints.push(limit(isSearching ? 3000 : 500));
 
     const snapshot = await getDocs(query(returnGuidesCol, ...constraints));
     let docs = snapshot.docs.map(d => ({

@@ -70,7 +70,7 @@ function ReturnsDamagesPageContent() {
   const [guides, setGuides] = useState<ReturnGuide[]>([]);
   const [guidesLoading, setGuidesLoading] = useState(false);
   const [guidesExporting, setGuidesExporting] = useState(false);
-  const [guidesPagination, setGuidesPagination] = useState({ totalCount: 0, currentPage: 1, hasMore: false });
+  const [guidesPagination, setGuidesPagination] = useState({ totalCount: 0, totalPages: 1, currentPage: 1, hasMore: false });
   const [guidesCarrierFilter, setGuidesCarrierFilter] = useState('all');
   const [guidesSearch, setGuidesSearch] = useState('');
   const [carriers, setCarriers] = useState<Carrier[]>([]);
@@ -129,7 +129,8 @@ function ReturnsDamagesPageContent() {
         pageSize: 50,
       });
       setGuides(result.guides);
-      setGuidesPagination({ totalCount: result.totalCount, currentPage: page, hasMore: result.hasMore });
+      const totalPages = Math.max(1, Math.ceil(result.totalCount / 50));
+      setGuidesPagination({ totalCount: result.totalCount, totalPages, currentPage: page, hasMore: result.hasMore });
     } catch (e) {
       console.error('Error loading guides:', e);
     } finally {
@@ -956,7 +957,7 @@ function ReturnsDamagesPageContent() {
                   {/* Paginación */}
                   <div className="flex items-center justify-between pt-2">
                     <div className="text-sm text-muted-foreground">
-                      Página {guidesPagination.currentPage} · mostrando {guides.length} de {guidesPagination.totalCount.toLocaleString('es-CO')} resultados
+                      Página {guidesPagination.currentPage} de {guidesPagination.totalPages} · {guidesPagination.totalCount.toLocaleString('es-CO')} guías{guidesPagination.totalCount === 500 ? ' (mostrando primeras 500, usa filtros para acotar)' : ''}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -966,6 +967,9 @@ function ReturnsDamagesPageContent() {
                       >
                         <ChevronLeft className="h-4 w-4" /> Anterior
                       </Button>
+                      <span className="text-sm text-muted-foreground px-1">
+                        {guidesPagination.currentPage} / {guidesPagination.totalPages}
+                      </span>
                       <Button
                         variant="outline" size="sm"
                         onClick={() => loadGuides(guidesPagination.currentPage + 1)}
