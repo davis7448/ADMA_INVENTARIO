@@ -74,6 +74,11 @@ function ReturnsDamagesPageContent() {
   const [guidesCarrierFilter, setGuidesCarrierFilter] = useState('all');
   const [guidesSearch, setGuidesSearch] = useState('');
   const [carriers, setCarriers] = useState<Carrier[]>([]);
+  const [guidesOpened, setGuidesOpened] = useState(false);
+  const [guidesDates, setGuidesDates] = useState<{ from: Date | undefined; to: Date | undefined }>(() => {
+    const today = new Date();
+    return { from: subDays(today, 29), to: today };
+  });
 
   // Filter damages data based on tracking search
   const filteredDamagesData = damagesData.filter(item =>
@@ -110,14 +115,15 @@ function ReturnsDamagesPageContent() {
     }
   };
 
-  const loadGuides = async (page = 1) => {
+  const loadGuides = async (page = 1, dates?: { from: Date | undefined; to: Date | undefined }) => {
     setGuidesLoading(true);
+    const d = dates ?? guidesDates;
     try {
       const result = await getReturnGuidesPaginated({
         warehouseId: selectedWarehouse !== 'all' ? selectedWarehouse : undefined,
         carrierId: guidesCarrierFilter !== 'all' ? guidesCarrierFilter : undefined,
-        startDate: dateRange.from,
-        endDate: dateRange.to,
+        startDate: d.from,
+        endDate: d.to,
         trackingSearch: guidesSearch.trim() || undefined,
         page,
         pageSize: 50,
@@ -131,14 +137,19 @@ function ReturnsDamagesPageContent() {
     }
   };
 
+  // Reload guides when shared warehouse filter or own dates change
+  useEffect(() => {
+    if (guidesOpened) loadGuides(1);
+  }, [selectedWarehouse, guidesDates, guidesCarrierFilter]);
+
   const exportGuides = async () => {
     setGuidesExporting(true);
     try {
       const all = await getReturnGuidesForExport({
         warehouseId: selectedWarehouse !== 'all' ? selectedWarehouse : undefined,
         carrierId: guidesCarrierFilter !== 'all' ? guidesCarrierFilter : undefined,
-        startDate: dateRange.from,
-        endDate: dateRange.to,
+        startDate: guidesDates.from,
+        endDate: guidesDates.to,
       });
       const carrierMap = Object.fromEntries(carriers.map(c => [c.id, c.name]));
       const warehouseMap = Object.fromEntries(warehouses.map(w => [w.id ?? '', w.name]));
@@ -578,7 +589,7 @@ function ReturnsDamagesPageContent() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="returns" className="space-y-4" onValueChange={(v) => { if (v === 'guides') loadGuides(1); }}>
+      <Tabs defaultValue="returns" className="space-y-4" onValueChange={(v) => { if (v === 'guides') { setGuidesOpened(true); loadGuides(1); } }}>
         <TabsList>
           <TabsTrigger value="returns">Devoluciones por Producto</TabsTrigger>
           <TabsTrigger value="damages">Averías Reportadas</TabsTrigger>
@@ -813,40 +824,93 @@ function ReturnsDamagesPageContent() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Filtros específicos de guías */}
-              <div className="flex flex-wrap gap-3">
-                {/* Búsqueda por número */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <input
-                    type="text"
-                    placeholder="Buscar número de guía..."
-                    value={guidesSearch}
-                    onChange={e => setGuidesSearch(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && loadGuides(1)}
-                    className="pl-9 pr-4 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring w-[220px]"
-                  />
+              {/* Filtros propios del tab */}
+              <div className="flex flex-wrap items-end gap-3">
+                {/* Fecha desde */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Desde</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn('w-[150px] justify-start text-left font-normal text-sm', !guidesDates.from && 'text-muted-foreground')}>
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                        {guidesDates.from ? format(guidesDates.from, 'dd/MM/yyyy') : 'Fecha inicio'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={guidesDates.from}
+                        onSelect={date => setGuidesDates(prev => ({ ...prev, from: date }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
-                {/* Filtro transportadora */}
-                <Select value={guidesCarrierFilter} onValueChange={v => { setGuidesCarrierFilter(v); }}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Transportadora" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las transportadoras</SelectItem>
-                    {carriers.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {/* Fecha hasta */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Hasta</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn('w-[150px] justify-start text-left font-normal text-sm', !guidesDates.to && 'text-muted-foreground')}>
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                        {guidesDates.to ? format(guidesDates.to, 'dd/MM/yyyy') : 'Fecha fin'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={guidesDates.to}
+                        onSelect={date => setGuidesDates(prev => ({ ...prev, to: date }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
-                <Button onClick={() => loadGuides(1)} variant="default" size="sm">
+                {/* Transportadora */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Transportadora</label>
+                  <Select value={guidesCarrierFilter} onValueChange={v => setGuidesCarrierFilter(v)}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las transportadoras</SelectItem>
+                      {carriers.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Búsqueda por número */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Número de guía</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                    <input
+                      type="text"
+                      placeholder="Buscar..."
+                      value={guidesSearch}
+                      onChange={e => setGuidesSearch(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && loadGuides(1)}
+                      className="pl-9 pr-4 py-2 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring w-[180px]"
+                    />
+                  </div>
+                </div>
+
+                <Button onClick={() => loadGuides(1)} variant="default" size="sm" className="mb-0.5">
                   Buscar
                 </Button>
 
-                {(guidesSearch || guidesCarrierFilter !== 'all') && (
-                  <Button variant="ghost" size="sm" onClick={() => { setGuidesSearch(''); setGuidesCarrierFilter('all'); }}>
+                {(guidesSearch || guidesCarrierFilter !== 'all' || guidesDates.from || guidesDates.to) && (
+                  <Button variant="ghost" size="sm" className="mb-0.5" onClick={() => {
+                    setGuidesSearch('');
+                    setGuidesCarrierFilter('all');
+                    const today = new Date();
+                    setGuidesDates({ from: subDays(today, 29), to: today });
+                  }}>
                     Limpiar
                   </Button>
                 )}
