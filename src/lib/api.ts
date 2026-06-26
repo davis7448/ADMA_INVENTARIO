@@ -2679,54 +2679,44 @@ export const getReturnGuidesPaginated = async (filters: {
   trackingSearch?: string;
   page: number;
   pageSize?: number;
-  lastDocId?: string;
 }): Promise<{ guides: ReturnGuide[]; totalCount: number; hasMore: boolean }> => {
   try {
     const pageSize = filters.pageSize ?? 50;
     const returnGuidesCol = collection(db, 'return_guides');
-
-    let baseQ = query(returnGuidesCol, orderBy('createdAt', 'desc'));
-    if (filters.warehouseId) baseQ = query(baseQ, where('warehouseId', '==', filters.warehouseId));
-    if (filters.carrierId)   baseQ = query(baseQ, where('carrierId',   '==', filters.carrierId));
-
-    // Para búsqueda por número de guía: cargamos un bloque mayor y filtramos client-side
     const isSearching = !!filters.trackingSearch?.trim();
-    const fetchLimit = isSearching ? 2000 : pageSize + 1;
 
-    let q = query(baseQ, limit(fetchLimit));
+    // Apply date range directly in Firestore on the orderBy field (no composite index needed
+    // when the range filter is on the same field as orderBy).
+    // Equality filters (warehouseId/carrierId) + createdAt range do need composite indexes;
+    // those already exist from the getReturnGuides queries used elsewhere.
+    const constraints: Parameters<typeof query>[1][] = [];
 
-    // Cursor-based pagination (solo cuando no hay búsqueda)
-    if (!isSearching && filters.lastDocId && filters.page > 1) {
-      const lastSnap = await getDoc(doc(db, 'return_guides', filters.lastDocId));
-      if (lastSnap.exists()) q = query(baseQ, startAfter(lastSnap), limit(fetchLimit));
+    if (filters.warehouseId) constraints.push(where('warehouseId', '==', filters.warehouseId));
+    if (filters.carrierId)   constraints.push(where('carrierId',   '==', filters.carrierId));
+
+    if (filters.startDate) {
+      constraints.push(where('createdAt', '>=', Timestamp.fromDate(filters.startDate)));
+    }
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      constraints.push(where('createdAt', '<=', Timestamp.fromDate(end)));
     }
 
-    const snapshot = await getDocs(q);
+    constraints.push(orderBy('createdAt', 'desc'));
+
+    // For tracking search we need to fetch a large block and filter client-side.
+    // For normal browsing, fetch one extra to detect hasMore.
+    const fetchLimit = isSearching ? 3000 : pageSize * filters.page + 1;
+    constraints.push(limit(fetchLimit));
+
+    const snapshot = await getDocs(query(returnGuidesCol, ...constraints));
     let docs = snapshot.docs.map(d => ({
       id: d.id,
       ...d.data(),
       createdAt: d.data().createdAt?.toDate?.() ?? d.data().createdAt,
     })) as ReturnGuide[];
 
-    // Filtro de fecha en memoria (evita índice compuesto)
-    if (filters.startDate) {
-      const from = filters.startDate.getTime();
-      docs = docs.filter(g => {
-        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
-        return ts >= from;
-      });
-    }
-    if (filters.endDate) {
-      const to = new Date(filters.endDate);
-      to.setHours(23, 59, 59, 999);
-      const toMs = to.getTime();
-      docs = docs.filter(g => {
-        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
-        return ts <= toMs;
-      });
-    }
-
-    // Filtro por número de guía
     if (isSearching) {
       const term = filters.trackingSearch!.toLowerCase();
       docs = docs.filter(g => g.trackingNumber.toLowerCase().includes(term));
@@ -2734,9 +2724,9 @@ export const getReturnGuidesPaginated = async (filters: {
 
     const totalCount = docs.length;
     const start = (filters.page - 1) * pageSize;
-    const page = docs.slice(start, start + pageSize);
+    const pageDocs = docs.slice(start, start + pageSize);
 
-    return { guides: page, totalCount, hasMore: start + pageSize < totalCount };
+    return { guides: pageDocs, totalCount, hasMore: start + pageSize < totalCount };
   } catch (error) {
     console.error('Error fetching return guides paginated:', error);
     return { guides: [], totalCount: 0, hasMore: false };
@@ -2751,34 +2741,29 @@ export const getReturnGuidesForExport = async (filters: {
 }): Promise<ReturnGuide[]> => {
   try {
     const returnGuidesCol = collection(db, 'return_guides');
-    let q = query(returnGuidesCol, orderBy('createdAt', 'desc'), limit(10000));
-    if (filters.warehouseId) q = query(q, where('warehouseId', '==', filters.warehouseId));
-    if (filters.carrierId)   q = query(q, where('carrierId',   '==', filters.carrierId));
+    const constraints: Parameters<typeof query>[1][] = [];
 
-    const snapshot = await getDocs(q);
-    let docs = snapshot.docs.map(d => ({
+    if (filters.warehouseId) constraints.push(where('warehouseId', '==', filters.warehouseId));
+    if (filters.carrierId)   constraints.push(where('carrierId',   '==', filters.carrierId));
+
+    if (filters.startDate) {
+      constraints.push(where('createdAt', '>=', Timestamp.fromDate(filters.startDate)));
+    }
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      constraints.push(where('createdAt', '<=', Timestamp.fromDate(end)));
+    }
+
+    constraints.push(orderBy('createdAt', 'desc'));
+    constraints.push(limit(10000));
+
+    const snapshot = await getDocs(query(returnGuidesCol, ...constraints));
+    return snapshot.docs.map(d => ({
       id: d.id,
       ...d.data(),
       createdAt: d.data().createdAt?.toDate?.() ?? d.data().createdAt,
     })) as ReturnGuide[];
-
-    if (filters.startDate) {
-      const from = filters.startDate.getTime();
-      docs = docs.filter(g => {
-        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
-        return ts >= from;
-      });
-    }
-    if (filters.endDate) {
-      const to = new Date(filters.endDate);
-      to.setHours(23, 59, 59, 999);
-      const toMs = to.getTime();
-      docs = docs.filter(g => {
-        const ts = g.createdAt instanceof Date ? g.createdAt.getTime() : (g.createdAt as any)?._seconds * 1000;
-        return ts <= toMs;
-      });
-    }
-    return docs;
   } catch (error) {
     console.error('Error exporting return guides:', error);
     return [];
