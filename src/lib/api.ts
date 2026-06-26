@@ -2671,6 +2671,54 @@ export const getReturnGuides = async (filters?: {
   }
 };
 
+// Shared helper: fetches ALL guides matching filters using batches of 300 with startAfter cursor.
+async function fetchAllReturnGuides(filters: {
+  warehouseId?: string;
+  carrierId?: string;
+  startDate?: Date;
+  endDate?: Date;
+}): Promise<ReturnGuide[]> {
+  const BATCH = 300;
+  const returnGuidesCol = collection(db, 'return_guides');
+
+  const baseConstraints = () => {
+    const c: Parameters<typeof query>[1][] = [];
+    if (filters.warehouseId) c.push(where('warehouseId', '==', filters.warehouseId));
+    if (filters.carrierId)   c.push(where('carrierId',   '==', filters.carrierId));
+    if (filters.startDate)   c.push(where('createdAt', '>=', Timestamp.fromDate(filters.startDate)));
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      c.push(where('createdAt', '<=', Timestamp.fromDate(end)));
+    }
+    c.push(orderBy('createdAt', 'desc'));
+    return c;
+  };
+
+  const all: ReturnGuide[] = [];
+  let lastSnap: DocumentSnapshot | undefined;
+
+  while (true) {
+    const c = baseConstraints();
+    if (lastSnap) c.push(startAfter(lastSnap));
+    c.push(limit(BATCH));
+
+    const snap = await getDocs(query(returnGuidesCol, ...c));
+    for (const d of snap.docs) {
+      all.push({
+        id: d.id,
+        ...d.data(),
+        createdAt: d.data().createdAt?.toDate?.() ?? d.data().createdAt,
+      } as ReturnGuide);
+    }
+
+    if (snap.docs.length < BATCH) break;
+    lastSnap = snap.docs[snap.docs.length - 1];
+  }
+
+  return all;
+}
+
 export const getReturnGuidesPaginated = async (filters: {
   warehouseId?: string;
   carrierId?: string;
@@ -2682,43 +2730,11 @@ export const getReturnGuidesPaginated = async (filters: {
 }): Promise<{ guides: ReturnGuide[]; totalCount: number; hasMore: boolean }> => {
   try {
     const pageSize = filters.pageSize ?? 50;
-    const returnGuidesCol = collection(db, 'return_guides');
-    const isSearching = !!filters.trackingSearch?.trim();
 
-    // Apply date range directly in Firestore on the orderBy field (no composite index needed
-    // when the range filter is on the same field as orderBy).
-    // Equality filters (warehouseId/carrierId) + createdAt range do need composite indexes;
-    // those already exist from the getReturnGuides queries used elsewhere.
-    const constraints: Parameters<typeof query>[1][] = [];
+    let docs = await fetchAllReturnGuides(filters);
 
-    if (filters.warehouseId) constraints.push(where('warehouseId', '==', filters.warehouseId));
-    if (filters.carrierId)   constraints.push(where('carrierId',   '==', filters.carrierId));
-
-    if (filters.startDate) {
-      constraints.push(where('createdAt', '>=', Timestamp.fromDate(filters.startDate)));
-    }
-    if (filters.endDate) {
-      const end = new Date(filters.endDate);
-      end.setHours(23, 59, 59, 999);
-      constraints.push(where('createdAt', '<=', Timestamp.fromDate(end)));
-    }
-
-    constraints.push(orderBy('createdAt', 'desc'));
-
-    // Fetch 500 docs max per request. The date filter is already applied in Firestore
-    // so this window covers the selected range. Client-side pagination slices them.
-    // For tracking search we need a bigger block to find matches.
-    constraints.push(limit(isSearching ? 3000 : 500));
-
-    const snapshot = await getDocs(query(returnGuidesCol, ...constraints));
-    let docs = snapshot.docs.map(d => ({
-      id: d.id,
-      ...d.data(),
-      createdAt: d.data().createdAt?.toDate?.() ?? d.data().createdAt,
-    })) as ReturnGuide[];
-
-    if (isSearching) {
-      const term = filters.trackingSearch!.toLowerCase();
+    if (filters.trackingSearch?.trim()) {
+      const term = filters.trackingSearch.toLowerCase();
       docs = docs.filter(g => g.trackingNumber.toLowerCase().includes(term));
     }
 
@@ -2740,30 +2756,7 @@ export const getReturnGuidesForExport = async (filters: {
   endDate?: Date;
 }): Promise<ReturnGuide[]> => {
   try {
-    const returnGuidesCol = collection(db, 'return_guides');
-    const constraints: Parameters<typeof query>[1][] = [];
-
-    if (filters.warehouseId) constraints.push(where('warehouseId', '==', filters.warehouseId));
-    if (filters.carrierId)   constraints.push(where('carrierId',   '==', filters.carrierId));
-
-    if (filters.startDate) {
-      constraints.push(where('createdAt', '>=', Timestamp.fromDate(filters.startDate)));
-    }
-    if (filters.endDate) {
-      const end = new Date(filters.endDate);
-      end.setHours(23, 59, 59, 999);
-      constraints.push(where('createdAt', '<=', Timestamp.fromDate(end)));
-    }
-
-    constraints.push(orderBy('createdAt', 'desc'));
-    constraints.push(limit(10000));
-
-    const snapshot = await getDocs(query(returnGuidesCol, ...constraints));
-    return snapshot.docs.map(d => ({
-      id: d.id,
-      ...d.data(),
-      createdAt: d.data().createdAt?.toDate?.() ?? d.data().createdAt,
-    })) as ReturnGuide[];
+    return await fetchAllReturnGuides(filters);
   } catch (error) {
     console.error('Error exporting return guides:', error);
     return [];
