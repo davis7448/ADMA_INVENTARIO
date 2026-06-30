@@ -250,9 +250,10 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     }
 
     const handleExternalWarehouseChange = (value: string) => {
-        setExternalWarehouseFilter(value);
+        const realValue = value === 'all' ? '' : value;
+        setExternalWarehouseFilter(realValue);
         const params = new URLSearchParams(searchParams.toString());
-        if (value) params.set('externalWarehouse', value);
+        if (realValue) params.set('externalWarehouse', realValue);
         else params.delete('externalWarehouse');
         params.set('page', '1');
         router.push(`${pathname}?${params.toString()}`);
@@ -586,19 +587,19 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
             {externalWarehouses && externalWarehouses.length > 0 && (
               <div className="flex items-center gap-3 pt-3">
                 <Label className="text-sm whitespace-nowrap text-muted-foreground">Bodega Externa</Label>
-                <Select value={externalWarehouseFilter} onValueChange={handleExternalWarehouseChange}>
+                <Select value={externalWarehouseFilter || 'all'} onValueChange={handleExternalWarehouseChange}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="Todas las bodegas" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todas las bodegas</SelectItem>
+                    <SelectItem value="all">Todas las bodegas</SelectItem>
                     {externalWarehouses.map(wh => (
                       <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {externalWarehouseFilter && (
-                  <Button variant="ghost" size="sm" onClick={() => handleExternalWarehouseChange('')}>
+                  <Button variant="ghost" size="sm" onClick={() => handleExternalWarehouseChange('all')}>
                     Limpiar
                   </Button>
                 )}
