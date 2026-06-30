@@ -426,12 +426,25 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     };
 
     const handleExportExcel = () => {
+        // Collect all external warehouse names across all products on this page
+        const allExtNames = new Set<string>();
+        for (const entries of Object.values(externalStockMap)) {
+            for (const e of entries) allExtNames.add(e.warehouseName);
+        }
+        // If user is filtering by an external warehouse, always include its column
+        if (externalWarehouseFilter) {
+            const wh = (externalWarehouses ?? []).find(w => w.id === externalWarehouseFilter);
+            if (wh) allExtNames.add(wh.name);
+        }
+
         const dataToExport = initialProducts.flatMap(p => {
-            // Build one column per external warehouse that appears in any product
             const extEntries = externalStockMap[p.id] ?? [];
+            const byName: Record<string, number> = {};
+            for (const e of extEntries) byName[e.warehouseName] = e.stock;
+            // Always include a column per known external warehouse (0 if absent for this product)
             const extStockCols: Record<string, number> = {};
-            for (const e of extEntries) {
-                extStockCols[`Stock ${e.warehouseName}`] = e.stock;
+            for (const name of allExtNames) {
+                extStockCols[`Stock ${name}`] = byName[name] ?? 0;
             }
 
             const baseData = {
