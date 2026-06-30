@@ -1,6 +1,6 @@
 
 
-import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovements, getRotationCategories, getUsers, getLocations } from '@/lib/api';
+import { getProducts, getSuppliersByIds, getCategoriesByIds, getInventoryMovements, getRotationCategories, getUsers, getLocations, getExternalWarehouses, getProductIdsByExternalWarehouse } from '@/lib/api';
 import type { Product, InventoryMovement, RotationCategory, User, Location } from '@/lib/types';
 import { ProductsContent } from '@/components/products-content';
 import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
@@ -43,6 +43,7 @@ export default async function ProductsPage({
     const user = await getCurrentUser(sessionCookie);
     const effectiveWarehouseId = user && (user.role === 'logistics' || user.role === 'commercial_director') ? (user.warehouseId || 'wh-bog') : undefined;
     const warehouseId = searchParams?.warehouse as string | undefined || effectiveWarehouseId;
+    const externalWarehouseId = searchParams?.externalWarehouse as string | undefined;
 
     // Server-side redirect for logistics users
     if (user?.role === 'logistics' && !searchParams?.warehouse) {
@@ -51,6 +52,11 @@ export default async function ProductsPage({
     if (user?.role === 'commercial_director' && warehouseId !== 'wh-bog') {
         redirect('?warehouse=wh-bog');
     }
+
+    const [externalWarehouses, externalProductIds] = await Promise.all([
+        getExternalWarehouses().catch(() => []),
+        externalWarehouseId ? getProductIdsByExternalWarehouse(externalWarehouseId).catch(() => []) : Promise.resolve(undefined),
+    ]);
 
     const filters = {
         searchQuery: searchParams?.q as string,
@@ -63,9 +69,31 @@ export default async function ProductsPage({
         onlyAudited: searchParams?.audited === 'true',
         onlyVariable: searchParams?.variable === 'true',
         noWarehouse: searchParams?.noWarehouse === 'true',
-        warehouseId: warehouseId,
+        warehouseId: externalWarehouseId ? undefined : warehouseId,
+        ids: externalProductIds,
         userRole: user?.role,
     };
+
+    // Guard: external warehouse selected but no mapped products
+    if (externalWarehouseId && externalProductIds !== undefined && externalProductIds.length === 0) {
+        return (
+            <Suspense>
+                <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'commercial_director', 'plataformas', 'logistics', 'mercado_libre']}>
+                    <ProductsContent
+                        initialProducts={[]}
+                        totalPages={1}
+                        initialSupplierNames={{}}
+                        initialCategoryNames={{}}
+                        allRotationCategories={[]}
+                        allLocations={[]}
+                        externalWarehouses={externalWarehouses}
+                        selectedExternalWarehouseId={externalWarehouseId}
+                        emptyReason="external_warehouse_empty"
+                    />
+                </AuthProviderWrapper>
+            </Suspense>
+        );
+    }
 
     const [productsResult, rotationCategories, locations] = await Promise.all([
         getProducts({ page, limit, filters }).catch(err => {
@@ -138,13 +166,15 @@ export default async function ProductsPage({
     return (
       <Suspense>
         <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'commercial_director', 'plataformas', 'logistics', 'mercado_libre']}>
-          <ProductsContent 
+          <ProductsContent
             initialProducts={productsWithRotation}
             totalPages={productsResult.totalPages}
             initialSupplierNames={supplierNames}
             initialCategoryNames={categoryNames}
             allRotationCategories={rotationCategories}
             allLocations={locations}
+            externalWarehouses={externalWarehouses}
+            selectedExternalWarehouseId={externalWarehouseId}
           />
         </AuthProviderWrapper>
       </Suspense>

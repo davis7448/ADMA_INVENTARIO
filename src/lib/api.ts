@@ -2914,6 +2914,30 @@ export const getLatestExternalStockByProductIds = async (productIds: string[]): 
   return result;
 };
 
+export async function getProductIdsByExternalWarehouse(warehouseId: string): Promise<string[]> {
+  const snapshotSnap = await getDocs(
+    query(
+      collection(db, 'externalStockSnapshots'),
+      where('warehouseId', '==', warehouseId),
+      orderBy('uploadedAt', 'desc'),
+      limit(1)
+    )
+  );
+  if (snapshotSnap.empty) return [];
+
+  const snapshotId = snapshotSnap.docs[0].id;
+  const itemsSnap = await getDocs(
+    query(collection(db, 'externalStockSnapshotItems'), where('snapshotId', '==', snapshotId))
+  );
+
+  const seen = new Set<string>();
+  for (const d of itemsSnap.docs) {
+    const pid = d.data().internalProductId as string | undefined;
+    if (pid) seen.add(pid);
+  }
+  return [...seen];
+}
+
 export const getExternalRotationData = async (warehouseId: string, currentSnapshotId: string): Promise<ExternalRotationItem[]> => {
   const snapshots = await getExternalStockSnapshots(warehouseId, 20);
   const currentIndex = snapshots.findIndex(s => s.id === currentSnapshotId);

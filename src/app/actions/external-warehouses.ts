@@ -15,6 +15,7 @@ import {
   getExternalRotationData,
   getExternalWarehouses,
   getLatestExternalStockByProductIds,
+  getProductIdsByExternalWarehouse,
   type ExternalStockSummaryMap,
 } from '@/lib/api';
 import type {
@@ -250,5 +251,16 @@ export async function getExternalStockSummaryAction(productIds: string[]): Promi
     return { success: true, summary };
   } catch {
     return { success: false, summary: {} };
+  }
+}
+
+export async function getProductIdsByExternalWarehouseAction(
+  warehouseId: string
+): Promise<{ success: boolean; ids?: string[]; message?: string }> {
+  try {
+    const ids = await getProductIdsByExternalWarehouse(warehouseId);
+    return { success: true, ids };
+  } catch {
+    return { success: false, message: 'Error al obtener productos de bodega externa' };
   }
 }

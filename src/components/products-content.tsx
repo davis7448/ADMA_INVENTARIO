@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { getVendedores } from '@/lib/api';
-import type { Product, RotationCategory, Vendedor, Location } from '@/lib/types';
+import type { Product, RotationCategory, Vendedor, Location, Warehouse } from '@/lib/types';
 import { getExternalStockSummaryAction } from '@/app/actions/external-warehouses';
 import type { ExternalStockSummaryMap } from '@/lib/api';
 import { MoreHorizontal, TrendingUp, ArrowUpCircle, CheckCircle, ArrowDownCircle, XCircle, FileSpreadsheet, ChevronDown, Upload, Settings, ShieldCheck, Check, Trash2, ChevronLeft, ChevronRight, Calculator } from 'lucide-react';
@@ -80,9 +80,12 @@ interface ProductsContentProps {
     initialCategoryNames: Record<string, string>;
     allRotationCategories: RotationCategory[];
     allLocations: Location[];
+    externalWarehouses?: Warehouse[];
+    selectedExternalWarehouseId?: string;
+    emptyReason?: 'external_warehouse_empty';
 }
 
-export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories, allLocations }: ProductsContentProps) {
+export function ProductsContent({ initialProducts, totalPages, initialSupplierNames, initialCategoryNames, allRotationCategories, allLocations, externalWarehouses, selectedExternalWarehouseId, emptyReason }: ProductsContentProps) {
     const [loading, setLoading] = useState(false);
     const { user, warehouses } = useAuth();
     const router = useRouter();
@@ -106,6 +109,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
     const [onlyAudited, setOnlyAudited] = useState(searchParams.get('audited') === 'true');
     const [onlyVariable, setOnlyVariable] = useState(searchParams.get('variable') === 'true');
     const [noWarehouse, setNoWarehouse] = useState(searchParams.get('noWarehouse') === 'true');
+    const [externalWarehouseFilter, setExternalWarehouseFilter] = useState(selectedExternalWarehouseId ?? '');
 
     // Pagination states from URL
     const currentPage = Number(searchParams.get('page') || '1');
@@ -244,6 +248,15 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
             }
         });
     }
+
+    const handleExternalWarehouseChange = (value: string) => {
+        setExternalWarehouseFilter(value);
+        const params = new URLSearchParams(searchParams.toString());
+        if (value) params.set('externalWarehouse', value);
+        else params.delete('externalWarehouse');
+        params.set('page', '1');
+        router.push(`${pathname}?${params.toString()}`);
+    };
 
     const handlePaginationChange = (newPage: number) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -570,6 +583,28 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                     <Input id="min-stock" type="number" placeholder="Ej: 10" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
                 </div>
             </div>
+            {externalWarehouses && externalWarehouses.length > 0 && (
+              <div className="flex items-center gap-3 pt-3">
+                <Label className="text-sm whitespace-nowrap text-muted-foreground">Bodega Externa</Label>
+                <Select value={externalWarehouseFilter} onValueChange={handleExternalWarehouseChange}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Todas las bodegas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Todas las bodegas</SelectItem>
+                    {externalWarehouses.map(wh => (
+                      <SelectItem key={wh.id} value={wh.id}>{wh.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {externalWarehouseFilter && (
+                  <Button variant="ghost" size="sm" onClick={() => handleExternalWarehouseChange('')}>
+                    Limpiar
+                  </Button>
+                )}
+              </div>
+            )}
+
              <div className="flex flex-wrap items-center gap-6 pt-4">
                <div className="flex items-center space-x-2">
                    <Switch id="pending-stock" checked={hasPending} onCheckedChange={setHasPending} />
@@ -954,7 +989,9 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                         ) : (
                             <TableRow>
                                 <TableCell colSpan={tableColumnCount} className="text-center h-24">
-                                    No se encontraron productos con los filtros actuales.
+                                    {emptyReason === 'external_warehouse_empty'
+                                        ? 'Esta bodega externa no tiene productos mapeados aún. Verifica el último snapshot en Bodegas Externas.'
+                                        : 'No se encontraron productos con los filtros actuales.'}
                                 </TableCell>
                             </TableRow>
                         )}
