@@ -427,11 +427,19 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
 
     const handleExportExcel = () => {
         const dataToExport = initialProducts.flatMap(p => {
+            // Build one column per external warehouse that appears in any product
+            const extEntries = externalStockMap[p.id] ?? [];
+            const extStockCols: Record<string, number> = {};
+            for (const e of extEntries) {
+                extStockCols[`Stock ${e.warehouseName}`] = e.stock;
+            }
+
             const baseData = {
                 'Categoría': initialCategoryNames[p.categoryId] || 'Desconocida',
                 'Rotación': p.rotationCategoryName || 'N/A',
                 'Stock Pendiente': p.pendingStock || 0,
                 'Stock Averiado': p.damagedStock || 0,
+                ...extStockCols,
                 'Costo': canViewCost ? p.cost : undefined,
                 'Precio Mínimo Venta': canViewCost ? p.priceMinSale : undefined,
                 'Precio Óptimo Venta': canViewCost ? p.priceOptimalSale : undefined,
