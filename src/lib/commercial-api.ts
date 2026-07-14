@@ -124,14 +124,36 @@ export const checkClientExists = async (email: string, phone: string): Promise<C
     }
 };
 
-export const createClient = async (client: CommercialClient): Promise<string> => {
+export const createClient = async (
+    client: CommercialClient,
+    actor?: { id: string; name: string }
+): Promise<string> => {
     try {
         const clientsCol = collection(db, 'clients');
         const docRef = await addDoc(clientsCol, {
             ...client,
+            created_by: actor?.id ?? null,
+            created_by_name: actor?.name ?? null,
             created_at: serverTimestamp(),
             updated_at: serverTimestamp()
         });
+
+        // Registrar el evento de alta para tener trazabilidad de "cuándo un usuario agrega".
+        // No debe bloquear la creación del cliente si el log falla.
+        if (actor) {
+            try {
+                await addClientEvent(
+                    docRef.id,
+                    'registered',
+                    `Cliente registrado por ${actor.name}`,
+                    actor.id,
+                    actor.name
+                );
+            } catch (eventError) {
+                console.error("Client created but failed to log 'registered' event:", eventError);
+            }
+        }
+
         return docRef.id;
     } catch (error) {
         console.error("Error creating client:", error);

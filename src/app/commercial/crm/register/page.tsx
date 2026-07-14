@@ -170,7 +170,7 @@ export default function RegisterClientPage() {
                 additional_phones: additionalPhones,
                 created_at: new Date(),
                 birthday: new Date(formData.birthday || new Date())
-            });
+            }, { id: user.id, name: user.name || user.email || 'Usuario' });
             toast({
                 title: "Cliente registrado",
                 description: "El cliente ha sido creado exitosamente.",

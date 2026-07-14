@@ -220,7 +220,7 @@ export default function ImportClientsPage() {
                         assigned_commercial_id: selectedCommercialId,
                         assigned_commercial_name: commercialName,
                         created_at: new Date(),
-                    });
+                    }, user ? { id: user.id, name: user.name || user.email || 'Usuario' } : undefined);
                     results.push({
                         rowIndex: row.rowIndex,
                         name: row.name,

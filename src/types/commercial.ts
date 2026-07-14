@@ -22,6 +22,8 @@ export interface CommercialClient {
   notes?: string; // Notas del cliente
   history?: any[]; // Legacy field - now uses client_events collection
   last_event_number?: number; // Track event numbering for ordering
+  created_by?: string; // ID del usuario que realmente registró el cliente
+  created_by_name?: string; // Nombre denormalizado del creador (para métricas)
   created_at: Date | any;
   updated_at?: Date | any;
 }
