@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format, subDays, startOfMonth, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { DateRange } from 'react-day-picker';
@@ -11,6 +11,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Users, UserPlus, CalendarDays, DollarSign, CalendarIcon, TrendingUp, Package } from 'lucide-react';
 import { CommercialClient } from '@/types/commercial';
 import { computeCrmMetrics } from '@/lib/crm-metrics';
+import { computeReservationsByDay } from '@/lib/crm-product-metrics';
+import { loadClientProductData, type ClientProductData } from '@/lib/crm-product-cache';
 import CrmAdditionsChart from '@/components/commercial/crm-additions-chart';
 import CrmAdditionsByCommercialChart from '@/components/commercial/crm-additions-by-commercial-chart';
 import CrmStatusChart from '@/components/commercial/crm-status-chart';
@@ -38,6 +40,31 @@ export default function CrmMetricsView({ clients, isDirector }: CrmMetricsViewPr
         () => computeCrmMetrics(clients, resolvedRange),
         [clients, resolvedRange],
     );
+
+    // Datos de producto (modificaciones) para superponer reservas en el gráfico de altas.
+    // Solo director/admin; usa la caché compartida (mismo fetch que la sección de producto).
+    const [productData, setProductData] = useState<ClientProductData | null>(null);
+    useEffect(() => {
+        if (!isDirector) return;
+        let active = true;
+        loadClientProductData()
+            .then((data) => { if (active) setProductData(data); })
+            .catch((err) => console.error('Error loading reservations for chart:', err));
+        return () => { active = false; };
+    }, [isDirector]);
+
+    // Serie combinada altas + reservas (n.º y cantidad) por día, sobre el rango seleccionado.
+    const additionsChartData = useMemo(() => {
+        const reservasByDay = productData
+            ? computeReservationsByDay(productData.modificaciones, resolvedRange)
+            : {};
+        return metrics.additionsByDay.map((d) => ({
+            date: d.date,
+            altas: d.count,
+            reservasCount: reservasByDay[d.date]?.count ?? 0,
+            reservasUnits: reservasByDay[d.date]?.units ?? 0,
+        }));
+    }, [metrics.additionsByDay, productData, resolvedRange]);
 
     const applyPreset = (preset: 'last30' | 'month' | 'all') => {
         const now = new Date();
@@ -148,13 +175,17 @@ export default function CrmMetricsView({ clients, isDirector }: CrmMetricsViewPr
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-base">
-                            <TrendingUp className="h-4 w-4 text-primary" /> Altas en el tiempo
+                            <TrendingUp className="h-4 w-4 text-primary" /> Altas y reservas en el tiempo
                         </CardTitle>
-                        <CardDescription>Clientes agregados por día en el rango seleccionado</CardDescription>
+                        <CardDescription>
+                            {isDirector
+                                ? 'Clientes agregados, n.º de reservas y cantidad reservada por día en el rango seleccionado'
+                                : 'Clientes agregados por día en el rango seleccionado'}
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="h-64">
-                            <CrmAdditionsChart data={metrics.additionsByDay} />
+                            <CrmAdditionsChart data={additionsChartData} showReservas={isDirector} />
                         </div>
                     </CardContent>
                 </Card>

@@ -1,4 +1,4 @@
-import { differenceInCalendarMonths } from 'date-fns';
+import { differenceInCalendarMonths, format } from 'date-fns';
 import type { CommercialClient } from '@/types/commercial';
 import type { Modificacion } from '@/app/actions/modificaciones';
 
@@ -78,6 +78,33 @@ const toMs = (value: unknown): number | null => {
 
 const inRange = (ms: number | null, from: number, to: number): boolean =>
     ms != null && ms >= from && ms <= to;
+
+export interface ReservationsDayValue {
+    count: number; // número de reservas (documentos) ese día
+    units: number; // cantidad reservada (suma de CANTIDAD SOLICITADA) ese día
+}
+
+/**
+ * Reservas por día (yyyy-MM-dd) dentro del rango, distinguiendo n.º de reservas y cantidad reservada.
+ * Se usa para superponer las reservas en el gráfico de altas en el tiempo.
+ */
+export function computeReservationsByDay(
+    modificaciones: Modificacion[],
+    range: DateRange,
+): Record<string, ReservationsDayValue> {
+    const from = range.from.getTime();
+    const to = range.to.getTime();
+    const byDay: Record<string, ReservationsDayValue> = {};
+    for (const mod of modificaciones) {
+        const ms = toMs(mod.FECHA);
+        if (!inRange(ms, from, to)) continue;
+        const day = format(new Date(ms as number), 'yyyy-MM-dd');
+        const entry = byDay[day] || (byDay[day] = { count: 0, units: 0 });
+        entry.count += 1;
+        entry.units += getModQty(mod);
+    }
+    return byDay;
+}
 
 /**
  * Combina el CRM (clientes + pedidos + testeos) con la colección `modificaciones`
