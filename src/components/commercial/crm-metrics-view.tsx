@@ -8,10 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Users, UserPlus, CalendarDays, DollarSign, CalendarIcon, TrendingUp, Package } from 'lucide-react';
+import { Users, UserPlus, CalendarDays, DollarSign, CalendarIcon, TrendingUp, Package, Trophy } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CommercialClient } from '@/types/commercial';
 import { computeCrmMetrics } from '@/lib/crm-metrics';
-import { computeReservationsByDay } from '@/lib/crm-product-metrics';
+import { computeReservationsByDay, computeCommercialReservationRanking } from '@/lib/crm-product-metrics';
 import { loadClientProductData, type ClientProductData } from '@/lib/crm-product-cache';
 import CrmAdditionsChart from '@/components/commercial/crm-additions-chart';
 import CrmAdditionsByCommercialChart from '@/components/commercial/crm-additions-by-commercial-chart';
@@ -24,6 +25,7 @@ type CrmMetricsViewProps = {
 };
 
 const salesFormatter = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
+const numberFormat = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
 
 export default function CrmMetricsView({ clients, isDirector }: CrmMetricsViewProps) {
     const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -65,6 +67,12 @@ export default function CrmMetricsView({ clients, isDirector }: CrmMetricsViewPr
             reservasUnits: reservasByDay[d.date]?.units ?? 0,
         }));
     }, [metrics.additionsByDay, productData, resolvedRange]);
+
+    // Ranking de comerciales por reservas (n.º y cantidad) en el rango — orden híbrido.
+    const commercialRanking = useMemo(
+        () => (productData ? computeCommercialReservationRanking(productData.modificaciones, resolvedRange) : []),
+        [productData, resolvedRange],
+    );
 
     const applyPreset = (preset: 'last30' | 'month' | 'all') => {
         const now = new Date();
@@ -204,6 +212,52 @@ export default function CrmMetricsView({ clients, isDirector }: CrmMetricsViewPr
                     </Card>
                 )}
             </div>
+
+            {/* Ranking de comerciales por reservas */}
+            {isDirector && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <Trophy className="h-4 w-4 text-amber-500" /> Ranking de comerciales (reservas)
+                        </CardTitle>
+                        <CardDescription>
+                            Ordenado por cantidad reservada en el rango; a igualdad, por n.º de reservas.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-12">#</TableHead>
+                                        <TableHead>Comercial</TableHead>
+                                        <TableHead className="text-right">N.º reservas</TableHead>
+                                        <TableHead className="text-right">Cantidad reservada</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {commercialRanking.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
+                                                Sin reservas en el rango seleccionado
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        commercialRanking.map((row, index) => (
+                                            <TableRow key={row.commercial}>
+                                                <TableCell className="font-semibold tabular-nums">{index + 1}</TableCell>
+                                                <TableCell className="font-medium">{row.commercial}</TableCell>
+                                                <TableCell className="text-right tabular-nums">{numberFormat.format(row.reservationsCount)}</TableCell>
+                                                <TableCell className="text-right font-semibold tabular-nums">{numberFormat.format(row.unitsReserved)}</TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Distribuciones */}
             <div className="grid gap-4 lg:grid-cols-3">

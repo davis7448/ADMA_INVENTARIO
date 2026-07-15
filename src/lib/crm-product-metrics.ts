@@ -21,6 +21,12 @@ export interface DateRange {
     to: Date;
 }
 
+export interface CommercialReservationRank {
+    commercial: string;
+    reservationsCount: number; // n.º de reservas en el rango
+    unitsReserved: number;     // cantidad reservada (unidades) en el rango
+}
+
 export interface ClientProductRow {
     clientId: string;
     name: string;
@@ -104,6 +110,36 @@ export function computeReservationsByDay(
         entry.units += getModQty(mod);
     }
     return byDay;
+}
+
+/**
+ * Ranking de comerciales por reservas (modificaciones) dentro del rango.
+ * Agrupa por el comercial que figura en la modificación (COMERCIAL, o CODIGO COMERCIAL).
+ * Orden híbrido: por cantidad reservada (desc) y, a igualdad, por n.º de reservas (desc).
+ */
+export function computeCommercialReservationRanking(
+    modificaciones: Modificacion[],
+    range: DateRange,
+): CommercialReservationRank[] {
+    const from = range.from.getTime();
+    const to = range.to.getTime();
+    const byCommercial = new Map<string, CommercialReservationRank>();
+
+    for (const mod of modificaciones) {
+        if (!inRange(toMs(mod.FECHA), from, to)) continue;
+        const commercial = (mod.COMERCIAL || mod['CODIGO COMERCIAL'] || 'Sin comercial').toString().trim() || 'Sin comercial';
+        let entry = byCommercial.get(commercial);
+        if (!entry) {
+            entry = { commercial, reservationsCount: 0, unitsReserved: 0 };
+            byCommercial.set(commercial, entry);
+        }
+        entry.reservationsCount += 1;
+        entry.unitsReserved += getModQty(mod);
+    }
+
+    return Array.from(byCommercial.values()).sort(
+        (a, b) => b.unitsReserved - a.unitsReserved || b.reservationsCount - a.reservationsCount,
+    );
 }
 
 /**
