@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { createSolicitud, getSolicitudesByEmail, type EstadoSolicitud, type Modificacion, type TipoModificacion } from '@/app/actions/modificaciones';
+import { createSolicitud, getSolicitudesByEmail, type DistribucionStock, type EstadoSolicitud, type Modificacion, type TipoModificacion } from '@/app/actions/modificaciones';
 import { syncSolicitudToClickUpAction } from '@/app/actions/clickup';
 import { findProductBySkuAction } from '@/app/actions/purchase-orders';
 import type { Platform, Warehouse } from '@/lib/types';
@@ -111,7 +111,7 @@ export function SolicitudesContent({ platforms, warehouses }: SolicitudesContent
                                         <TableCell className="whitespace-nowrap">{s.FECHA ? format(new Date(s.FECHA), 'dd MMM HH:mm', { locale: es }) : '—'}</TableCell>
                                         <TableCell>
                                             <Badge variant={s.tipoModificacion === 'CREACION_ITEM' ? 'default' : 'secondary'}>
-                                                {s.tipoModificacion === 'CREACION_ITEM' ? 'Creación' : s.SOLICITUD === 'SUMA' ? 'Suma' : 'Ajuste'}
+                                                {s.tipoModificacion === 'CREACION_ITEM' ? 'Creación' : s.ES_RETIRO ? 'Retiro' : s.SOLICITUD === 'SUMA' ? 'Suma' : 'Ajuste'}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="font-medium max-w-[220px] truncate">{s.PRODUCTO || '—'}</TableCell>
@@ -154,7 +154,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [isSaving, setIsSaving] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
 
-    const [tipo, setTipo] = useState<'CREACION_ITEM' | 'AJUSTE' | 'SUMA'>('CREACION_ITEM');
+    const [tipo, setTipo] = useState<'CREACION_ITEM' | 'AJUSTE' | 'SUMA' | 'RETIRO'>('CREACION_ITEM');
+    const [accionPriv, setAccionPriv] = useState<'sin_cambio' | 'privatizar' | 'quitar_privatizacion'>('sin_cambio');
+    const [distribucion, setDistribucion] = useState<DistribucionStock[]>([]);
     const [sku, setSku] = useState('');
     const [productName, setProductName] = useState('');
     const [variable, setVariable] = useState('');
@@ -201,17 +203,29 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             toast({ title: 'Error', description: 'Selecciona la plataforma.', variant: 'destructive' });
             return;
         }
-        if (visibilidad === 'Privado' && !correo.trim()) {
+        if (tipo === 'CREACION_ITEM' && visibilidad === 'Privado' && !correo.trim()) {
             toast({ title: 'Error', description: 'Para item privado debes indicar el correo de privatización.', variant: 'destructive' });
             return;
         }
-        if (tipo !== 'CREACION_ITEM' && !idPlataforma.trim()) {
-            toast({ title: 'Error', description: 'Para ajustes/sumas indica el ID del item en la plataforma.', variant: 'destructive' });
+        if (tipo !== 'CREACION_ITEM' && accionPriv === 'privatizar' && !correo.trim()) {
+            toast({ title: 'Error', description: 'Para privatizar debes indicar el correo.', variant: 'destructive' });
             return;
+        }
+        if (tipo !== 'CREACION_ITEM' && !idPlataforma.trim()) {
+            toast({ title: 'Error', description: 'Para ajustes, sumas o retiros indica el ID del item en la plataforma.', variant: 'destructive' });
+            return;
+        }
+        const distribucionValida = distribucion.filter(d => d.cantidad > 0);
+        for (const d of distribucionValida) {
+            if (d.destino === 'privado' && !d.correo?.trim()) {
+                toast({ title: 'Error', description: 'Cada reparto privado de la distribución necesita su correo.', variant: 'destructive' });
+                return;
+            }
         }
 
         setIsSaving(true);
         try {
+            const esRetiro = tipo === 'RETIRO';
             const solicitudId = await createSolicitud({
                 FECHA: Date.now(),
                 ID: idPlataforma.trim() ? Number(idPlataforma) || null : null,
@@ -223,12 +237,14 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 BODEGA: bodega || null,
                 COMERCIAL: user.name,
                 'CODIGO COMERCIAL': user.commercialCode || user.email,
-                'PRIVADO_PUBLICO': visibilidad,
+                'PRIVADO_PUBLICO': tipo === 'CREACION_ITEM'
+                    ? visibilidad
+                    : accionPriv === 'privatizar' ? 'Privado' : 'Publico',
                 'CORREO_CODIGO': correo.trim() || null,
                 CREADO: 'NO',
-                SOLICITUD: tipo === 'CREACION_ITEM' ? 'SUMA' : tipo,
+                SOLICITUD: (tipo === 'CREACION_ITEM' || tipo === 'SUMA') ? 'SUMA' : 'AJUSTE',
                 'CANTIDAD PREVIA': null,
-                'CANTIDAD SOLICITADA': stock ? Number(stock) : null,
+                'CANTIDAD SOLICITADA': esRetiro ? 0 : (stock ? Number(stock) : null),
                 'CANTIDAD POSTERIOR': null,
                 PAIS: pais,
                 tipoModificacion: (tipo === 'CREACION_ITEM' ? 'CREACION_ITEM' : 'AJUSTE_STOCK') as TipoModificacion,
@@ -236,6 +252,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 ENLACE_DRIVE: enlaceDrive.trim() || undefined,
                 TIPO_PRECIO: tipoPrecio,
                 OBSERVACIONES: observaciones.trim() || undefined,
+                ES_RETIRO: esRetiro || undefined,
+                ACCION_PRIVATIZACION: tipo === 'CREACION_ITEM' ? undefined : accionPriv,
+                DISTRIBUCION: distribucionValida.length > 0 ? distribucionValida : undefined,
                 solicitadoPor: { id: user.id, name: user.name, email: user.email },
             } as Omit<Modificacion, 'ID CONSECUTIVO'>);
 
@@ -270,6 +289,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                             <SelectItem value="CREACION_ITEM">Creación de item nuevo</SelectItem>
                             <SelectItem value="AJUSTE">Ajuste de stock</SelectItem>
                             <SelectItem value="SUMA">Suma de stock (recarga)</SelectItem>
+                            <SelectItem value="RETIRO">Dejar ID en cero / retirar</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -326,7 +346,8 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 )}
                 <div>
                     <Label htmlFor="sol-stock">Stock</Label>
-                    <Input id="sol-stock" type="number" min="0" value={stock} onChange={e => setStock(e.target.value)} className="mt-1" />
+                    <Input id="sol-stock" type="number" min="0" value={tipo === 'RETIRO' ? '0' : stock} onChange={e => setStock(e.target.value)} className="mt-1" disabled={tipo === 'RETIRO'} />
+                    {tipo === 'RETIRO' && <p className="text-xs text-muted-foreground mt-1">El ID quedará en cero.</p>}
                 </div>
                 <div>
                     <Label htmlFor="sol-precio">Precio (COP)</Label>
@@ -342,22 +363,65 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                         </SelectContent>
                     </Select>
                 </div>
-                <div>
-                    <Label>Visibilidad del item</Label>
-                    <Select value={visibilidad} onValueChange={(v) => setVisibilidad(v as typeof visibilidad)}>
-                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Publico">Público (todos los clientes)</SelectItem>
-                            <SelectItem value="Privado">Privado (por correo)</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                {visibilidad === 'Privado' && (
+                {tipo === 'CREACION_ITEM' ? (
+                    <div>
+                        <Label>Visibilidad del item</Label>
+                        <Select value={visibilidad} onValueChange={(v) => setVisibilidad(v as typeof visibilidad)}>
+                            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Publico">Público (todos los clientes)</SelectItem>
+                                <SelectItem value="Privado">Privado (por correo)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                ) : (
+                    <div>
+                        <Label>Acción de privatización</Label>
+                        <Select value={accionPriv} onValueChange={(v) => setAccionPriv(v as typeof accionPriv)}>
+                            <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="sin_cambio">Sin cambio</SelectItem>
+                                <SelectItem value="privatizar">Privatizar (por correo)</SelectItem>
+                                <SelectItem value="quitar_privatizacion">Quitar privatización (dejar público)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
+                {((tipo === 'CREACION_ITEM' && visibilidad === 'Privado') || (tipo !== 'CREACION_ITEM' && accionPriv === 'privatizar')) && (
                     <div className="col-span-2">
                         <Label htmlFor="sol-correo">Correo(s) de privatización *</Label>
                         <Input id="sol-correo" value={correo} onChange={e => setCorreo(e.target.value)} className="mt-1" placeholder="cliente@correo.com, otro@correo.com" />
                     </div>
                 )}
+                <div className="col-span-2 border rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                        <Label>Distribución del stock <span className="text-muted-foreground font-normal">(opcional — reparto entre público/privado o variantes)</span></Label>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setDistribucion(prev => [...prev, { cantidad: 0, destino: 'privado' }])}>+ Reparto</Button>
+                    </div>
+                    {distribucion.map((d, i) => (
+                        <div key={i} className="flex flex-wrap items-center gap-2">
+                            <Input type="number" min="0" placeholder="Cant." value={d.cantidad || ''} className="w-20 h-8"
+                                onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))} />
+                            <Select value={d.destino} onValueChange={v => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, destino: v as 'publico' | 'privado' } : x))}>
+                                <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="publico">Público</SelectItem>
+                                    <SelectItem value="privado">Privado</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            {d.destino === 'privado' && (
+                                <Input placeholder="correo@cliente.com" value={d.correo || ''} className="flex-1 min-w-[140px] h-8 text-xs"
+                                    onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, correo: e.target.value } : x))} />
+                            )}
+                            <Input placeholder="Variante (opc.)" value={d.variante || ''} className="w-32 h-8 text-xs"
+                                onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, variante: e.target.value } : x))} />
+                            <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-destructive" onClick={() => setDistribucion(prev => prev.filter((_, j) => j !== i))}>✕</Button>
+                        </div>
+                    ))}
+                    {distribucion.length === 0 && (
+                        <p className="text-xs text-muted-foreground">Ej: 75 unds privado a cliente@x.com (variante 1.5) + 75 unds público. La instrucción para plataformas se genera automáticamente.</p>
+                    )}
+                </div>
                 <div className="col-span-2">
                     <Label htmlFor="sol-drive">Enlace Drive (contenido)</Label>
                     <Input id="sol-drive" value={enlaceDrive} onChange={e => setEnlaceDrive(e.target.value)} className="mt-1" placeholder="https://drive.google.com/…" />

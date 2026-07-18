@@ -69,6 +69,29 @@ function fieldValue(map: FieldMap, name: string, rawValue: unknown): { id: strin
     return { id: field.id, value: rawValue };
 }
 
+// Convierte las operaciones estructuradas de la solicitud en la instrucción de texto
+// que el equipo de plataformas lee en ClickUp (campo OBSEVRACIONES O VARIANTES).
+export function buildObservacionesText(solicitud: Modificacion): string {
+    const parts: string[] = [];
+
+    if (solicitud.ES_RETIRO) {
+        parts.push('DEJAR EL ID EN CERO (retirar stock de plataforma)');
+    }
+    if (solicitud.ACCION_PRIVATIZACION === 'quitar_privatizacion') {
+        parts.push('QUITAR PRIVATIZACIÓN (dejar el ID público, eliminar correos privados)');
+    } else if (solicitud.ACCION_PRIVATIZACION === 'privatizar' && solicitud.CORREO_CODIGO) {
+        parts.push(`PRIVATIZAR a: ${solicitud.CORREO_CODIGO}`);
+    }
+    for (const d of solicitud.DISTRIBUCION || []) {
+        const destino = d.destino === 'privado' ? `PRIVADO${d.correo ? ` a ${d.correo}` : ''}` : 'PÚBLICO';
+        parts.push(`${d.cantidad} unds → ${destino}${d.variante ? ` (variante: ${d.variante})` : ''}`);
+    }
+    if (solicitud.VARIABLE) parts.push(`Variante: ${solicitud.VARIABLE}`);
+    if (solicitud.OBSERVACIONES) parts.push(solicitud.OBSERVACIONES);
+
+    return parts.join(' | ');
+}
+
 // --- ADMA → ClickUp: crear la tarea espejo de una solicitud ---
 
 export async function createClickUpTaskForSolicitud(modificacionId: string): Promise<{ success: boolean; taskId?: string; error?: string }> {
@@ -82,7 +105,7 @@ export async function createClickUpTaskForSolicitud(modificacionId: string): Pro
         }
 
         const map = await getListFieldMap();
-        const observaciones = [solicitud.VARIABLE, solicitud.OBSERVACIONES].filter(Boolean).join(' — ');
+        const observaciones = buildObservacionesText(solicitud);
         const customFields = [
             fieldValue(map, 'TIPO DE STOCK', solicitud.SOLICITUD),
             fieldValue(map, 'PLATAFORMA', solicitud.PLATAFORMA),

@@ -48,6 +48,18 @@ export type Modificacion = {
     // Puente con ClickUp (fase 4b)
     clickupTaskId?: string;
     clickupSync?: 'synced' | 'error' | 'pending';
+    // Operaciones estructuradas (antes viajaban como texto libre en observaciones)
+    ACCION_PRIVATIZACION?: 'privatizar' | 'quitar_privatizacion' | 'sin_cambio';
+    ES_RETIRO?: boolean; // dejar el ID en cero / retirar de plataforma
+    DISTRIBUCION?: DistribucionStock[];
+};
+
+// Reparto del stock entre destinos (ej: 75 unds privado a correo X variante 1.5)
+export type DistribucionStock = {
+    cantidad: number;
+    destino: 'publico' | 'privado';
+    correo?: string;
+    variante?: string;
 };
 
 const MODIFICACIONES_EDIT_ROLES = new Set(['admin', 'plataformas']);
