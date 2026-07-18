@@ -42,6 +42,17 @@ async function clickupFetch(path: string, init?: RequestInit): Promise<any> {
 
 type FieldMap = Record<string, { id: string; type: string; options: Record<string, string> }>;
 
+// Normaliza para empatar opciones de dropdown: mayúsculas, sin tildes,
+// espacios colapsados ("José  David" ≡ "JOSE DAVID").
+function normalizeLabel(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+}
+
 // Mapa de custom fields de la lista, indexado por nombre (mayúsculas).
 // Se consulta en cada sync (~84/semana, muy por debajo del rate limit) para
 // resistir cambios de opciones en ClickUp sin redeploy.
@@ -51,51 +62,26 @@ async function getListFieldMap(): Promise<FieldMap> {
     for (const field of data.fields || []) {
         const options: Record<string, string> = {};
         for (const opt of field.type_config?.options || []) {
-            const label = (opt.name || opt.label || '').toString().trim().toUpperCase();
+            const label = normalizeLabel((opt.name || opt.label || '').toString());
             if (label) options[label] = opt.id;
         }
-        map[field.name.trim().toUpperCase()] = { id: field.id, type: field.type, options };
+        map[normalizeLabel(field.name)] = { id: field.id, type: field.type, options };
     }
     return map;
 }
 
 function fieldValue(map: FieldMap, name: string, rawValue: unknown): { id: string; value: unknown } | null {
-    const field = map[name.toUpperCase()];
+    const field = map[normalizeLabel(name)];
     if (!field || rawValue === undefined || rawValue === null || rawValue === '') return null;
     if (field.type === 'drop_down') {
-        const optionId = field.options[String(rawValue).trim().toUpperCase()];
+        const optionId = field.options[normalizeLabel(String(rawValue))];
         return optionId ? { id: field.id, value: optionId } : null;
     }
     return { id: field.id, value: rawValue };
 }
 
-// Convierte las operaciones estructuradas de la solicitud en la instrucción de texto
-// que el equipo de plataformas lee en ClickUp (campo OBSEVRACIONES O VARIANTES).
-export function buildObservacionesText(solicitud: Modificacion): string {
-    const parts: string[] = [];
-
-    if (solicitud.ES_RETIRO) {
-        parts.push('DEJAR EL ID EN CERO (retirar stock de plataforma)');
-    }
-    if (solicitud.COMBO) {
-        const paquetes = solicitud['CANTIDAD SOLICITADA'] || 0;
-        const totalUnidades = paquetes * solicitud.COMBO.unidadesPorCombo;
-        parts.push(`CREAR VARIABLE/COMBO "${solicitud.COMBO.nombre}": ${paquetes} paquetes × ${solicitud.COMBO.unidadesPorCombo} unds c/u = ${totalUnidades} unidades del producto base`);
-    }
-    if (solicitud.ACCION_PRIVATIZACION === 'quitar_privatizacion') {
-        parts.push('QUITAR PRIVATIZACIÓN (dejar el ID público, eliminar correos privados)');
-    } else if (solicitud.ACCION_PRIVATIZACION === 'privatizar' && solicitud.CORREO_CODIGO) {
-        parts.push(`PRIVATIZAR a: ${solicitud.CORREO_CODIGO}`);
-    }
-    for (const d of solicitud.DISTRIBUCION || []) {
-        const destino = d.destino === 'privado' ? `PRIVADO${d.correo ? ` a ${d.correo}` : ''}` : 'PÚBLICO';
-        parts.push(`${d.cantidad} unds → ${destino}${d.variante ? ` (variante: ${d.variante})` : ''}`);
-    }
-    if (solicitud.VARIABLE) parts.push(`Variante: ${solicitud.VARIABLE}`);
-    if (solicitud.OBSERVACIONES) parts.push(solicitud.OBSERVACIONES);
-
-    return parts.join(' | ');
-}
+export { buildObservacionesText } from '@/lib/solicitud-text';
+import { buildObservacionesText } from '@/lib/solicitud-text';
 
 // --- ADMA → ClickUp: crear la tarea espejo de una solicitud ---
 
