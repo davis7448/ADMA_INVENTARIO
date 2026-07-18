@@ -53,6 +53,13 @@ export type Modificacion = {
     ES_RETIRO?: boolean; // dejar el ID en cero / retirar de plataforma
     DISTRIBUCION?: DistribucionStock[];
     COMBO?: ComboSolicitud; // crear variante tipo combo/paquete (ej: Bella Skin x2)
+    STOCK_POR_VARIANTE?: StockPorVariante[]; // reparto de stock entre variantes registradas
+};
+
+export type StockPorVariante = {
+    variante: string;
+    sku?: string;
+    cantidad: number;
 };
 
 // Combo/paquete nuevo sobre un producto: N unidades del producto base por paquete.

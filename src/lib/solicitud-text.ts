@@ -19,6 +19,12 @@ export function buildObservacionesText(solicitud: Partial<Modificacion>): string
     } else if (solicitud.ACCION_PRIVATIZACION === 'privatizar' && solicitud.CORREO_CODIGO) {
         parts.push(`PRIVATIZAR a: ${solicitud.CORREO_CODIGO}`);
     }
+    if (solicitud.STOCK_POR_VARIANTE?.length) {
+        const detalle = solicitud.STOCK_POR_VARIANTE
+            .map(v => `${v.cantidad} unds → ${v.variante}${v.sku ? ` (SKU ${v.sku})` : ''}`)
+            .join(', ');
+        parts.push(`STOCK POR VARIANTE: ${detalle}`);
+    }
     for (const d of solicitud.DISTRIBUCION || []) {
         const destino = d.destino === 'privado' ? `PRIVADO${d.correo ? ` a ${d.correo}` : ''}` : 'PÚBLICO';
         parts.push(`${d.cantidad} unds → ${destino}${d.variante ? ` (variante: ${d.variante})` : ''}`);

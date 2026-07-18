@@ -185,10 +185,18 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [observaciones, setObservaciones] = useState('');
     const imagesInputRef = useRef<HTMLInputElement>(null);
     const [imageCount, setImageCount] = useState(0);
+    // Stock por variante (cuando el producto tiene variantes y la solicitud aplica a varias)
+    const [variantStocks, setVariantStocks] = useState<Record<string, string>>({});
 
     const esRetiro = tipo === 'RETIRO';
     const esCreacion = tipo === 'CREACION_ITEM';
     const necesitaCorreo = (esCreacion && visibilidad === 'Privado') || (!esCreacion && accionPriv === 'privatizar');
+    // Grilla por variante activa cuando hay variantes y no se eligió una específica ni combo
+    const usaStockPorVariante = pickedVariants.length > 0 && !variable && !comboMode && !esRetiro;
+    const stockPorVariante = pickedVariants
+        .map(v => ({ variante: v.name, sku: v.sku, cantidad: Number(variantStocks[v.id] || 0) }))
+        .filter(v => v.cantidad > 0);
+    const totalVariantes = stockPorVariante.reduce((acc, v) => acc + v.cantidad, 0);
 
     const resetAll = () => {
         setPaso(1); setTipo('CREACION_ITEM'); setAccionPriv('sin_cambio'); setDistribucion([]);
@@ -198,6 +206,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setPais('COLOMBIA'); setStock(''); setPrecio(''); setTipoPrecio('DROPSHIPPING');
         setVisibilidad('Publico'); setCorreo(''); setIdPlataforma(''); setObservaciones('');
         setImageCount(0);
+        setVariantStocks({});
         if (imagesInputRef.current) imagesInputRef.current.value = '';
     };
 
@@ -210,6 +219,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setComboNombre('');
         setComboUnidades('');
         setPickedVariants(product.productType === 'variable' ? (product.variants || []) : []);
+        setVariantStocks({});
         if (product.contentLink) setEnlaceDrive(product.contentLink);
         if (product.priceDropshipping) setPrecio(String(product.priceDropshipping));
     };
@@ -246,7 +256,8 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             if (!plataforma) return 'Selecciona la plataforma.';
             if (!esCreacion && !idPlataforma.trim()) return 'Indica el ID del item en la plataforma (aparece en Dropi/la plataforma).';
             if (comboMode && (!stock || Number(stock) <= 0)) return 'Indica cuántos paquetes/combos se solicitan.';
-            if (!esRetiro && !comboMode && tipo !== 'AJUSTE' && (!stock || Number(stock) <= 0)) return 'Indica el stock solicitado.';
+            if (usaStockPorVariante && tipo !== 'AJUSTE' && totalVariantes <= 0) return 'Indica el stock de al menos una variante.';
+            if (!usaStockPorVariante && !esRetiro && !comboMode && tipo !== 'AJUSTE' && (!stock || Number(stock) <= 0)) return 'Indica el stock solicitado.';
             return null;
         }
         if (n === 3) {
@@ -270,7 +281,8 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
 
     // Objeto parcial para la vista previa de la instrucción (paso 4)
     const solicitudPreview: Partial<Modificacion> = {
-        'CANTIDAD SOLICITADA': esRetiro ? 0 : (stock ? Number(stock) : null),
+        'CANTIDAD SOLICITADA': esRetiro ? 0 : usaStockPorVariante ? totalVariantes : (stock ? Number(stock) : null),
+        STOCK_POR_VARIANTE: usaStockPorVariante && stockPorVariante.length > 0 ? stockPorVariante : undefined,
         VARIABLE: comboMode ? comboNombre.trim() : (variable.trim() || null),
         CORREO_CODIGO: correo.trim() || null,
         OBSERVACIONES: observaciones.trim() || undefined,
@@ -311,7 +323,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 CREADO: 'NO',
                 SOLICITUD: (esCreacion || tipo === 'SUMA') ? 'SUMA' : 'AJUSTE',
                 'CANTIDAD PREVIA': null,
-                'CANTIDAD SOLICITADA': esRetiro ? 0 : (stock ? Number(stock) : null),
+                'CANTIDAD SOLICITADA': esRetiro ? 0 : usaStockPorVariante ? totalVariantes : (stock ? Number(stock) : null),
                 'CANTIDAD POSTERIOR': null,
                 PAIS: pais,
                 tipoModificacion: (esCreacion ? 'CREACION_ITEM' : 'AJUSTE_STOCK') as TipoModificacion,
@@ -323,6 +335,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 ACCION_PRIVATIZACION: esCreacion ? undefined : accionPriv,
                 DISTRIBUCION: distribucionValida.length > 0 ? distribucionValida : undefined,
                 COMBO: comboMode ? { nombre: comboNombre.trim(), unidadesPorCombo: Number(comboUnidades) } : undefined,
+                STOCK_POR_VARIANTE: usaStockPorVariante && stockPorVariante.length > 0 ? stockPorVariante : undefined,
                 solicitadoPor: { id: user.id, name: user.name, email: user.email },
             } as Omit<Modificacion, 'ID CONSECUTIVO'>);
 
@@ -421,14 +434,14 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                                 <Select onValueChange={handleVariantPick}>
                                     <SelectTrigger className="mt-1"><SelectValue placeholder="Elige la variante del producto…" /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="todas">Todas / el producto completo</SelectItem>
+                                        <SelectItem value="todas">Varias variantes (repartirás el stock en el siguiente paso)</SelectItem>
                                         {pickedVariants.map(v => (
-                                            <SelectItem key={v.id} value={v.id}>{v.name} — SKU {v.sku}</SelectItem>
+                                            <SelectItem key={v.id} value={v.id}>Solo: {v.name} — SKU {v.sku}</SelectItem>
                                         ))}
                                         <SelectItem value="nuevo_combo">➕ Crear combo/variante nueva…</SelectItem>
                                     </SelectContent>
                                 </Select>
-                                <p className="text-xs text-muted-foreground mt-1">Al elegir una variante, el SKU y el precio se actualizan solos.</p>
+                                <p className="text-xs text-muted-foreground mt-1">Si eliges una sola variante, el SKU y el precio se actualizan solos. Si eliges "Varias", en el paso 2 pondrás el stock de cada una.</p>
                             </>
                         ) : (
                             <>
@@ -498,14 +511,16 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                                 <Input id="sol-idp" value={idPlataforma} onChange={e => setIdPlataforma(e.target.value)} className="mt-1" placeholder="Ej: 2158539" />
                             </div>
                         )}
-                        <div>
-                            <Label htmlFor="sol-stock">{comboMode ? 'Nº de paquetes/combos *' : 'Stock'}</Label>
-                            <Input id="sol-stock" type="number" min="0" value={esRetiro ? '0' : stock} onChange={e => setStock(e.target.value)} className="mt-1" disabled={esRetiro} />
-                            {esRetiro && <p className="text-xs text-muted-foreground mt-1">El ID quedará en cero.</p>}
-                            {comboMode && stock && comboUnidades && (
-                                <p className="text-xs text-muted-foreground mt-1">= {Number(stock) * Number(comboUnidades)} unidades del producto base</p>
-                            )}
-                        </div>
+                        {!usaStockPorVariante && (
+                            <div>
+                                <Label htmlFor="sol-stock">{comboMode ? 'Nº de paquetes/combos *' : 'Stock'}</Label>
+                                <Input id="sol-stock" type="number" min="0" value={esRetiro ? '0' : stock} onChange={e => setStock(e.target.value)} className="mt-1" disabled={esRetiro} />
+                                {esRetiro && <p className="text-xs text-muted-foreground mt-1">El ID quedará en cero.</p>}
+                                {comboMode && stock && comboUnidades && (
+                                    <p className="text-xs text-muted-foreground mt-1">= {Number(stock) * Number(comboUnidades)} unidades del producto base</p>
+                                )}
+                            </div>
+                        )}
                         <div>
                             <Label htmlFor="sol-precio">Precio (COP)</Label>
                             <Input id="sol-precio" type="number" min="0" value={precio} onChange={e => setPrecio(e.target.value)} className="mt-1" />
@@ -521,6 +536,29 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                             </Select>
                         </div>
                     </div>
+                    {usaStockPorVariante && (
+                        <div className="border rounded-lg p-3 space-y-2">
+                            <Label>Stock por variante *</Label>
+                            <p className="text-xs text-muted-foreground">Indica las unidades por variante (deja en blanco las que no aplican).</p>
+                            <div className="space-y-1.5">
+                                {pickedVariants.map(v => (
+                                    <div key={v.id} className="flex items-center gap-2">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm truncate">{v.name}</p>
+                                            <p className="text-xs text-muted-foreground font-mono">SKU {v.sku}</p>
+                                        </div>
+                                        <Input
+                                            type="number" min="0" placeholder="0"
+                                            value={variantStocks[v.id] || ''}
+                                            onChange={e => setVariantStocks(prev => ({ ...prev, [v.id]: e.target.value }))}
+                                            className="w-24 h-9 text-right"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-sm font-medium text-right border-t pt-2">Total: {totalVariantes.toLocaleString('es-CO')} unidades</p>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -611,7 +649,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                         <p><span className="text-muted-foreground">Tipo:</span> {esCreacion ? 'Creación de item' : esRetiro ? 'Retiro / dejar en cero' : tipo === 'SUMA' ? 'Suma de stock' : 'Ajuste de stock'}</p>
                         <p><span className="text-muted-foreground">Producto:</span> {productName || '—'}{sku ? ` (${sku})` : ''}</p>
                         <p><span className="text-muted-foreground">Plataforma:</span> {plataforma || '—'} · {pais}{bodega ? ` · ${bodega}` : ''}{idPlataforma ? ` · ID ${idPlataforma}` : ''}</p>
-                        <p><span className="text-muted-foreground">Stock:</span> {esRetiro ? '0 (retiro)' : stock || '—'}{comboMode && stock && comboUnidades ? ` paquetes (${Number(stock) * Number(comboUnidades)} unds)` : ''} · <span className="text-muted-foreground">Precio:</span> {precio ? `$${Number(precio).toLocaleString('es-CO')}` : '—'}</p>
+                        <p><span className="text-muted-foreground">Stock:</span> {esRetiro ? '0 (retiro)' : usaStockPorVariante ? `${totalVariantes} unds en ${stockPorVariante.length} variante(s)` : (stock || '—')}{comboMode && stock && comboUnidades ? ` paquetes (${Number(stock) * Number(comboUnidades)} unds)` : ''} · <span className="text-muted-foreground">Precio:</span> {precio ? `$${Number(precio).toLocaleString('es-CO')}` : '—'}</p>
                         {instruccionGenerada && (
                             <p className="pt-1 border-t mt-2"><span className="text-muted-foreground">Instrucción para plataformas:</span> {instruccionGenerada}</p>
                         )}
