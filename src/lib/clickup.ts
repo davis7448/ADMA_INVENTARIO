@@ -77,6 +77,11 @@ export function buildObservacionesText(solicitud: Modificacion): string {
     if (solicitud.ES_RETIRO) {
         parts.push('DEJAR EL ID EN CERO (retirar stock de plataforma)');
     }
+    if (solicitud.COMBO) {
+        const paquetes = solicitud['CANTIDAD SOLICITADA'] || 0;
+        const totalUnidades = paquetes * solicitud.COMBO.unidadesPorCombo;
+        parts.push(`CREAR VARIABLE/COMBO "${solicitud.COMBO.nombre}": ${paquetes} paquetes × ${solicitud.COMBO.unidadesPorCombo} unds c/u = ${totalUnidades} unidades del producto base`);
+    }
     if (solicitud.ACCION_PRIVATIZACION === 'quitar_privatizacion') {
         parts.push('QUITAR PRIVATIZACIÓN (dejar el ID público, eliminar correos privados)');
     } else if (solicitud.ACCION_PRIVATIZACION === 'privatizar' && solicitud.CORREO_CODIGO) {

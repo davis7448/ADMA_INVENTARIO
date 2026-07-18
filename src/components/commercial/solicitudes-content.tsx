@@ -159,6 +159,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [productName, setProductName] = useState('');
     const [variable, setVariable] = useState('');
     const [pickedVariants, setPickedVariants] = useState<Array<{ id: string; name: string; sku: string; priceDropshipping?: number }>>([]);
+    const [comboMode, setComboMode] = useState(false);
+    const [comboNombre, setComboNombre] = useState('');
+    const [comboUnidades, setComboUnidades] = useState('');
     const [productId, setProductId] = useState<string | null>(null);
     const [enlaceDrive, setEnlaceDrive] = useState('');
     const [plataforma, setPlataforma] = useState('');
@@ -177,6 +180,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setProductName(product.name);
         setSku(product.sku || '');
         setVariable('');
+        setComboMode(false);
+        setComboNombre('');
+        setComboUnidades('');
         setPickedVariants(product.productType === 'variable' ? (product.variants || []) : []);
         if (product.contentLink) setEnlaceDrive(product.contentLink);
         if (product.priceDropshipping) setPrecio(String(product.priceDropshipping));
@@ -184,6 +190,12 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     };
 
     const handleVariantPick = (variantId: string) => {
+        if (variantId === 'nuevo_combo') {
+            setComboMode(true);
+            setVariable('');
+            return;
+        }
+        setComboMode(false);
         if (variantId === 'todas') {
             setVariable('');
             return;
@@ -218,6 +230,16 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             toast({ title: 'Error', description: 'Para ajustes, sumas o retiros indica el ID del item en la plataforma.', variant: 'destructive' });
             return;
         }
+        if (comboMode) {
+            if (!comboNombre.trim() || !comboUnidades || Number(comboUnidades) < 2) {
+                toast({ title: 'Error', description: 'Para el combo indica su nombre y cuántas unidades del producto trae (mínimo 2).', variant: 'destructive' });
+                return;
+            }
+            if (!stock || Number(stock) <= 0) {
+                toast({ title: 'Error', description: 'Indica en Stock cuántos paquetes/combos se solicitan.', variant: 'destructive' });
+                return;
+            }
+        }
         const distribucionValida = distribucion.filter(d => d.cantidad > 0);
         for (const d of distribucionValida) {
             if (d.destino === 'privado' && !d.correo?.trim()) {
@@ -233,7 +255,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 FECHA: Date.now(),
                 ID: idPlataforma.trim() ? Number(idPlataforma) || null : null,
                 PRODUCTO: productName.trim(),
-                VARIABLE: variable.trim() || null,
+                VARIABLE: comboMode ? comboNombre.trim() : (variable.trim() || null),
                 'SKU ': sku.trim() || null,
                 'PRECIO ': precio ? Number(precio) : null,
                 PLATAFORMA: plataforma,
@@ -258,6 +280,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 ES_RETIRO: esRetiro || undefined,
                 ACCION_PRIVATIZACION: tipo === 'CREACION_ITEM' ? undefined : accionPriv,
                 DISTRIBUCION: distribucionValida.length > 0 ? distribucionValida : undefined,
+                COMBO: comboMode ? { nombre: comboNombre.trim(), unidadesPorCombo: Number(comboUnidades) } : undefined,
                 solicitadoPor: { id: user.id, name: user.name, email: user.email },
             } as Omit<Modificacion, 'ID CONSECUTIVO'>);
 
@@ -322,15 +345,40 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                                     {pickedVariants.map(v => (
                                         <SelectItem key={v.id} value={v.id}>{v.name} — SKU {v.sku}</SelectItem>
                                     ))}
+                                    <SelectItem value="nuevo_combo">➕ Crear combo/variante nueva…</SelectItem>
                                 </SelectContent>
                             </Select>
                             <p className="text-xs text-muted-foreground mt-1">Este producto tiene {pickedVariants.length} variantes registradas. Al elegir una, el SKU y el precio se actualizan solos. Si la solicitud reparte stock entre varias, usa la "Distribución del stock" más abajo.</p>
                         </>
                     ) : (
                         <>
-                            <Input id="sol-variable" value={variable} onChange={e => setVariable(e.target.value)} className="mt-1" placeholder="Déjalo vacío si aplica al producto completo" />
-                            <p className="text-xs text-muted-foreground mt-1">Solo si el producto tiene presentaciones distintas: escribe cuál aplica (ej: "Grado 2.0", "Talla M", "Combo x2"). Si aplica a todas, déjalo vacío.</p>
+                            <div className="flex gap-2 mt-1">
+                                <Input id="sol-variable" value={variable} onChange={e => setVariable(e.target.value)} placeholder="Déjalo vacío si aplica al producto completo" disabled={comboMode} className="flex-1" />
+                                <Button type="button" variant={comboMode ? 'default' : 'outline'} size="sm" className="h-10 whitespace-nowrap" onClick={() => setComboMode(!comboMode)}>
+                                    {comboMode ? '✓ Combo nuevo' : '+ Combo (x2, x3…)'}
+                                </Button>
+                            </div>
+                            {!comboMode && <p className="text-xs text-muted-foreground mt-1">Solo si el producto tiene presentaciones distintas: escribe cuál aplica (ej: "Grado 2.0", "Talla M"). Si aplica a todas, déjalo vacío. Para pedir un combo/paquete nuevo (ej: Bella Skin x2), usa el botón.</p>}
                         </>
+                    )}
+                    {comboMode && (
+                        <div className="mt-2 border rounded-lg p-3 space-y-2 bg-muted/30">
+                            <p className="text-sm font-medium">Combo / paquete nuevo</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <Label htmlFor="combo-nombre" className="text-xs">Nombre del combo *</Label>
+                                    <Input id="combo-nombre" value={comboNombre} onChange={e => setComboNombre(e.target.value)} className="mt-1 h-9" placeholder="Ej: Combo x2" />
+                                </div>
+                                <div>
+                                    <Label htmlFor="combo-unidades" className="text-xs">Unidades del producto por combo *</Label>
+                                    <Input id="combo-unidades" type="number" min="2" value={comboUnidades} onChange={e => setComboUnidades(e.target.value)} className="mt-1 h-9" placeholder="Ej: 2" />
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                El campo "Stock" de abajo será el <strong>número de paquetes</strong>.
+                                {stock && comboUnidades ? ` → ${Number(stock)} paquetes × ${Number(comboUnidades)} unds = ${Number(stock) * Number(comboUnidades)} unidades del producto base.` : ''}
+                            </p>
+                        </div>
                     )}
                 </div>
                 <div>

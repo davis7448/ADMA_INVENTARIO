@@ -52,6 +52,14 @@ export type Modificacion = {
     ACCION_PRIVATIZACION?: 'privatizar' | 'quitar_privatizacion' | 'sin_cambio';
     ES_RETIRO?: boolean; // dejar el ID en cero / retirar de plataforma
     DISTRIBUCION?: DistribucionStock[];
+    COMBO?: ComboSolicitud; // crear variante tipo combo/paquete (ej: Bella Skin x2)
+};
+
+// Combo/paquete nuevo sobre un producto: N unidades del producto base por paquete.
+// CANTIDAD SOLICITADA = nº de paquetes; unidades base = paquetes × unidadesPorCombo.
+export type ComboSolicitud = {
+    nombre: string; // ej: "Combo x2"
+    unidadesPorCombo: number;
 };
 
 // Reparto del stock entre destinos (ej: 75 unds privado a correo X variante 1.5)
