@@ -150,6 +150,9 @@ export function PurchaseOrderDetailContent({ orderId, suppliers, warehouses }: P
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {canEdit && (
+                        <Button variant="outline" onClick={() => router.push(`/compras/${orderId}/liquidacion`)}>Liquidar</Button>
+                    )}
                     {canEdit ? (
                         <Select value={order.status} onValueChange={(v) => handleStatusChange(v as PurchaseOrderStatus)}>
                             <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>

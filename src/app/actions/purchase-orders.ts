@@ -244,6 +244,66 @@ export async function deletePurchaseOrderItemAction(itemId: string): Promise<{ s
     }
 }
 
+// --- Liquidación (fase 3): costo final por línea + actualización del costo del producto ---
+
+export async function liquidatePurchaseOrderAction(
+    purchaseOrderId: string,
+    rows: Array<{ itemId: string; unitCostFinal: number }>,
+    user: import('@/lib/types').User | null
+): Promise<{ success: boolean; liquidated?: number; productsUpdated?: number; skippedSkus?: string[]; error?: string }> {
+    try {
+        if (!user || !['admin', 'coordinacion'].includes(user.role)) {
+            return { success: false, error: 'No tienes permiso para liquidar mercancía.' };
+        }
+        if (rows.length === 0) {
+            return { success: false, error: 'No hay líneas con costo final para liquidar.' };
+        }
+
+        const now = new Date().toISOString();
+        const costRows: Array<{ rowNumber: number; sku: string; cost: number; isLiquidation: boolean }> = [];
+
+        let liquidated = 0;
+        for (const row of rows) {
+            if (!Number.isFinite(row.unitCostFinal) || row.unitCostFinal <= 0) continue;
+            const itemRef = doc(db, ITEMS_COLLECTION, row.itemId);
+            const snap = await getDoc(itemRef);
+            if (!snap.exists()) continue;
+            const item = snap.data() as PurchaseOrderItem;
+            if (item.purchaseOrderId !== purchaseOrderId) continue;
+
+            await updateDoc(itemRef, {
+                unitCostFinal: row.unitCostFinal,
+                status: 'liquidada',
+                updatedAt: now,
+            });
+            liquidated++;
+
+            if (item.productId) {
+                costRows.push({ rowNumber: costRows.length + 1, sku: item.sku, cost: row.unitCostFinal, isLiquidation: true });
+            }
+        }
+
+        // Actualizar el costo de los productos existentes (reusa la resolución de SKU + preview del módulo de costos)
+        let productsUpdated = 0;
+        let skippedSkus: string[] = [];
+        if (costRows.length > 0) {
+            const { applyCostPriceUpdateAction } = await import('./products');
+            const applyResult = await applyCostPriceUpdateAction(costRows, user);
+            productsUpdated = applyResult.applied;
+            skippedSkus = applyResult.preview.rows
+                .filter(r => r.status !== 'valid')
+                .map(r => r.sku);
+        }
+
+        await updateDoc(doc(db, ORDERS_COLLECTION, purchaseOrderId), { status: 'liquidada', updatedAt: now });
+
+        return { success: true, liquidated, productsUpdated, skippedSkus };
+    } catch (error) {
+        console.error('Error liquidating purchase order:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
+    }
+}
+
 // Busca un producto existente por SKU (padre o variante) para vincular la línea como reabastecimiento
 export async function findProductBySkuAction(sku: string): Promise<{ found: boolean; productId?: string; productName?: string; variantId?: string }> {
     const trimmed = sku.trim();

@@ -63,7 +63,7 @@ export type CostPriceUpdatePreview = {
     };
 };
 
-const canManageCostPriceUpdates = (user: User | null) => user?.role === 'admin' || user?.role === 'plataformas';
+const canManageCostPriceUpdates = (user: User | null) => user?.role === 'admin' || user?.role === 'plataformas' || user?.role === 'coordinacion';
 
 const normalizeUpdateNumber = (value?: number | null) => (
     typeof value === 'number' && Number.isFinite(value) ? value : undefined
