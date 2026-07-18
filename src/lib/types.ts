@@ -157,6 +157,46 @@ export type PurchaseOrderItem = {
 // Tarifa de importación por defecto (COP por m³) para costo estimado de mercancía por llegar
 export const DEFAULT_IMPORT_TARIFF_PER_CBM = 2_200_000;
 
+// --- Recepción de mercancía ---
+
+export type ReceptionStatus = 'en_conteo' | 'con_discrepancia' | 'verificada' | 'cargada';
+
+export type Reception = {
+  id: string;
+  receptionNumber: string; // REC-YYYY-NNN
+  purchaseOrderId: string;
+  purchaseOrderNumber: string; // denormalizado para listas
+  warehouseId?: string;
+  receivedBy: { id: string; name: string }; // bodega (logistics)
+  verifiedBy?: { id: string; name: string }; // coordinación — segunda firma ante discrepancias
+  status: ReceptionStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ReceptionItem = {
+  id: string;
+  receptionId: string;
+  purchaseOrderItemId: string;
+  sku: string;
+  productName: string;
+  productId?: string | null;
+  entryType: 'nuevo' | 'reabastecimiento';
+  expectedUnits: number; // snapshot de la línea de OC al iniciar recepción
+  expectedBoxes?: number;
+  countedUnits?: number;
+  countedBoxes?: number;
+  match?: boolean; // conteo coincide con lo esperado
+  discrepancyNotes?: string;
+  realPhotos: string[]; // fotos reales tomadas al recibir
+  locationId?: string; // ubicación asignada (A-1-1-A…)
+  inventoryLoaded: boolean;
+  movementId?: number; // movimiento de inventario generado al cargar
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type User = {
   id: string;
   name: string;

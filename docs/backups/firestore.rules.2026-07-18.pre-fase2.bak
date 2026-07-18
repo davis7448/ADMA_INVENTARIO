@@ -124,16 +124,6 @@ service cloud.firestore {
        allow create, update: if isRoleIn(['admin', 'coordinacion', 'marketing']) || isAdminAccess();
        allow delete: if isRoleIn(['admin', 'coordinacion']) || isAdminAccess();
      }
-     match /receptions/{receptionId} {
-       allow read: if isSignedIn() || isAdminAccess();
-       allow create, update: if isRoleIn(['admin', 'logistics', 'coordinacion']) || isAdminAccess();
-       allow delete: if isRole('admin') || isAdminAccess();
-     }
-     match /receptionItems/{itemId} {
-       allow read: if isSignedIn() || isAdminAccess();
-       allow create, update: if isRoleIn(['admin', 'logistics', 'coordinacion']) || isAdminAccess();
-       allow delete: if isRole('admin') || isAdminAccess();
-     }
       match /modificaciones/{modId} {
         allow read: if isSignedIn() || isAdminAccess();
         allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();

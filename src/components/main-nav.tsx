@@ -55,9 +55,10 @@ const navItems: NavItem[] = [
   { href: '/modificaciones', label: 'Modificaciones', roles: ['admin', 'logistics', 'commercial', 'consulta', 'plataformas'] },
   {
     label: 'Logística',
-    roles: ['admin', 'logistics', 'plataformas', 'commercial'],
+    roles: ['admin', 'logistics', 'plataformas', 'commercial', 'coordinacion'],
     children: [
       { href: '/logistics', label: 'Picking', roles: ['admin', 'logistics', 'plataformas'] },
+      { href: '/logistics/recepciones', label: 'Recepciones', roles: ['admin', 'logistics', 'plataformas', 'coordinacion'] },
       { href: '/dispatch', label: 'Despachos', roles: ['admin', 'logistics', 'plataformas'] },
       { href: '/reporte-despachos', label: 'Reporte de Despachos', roles: ['admin', 'logistics', 'plataformas', 'commercial', 'consulta'] },
       { href: '/reporte-produccion', label: 'Reporte de Producción', roles: ['admin', 'logistics', 'plataformas', 'commercial', 'consulta'] },
