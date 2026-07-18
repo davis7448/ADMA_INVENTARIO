@@ -3,8 +3,10 @@ import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, update
 import { getAuth } from 'firebase/auth';
 import { createReservation, deleteReservation } from '@/lib/api';
 
-export type TipoModificacion = 'RESERVA_INVENTARIO' | 'AJUSTE_STOCK' | 'BAJA_PLATAFORMA';
-export type EstadoSolicitud = 'pendiente' | 'completado';
+export type TipoModificacion = 'RESERVA_INVENTARIO' | 'AJUSTE_STOCK' | 'BAJA_PLATAFORMA' | 'CREACION_ITEM';
+// Flujo de solicitudes (migrado de ClickUp): pendiente → en_revision → aprobado → creado, o rechazado.
+// 'completado' se conserva por compatibilidad con modificaciones históricas.
+export type EstadoSolicitud = 'pendiente' | 'en_revision' | 'aprobado' | 'rechazado' | 'creado' | 'completado';
 
 export type Modificacion = {
     FECHA: number | null;
@@ -37,6 +39,12 @@ export type Modificacion = {
     vendedorId?: string;
     customerEmail?: string;
     externalId?: string;
+    // Campos de solicitudes migradas de ClickUp (fase 4)
+    ENLACE_DRIVE?: string;
+    TIPO_PRECIO?: 'DROPSHIPPING' | 'ESPECIAL';
+    OBSERVACIONES?: string;
+    motivoRechazo?: string;
+    solicitadoPor?: { id: string; name: string; email?: string };
 };
 
 const MODIFICACIONES_EDIT_ROLES = new Set(['admin', 'plataformas']);
@@ -230,6 +238,118 @@ export async function deleteModificacion(id: string) {
     
     await deleteDoc(docRef);
     return id;
+}
+
+// --- Solicitudes (migración de ClickUp, fase 4) ---
+
+const SOLICITUD_CREATE_ROLES = new Set(['admin', 'plataformas', 'commercial', 'commercial_director', 'coordinacion']);
+const SOLICITUD_TIPOS = new Set<TipoModificacion>(['CREACION_ITEM', 'AJUSTE_STOCK']);
+
+async function getCurrentUserRole(): Promise<{ role: string; email: string } | null> {
+    const auth = getAuth(app);
+    const currentUser = auth.currentUser;
+    if (!currentUser?.email) return null;
+    const userQuery = query(collection(db, 'users'), where('email', '==', currentUser.email), limit(1));
+    const userSnapshot = await getDocs(userQuery);
+    const role = userSnapshot.docs[0]?.data()?.role;
+    return role ? { role, email: currentUser.email } : null;
+}
+
+async function nextConsecutivo(): Promise<number> {
+    const maxIdQuery = query(collection(db, 'modificaciones'), orderBy('ID CONSECUTIVO', 'desc'), limit(1));
+    const maxIdSnap = await getDocs(maxIdQuery);
+    return (maxIdSnap.docs[0]?.data()?.['ID CONSECUTIVO'] || 0) + 1;
+}
+
+// Los comerciales crean solicitudes (equivalente al formulario de ClickUp); quedan 'pendiente'.
+export async function createSolicitud(data: Omit<Modificacion, 'ID CONSECUTIVO'>): Promise<string> {
+    const current = await getCurrentUserRole();
+    if (!current || !SOLICITUD_CREATE_ROLES.has(current.role)) {
+        throw new Error('No tienes permiso para crear solicitudes.');
+    }
+    if (!data.tipoModificacion || !SOLICITUD_TIPOS.has(data.tipoModificacion)) {
+        throw new Error('Tipo de solicitud inválido.');
+    }
+    if (!data.PAIS || data.PAIS.trim() === '') {
+        throw new Error('El campo PAIS es obligatorio');
+    }
+
+    const solicitudData: Record<string, any> = {
+        ...data,
+        FECHA: data.FECHA || Date.now(),
+        CREADO: 'NO',
+        estadoSolicitud: 'pendiente',
+        'ID CONSECUTIVO': await nextConsecutivo(),
+    };
+    Object.keys(solicitudData).forEach(k => solicitudData[k] === undefined && delete solicitudData[k]);
+
+    const docRef = await addDoc(collection(db, 'modificaciones'), solicitudData);
+    return docRef.id;
+}
+
+export async function getSolicitudesByEmail(email: string) {
+    // Sin orderBy para no requerir índice compuesto; se ordena en memoria.
+    const q = query(
+        collection(db, 'modificaciones'),
+        where('solicitadoPor.email', '==', email),
+        limit(200)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }) as Modificacion & { id: string })
+        .sort((a, b) => (b.FECHA || 0) - (a.FECHA || 0));
+}
+
+// Transición de estado por parte de plataformas/admin, con efectos al marcar 'creado'.
+export async function updateSolicitudEstado(
+    id: string,
+    estado: EstadoSolicitud,
+    opts?: { motivoRechazo?: string }
+): Promise<void> {
+    await assertModificacionesRole(false);
+
+    if (estado === 'rechazado' && !opts?.motivoRechazo?.trim()) {
+        throw new Error('El motivo de rechazo es obligatorio.');
+    }
+
+    const docRef = doc(db, 'modificaciones', id);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) throw new Error('La solicitud no existe.');
+    const solicitud = snap.data() as Modificacion;
+
+    const updates: Record<string, any> = { estadoSolicitud: estado };
+    if (estado === 'rechazado') updates.motivoRechazo = opts!.motivoRechazo!.trim();
+    if (estado === 'creado') updates.CREADO = 'SI';
+    await updateDoc(docRef, updates);
+
+    // Efectos al crear el item en plataforma (activación del producto)
+    if (estado === 'creado' && solicitud.tipoModificacion === 'CREACION_ITEM' && solicitud.productId) {
+        const now = new Date().toISOString();
+        await updateDoc(doc(db, 'products', solicitud.productId), {
+            activationStatus: 'activo',
+            activatedAt: now,
+            activationModificacionId: id,
+        }).catch(err => console.error('No se pudo actualizar el producto activado:', err));
+
+        // Avanzar las líneas de OC almacenadas/liquidadas de ese producto
+        try {
+            const poItems = await getDocs(query(
+                collection(db, 'purchaseOrderItems'),
+                where('productId', '==', solicitud.productId),
+                where('status', 'in', ['almacenada', 'liquidada'])
+            ));
+            await Promise.all(poItems.docs.map(d => updateDoc(d.ref, { status: 'activada', updatedAt: now })));
+        } catch (err) {
+            console.error('No se pudieron avanzar las líneas de OC:', err);
+        }
+
+        // Refrescar catálogo externo (webhook n8n ACTIVACION)
+        try {
+            await fetch('/api/webhook', { method: 'POST' });
+        } catch (err) {
+            console.error('No se pudo disparar el webhook de activación:', err);
+        }
+    }
 }
 
 export async function getComercialUsers() {

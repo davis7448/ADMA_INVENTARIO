@@ -13,10 +13,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getModificaciones, createModificacion, updateModificacion, deleteModificacion, getComercialUsers, getPlataformas, getAllModificacionesForExport, type Modificacion, type TipoModificacion } from '@/app/actions/modificaciones';
+import { getModificaciones, createModificacion, updateModificacion, deleteModificacion, getComercialUsers, getPlataformas, getAllModificacionesForExport, updateSolicitudEstado, type EstadoSolicitud, type Modificacion, type TipoModificacion } from '@/app/actions/modificaciones';
 import { getProducts } from '@/lib/api';
 import { Textarea } from '@/components/ui/textarea';
-import { Download, Loader2, Search, Eye, Pencil, Trash2, Plus, Filter, ClipboardList, BarChart3, ArrowDownUp, XCircle } from 'lucide-react';
+import { Download, Loader2, Search, Eye, Pencil, Trash2, Plus, Filter, ClipboardList, BarChart3, ArrowDownUp, XCircle, ChevronDown } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
@@ -43,14 +44,36 @@ const TIPOS_MODIFICACION: { value: TipoModificacion; label: string }[] = [
 function tipoBadge(tipo?: string) {
     if (tipo === 'RESERVA_INVENTARIO') return <Badge className="bg-orange-100 text-orange-700 border-orange-200">Reserva</Badge>;
     if (tipo === 'BAJA_PLATAFORMA') return <Badge className="bg-red-100 text-red-700 border-red-200">Baja</Badge>;
+    if (tipo === 'CREACION_ITEM') return <Badge className="bg-purple-100 text-purple-700 border-purple-200">Creación</Badge>;
     return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Ajuste</Badge>;
 }
 
 function estadoBadge(estado?: string) {
     if (estado === 'completado') return <Badge className="bg-green-100 text-green-700 border-green-200">Completado</Badge>;
     if (estado === 'pendiente') return <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200">Pendiente</Badge>;
+    if (estado === 'en_revision') return <Badge className="bg-blue-100 text-blue-700 border-blue-200">En Revisión</Badge>;
+    if (estado === 'aprobado') return <Badge className="bg-sky-100 text-sky-700 border-sky-200">Aprobado</Badge>;
+    if (estado === 'rechazado') return <Badge className="bg-red-100 text-red-700 border-red-200">Rechazado</Badge>;
+    if (estado === 'creado') return <Badge className="bg-green-100 text-green-700 border-green-200">Creado</Badge>;
     return null;
 }
+
+// Transiciones del flujo de solicitudes (migrado de ClickUp)
+const ESTADO_TRANSICIONES: Record<string, Array<{ value: string; label: string }>> = {
+    pendiente: [
+        { value: 'en_revision', label: 'Pasar a revisión' },
+        { value: 'aprobado', label: 'Aprobar' },
+        { value: 'rechazado', label: 'Rechazar' },
+    ],
+    en_revision: [
+        { value: 'aprobado', label: 'Aprobar' },
+        { value: 'rechazado', label: 'Rechazar' },
+    ],
+    aprobado: [
+        { value: 'creado', label: 'Marcar creado' },
+        { value: 'rechazado', label: 'Rechazar' },
+    ],
+};
 
 function formatFecha(ts?: number | null) {
     if (!ts) return '—';
@@ -341,6 +364,22 @@ export function ModificacionesContent() {
         }
     };
 
+    const handleEstadoTransition = async (row: Modificacion & { id: string }, estado: string) => {
+        let motivoRechazo: string | undefined;
+        if (estado === 'rechazado') {
+            motivoRechazo = prompt('Motivo del rechazo (obligatorio):') || undefined;
+            if (!motivoRechazo?.trim()) return;
+        }
+        if (estado === 'creado' && !confirm(`¿Marcar como CREADO en plataforma "${row.PRODUCTO || 'la solicitud'}"?${row.tipoModificacion === 'CREACION_ITEM' ? ' El producto quedará activado y se refrescará el catálogo.' : ''}`)) return;
+        try {
+            await updateSolicitudEstado(row.id, estado as EstadoSolicitud, { motivoRechazo });
+            toast({ title: 'Estado actualizado', description: `La solicitud pasó a ${estado.replace('_', ' ')}.` });
+            fetchData();
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error', description: getPermissionDeniedMessage(error, 'procesar solicitudes') });
+        }
+    };
+
     const handleExportExcel = async () => {
         setExporting(true);
         try {
@@ -588,6 +627,22 @@ export function ModificacionesContent() {
                                                 <TableCell>{estadoBadge(row.estadoSolicitud) ?? <span className="text-muted-foreground text-xs">—</span>}</TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center justify-end gap-1">
+                                                        {canCreateOrUpdate && row.estadoSolicitud && ESTADO_TRANSICIONES[row.estadoSolicitud] && (
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" title="Procesar solicitud">
+                                                                        Procesar<ChevronDown className="h-3 w-3 ml-1" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    {ESTADO_TRANSICIONES[row.estadoSolicitud].map(t => (
+                                                                        <DropdownMenuItem key={t.value} onClick={() => handleEstadoTransition(row, t.value)}>
+                                                                            {t.label}
+                                                                        </DropdownMenuItem>
+                                                                    ))}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        )}
                                                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openDetailSheet(row)} title="Ver detalle">
                                                             <Eye className="h-3.5 w-3.5" />
                                                         </Button>
@@ -676,6 +731,14 @@ export function ModificacionesContent() {
                                 </div>
                                 <DetailRow label="Creado" value={detailItem.CREADO || '—'} />
                                 <DetailRow label="Solicitud" value={detailItem.SOLICITUD || '—'} />
+                                {detailItem.estadoSolicitud && <DetailRow label="Estado solicitud" value={detailItem.estadoSolicitud.replace('_', ' ')} />}
+                                {detailItem.TIPO_PRECIO && <DetailRow label="Tipo de precio" value={detailItem.TIPO_PRECIO} />}
+                                {detailItem.ENLACE_DRIVE && (
+                                    <DetailRow label="Enlace Drive" value={<a href={detailItem.ENLACE_DRIVE} target="_blank" rel="noopener noreferrer" className="underline text-primary">Abrir</a>} />
+                                )}
+                                {detailItem.OBSERVACIONES && <DetailRow label="Observaciones" value={detailItem.OBSERVACIONES} />}
+                                {detailItem.motivoRechazo && <DetailRow label="Motivo de rechazo" value={detailItem.motivoRechazo} />}
+                                {detailItem.solicitadoPor?.name && <DetailRow label="Solicitado por" value={detailItem.solicitadoPor.name} />}
                             </div>
                             {(detailItem.tipoModificacion === 'RESERVA_INVENTARIO' || detailItem.reservationId) && (
                                 <>
@@ -912,7 +975,7 @@ export function ModificacionesContent() {
     );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
     return (
         <div className="flex justify-between gap-2">
             <span className="text-muted-foreground shrink-0">{label}</span>

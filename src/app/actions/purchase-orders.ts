@@ -305,7 +305,7 @@ export async function liquidatePurchaseOrderAction(
 }
 
 // Busca un producto existente por SKU (padre o variante) para vincular la línea como reabastecimiento
-export async function findProductBySkuAction(sku: string): Promise<{ found: boolean; productId?: string; productName?: string; variantId?: string }> {
+export async function findProductBySkuAction(sku: string): Promise<{ found: boolean; productId?: string; productName?: string; variantId?: string; contentLink?: string; priceDropshipping?: number; activationStatus?: string }> {
     const trimmed = sku.trim();
     if (!trimmed) return { found: false };
 
@@ -313,7 +313,12 @@ export async function findProductBySkuAction(sku: string): Promise<{ found: bool
     const snap = await getDocs(bySku);
     if (!snap.empty) {
         const d = snap.docs[0];
-        return { found: true, productId: d.id, productName: (d.data() as Product).name };
+        const product = d.data() as Product;
+        return {
+            found: true, productId: d.id, productName: product.name,
+            contentLink: product.contentLink, priceDropshipping: product.priceDropshipping,
+            activationStatus: product.activationStatus,
+        };
     }
 
     // Buscar en variantes de productos variables (escaneo acotado)
@@ -323,7 +328,11 @@ export async function findProductBySkuAction(sku: string): Promise<{ found: bool
         const product = d.data() as Product;
         const variant = product.variants?.find(v => v.sku === trimmed);
         if (variant) {
-            return { found: true, productId: d.id, productName: product.name, variantId: variant.id };
+            return {
+                found: true, productId: d.id, productName: product.name, variantId: variant.id,
+                contentLink: product.contentLink, priceDropshipping: variant.priceDropshipping,
+                activationStatus: product.activationStatus,
+            };
         }
     }
 
