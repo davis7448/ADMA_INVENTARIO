@@ -190,7 +190,15 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
 
     const esRetiro = tipo === 'RETIRO';
     const esCreacion = tipo === 'CREACION_ITEM';
-    const necesitaCorreo = (esCreacion && visibilidad === 'Privado') || (!esCreacion && accionPriv === 'privatizar');
+    // Correos de los repartos privados: si existen, son LOS correos de privatización
+    // (no se pide otro campo aparte)
+    const correosDeRepartos = Array.from(new Set(
+        distribucion
+            .filter(d => d.cantidad > 0 && d.destino === 'privado' && d.correo?.trim())
+            .map(d => d.correo!.trim())
+    ));
+    const quierePrivatizar = (esCreacion && visibilidad === 'Privado') || (!esCreacion && accionPriv === 'privatizar');
+    const necesitaCorreo = quierePrivatizar && correosDeRepartos.length === 0;
     // Grilla por variante activa cuando hay variantes y no se eligió una específica ni combo
     const usaStockPorVariante = pickedVariants.length > 0 && !variable && !comboMode && !esRetiro;
     const stockPorVariante = pickedVariants
@@ -261,10 +269,10 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             return null;
         }
         if (n === 3) {
-            if (necesitaCorreo && !correo.trim()) return 'Indica el correo de privatización.';
             for (const d of distribucion.filter(x => x.cantidad > 0)) {
                 if (d.destino === 'privado' && !d.correo?.trim()) return 'Cada reparto privado necesita su correo.';
             }
+            if (necesitaCorreo && !correo.trim()) return 'Indica el correo de privatización (o agrega repartos privados con sus correos).';
             return null;
         }
         return null;
@@ -279,12 +287,15 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setPaso(p => Math.min(4, p + 1));
     };
 
+    // Correo(s) finales de privatización: el campo único, o los de los repartos privados
+    const correoFinal = correo.trim() || (correosDeRepartos.length > 0 ? correosDeRepartos.join(', ') : '');
+
     // Objeto parcial para la vista previa de la instrucción (paso 4)
     const solicitudPreview: Partial<Modificacion> = {
         'CANTIDAD SOLICITADA': esRetiro ? 0 : usaStockPorVariante ? totalVariantes : (stock ? Number(stock) : null),
         STOCK_POR_VARIANTE: usaStockPorVariante && stockPorVariante.length > 0 ? stockPorVariante : undefined,
         VARIABLE: comboMode ? comboNombre.trim() : (variable.trim() || null),
-        CORREO_CODIGO: correo.trim() || null,
+        CORREO_CODIGO: correoFinal || null,
         OBSERVACIONES: observaciones.trim() || undefined,
         ES_RETIRO: esRetiro || undefined,
         ACCION_PRIVATIZACION: esCreacion ? undefined : accionPriv,
@@ -319,7 +330,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 COMERCIAL: user.name,
                 'CODIGO COMERCIAL': user.commercialCode || user.email,
                 'PRIVADO_PUBLICO': esCreacion ? visibilidad : accionPriv === 'privatizar' ? 'Privado' : 'Publico',
-                'CORREO_CODIGO': correo.trim() || null,
+                'CORREO_CODIGO': correoFinal || null,
                 CREADO: 'NO',
                 SOLICITUD: (esCreacion || tipo === 'SUMA') ? 'SUMA' : 'AJUSTE',
                 'CANTIDAD PREVIA': null,
@@ -594,6 +605,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                             <Label htmlFor="sol-correo">Correo(s) de privatización *</Label>
                             <Input id="sol-correo" value={correo} onChange={e => setCorreo(e.target.value)} className="mt-1" placeholder="cliente@correo.com, otro@correo.com" />
                         </div>
+                    )}
+                    {quierePrivatizar && correosDeRepartos.length > 0 && (
+                        <p className="text-xs text-muted-foreground">✓ Se usarán los correos de los repartos privados: {correosDeRepartos.join(', ')}</p>
                     )}
                     <div className="border rounded-lg p-3 space-y-2">
                         <div className="flex items-center justify-between">
