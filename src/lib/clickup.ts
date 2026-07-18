@@ -188,6 +188,31 @@ export async function applyClickUpStatusToSolicitud(taskId: string, clickupStatu
     return { success: true, estado };
 }
 
+// Sube imágenes como adjuntos de la tarea de ClickUp (NO pasan por Firebase Storage)
+export async function uploadAttachmentsToTask(taskId: string, files: File[]): Promise<{ uploaded: number; errors: string[] }> {
+    const errors: string[] = [];
+    let uploaded = 0;
+    for (const file of files) {
+        try {
+            const form = new FormData();
+            form.append('attachment', file, file.name);
+            const response = await fetch(`${CLICKUP_API}/task/${taskId}/attachment`, {
+                method: 'POST',
+                headers: { 'Authorization': getToken() },
+                body: form,
+            });
+            if (!response.ok) {
+                errors.push(`${file.name}: ${response.status}`);
+            } else {
+                uploaded++;
+            }
+        } catch (error) {
+            errors.push(`${file.name}: ${error instanceof Error ? error.message : 'error'}`);
+        }
+    }
+    return { uploaded, errors };
+}
+
 // Consulta el estado actual de una tarea (para el cron de respaldo)
 export async function getClickUpTaskStatus(taskId: string): Promise<string | null> {
     try {
