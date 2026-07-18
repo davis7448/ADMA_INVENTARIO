@@ -1,0 +1,311 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdminAccess() {
+      // Allow access when there's no auth (server-side admin operations)
+      return request.auth == null;
+    }
+    // Funciones de rol deshabilitadas temporalmente - usar verificación por email
+    // El rol se verifica en el cliente leyendo el documento de usuario por email
+    function isRole(role) {
+      // Temporalmente permitir a todos los usuarios autenticados
+      // La validación real se hace en el cliente
+      return isSignedIn();
+    }
+    function isRoleIn(roles) {
+      // Temporalmente permitir a todos los usuarios autenticados
+      return isSignedIn();
+    }
+    
+    // -- COMMERCIAL MODULE HELPER --
+    function isCommercial() {
+        return isRole('commercial') || isRole('commercial_director');
+    }
+    
+    function isDirector() {
+        return isRole('commercial_director');
+    }
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow reads for all authenticated users on most collections
+    match /products/{productId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas', 'logistics']) || isAdminAccess();
+    }
+    match /suppliers/{supplierId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+    }
+    match /categories/{categoryId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+    }
+    match /carriers/{carrierId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+    }
+    match /platforms/{platformId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+    }
+    match /vendedores/{vendedorId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+    }
+    match /users/{userId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      // Allow users to update their own profile? Or strictly admins. 
+      // Existing rule: allow create, update, delete: if isRole('admin') || isAdminAccess() || (request.auth != null && request.auth.uid == userId);
+      allow create, update, delete: if isRole('admin') || isAdminAccess() || (request.auth != null && request.auth.uid == userId);
+    }
+    match /inventoryMovements/{movementId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /dispatchOrders/{orderId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /auditAlerts/{alertId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /auditRuns/{runId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /staleReservationAlerts/{alertId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /stockAlertsCache/{cacheId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /cancellationRequests/{reqId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /warehouses/{warehouseId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow create, update: if isRole('admin') || isAdminAccess();
+    }
+    match /counters/{counterId} {
+      allow read, write: if isSignedIn() || isAdminAccess(); // Server-side access, but locked down for safety.
+    }
+    match /reservations/{reservationId} {
+      allow read, write: if isSignedIn() || isAdminAccess();
+    }
+    match /rotationCategories/{catId} {
+      allow read: if isSignedIn() || isAdminAccess();
+      allow update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+    }
+     match /entryReasons/{reasonId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+     }
+     match /locations/{locationId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update, delete: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+     }
+     match /importRequests/{requestId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+     }
+      match /modificaciones/{modId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+      match /return_guides/{guideId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRoleIn(['admin', 'plataformas', 'logistics']) || isAdminAccess();
+        allow update, delete: if isRole('admin') || isAdminAccess();
+      }
+      
+       // --- NEW COMMERCIAL MODULE RULES ---
+      
+       // Clients: Permisos temporales simplificados hasta implementar custom claims
+       // La validación de roles se realiza en el cliente
+       match /clients/{clientId} {
+          // Lectura: Cualquier usuario autenticado puede leer
+          // El filtrado por comercial asignado se hace en la aplicación
+          allow read: if isSignedIn() || isAdminAccess();
+          
+          // Creación: Cualquier usuario autenticado puede crear
+          allow create: if isSignedIn() || isAdminAccess();
+          
+          // Actualización: Cualquier usuario autenticado puede actualizar
+          // La validación de quién puede editar qué cliente se hace en el cliente
+          allow update: if isSignedIn() || isAdminAccess();
+          
+          // Eliminación: Solo usuarios autenticados
+          allow delete: if isSignedIn() || isAdminAccess();
+       }
+
+    match /commercial_challenges/{challengeId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       allow create, update, delete: if isDirector() || isRole('admin') || isAdminAccess();
+    }
+
+    match /commercial_ratings/{ratingId} {
+       allow read: if isSignedIn() || isAdminAccess();
+       // "solo podrán poner 1 por día" - validation ideally happens in backend, 
+       // but here we ensure they are authenticated.
+       allow create: if isSignedIn() || isAdminAccess();
+       allow update, delete: if false; // Ratings are permanent usually? Or admin only.
+    }
+
+     match /academy_resources/{resourceId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update, delete: if isDirector() || isRole('admin') || isAdminAccess();
+     }
+
+     // Client Tests
+      match /client_tests/{testId} {
+         allow read: if isSignedIn() || isAdminAccess();
+         allow create: if isSignedIn() || isAdminAccess();
+         allow update, delete: if isSignedIn() || isAdminAccess();
+      }
+
+     // 4DX System - MCI (Metas Crucialmente Importantes)
+     // Users can create/edit/delete MCIs when authenticated, but can read all
+     match /user_missions/{mciId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn();
+     }
+
+     // 4DX System - User Gamification Profiles
+     // Users can create their own profile and update it, but can read all
+     match /user_gamification_profiles/{profileId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn();
+        allow update: if isSignedIn();
+        allow delete: if false; // Never delete profiles
+     }
+
+     // 4DX System - Level Config (admin only)
+     match /settings/level_config {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow write: if isRole('admin') || isAdminAccess();
+     }
+
+     // TASK SYSTEM - Areas (admin only)
+     match /areas/{areaId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isRole('admin') || isAdminAccess();
+     }
+
+     // TASK SYSTEM - User Positions (admin writes, all read)
+     match /user_positions/{positionId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isRole('admin') || isAdminAccess();
+     }
+
+      // TASK SYSTEM - Tasks
+      // Simplified: allow read for all authenticated, filtering done in client
+      match /tasks/{taskId} {
+         allow read: if isSignedIn();
+         allow create: if isSignedIn();
+         allow update: if isSignedIn();
+         allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // TASK SYSTEM - Notifications
+      match /task_notifications/{notificationId} {
+         allow read: if isSignedIn();
+         allow create: if isSignedIn();
+         allow update: if isSignedIn();
+         allow delete: if isSignedIn();
+      }
+
+      // TASK SYSTEM - Rejection Tracker
+      match /task_rejection_tracker/{trackerId} {
+         allow read: if isSignedIn();
+         allow create, update: if isSignedIn();
+         allow delete: if false;
+      }
+
+      // ====================
+      // COMMUNITIES MODULE
+      // ====================
+      
+      // Community Leaders - Anyone can read, only owner or admin can write
+      match /community_leaders/{leaderId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update: if request.auth.uid == leaderId || isRole('admin') || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // Communities - Read by all, write by leader or admin
+      match /communities/{communityId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update: if isRole('admin') || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // Community Members - Read by leader of community or admin
+      match /community_members/{memberId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isSignedIn() || isAdminAccess();
+        allow update: if request.auth.uid == memberId || isRole('admin') || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // CHALLENGES MODULE
+      // ====================
+      
+      match /challenges/{challengeId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create: if isRole('admin') || isAdminAccess();
+        allow update, delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // EXTERNAL WAREHOUSES MODULE
+      // ====================
+
+      match /externalProductMappings/{mappingId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      match /externalStockSnapshots/{snapshotId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      match /externalStockSnapshotItems/{itemId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow create, update: if isRoleIn(['admin', 'plataformas']) || isAdminAccess();
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+      // ====================
+      // DROPSHIPPING MODULE
+      // ====================
+      
+      match /dropshipping_requests/{requestId} {
+        // Anyone authenticated can create (submit request)
+        allow create: if isSignedIn() || isAdminAccess();
+        
+        // Read: owner of request, or admin/commercial roles
+        allow read: if isSignedIn() || isAdminAccess();
+        
+        // Update: only admin or commercial roles
+        allow update: if isRoleIn(['admin', 'commercial']) || isAdminAccess();
+        
+        // Delete: only admin
+        allow delete: if isRole('admin') || isAdminAccess();
+      }
+
+    }
+  }
