@@ -15,11 +15,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { createSolicitud, getSolicitudesByEmail, type DistribucionStock, type EstadoSolicitud, type Modificacion, type TipoModificacion } from '@/app/actions/modificaciones';
 import { syncSolicitudToClickUpAction } from '@/app/actions/clickup';
-import { findProductBySkuAction } from '@/app/actions/purchase-orders';
+import { ProductSearchPicker } from '@/components/product-search-picker';
 import type { Platform, Warehouse } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Search } from 'lucide-react';
 
 const PAISES = ['COLOMBIA', 'MEXICO', 'ECUADOR', 'PARAGUAY', 'ARGENTINA', 'GUATEMALA'];
 
@@ -152,7 +151,6 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isSaving, setIsSaving] = useState(false);
-    const [isSearching, setIsSearching] = useState(false);
 
     const [tipo, setTipo] = useState<'CREACION_ITEM' | 'AJUSTE' | 'SUMA' | 'RETIRO'>('CREACION_ITEM');
     const [accionPriv, setAccionPriv] = useState<'sin_cambio' | 'privatizar' | 'quitar_privatizacion'>('sin_cambio');
@@ -173,24 +171,13 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [idPlataforma, setIdPlataforma] = useState('');
     const [observaciones, setObservaciones] = useState('');
 
-    const handleSearchSku = async () => {
-        if (!sku.trim()) return;
-        setIsSearching(true);
-        try {
-            const result = await findProductBySkuAction(sku);
-            if (result.found && result.productId) {
-                setProductId(result.productId);
-                setProductName(result.productName || '');
-                if (result.contentLink) setEnlaceDrive(result.contentLink);
-                if (result.priceDropshipping) setPrecio(String(result.priceDropshipping));
-                toast({ title: 'Producto encontrado', description: result.productName });
-            } else {
-                setProductId(null);
-                toast({ title: 'SKU no encontrado', description: 'No existe en inventario. Verifica el SKU o escribe el nombre manualmente.', variant: 'destructive' });
-            }
-        } finally {
-            setIsSearching(false);
-        }
+    const handleProductPick = (product: { id: string; name: string; sku?: string; contentLink?: string; priceDropshipping?: number }) => {
+        setProductId(product.id);
+        setProductName(product.name);
+        setSku(product.sku || '');
+        if (product.contentLink) setEnlaceDrive(product.contentLink);
+        if (product.priceDropshipping) setPrecio(String(product.priceDropshipping));
+        toast({ title: 'Producto vinculado', description: product.name });
     };
 
     const handleSubmit = async () => {
@@ -294,18 +281,19 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                     </Select>
                 </div>
                 <div className="col-span-2">
-                    <Label htmlFor="sol-sku">SKU del producto</Label>
-                    <div className="flex gap-2 mt-1">
-                        <Input id="sol-sku" value={sku} onChange={e => { setSku(e.target.value); setProductId(null); }} placeholder="Busca en inventario" />
-                        <Button type="button" variant="outline" onClick={handleSearchSku} disabled={isSearching}>
-                            <Search className="h-4 w-4 mr-1" />{isSearching ? '…' : 'Buscar'}
-                        </Button>
+                    <Label>Producto del inventario</Label>
+                    <div className="mt-1">
+                        <ProductSearchPicker onSelect={handleProductPick} />
                     </div>
-                    {productId && <p className="text-xs text-green-600 mt-1">✓ Vinculado al inventario</p>}
+                    {productId && <p className="text-xs text-green-600 mt-1">✓ Vinculado al inventario{sku ? ` (SKU: ${sku})` : ''}</p>}
                 </div>
                 <div className="col-span-2">
-                    <Label htmlFor="sol-name">Nombre del producto *</Label>
-                    <Input id="sol-name" value={productName} onChange={e => setProductName(e.target.value)} className="mt-1" />
+                    <Label htmlFor="sol-name">Nombre del producto * <span className="text-muted-foreground font-normal">(editable si no está en inventario)</span></Label>
+                    <Input id="sol-name" value={productName} onChange={e => { setProductName(e.target.value); }} className="mt-1" />
+                </div>
+                <div className="col-span-2">
+                    <Label htmlFor="sol-sku">SKU</Label>
+                    <Input id="sol-sku" value={sku} onChange={e => { setSku(e.target.value); setProductId(null); }} className="mt-1" placeholder="Se llena solo al elegir producto" />
                 </div>
                 <div className="col-span-2">
                     <Label htmlFor="sol-variable">Variable / variante <span className="text-muted-foreground">(color, talla, presentación…)</span></Label>

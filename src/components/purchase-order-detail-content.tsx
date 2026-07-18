@@ -17,11 +17,12 @@ import { useToast } from '@/hooks/use-toast';
 import {
     getPurchaseOrderAction, updatePurchaseOrderAction,
     addPurchaseOrderItemAction, updatePurchaseOrderItemAction, deletePurchaseOrderItemAction,
-    addItemInspectionPhotosAction, findProductBySkuAction,
+    addItemInspectionPhotosAction,
 } from '@/app/actions/purchase-orders';
 import { PO_STATUS_LABELS } from './purchase-orders-content';
 import type { PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, Supplier, Warehouse } from '@/lib/types';
-import { ArrowLeft, Camera, ExternalLink, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, Camera, ExternalLink, Trash2 } from 'lucide-react';
+import { ProductSearchPicker } from '@/components/product-search-picker';
 
 const ITEM_STATUS_LABELS: Record<PurchaseOrderItem['status'], string> = {
     documentada: 'Documentada',
@@ -297,7 +298,6 @@ function AddItemDialog({ open, onOpenChange, purchaseOrderId, onItemAdded }: {
 }) {
     const { toast } = useToast();
     const [isSaving, setIsSaving] = useState(false);
-    const [isSearching, setIsSearching] = useState(false);
     const [sku, setSku] = useState('');
     const [productName, setProductName] = useState('');
     const [linkedProductId, setLinkedProductId] = useState<string | null>(null);
@@ -316,22 +316,12 @@ function AddItemDialog({ open, onOpenChange, purchaseOrderId, onItemAdded }: {
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    const handleSearchSku = async () => {
-        if (!sku.trim()) return;
-        setIsSearching(true);
-        try {
-            const result = await findProductBySkuAction(sku);
-            if (result.found && result.productId) {
-                setLinkedProductId(result.productId);
-                setProductName(result.productName || '');
-                toast({ title: 'Producto encontrado', description: `Se vinculará como reabastecimiento de "${result.productName}".` });
-            } else {
-                setLinkedProductId(null);
-                toast({ title: 'SKU nuevo', description: 'No existe en inventario: la línea quedará como producto nuevo.' });
-            }
-        } finally {
-            setIsSearching(false);
-        }
+    const handleProductPick = (product: { id: string; name: string; sku?: string; contentLink?: string }) => {
+        setLinkedProductId(product.id);
+        setProductName(product.name);
+        setSku(product.sku || '');
+        if (product.contentLink) setContentLink(product.contentLink);
+        toast({ title: 'Producto vinculado', description: `Se registrará como reabastecimiento de "${product.name}".` });
     };
 
     const handleSubmit = async () => {
@@ -377,14 +367,15 @@ function AddItemDialog({ open, onOpenChange, purchaseOrderId, onItemAdded }: {
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-4 py-2">
                     <div className="col-span-2">
-                        <Label htmlFor="item-sku">SKU *</Label>
-                        <div className="flex gap-2 mt-1">
-                            <Input id="item-sku" value={sku} onChange={e => { setSku(e.target.value); setLinkedProductId(null); }} placeholder="SKU del producto" />
-                            <Button type="button" variant="outline" onClick={handleSearchSku} disabled={isSearching}>
-                                <Search className="h-4 w-4 mr-1" />{isSearching ? 'Buscando…' : 'Buscar'}
-                            </Button>
+                        <Label>Buscar en inventario <span className="text-muted-foreground font-normal">(reabastecimiento)</span></Label>
+                        <div className="mt-1">
+                            <ProductSearchPicker onSelect={handleProductPick} placeholder="Nombre o SKU del producto existente…" />
                         </div>
                         {linkedProductId && <p className="text-xs text-green-600 mt-1">✓ Vinculado a producto existente (reabastecimiento)</p>}
+                    </div>
+                    <div className="col-span-2">
+                        <Label htmlFor="item-sku">SKU *</Label>
+                        <Input id="item-sku" value={sku} onChange={e => { setSku(e.target.value); setLinkedProductId(null); }} className="mt-1" placeholder="SKU (nuevo o del producto vinculado)" />
                     </div>
                     <div className="col-span-2">
                         <Label htmlFor="item-name">Nombre del producto *</Label>
