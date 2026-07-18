@@ -744,7 +744,14 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
                                                 width="64"
                                             />
                                         </TableCell>
-                                        <TableCell className="font-medium">{product.name}</TableCell>
+                                        <TableCell className="font-medium">
+                                            <div className="flex items-center gap-2">
+                                                <span>{product.name}</span>
+                                                {product.visibility === 'privado' && (
+                                                    <Badge variant="secondary" className="text-[10px] uppercase">Privado</Badge>
+                                                )}
+                                            </div>
+                                        </TableCell>
                                         <TableCell>
                                             {warehouses.find(w => w.id === product.warehouseId)?.name || 'N/A'}
                                         </TableCell>

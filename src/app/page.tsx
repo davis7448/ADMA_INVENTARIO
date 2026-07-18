@@ -5,7 +5,7 @@ import { Suspense } from 'react';
 export default function DashboardPage() {
     return (
         <Suspense>
-            <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'commercial', 'plataformas', 'mercado_libre']}>
+            <AuthProviderWrapper allowedRoles={['admin', 'logistics', 'commercial', 'plataformas', 'mercado_libre', 'compras', 'marketing']}>
                 <DashboardNewClient />
             </AuthProviderWrapper>
         </Suspense>

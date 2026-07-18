@@ -32,7 +32,7 @@ export default async function SettingsPage() {
 
     return (
       <Suspense>
-        <AuthProviderWrapper allowedRoles={['admin', 'plataformas', 'commercial', 'logistics']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'plataformas', 'commercial', 'logistics', 'compras', 'marketing']}>
           <SettingsContent 
               initialRotationCategories={rotationCategories} 
               initialUsers={users}

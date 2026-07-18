@@ -6,6 +6,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, Timestamp, runTransaction, writeBatch, deleteDoc, documentId, setDoc, limit, startAfter, orderBy, serverTimestamp, type Query, type DocumentSnapshot } from "firebase/firestore";
 import { Storage } from '@google-cloud/storage';
 import type { Product, Supplier, Order, ReturnRequest, User, InventoryMovement, Category, Carrier, Platform, DispatchOrder, DispatchOrderProduct, DispatchException, DispatchExceptionProduct, AuditAlert, PendingInventoryItem, RotationCategory, ProductPerformanceData, Vendedor, Reservation, StaleReservationAlert, StockAlertItem, GetStockAlertsResult, LogisticItem, EntryReason, Warehouse, Location, DashboardData, CancellationRequest, ImportRequest, ExternalProductMapping, ExternalStockSnapshot, ExternalStockSnapshotItem, ExternalColumnConfig, ExternalRotationItem } from './types';
+import { DEFAULT_IMPORT_TARIFF_PER_CBM } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { computeDashboardData, type DashboardRawData } from './dashboard-utils';
@@ -2357,7 +2358,39 @@ export const updateProductLocation = async (productId: string, locationId: strin
     await updateDoc(productRef, { locationId });
 }
 
-export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string, warehouseId?: string | null): Promise<void> => {
+// Import Settings (tarifa de importación para costo estimado de mercancía por llegar)
+export type ImportSettings = {
+    tariffPerCbm: number;
+};
+
+export const getImportSettings = async (): Promise<ImportSettings> => {
+    try {
+        const docRef = doc(db, 'settings', 'import_config');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { tariffPerCbm: docSnap.data().tariffPerCbm ?? DEFAULT_IMPORT_TARIFF_PER_CBM };
+        }
+        return { tariffPerCbm: DEFAULT_IMPORT_TARIFF_PER_CBM };
+    } catch (error) {
+        console.error("Error getting import settings:", error);
+        return { tariffPerCbm: DEFAULT_IMPORT_TARIFF_PER_CBM };
+    }
+};
+
+export const updateImportSettings = async (settings: ImportSettings): Promise<void> => {
+    await setDoc(doc(db, 'settings', 'import_config'), {
+        ...settings,
+        updatedAt: Timestamp.now(),
+    }, { merge: true });
+};
+
+export type InventoryEntryMeta = {
+    entryType?: 'nuevo' | 'reabastecimiento';
+    purchaseOrderId?: string;
+    receptionId?: string;
+};
+
+export const registerInventoryEntry = async (items: (LogisticItem & { trackingNumber?: string })[], user: User | null, reasonLabel: string, supplierId?: string, carrierId?: string, warehouseId?: string | null, meta?: InventoryEntryMeta): Promise<void> => {
     const warehouse = warehouseId || user?.warehouseId || DEFAULT_WAREHOUSE_ID;
 
     for (const item of items) {
@@ -2385,6 +2418,9 @@ export const registerInventoryEntry = async (items: (LogisticItem & { trackingNu
             userId: user?.id,
             userName: user?.name,
             warehouseId: warehouse,
+            ...(meta?.entryType ? { entryType: meta.entryType } : {}),
+            ...(meta?.purchaseOrderId ? { purchaseOrderId: meta.purchaseOrderId } : {}),
+            ...(meta?.receptionId ? { receptionId: meta.receptionId } : {}),
         });
 
         // Update stock

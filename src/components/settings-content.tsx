@@ -24,6 +24,7 @@ import { ProfileManagement } from './profile-management';
 import { EntryReasonsManagement } from './entry-reasons-management';
 import { WarehouseManagement } from './warehouse-management';
 import { LocationManagement } from './location-management';
+import { ImportTariffManagement } from './import-tariff-management';
 import { reconcileCancelledExceptions } from '@/app/actions/data-reconciliation';
 
 interface SettingsContentProps {
@@ -168,6 +169,10 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
           
           {canManageSettings && (
              <EntryReasonsManagement initialEntryReasons={initialEntryReasons} />
+          )}
+
+          {(isAdmin || user?.role === 'compras') && (
+            <ImportTariffManagement canEdit={isAdmin || user?.role === 'compras'} />
           )}
 
           <Card>

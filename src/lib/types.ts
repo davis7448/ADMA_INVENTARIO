@@ -44,6 +44,12 @@ export type Product = {
   warehouseId?: string; // New field
   locationId?: string; // New field for location
   codigoERP?: string; // Código ERP field
+  visibility?: 'privado' | 'publico'; // ausente = 'publico' (retrocompatible)
+  activationStatus?: 'borrador' | 'solicitado' | 'activo';
+  activatedAt?: string;
+  activationModificacionId?: string;
+  inspectionPhotos?: string[]; // fotos de inspección en origen (pre-arribo)
+  realPhotos?: string[]; // fotos reales tomadas en recepción
 };
 
 export type Reservation = {
@@ -102,7 +108,10 @@ export type ReturnRequest = {
   date: string;
 };
 
-export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre';
+export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre' | 'compras' | 'marketing';
+
+// Tarifa de importación por defecto (COP por m³) para costo estimado de mercancía por llegar
+export const DEFAULT_IMPORT_TARIFF_PER_CBM = 2_200_000;
 
 export type User = {
   id: string;
@@ -137,6 +146,9 @@ export type InventoryMovement = {
   warehouseId?: string;
   variantId?: string;
   variantSku?: string;
+  entryType?: 'nuevo' | 'reabastecimiento';
+  purchaseOrderId?: string;
+  receptionId?: string;
 };
 
 export type Carrier = {
