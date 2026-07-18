@@ -199,6 +199,23 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     ));
     const quierePrivatizar = (esCreacion && visibilidad === 'Privado') || (!esCreacion && accionPriv === 'privatizar');
     const necesitaCorreo = quierePrivatizar && correosDeRepartos.length === 0;
+
+    // Presupuesto del reparto: no se puede repartir más de lo solicitado
+    const totalSolicitado = esRetiro ? 0 : (pickedVariants.length > 0 && !variable && !comboMode)
+        ? pickedVariants.reduce((acc, v) => acc + Number(variantStocks[v.id] || 0), 0)
+        : Number(stock || 0);
+    const totalRepartido = distribucion.reduce((acc, d) => acc + (d.cantidad > 0 ? d.cantidad : 0), 0);
+    const excedido = totalSolicitado > 0 && totalRepartido > totalSolicitado;
+    // Restante por variante (cuando se pidió stock por variante)
+    const restantePorVariante = (variante: string): number => {
+        const solicitada = pickedVariants
+            .filter(v => v.name === variante)
+            .reduce((acc, v) => acc + Number(variantStocks[v.id] || 0), 0);
+        const repartida = distribucion
+            .filter(d => d.variante === variante && d.cantidad > 0)
+            .reduce((acc, d) => acc + d.cantidad, 0);
+        return solicitada - repartida;
+    };
     // Grilla por variante activa cuando hay variantes y no se eligió una específica ni combo
     const usaStockPorVariante = pickedVariants.length > 0 && !variable && !comboMode && !esRetiro;
     const stockPorVariante = pickedVariants
@@ -271,6 +288,14 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         if (n === 3) {
             for (const d of distribucion.filter(x => x.cantidad > 0)) {
                 if (d.destino === 'privado' && !d.correo?.trim()) return 'Cada reparto privado necesita su correo.';
+            }
+            if (excedido) return `Estás repartiendo ${totalRepartido} unidades pero solo solicitaste ${totalSolicitado}. Ajusta las cantidades.`;
+            if (usaStockPorVariante) {
+                for (const v of pickedVariants) {
+                    if (restantePorVariante(v.name) < 0) {
+                        return `La variante "${v.name}" tiene repartidas más unidades de las solicitadas.`;
+                    }
+                }
             }
             if (necesitaCorreo && !correo.trim()) return 'Indica el correo de privatización (o agrega repartos privados con sus correos).';
             return null;
@@ -609,14 +634,24 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                     {quierePrivatizar && correosDeRepartos.length > 0 && (
                         <p className="text-xs text-muted-foreground">✓ Se usarán los correos de los repartos privados: {correosDeRepartos.join(', ')}</p>
                     )}
-                    <div className="border rounded-lg p-3 space-y-2">
+                    <div className={`border rounded-lg p-3 space-y-2 ${excedido ? 'border-destructive' : ''}`}>
                         <div className="flex items-center justify-between">
                             <Label>Repartir el stock <span className="text-muted-foreground font-normal">(opcional)</span></Label>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setDistribucion(prev => [...prev, { cantidad: 0, destino: 'privado' }])}>+ Reparto</Button>
+                            <div className="flex items-center gap-2">
+                                {totalSolicitado > 0 && distribucion.length > 0 && (
+                                    <span className={`text-xs font-medium ${excedido ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                        {totalRepartido} / {totalSolicitado} unds
+                                    </span>
+                                )}
+                                <Button type="button" variant="outline" size="sm" onClick={() => setDistribucion(prev => [...prev, { cantidad: 0, destino: 'privado' }])}>+ Reparto</Button>
+                            </div>
                         </div>
+                        {excedido && (
+                            <p className="text-xs text-destructive">⚠ Estás repartiendo más unidades ({totalRepartido}) de las solicitadas ({totalSolicitado}).</p>
+                        )}
                         {distribucion.map((d, i) => (
                             <div key={i} className="flex flex-wrap items-center gap-2">
-                                <Input type="number" min="0" placeholder="Cant." value={d.cantidad || ''} className="w-20 h-8"
+                                <Input type="number" min="0" max={totalSolicitado > 0 ? totalSolicitado : undefined} placeholder="Cant." value={d.cantidad || ''} className="w-20 h-8"
                                     onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, cantidad: Number(e.target.value) } : x))} />
                                 <Select value={d.destino} onValueChange={v => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, destino: v as 'publico' | 'privado' } : x))}>
                                     <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -629,13 +664,27 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                                     <Input placeholder="correo@cliente.com" value={d.correo || ''} className="flex-1 min-w-[140px] h-8 text-xs"
                                         onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, correo: e.target.value } : x))} />
                                 )}
-                                <Input placeholder="Variante (opc.)" value={d.variante || ''} className="w-32 h-8 text-xs"
-                                    onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, variante: e.target.value } : x))} />
+                                {pickedVariants.length > 0 ? (
+                                    <Select value={d.variante || 'sin_variante'} onValueChange={v => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, variante: v === 'sin_variante' ? undefined : v } : x))}>
+                                        <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Variante…" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="sin_variante">Sin variante específica</SelectItem>
+                                            {pickedVariants.map(v => (
+                                                <SelectItem key={v.id} value={v.name}>
+                                                    {v.name}{usaStockPorVariante ? ` (quedan ${Math.max(0, restantePorVariante(v.name) + (d.variante === v.name ? d.cantidad : 0))})` : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <Input placeholder="Variante (opc.)" value={d.variante || ''} className="w-32 h-8 text-xs"
+                                        onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, variante: e.target.value } : x))} />
+                                )}
                                 <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-destructive" onClick={() => setDistribucion(prev => prev.filter((_, j) => j !== i))}>✕</Button>
                             </div>
                         ))}
                         {distribucion.length === 0 && (
-                            <p className="text-xs text-muted-foreground">Solo si el stock se divide entre público/privado o entre variantes. Ej: 75 unds privado a cliente@x.com + 75 público.</p>
+                            <p className="text-xs text-muted-foreground">Solo si el stock se divide entre público/privado, entre correos o entre variantes. Ej: 75 unds privado a cliente@x.com (Grado 1.5) + 75 público. No puedes repartir más de lo solicitado en el paso 2.</p>
                         )}
                     </div>
                 </div>
