@@ -170,7 +170,7 @@ export function CreateUserDialog({ onUserCreated }: CreateUserDialogProps) {
                         <SelectItem value="logistics">Logística</SelectItem>
                         <SelectItem value="commercial">Comercial</SelectItem>
                         <SelectItem value="commercial_director">Director Comercial</SelectItem>
-                        <SelectItem value="compras">Compras</SelectItem>
+                        <SelectItem value="coordinacion">Coordinación Operativa</SelectItem>
                         <SelectItem value="marketing">Marketing</SelectItem>
                         <SelectItem value="consulta">Consulta</SelectItem>
                     </SelectContent>

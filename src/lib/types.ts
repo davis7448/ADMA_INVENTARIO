@@ -44,8 +44,7 @@ export type Product = {
   warehouseId?: string; // New field
   locationId?: string; // New field for location
   codigoERP?: string; // Código ERP field
-  visibility?: 'privado' | 'publico'; // ausente = 'publico' (retrocompatible)
-  activationStatus?: 'borrador' | 'solicitado' | 'activo';
+  activationStatus?: 'borrador' | 'solicitado' | 'activo'; // estado de activación en plataformas externas (ausente = ya activo/histórico)
   activatedAt?: string;
   activationModificacionId?: string;
   inspectionPhotos?: string[]; // fotos de inspección en origen (pre-arribo)
@@ -108,7 +107,7 @@ export type ReturnRequest = {
   date: string;
 };
 
-export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre' | 'compras' | 'marketing';
+export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre' | 'coordinacion' | 'marketing';
 
 // Tarifa de importación por defecto (COP por m³) para costo estimado de mercancía por llegar
 export const DEFAULT_IMPORT_TARIFF_PER_CBM = 2_200_000;

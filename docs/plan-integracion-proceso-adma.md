@@ -14,7 +14,7 @@ Documentación de mercancía por llegar (OC con SKU)
   → Recepción en bodega con verificación (cajas/unidades, fotos reales)
   → Almacenamiento (bodega + ubicación)
   → Liquidación de costos (landed cost)
-  → Activación comercial (privado → público, migrando ClickUp a ADMA)
+  → Activación comercial (creación de items públicos en plataformas, migrando ClickUp a ADMA)
   → Difusión y remarketing (registro por producto × cliente)
   → Reportes (difusión, entradas, clientes)
 ```
@@ -23,28 +23,27 @@ Documentación de mercancía por llegar (OC con SKU)
 
 | Tema | Decisión |
 |---|---|
-| Origen de la OC | Digitada manualmente en Inventario por compras (Xiomara). Groupack es solo referencia (campo `groupackRef`), sin integración API. |
+| Origen de la OC | Digitada manualmente en Inventario por coordinación operativa (Xiomara). Groupack es solo referencia (campo `groupackRef`), sin integración API. |
 | Fotos | Fotos de **inspección de China** se cargan ANTES del arribo (info que entrega Groupack). Al recibir, bodega (Kristal) carga las **fotos reales** del item. |
 | Drive | Sigue siendo un link manual vinculado por producto/línea (sin API de Drive). Josué gestiona el contenido publicitario. |
 | Costo estimado | Se calcula con la tarifa cliente: `costo de producto + $2.200.000 COP × m³`. La tarifa debe ser **configurable** (settings). |
 | Liquidación | El costo final unitario se registra en Inventario (desde el Excel/Groupack) y alimenta `cost` → recálculo de precios. |
 | Nuevo vs recarga | Flujos distintos: **nuevo** → contenido + activación + difusión completa; **reabastecimiento** → remarketing a clientes con historial + actualización de precios si cambió el costo. |
-| Solicitud de items | "Creación de item" = crear una **modificación** (módulo existente) con tipo nuevo. "Actualización de plataforma" = procesarla (habilitar producto). |
+| Solicitud de items | "Creación de item" = crear una **modificación** (módulo existente) con tipo nuevo. "Actualización de plataforma" = procesarla (habilitar producto). **"Público no privado" se refiere al tipo de item en las plataformas externas (Dropi, etc.)**: los items se crean públicos (para todos los clientes) y no privados por correo; ese dato viaja en la modificación (campo PRIVADO_PUBLICO existente). Internamente NO se oculta ningún producto: el estado del proceso se lleva con `activationStatus` (borrador → solicitado → activo). |
 | ClickUp | **Se migra completamente a ADMA.** Antes de la fase 4, análisis vía API de ClickUp (el dueño da el token) para inventariar los tipos de solicitudes reales. |
 | Difusión | Solo **registro manual**: el comercial difunde por fuera (WhatsApp/IG/directo/grupos) y registra en la app a quién ofertó. Sin WhatsApp API. |
-| Roles | Xiomara → rol nuevo `compras` · Josué → rol nuevo `marketing` · Kristal → `logistics` (existente) · procesa activaciones → `plataformas`. |
+| Roles | Xiomara (coordinadora operativa) → rol nuevo `coordinacion` · Josué → rol nuevo `marketing` · Kristal → `logistics` (existente) · procesa activaciones → `plataformas`. |
 | Variantes | Las OC pueden venir por variante con SKU o por producto general; **el detalle se confirma en bodega** al recibir. El modelo soporta ambos. |
 
 ## 3. Fases
 
-### Fase 0 — Fundamentos (prerequisito corto)
+### Fase 0 — Fundamentos (prerequisito corto) ✅ implementada
 
-- **Roles nuevos** en `UserRole` (`src/lib/types.ts`): `compras`, `marketing`. Actualizar menú (`main-nav.tsx`), middleware y gestión de usuarios.
-- **Visibilidad de producto** — `Product` +=
-  - `visibility?: 'privado' | 'publico'` (ausente = público → retrocompatible, sin migración masiva)
-  - `activationStatus?: 'borrador' | 'solicitado' | 'activo'`, `activatedAt?`, `activationModificacionId?`
+- **Roles nuevos** en `UserRole` (`src/lib/types.ts`): `coordinacion` (Coordinación Operativa), `marketing`. Actualizar menú (`main-nav.tsx`) y gestión de usuarios.
+- **Estado de activación de producto** — `Product` +=
+  - `activationStatus?: 'borrador' | 'solicitado' | 'activo'` (estado de activación en plataformas externas; ausente = histórico/ya activo), `activatedAt?`, `activationModificacionId?`
   - `inspectionPhotos?: string[]`, `realPhotos?: string[]`
-  - `getProductsForCatalog` (`src/lib/commercial-api.ts`) filtra `visibility === 'privado'` para comerciales; `/products` muestra todo con badge.
+  - Nota: NO se oculta ningún producto internamente — el catálogo comercial muestra todo. Lo "público/privado" es el tipo de item en la plataforma externa y va en la modificación.
 - **Trazabilidad de entradas** — `InventoryMovement` += `entryType?: 'nuevo' | 'reabastecimiento'`, `purchaseOrderId?`, `receptionId?`.
 - **Tarifa de importación** configurable en `settings` (COP por m³, hoy $2.200.000).
 
@@ -66,7 +65,7 @@ Xiomara documenta lo que viene; Josué gestiona la cola de contenido; todos ven 
 - `unitCostFinal?` (fase 3)
 - `status: documentada → en_transito → recibida → almacenada → liquidada → activada` ← **espina dorsal del flujo; las fases 2–4 solo lo avanzan**
 
-**UI/código nuevo:** `src/app/compras/ordenes/` (lista pipeline + detalle con líneas, galería de inspección, links Drive) + `src/app/actions/purchase-orders.ts`. Menú "Compras" para `admin, compras, marketing, plataformas, logistics (lectura), consulta`. Rol `marketing` solo edita `contentLink`/`contentStatus`. Badge "Por llegar" en el detalle de producto.
+**UI/código nuevo:** `src/app/compras/ordenes/` (lista pipeline + detalle con líneas, galería de inspección, links Drive) + `src/app/actions/purchase-orders.ts`. Menú "Compras" para `admin, coordinacion, marketing, plataformas, logistics (lectura), consulta`. Rol `marketing` solo edita `contentLink`/`contentStatus`. Badge "Por llegar" en el detalle de producto.
 
 **Se reutiliza:** `uploadImageAndGetURL` (`src/lib/api.ts`), consecutivos con `counters`, `suppliers`, buscador de productos/SKU de los formularios existentes.
 
@@ -76,23 +75,23 @@ Xiomara documenta lo que viene; Josué gestiona la cola de contenido; todos ven 
 
 **Colecciones nuevas:**
 
-`receptions`: `receptionNumber`, `purchaseOrderId`, `warehouseId`, `receivedBy` (logistics/Kristal), `verifiedBy?` (compras/Xiomara — segunda firma), `status: en_conteo | con_discrepancia | verificada | cargada`, `notes?`.
+`receptions`: `receptionNumber`, `purchaseOrderId`, `warehouseId`, `receivedBy` (logistics/Kristal), `verifiedBy?` (coordinacion/Xiomara — segunda firma), `status: en_conteo | con_discrepancia | verificada | cargada`, `notes?`.
 
 `receptionItems`: `receptionId`, `purchaseOrderItemId`, `sku`, `productId?`, `countedUnits`, `countedBoxes`, `expectedUnits/expectedBoxes` (snapshot para auditoría), `match: boolean`, `discrepancyNotes?`, `realPhotos: string[]`, `locationId?`, `inventoryLoaded`, `movementId?`.
 
 **Flujo (wizard):**
 1. Lista de OCs `en_transito` → "iniciar recepción".
-2. Conteo de cajas/unidades por línea → el sistema marca `match` contra lo esperado. Discrepancia exige nota y **verificación de `compras`** antes de continuar.
+2. Conteo de cajas/unidades por línea → el sistema marca `match` contra lo esperado. Discrepancia exige nota y **verificación de `coordinacion`** antes de continuar.
 3. Fotos reales por línea (alimentan `realPhotos` del producto — el "item real").
 4. Ubicación: selector de `locations` (códigos `A-1-1-A`… ya cargados) + bodega.
-5. Cargue: si `productId` existe → **reabastecimiento** vía `registerInventoryEntry` (extendido con `meta { entryType, purchaseOrderId, receptionId }` — cambio retrocompatible); si no → **alta** con `addProductAction` precargada (nombre/SKU/fotos/link de la línea), nace `privado`/`borrador`. Aquí se confirma o detalla el desglose por variantes.
+5. Cargue: si `productId` existe → **reabastecimiento** vía `registerInventoryEntry` (extendido con `meta { entryType, purchaseOrderId, receptionId }` — cambio retrocompatible); si no → **alta** con `addProductAction` precargada (nombre/SKU/fotos/link de la línea), nace con `activationStatus: 'borrador'`. Aquí se confirma o detalla el desglose por variantes.
 6. Avanza estados: línea → `almacenada`, OC → `recibida`/`recibida_parcial`.
 
 **UI/código nuevo:** `src/app/logistics/recepciones/` + `src/app/actions/receptions.ts`.
 
 ### Fase 3 — Liquidación (landed cost) — la más barata, ~90 % reuso
 
-- Pantalla `/compras/ordenes/[id]/liquidacion` (roles `admin`, `compras`): tabla SKU × costo final digitado desde el Excel de Groupack; muestra el **delta vs `unitCostEstimated`**.
+- Pantalla `/compras/ordenes/[id]/liquidacion` (roles `admin`, `coordinacion`): tabla SKU × costo final digitado desde el Excel de Groupack; muestra el **delta vs `unitCostEstimated`**.
 - Al confirmar: `unitCostFinal` en líneas, estados → `liquidada`, y alimenta `previewCostPriceUpdateAction` / `applyCostPriceUpdateAction` (`src/app/actions/products.ts`) que ya actualizan `cost` y recalculan precios con preview de conflictos.
 - Si el costo cambió en un reabastecimiento, el delta de precios queda como insumo del remarketing (fase 5).
 

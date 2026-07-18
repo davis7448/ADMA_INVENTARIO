@@ -111,7 +111,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate, warehouse
                                     <SelectItem value="logistics">Logística</SelectItem>
                                     <SelectItem value="commercial">Comercial</SelectItem>
                                     <SelectItem value="commercial_director">Director Comercial</SelectItem>
-                                    <SelectItem value="compras">Compras</SelectItem>
+                                    <SelectItem value="coordinacion">Coordinación Operativa</SelectItem>
                                     <SelectItem value="marketing">Marketing</SelectItem>
                                     <SelectItem value="consulta">Consulta</SelectItem>
                                 </SelectContent>
@@ -236,7 +236,7 @@ function UserRow({ user, onUsersUpdate, warehouses }: { user: User; onUsersUpdat
                         <SelectItem value="logistics">Logística</SelectItem>
                         <SelectItem value="commercial">Comercial</SelectItem>
                         <SelectItem value="commercial_director">Director Comercial</SelectItem>
-                        <SelectItem value="compras">Compras</SelectItem>
+                        <SelectItem value="coordinacion">Coordinación Operativa</SelectItem>
                         <SelectItem value="marketing">Marketing</SelectItem>
                         <SelectItem value="consulta">Consulta</SelectItem>
                     </SelectContent>

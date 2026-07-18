@@ -78,7 +78,7 @@ export default async function ProductsPage({
     if (externalWarehouseId && externalProductIds !== undefined && externalProductIds.length === 0) {
         return (
             <Suspense>
-                <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'commercial_director', 'plataformas', 'logistics', 'mercado_libre', 'compras', 'marketing']}>
+                <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'commercial_director', 'plataformas', 'logistics', 'mercado_libre', 'coordinacion', 'marketing']}>
                     <ProductsContent
                         initialProducts={[]}
                         totalPages={1}
@@ -165,7 +165,7 @@ export default async function ProductsPage({
 
     return (
       <Suspense>
-        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'commercial_director', 'plataformas', 'logistics', 'mercado_libre', 'compras', 'marketing']}>
+        <AuthProviderWrapper allowedRoles={['admin', 'commercial', 'commercial_director', 'plataformas', 'logistics', 'mercado_libre', 'coordinacion', 'marketing']}>
           <ProductsContent
             initialProducts={productsWithRotation}
             totalPages={productsResult.totalPages}

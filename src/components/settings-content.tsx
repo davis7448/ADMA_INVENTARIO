@@ -171,8 +171,8 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
              <EntryReasonsManagement initialEntryReasons={initialEntryReasons} />
           )}
 
-          {(isAdmin || user?.role === 'compras') && (
-            <ImportTariffManagement canEdit={isAdmin || user?.role === 'compras'} />
+          {(isAdmin || user?.role === 'coordinacion') && (
+            <ImportTariffManagement canEdit={isAdmin || user?.role === 'coordinacion'} />
           )}
 
           <Card>

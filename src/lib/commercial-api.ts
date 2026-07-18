@@ -424,7 +424,7 @@ export const getProductsForCatalog = async (): Promise<Product[]> => {
                 // purchaseDate is often a string in this codebase, but let's be safe
                 purchaseDate: data.purchaseDate // assuming string ISO
             } as Product;
-        }).filter(product => product.visibility !== 'privado');
+        });
     } catch (error) {
         console.error("Error fetching catalog products:", error);
         return [];
