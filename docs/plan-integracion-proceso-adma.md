@@ -35,6 +35,21 @@ Documentación de mercancía por llegar (OC con SKU)
 | Roles | Xiomara (coordinadora operativa) → rol nuevo `coordinacion` · Josué → rol nuevo `marketing` · Kristal → `logistics` (existente) · procesa activaciones → `plataformas`. |
 | Variantes | Las OC pueden venir por variante con SKU o por producto general; **el detalle se confirma en bodega** al recibir. El modelo soporta ambos. |
 
+## 2.1 Enfoque: flujo documentado + KPIs
+
+Esto es un software de inventario: no hay "catálogo interno" ni vitrina. El objetivo de los módulos es **documentar el flujo real de la operación y conectarlo de punta a punta** para poder medirlo. KPIs que habilita el modelo de datos:
+
+| KPI | Fuente |
+|---|---|
+| Tiempo de tránsito (documentada → recibida) y tiempo total (documentada → activada) | timestamps de estados en `purchaseOrderItems` |
+| Exactitud de recepción: % líneas con discrepancia, unidades esperadas vs contadas | `receptionItems` (match, counted vs expected) |
+| Precisión del costeo: costo estimado (tarifa × CBM) vs costo final liquidado | `unitCostEstimated` vs `unitCostFinal` |
+| Velocidad de contenido: líneas con contenido listo antes del arribo | `contentStatus` vs fecha de recepción |
+| Tiempo de activación: recibido → item creado en plataforma | `activationStatus`/modificaciones `CREACION_ITEM` |
+| Entradas por tipo: unidades nuevas vs reabastecimiento (por periodo, por proveedor) | `inventoryMovements.entryType` |
+| Difusión: ofertas por producto/categoría/comercial/canal y su outcome | `productPromotions` |
+| Comportamiento de clientes: activados nuevos, reactivados, sin oferta reciente | `client_events` + `productPromotions` |
+
 ## 3. Fases
 
 ### Fase 0 — Fundamentos (prerequisito corto) ✅ implementada

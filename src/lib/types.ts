@@ -109,6 +109,51 @@ export type ReturnRequest = {
 
 export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre' | 'coordinacion' | 'marketing';
 
+// --- Mercancía por llegar (órdenes de compra) ---
+
+export type PurchaseOrderStatus = 'documentada' | 'en_transito' | 'recibida_parcial' | 'recibida' | 'liquidada' | 'cerrada';
+
+export type PurchaseOrder = {
+  id: string;
+  orderNumber: string; // OC-YYYY-NNN
+  supplierId?: string;
+  groupackRef?: string; // referencia manual a Groupack (cotización/contenedor)
+  warehouseId?: string; // bodega destino
+  status: PurchaseOrderStatus;
+  estimatedArrivalDate?: string;
+  notes?: string;
+  createdBy: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PurchaseOrderItemStatus = 'documentada' | 'en_transito' | 'recibida' | 'almacenada' | 'liquidada' | 'activada';
+
+export type PurchaseOrderItem = {
+  id: string;
+  purchaseOrderId: string;
+  sku: string;
+  productName: string;
+  productId?: string | null; // null = producto nuevo por crear en recepción
+  variantId?: string;
+  entryType: 'nuevo' | 'reabastecimiento';
+  expectedUnits: number;
+  expectedBoxes?: number;
+  unitsPerBox?: number;
+  cbmPerUnit?: number; // volumen unitario en m³
+  productCost?: number; // costo del producto (sin importación)
+  unitCostEstimated?: number; // productCost + tarifa × cbmPerUnit
+  inspectionPhotos: string[]; // fotos de inspección en origen (pre-arribo)
+  contentLink?: string; // link Drive de contenido publicitario
+  contentStatus: 'pendiente' | 'en_proceso' | 'listo';
+  unitCostFinal?: number; // se llena en liquidación (fase 3)
+  status: PurchaseOrderItemStatus;
+  receivedUnits?: number; // se llena en recepción (fase 2)
+  receivedBoxes?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 // Tarifa de importación por defecto (COP por m³) para costo estimado de mercancía por llegar
 export const DEFAULT_IMPORT_TARIFF_PER_CBM = 2_200_000;
 
