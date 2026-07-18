@@ -158,6 +158,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [sku, setSku] = useState('');
     const [productName, setProductName] = useState('');
     const [variable, setVariable] = useState('');
+    const [pickedVariants, setPickedVariants] = useState<Array<{ id: string; name: string; sku: string; priceDropshipping?: number }>>([]);
     const [productId, setProductId] = useState<string | null>(null);
     const [enlaceDrive, setEnlaceDrive] = useState('');
     const [plataforma, setPlataforma] = useState('');
@@ -171,13 +172,28 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [idPlataforma, setIdPlataforma] = useState('');
     const [observaciones, setObservaciones] = useState('');
 
-    const handleProductPick = (product: { id: string; name: string; sku?: string; contentLink?: string; priceDropshipping?: number }) => {
+    const handleProductPick = (product: { id: string; name: string; sku?: string; contentLink?: string; priceDropshipping?: number; productType?: string; variants?: Array<{ id: string; name: string; sku: string; priceDropshipping?: number }> }) => {
         setProductId(product.id);
         setProductName(product.name);
         setSku(product.sku || '');
+        setVariable('');
+        setPickedVariants(product.productType === 'variable' ? (product.variants || []) : []);
         if (product.contentLink) setEnlaceDrive(product.contentLink);
         if (product.priceDropshipping) setPrecio(String(product.priceDropshipping));
         toast({ title: 'Producto vinculado', description: product.name });
+    };
+
+    const handleVariantPick = (variantId: string) => {
+        if (variantId === 'todas') {
+            setVariable('');
+            return;
+        }
+        const variant = pickedVariants.find(v => v.id === variantId);
+        if (variant) {
+            setVariable(variant.name);
+            setSku(variant.sku);
+            if (variant.priceDropshipping) setPrecio(String(variant.priceDropshipping));
+        }
     };
 
     const handleSubmit = async () => {
@@ -296,8 +312,26 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                     <Input id="sol-sku" value={sku} onChange={e => { setSku(e.target.value); setProductId(null); }} className="mt-1" placeholder="Se llena solo al elegir producto" />
                 </div>
                 <div className="col-span-2">
-                    <Label htmlFor="sol-variable">Variable / variante <span className="text-muted-foreground">(color, talla, presentación…)</span></Label>
-                    <Input id="sol-variable" value={variable} onChange={e => setVariable(e.target.value)} className="mt-1" placeholder="Ej: Grado 2.0 / Talla M / x2 unidades" />
+                    <Label htmlFor="sol-variable">¿A qué variante aplica esta solicitud?</Label>
+                    {pickedVariants.length > 0 ? (
+                        <>
+                            <Select onValueChange={handleVariantPick}>
+                                <SelectTrigger className="mt-1"><SelectValue placeholder="Elige la variante del producto…" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todas">Todas / el producto completo</SelectItem>
+                                    {pickedVariants.map(v => (
+                                        <SelectItem key={v.id} value={v.id}>{v.name} — SKU {v.sku}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground mt-1">Este producto tiene {pickedVariants.length} variantes registradas. Al elegir una, el SKU y el precio se actualizan solos. Si la solicitud reparte stock entre varias, usa la "Distribución del stock" más abajo.</p>
+                        </>
+                    ) : (
+                        <>
+                            <Input id="sol-variable" value={variable} onChange={e => setVariable(e.target.value)} className="mt-1" placeholder="Déjalo vacío si aplica al producto completo" />
+                            <p className="text-xs text-muted-foreground mt-1">Solo si el producto tiene presentaciones distintas: escribe cuál aplica (ej: "Grado 2.0", "Talla M", "Combo x2"). Si aplica a todas, déjalo vacío.</p>
+                        </>
+                    )}
                 </div>
                 <div>
                     <Label>Plataforma *</Label>
