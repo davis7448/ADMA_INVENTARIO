@@ -39,3 +39,13 @@ env:
      secret: GMAIL_APP_PASSWORD
      availability:
        - RUNTIME
+
+   - variable: CLICKUP_API_TOKEN
+     secret: CLICKUP_API_TOKEN
+     availability:
+       - RUNTIME
+
+   - variable: CLICKUP_WEBHOOK_SECRETS
+     secret: CLICKUP_WEBHOOK_SECRETS
+     availability:
+       - RUNTIME

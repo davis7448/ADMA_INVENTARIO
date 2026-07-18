@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { createSolicitud, getSolicitudesByEmail, type EstadoSolicitud, type Modificacion, type TipoModificacion } from '@/app/actions/modificaciones';
+import { syncSolicitudToClickUpAction } from '@/app/actions/clickup';
 import { findProductBySkuAction } from '@/app/actions/purchase-orders';
 import type { Platform, Warehouse } from '@/lib/types';
 import { format } from 'date-fns';
@@ -156,6 +157,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [tipo, setTipo] = useState<'CREACION_ITEM' | 'AJUSTE' | 'SUMA'>('CREACION_ITEM');
     const [sku, setSku] = useState('');
     const [productName, setProductName] = useState('');
+    const [variable, setVariable] = useState('');
     const [productId, setProductId] = useState<string | null>(null);
     const [enlaceDrive, setEnlaceDrive] = useState('');
     const [plataforma, setPlataforma] = useState('');
@@ -210,11 +212,11 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
 
         setIsSaving(true);
         try {
-            await createSolicitud({
+            const solicitudId = await createSolicitud({
                 FECHA: Date.now(),
                 ID: idPlataforma.trim() ? Number(idPlataforma) || null : null,
                 PRODUCTO: productName.trim(),
-                VARIABLE: null,
+                VARIABLE: variable.trim() || null,
                 'SKU ': sku.trim() || null,
                 'PRECIO ': precio ? Number(precio) : null,
                 PLATAFORMA: plataforma,
@@ -237,7 +239,14 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 solicitadoPor: { id: user.id, name: user.name, email: user.email },
             } as Omit<Modificacion, 'ID CONSECUTIVO'>);
 
-            toast({ title: '¡Solicitud enviada!', description: 'Quedó pendiente para el equipo de plataformas.' });
+            // Crear la tarea espejo en ClickUp (si falla, el cron de respaldo la reintenta)
+            const sync = await syncSolicitudToClickUpAction(solicitudId);
+            toast({
+                title: '¡Solicitud enviada!',
+                description: sync.success
+                    ? 'Quedó pendiente para el equipo de plataformas (sincronizada con ClickUp).'
+                    : 'Quedó pendiente en ADMA; la sincronización con ClickUp se reintentará automáticamente.',
+            });
             onCreated();
         } catch (error) {
             toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo crear la solicitud.', variant: 'destructive' });
@@ -277,6 +286,10 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 <div className="col-span-2">
                     <Label htmlFor="sol-name">Nombre del producto *</Label>
                     <Input id="sol-name" value={productName} onChange={e => setProductName(e.target.value)} className="mt-1" />
+                </div>
+                <div className="col-span-2">
+                    <Label htmlFor="sol-variable">Variable / variante <span className="text-muted-foreground">(color, talla, presentación…)</span></Label>
+                    <Input id="sol-variable" value={variable} onChange={e => setVariable(e.target.value)} className="mt-1" placeholder="Ej: Grado 2.0 / Talla M / x2 unidades" />
                 </div>
                 <div>
                     <Label>Plataforma *</Label>

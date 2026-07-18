@@ -45,6 +45,9 @@ export type Modificacion = {
     OBSERVACIONES?: string;
     motivoRechazo?: string;
     solicitadoPor?: { id: string; name: string; email?: string };
+    // Puente con ClickUp (fase 4b)
+    clickupTaskId?: string;
+    clickupSync?: 'synced' | 'error' | 'pending';
 };
 
 const MODIFICACIONES_EDIT_ROLES = new Set(['admin', 'plataformas']);
