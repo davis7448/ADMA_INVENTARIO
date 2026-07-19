@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CommercialClient } from '@/types/commercial';
+import { useEffect, useState } from 'react';
 import { getStatusLabel } from '@/lib/crm-metrics';
-import { daysSinceLastContact, getClientVolume } from '@/lib/client-volume';
+import { DEFAULT_CRM_CONFIG, daysSinceLastContact, getClientVolume, loadCrmConfig, type CrmConfig } from '@/lib/client-volume';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 const columns: { id: string; label: string }[] = [
@@ -21,6 +22,8 @@ type CrmKanbanBoardProps = {
 };
 
 export default function CrmKanbanBoard({ clients, onDragEnd }: CrmKanbanBoardProps) {
+    const [crmConfig, setCrmConfig] = useState<CrmConfig>(DEFAULT_CRM_CONFIG);
+    useEffect(() => { loadCrmConfig().then(setCrmConfig); }, []);
     return (
         <DragDropContext onDragEnd={onDragEnd}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-[calc(100vh-320px)] overflow-x-auto">
@@ -58,14 +61,14 @@ export default function CrmKanbanBoard({ clients, onDragEnd }: CrmKanbanBoardPro
                                                                         <Badge variant="outline" className="text-[10px] h-5">{client.category}</Badge>
                                                                         <Badge variant="outline" className="text-[10px] h-5">{client.type}</Badge>
                                                                         {(() => {
-                                                                            const volume = getClientVolume(client);
+                                                                            const volume = getClientVolume(client, crmConfig);
                                                                             const days = daysSinceLastContact(client);
                                                                             return (
                                                                                 <>
                                                                                     {volume.tier !== 'Nuevo' && (
                                                                                         <Badge variant={volume.tier === 'A' ? 'default' : 'secondary'} className="text-[10px] h-5">Vol. {volume.tier}</Badge>
                                                                                     )}
-                                                                                    {days !== null && days >= 15 && (
+                                                                                    {days !== null && days >= crmConfig.warnDays && (
                                                                                         <Badge variant="destructive" className="text-[10px] h-5">{days}d sin contacto</Badge>
                                                                                     )}
                                                                                 </>

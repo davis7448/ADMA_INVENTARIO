@@ -1,20 +1,23 @@
 "use client";
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { daysSinceLastContact, getClientVolume } from '@/lib/client-volume';
+import { DEFAULT_CRM_CONFIG, daysSinceLastContact, getClientVolume, loadCrmConfig, type CrmConfig } from '@/lib/client-volume';
 import type { CommercialClient } from '@/types/commercial';
 import { AlertTriangle, BellRing } from 'lucide-react';
 
-const WARN_DAYS = 15;
-const ALERT_DAYS = 30;
-
 // Alertas de seguimiento: clientes sin contacto reciente (oferta, pedido o nota),
-// priorizando los de mayor volumen.
+// priorizando los de mayor volumen. Umbrales configurables en Ajustes.
 export function FollowUpAlerts({ clients }: { clients: CommercialClient[] }) {
+    const [config, setConfig] = useState<CrmConfig>(DEFAULT_CRM_CONFIG);
+    useEffect(() => { loadCrmConfig().then(setConfig); }, []);
+    const WARN_DAYS = config.warnDays;
+    const ALERT_DAYS = config.alertDays;
+
     const stale = clients
-        .map(client => ({ client, days: daysSinceLastContact(client), volume: getClientVolume(client) }))
+        .map(client => ({ client, days: daysSinceLastContact(client), volume: getClientVolume(client, config) }))
         .filter(x => x.days !== null && x.days >= WARN_DAYS)
         .sort((a, b) => {
             // Primero mayor volumen, luego más días sin contacto

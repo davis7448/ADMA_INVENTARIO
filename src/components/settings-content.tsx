@@ -25,6 +25,7 @@ import { EntryReasonsManagement } from './entry-reasons-management';
 import { WarehouseManagement } from './warehouse-management';
 import { LocationManagement } from './location-management';
 import { ImportTariffManagement } from './import-tariff-management';
+import { CrmConfigManagement } from './crm-config-management';
 import { reconcileCancelledExceptions } from '@/app/actions/data-reconciliation';
 
 interface SettingsContentProps {
@@ -173,6 +174,10 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
 
           {(isAdmin || user?.role === 'coordinacion') && (
             <ImportTariffManagement canEdit={isAdmin || user?.role === 'coordinacion'} />
+          )}
+
+          {(isAdmin || user?.role === 'commercial_director') && (
+            <CrmConfigManagement canEdit={isAdmin || user?.role === 'commercial_director'} />
           )}
 
           <Card>
