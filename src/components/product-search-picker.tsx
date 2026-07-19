@@ -16,6 +16,7 @@ export type ProductPick = {
     priceDropshipping?: number;
     productType?: 'simple' | 'variable';
     variants?: Product['variants'];
+    categoryId?: string;
 };
 
 // Buscador de productos por nombre o SKU con desplegable y vista previa.
@@ -57,7 +58,7 @@ export function ProductSearchPicker({ onSelect, placeholder }: {
                 setResults((data.products || []).map((p: any) => ({
                     id: p.id, name: p.name, sku: p.sku, imageUrl: p.imageUrl, stock: p.stock,
                     contentLink: p.contentLink, priceDropshipping: p.priceDropshipping,
-                    productType: p.productType, variants: p.variants,
+                    productType: p.productType, variants: p.variants, categoryId: p.categoryId,
                 })));
                 setIsOpen(true);
             } catch {

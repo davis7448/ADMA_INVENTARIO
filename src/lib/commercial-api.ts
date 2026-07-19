@@ -557,7 +557,7 @@ export const deleteClientTest = async (testId: string): Promise<void> => {
 export interface ClientEvent {
     id: string;
     clientId: string;
-    type: 'status_change' | 'edit' | 'note' | 'order' | 'registered' | 'testing';
+    type: 'status_change' | 'edit' | 'note' | 'order' | 'registered' | 'testing' | 'promotion';
     description: string;
     details?: string;
     event_number: number;
