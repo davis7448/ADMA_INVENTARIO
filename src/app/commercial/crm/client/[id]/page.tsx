@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Pencil, TestTube, FileText, Trash2, Check, ChevronsUpDown } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Pencil, TestTube, FileText, Trash2, Check, ChevronsUpDown, Megaphone } from 'lucide-react';
+import { ClientOffersTab } from '@/components/commercial/client-offers-tab';
 import Link from 'next/link';
 import { getClientById, updateClient, addNoteToClient, addOrderToClient, addTestToClient, getProductsWithStock, type ProductForOrder } from '@/lib/commercial-api';
 import { Label } from '@/components/ui/label';
@@ -493,7 +494,14 @@ export default function ClientDetailPage() {
                             <TabsTrigger value="tests" className="gap-2">
                                 <TestTube className="h-4 w-4" /> Testeos
                             </TabsTrigger>
+                            <TabsTrigger value="offers" className="gap-2">
+                                <Megaphone className="h-4 w-4" /> Ofertas
+                            </TabsTrigger>
                         </TabsList>
+
+                        <TabsContent value="offers">
+                            <ClientOffersTab client={client} />
+                        </TabsContent>
                         
                         {/* Pestaña de Notas */}
                         <TabsContent value="notes" className="space-y-4 pt-4">

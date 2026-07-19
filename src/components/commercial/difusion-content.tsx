@@ -19,7 +19,7 @@ import {
     PROMOTION_CHANNEL_LABELS, PROMOTION_TYPE_LABELS, PROMOTION_OUTCOME_LABELS,
     type ProductPromotion, type PromotionChannel, type PromotionOutcome, type PromotionType,
 } from '@/app/actions/promotions';
-import { getAllClients } from '@/lib/commercial-api';
+import { checkClientExists, createClient, getAllClients } from '@/lib/commercial-api';
 import type { CommercialClient } from '@/types/commercial';
 import { ProductSearchPicker, type ProductPick } from '@/components/product-search-picker';
 import { format } from 'date-fns';
@@ -140,6 +140,10 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
     const [clientSearch, setClientSearch] = useState('');
     const [selected, setSelected] = useState<Record<string, boolean>>({});
     const [historyClients, setHistoryClients] = useState<Array<{ id: string; name: string; status?: string; source: string }>>([]);
+    // Crear cliente al vuelo cuando no existe en el CRM
+    const [showNewClient, setShowNewClient] = useState(false);
+    const [isCreatingClient, setIsCreatingClient] = useState(false);
+    const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', city: '' });
 
     useEffect(() => {
         if (!user) return;
@@ -167,6 +171,48 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
     const selectedCount = Object.values(selected).filter(Boolean).length;
 
     const toggleClient = (id: string) => setSelected(prev => ({ ...prev, [id]: !prev[id] }));
+
+    const handleCreateClient = async () => {
+        if (!user) return;
+        if (!newClient.name.trim() || !newClient.email.trim() || !newClient.phone.trim()) {
+            toast({ title: 'Error', description: 'Nombre, correo y teléfono son obligatorios.', variant: 'destructive' });
+            return;
+        }
+        setIsCreatingClient(true);
+        try {
+            const exists = await checkClientExists(newClient.email.trim(), newClient.phone.trim());
+            if (exists?.exists) {
+                const assigned = exists.client?.assigned_commercial_name;
+                toast({ title: 'Ya existe', description: `Este cliente ya está registrado${assigned ? ` (asignado a ${assigned})` : ''}. Búscalo en la lista.`, variant: 'destructive' });
+                return;
+            }
+            const id = await createClient({
+                name: newClient.name.trim(),
+                email: newClient.email.trim(),
+                phone: newClient.phone.trim(),
+                city: newClient.city.trim() || '—',
+                category: 'laboratorio',
+                type: 'mixto',
+                avg_sales: 0,
+                status: 'finding_winner',
+                assigned_commercial_id: user.id,
+                assigned_commercial_name: user.name,
+                birthday: new Date(),
+                created_at: new Date(),
+            } as CommercialClient, { id: user.id, name: user.name });
+
+            const created = { id, name: newClient.name.trim(), email: newClient.email.trim(), phone: newClient.phone.trim() } as CommercialClient;
+            setClients(prev => [created, ...prev]);
+            setSelected(prev => ({ ...prev, [id]: true }));
+            setShowNewClient(false);
+            setNewClient({ name: '', email: '', phone: '', city: '' });
+            toast({ title: 'Cliente creado', description: `${created.name} quedó registrado en el CRM y seleccionado.` });
+        } catch (error) {
+            toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo crear el cliente.', variant: 'destructive' });
+        } finally {
+            setIsCreatingClient(false);
+        }
+    };
 
     const selectHistoryClients = () => {
         setSelected(prev => {
@@ -269,7 +315,26 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
                 </div>
 
                 <div>
-                    <Label>Clientes a los que ofertaste * <span className="text-muted-foreground font-normal">({selectedCount} seleccionados)</span></Label>
+                    <div className="flex items-center justify-between">
+                        <Label>Clientes a los que ofertaste * <span className="text-muted-foreground font-normal">({selectedCount} seleccionados)</span></Label>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setShowNewClient(!showNewClient)}>
+                            {showNewClient ? 'Cancelar' : '+ Nuevo cliente'}
+                        </Button>
+                    </div>
+                    {showNewClient && (
+                        <div className="border rounded-lg p-3 mt-2 mb-2 space-y-2 bg-muted/30">
+                            <p className="text-sm font-medium">Cliente nuevo (queda registrado en el CRM, asignado a ti)</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Input placeholder="Nombre *" value={newClient.name} onChange={e => setNewClient(p => ({ ...p, name: e.target.value }))} className="h-9" />
+                                <Input placeholder="Correo *" type="email" value={newClient.email} onChange={e => setNewClient(p => ({ ...p, email: e.target.value }))} className="h-9" />
+                                <Input placeholder="Teléfono *" value={newClient.phone} onChange={e => setNewClient(p => ({ ...p, phone: e.target.value }))} className="h-9" />
+                                <Input placeholder="Ciudad" value={newClient.city} onChange={e => setNewClient(p => ({ ...p, city: e.target.value }))} className="h-9" />
+                            </div>
+                            <Button type="button" size="sm" onClick={handleCreateClient} disabled={isCreatingClient}>
+                                {isCreatingClient ? 'Creando…' : 'Crear y seleccionar'}
+                            </Button>
+                        </div>
+                    )}
                     <Input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Buscar cliente por nombre o correo…" className="mt-1 mb-2" />
                     <div className="border rounded-md max-h-48 overflow-y-auto divide-y">
                         {filteredClients.map(client => (

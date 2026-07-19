@@ -3,8 +3,8 @@
 // fuera. Módulo cliente, mismo patrón que modificaciones.ts.
 import { db } from '@/lib/firebase';
 import {
-    collection, addDoc, getDocs, getDoc, doc, updateDoc,
-    query, where, orderBy, limit,
+    collection, addDoc, getDocs, doc, updateDoc,
+    query, where, limit, serverTimestamp,
 } from 'firebase/firestore';
 import { addClientEvent } from '@/lib/commercial-api';
 
@@ -88,6 +88,13 @@ export async function createPromotions(input: {
         }));
         created++;
 
+        // Una oferta = contacto real: actualiza el último contacto del cliente
+        try {
+            await updateDoc(doc(db, 'clients', client.id), { last_contacted_at: serverTimestamp() });
+        } catch (error) {
+            console.error('No se pudo actualizar last_contacted_at:', error);
+        }
+
         // Evento en la línea de tiempo del cliente (no bloquea si falla)
         try {
             await addClientEvent(
@@ -106,9 +113,10 @@ export async function createPromotions(input: {
     return { created };
 }
 
-export async function getPromotions(options?: { commercialId?: string; max?: number }): Promise<ProductPromotion[]> {
+export async function getPromotions(options?: { commercialId?: string; clientId?: string; max?: number }): Promise<ProductPromotion[]> {
     const constraints = [];
     if (options?.commercialId) constraints.push(where('commercialId', '==', options.commercialId));
+    if (options?.clientId) constraints.push(where('clientId', '==', options.clientId));
     const q = query(collection(db, COLLECTION), ...constraints, limit(options?.max ?? 300));
     const snapshot = await getDocs(q);
     return snapshot.docs
@@ -120,10 +128,13 @@ export async function updatePromotionOutcome(id: string, outcome: PromotionOutco
     await updateDoc(doc(db, COLLECTION, id), { outcome });
 }
 
-// Remarketing asistido: clientes que ya tienen historial con el producto
-// (testeándolo o vendiéndolo en el CRM), para preseleccionarlos al reabastecer.
-export async function getClientsWithProductHistory(productId: string): Promise<Array<{ id: string; name: string; status?: string; source: 'testing' | 'selling' }>> {
-    const results: Array<{ id: string; name: string; status?: string; source: 'testing' | 'selling' }> = [];
+// Remarketing asistido: clientes con historial del producto — lo venden o testean
+// (arrays del CRM, ahora alimentados por pedidos/testeos) o respondieron bien a
+// una oferta anterior (productPromotions con outcome pedido/interesado).
+export type ClientHistoryHit = { id: string; name: string; status?: string; source: 'selling' | 'testing' | 'oferta_previa' };
+
+export async function getClientsWithProductHistory(productId: string): Promise<ClientHistoryHit[]> {
+    const results: ClientHistoryHit[] = [];
     const seen = new Set<string>();
 
     for (const field of ['products_selling', 'products_testing'] as const) {
@@ -148,5 +159,25 @@ export async function getClientsWithProductHistory(productId: string): Promise<A
             console.error(`Error consultando ${field}:`, error);
         }
     }
+
+    // Ofertas previas con respuesta positiva
+    try {
+        const promoSnap = await getDocs(query(
+            collection(db, COLLECTION),
+            where('productId', '==', productId),
+            limit(200)
+        ));
+        for (const d of promoSnap.docs) {
+            const p = d.data() as ProductPromotion;
+            if (seen.has(p.clientId)) continue;
+            if (p.outcome === 'pedido' || p.outcome === 'interesado') {
+                seen.add(p.clientId);
+                results.push({ id: p.clientId, name: p.clientName, source: 'oferta_previa' });
+            }
+        }
+    } catch (error) {
+        console.error('Error consultando ofertas previas:', error);
+    }
+
     return results;
 }

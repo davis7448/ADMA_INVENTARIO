@@ -2,6 +2,51 @@ export type ClientCategory = 'laboratorio' | 'chino';
 export type ClientType = 'dropshipper' | 'mixto' | 'ecommerce';
 export type ClientStatus = 'finding_winner' | 'testing' | 'selling' | 'scaling';
 
+// Registros embebidos en el doc del cliente (los adjunta transformLegacyClientData)
+export interface ClientNote {
+  id: string;
+  clientId?: string;
+  content: string;
+  created_at: Date | any;
+  created_by?: string;
+  created_by_name?: string;
+}
+
+export interface ClientOrderItem {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  total: number;
+}
+
+export interface ClientOrder {
+  id: string;
+  clientId?: string;
+  items: ClientOrderItem[];
+  total: number;
+  status: string;
+  created_at: Date | any;
+  created_by?: string;
+  created_by_name?: string;
+}
+
+export interface ClientTest {
+  id: string;
+  clientId?: string;
+  product_id?: string;
+  product_name?: string;
+  productId?: string;
+  productName?: string;
+  productSku?: string;
+  platform?: string;
+  status: string;
+  result?: 'positive' | 'negative' | 'neutral' | 'pending';
+  notes?: string;
+  created_at: Date | any;
+  created_by?: string;
+}
+
 export interface CommercialClient {
   id?: string;
   name: string;
@@ -19,13 +64,17 @@ export interface CommercialClient {
   assigned_commercial_name?: string; // Nombre del comercial para mostrar
   products_testing?: string[];
   products_selling?: string[];
-  notes?: string; // Notas del cliente
+  notes?: any; // Legacy: string; en runtime transformLegacyClientData adjunta ClientNote[]
   history?: any[]; // Legacy field - now uses client_events collection
   last_event_number?: number; // Track event numbering for ordering
+  last_contacted_at?: Date | any; // Último contacto real (oferta, pedido o nota)
   created_by?: string; // ID del usuario que realmente registró el cliente
   created_by_name?: string; // Nombre denormalizado del creador (para métricas)
   created_at: Date | any;
   updated_at?: Date | any;
+  // Poblados en runtime por transformLegacyClientData (embebidos en el doc)
+  orders?: ClientOrder[];
+  tests?: ClientTest[];
 }
 
 export type ChallengeType = 'daily' | 'monthly';

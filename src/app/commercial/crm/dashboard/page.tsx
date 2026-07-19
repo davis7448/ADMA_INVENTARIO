@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, Filter, Upload, LayoutGrid, BarChart3 } from 'lucide-react';
+import { Plus, Search, Filter, Upload, LayoutGrid, BarChart3, Megaphone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CommercialClient } from '@/types/commercial';
@@ -12,6 +12,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { DropResult } from '@hello-pangea/dnd';
 import CrmKanbanBoard from '@/components/commercial/crm-kanban-board';
 import CrmMetricsView from '@/components/commercial/crm-metrics-view';
+import { DifusionContent } from '@/components/commercial/difusion-content';
+import { FollowUpAlerts } from '@/components/commercial/followup-alerts';
 
 export default function CrmDashboardPage() {
     const { user } = useAuth();
@@ -110,6 +112,9 @@ export default function CrmDashboardPage() {
                     <TabsTrigger value="metrics">
                         <BarChart3 className="mr-2 h-4 w-4" /> Métricas
                     </TabsTrigger>
+                    <TabsTrigger value="difusion">
+                        <Megaphone className="mr-2 h-4 w-4" /> Difusión
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="board" className="space-y-4">
@@ -134,6 +139,11 @@ export default function CrmDashboardPage() {
 
                 <TabsContent value="metrics">
                     <CrmMetricsView clients={clients} isDirector={isDirector} />
+                </TabsContent>
+
+                <TabsContent value="difusion" className="space-y-4">
+                    <FollowUpAlerts clients={clients} />
+                    <DifusionContent />
                 </TabsContent>
             </Tabs>
         </div>

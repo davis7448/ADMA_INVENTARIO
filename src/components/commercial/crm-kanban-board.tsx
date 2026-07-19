@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CommercialClient } from '@/types/commercial';
 import { getStatusLabel } from '@/lib/crm-metrics';
+import { daysSinceLastContact, getClientVolume } from '@/lib/client-volume';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 const columns: { id: string; label: string }[] = [
@@ -56,6 +57,20 @@ export default function CrmKanbanBoard({ clients, onDragEnd }: CrmKanbanBoardPro
                                                                     <div className="flex flex-wrap gap-1 mt-2">
                                                                         <Badge variant="outline" className="text-[10px] h-5">{client.category}</Badge>
                                                                         <Badge variant="outline" className="text-[10px] h-5">{client.type}</Badge>
+                                                                        {(() => {
+                                                                            const volume = getClientVolume(client);
+                                                                            const days = daysSinceLastContact(client);
+                                                                            return (
+                                                                                <>
+                                                                                    {volume.tier !== 'Nuevo' && (
+                                                                                        <Badge variant={volume.tier === 'A' ? 'default' : 'secondary'} className="text-[10px] h-5">Vol. {volume.tier}</Badge>
+                                                                                    )}
+                                                                                    {days !== null && days >= 15 && (
+                                                                                        <Badge variant="destructive" className="text-[10px] h-5">{days}d sin contacto</Badge>
+                                                                                    )}
+                                                                                </>
+                                                                            );
+                                                                        })()}
                                                                     </div>
 
                                                                     {client.assigned_commercial_name && (

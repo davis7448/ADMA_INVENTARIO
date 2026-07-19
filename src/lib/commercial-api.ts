@@ -1995,9 +1995,10 @@ export const addNoteToClient = async (clientId: string, content: string): Promis
         };
         
         notes.push(newNote);
-        
+
         await updateDoc(clientRef, {
             notes,
+            last_contacted_at: serverTimestamp(),
             updated_at: serverTimestamp()
         });
         
@@ -2047,12 +2048,16 @@ export const addOrderToClient = async (
         };
         
         orders.push(newOrder);
-        
+
+        const orderedProductIds = items.map(i => i.product_id).filter(Boolean);
         await updateDoc(clientRef, {
             orders,
+            // Un pedido = contacto real + el producto "le funciona" (alimenta remarketing)
+            last_contacted_at: serverTimestamp(),
+            ...(orderedProductIds.length > 0 ? { products_selling: arrayUnion(...orderedProductIds) } : {}),
             updated_at: serverTimestamp()
         });
-        
+
         return newOrder.id;
     } catch (error) {
         console.error("Error adding order to client:", error);
@@ -2113,11 +2118,14 @@ export const addTestToClient = async (
             throw new Error("No hay productos válidos para crear el test");
         }
         
+        const testedProductIds = items.map(i => i.product_id).filter(Boolean);
         await updateDoc(clientRef, {
             tests,
+            last_contacted_at: serverTimestamp(),
+            ...(testedProductIds.length > 0 ? { products_testing: arrayUnion(...testedProductIds) } : {}),
             updated_at: serverTimestamp()
         });
-        
+
         return newTestIds;
     } catch (error) {
         console.error("Error adding test to client:", error);
