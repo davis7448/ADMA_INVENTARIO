@@ -11,6 +11,7 @@ export type CrmConfig = {
     tierBThreshold: number; // COP en pedidos para ser cliente B
     warnDays: number; // días sin contacto para alerta ámbar
     alertDays: number; // días sin contacto para alerta roja
+    reactivationDays: number; // días sin ventas para que una venta cuente como reactivación
 };
 
 export const DEFAULT_CRM_CONFIG: CrmConfig = {
@@ -18,6 +19,7 @@ export const DEFAULT_CRM_CONFIG: CrmConfig = {
     tierBThreshold: 1_000_000,
     warnDays: 15,
     alertDays: 30,
+    reactivationDays: 45,
 };
 
 export const TIER_LABELS: Record<ClientTier, string> = {
@@ -54,7 +56,11 @@ export async function updateCrmConfig(config: CrmConfig): Promise<void> {
 export function getClientVolume(client: CommercialClient, config: CrmConfig = DEFAULT_CRM_CONFIG): { total: number; ordersCount: number; tier: ClientTier } {
     const orders = Array.isArray(client.orders) ? client.orders : [];
     const ordersTotal = orders.reduce((acc, o) => acc + (Number(o?.total) || 0), 0);
-    const total = ordersTotal > 0 ? ordersTotal : (Number(client.avg_sales) || 0);
+    // Volumen = pedidos × mayor del CRM + ventas de plataforma entregadas (importadas);
+    // si no hay nada registrado, cae al avg_sales manual.
+    const platformTotal = Number((client as any).platform_sales_total) || 0;
+    const combined = ordersTotal + platformTotal;
+    const total = combined > 0 ? combined : (Number(client.avg_sales) || 0);
 
     let tier: ClientTier;
     if (total >= config.tierAThreshold) tier = 'A';

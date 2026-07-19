@@ -70,6 +70,11 @@ export function CrmConfigManagement({ canEdit }: { canEdit: boolean }) {
                         <Label htmlFor="alert-days">Alerta roja: días sin contacto</Label>
                         <Input id="alert-days" type="number" min="2" value={isLoading ? '' : config.alertDays} onChange={set('alertDays')} className="mt-1" disabled={!canEdit || isLoading || isSaving} />
                     </div>
+                    <div>
+                        <Label htmlFor="react-days">Reactivación: días sin ventas</Label>
+                        <Input id="react-days" type="number" min="1" value={isLoading ? '' : config.reactivationDays} onChange={set('reactivationDays')} className="mt-1" disabled={!canEdit || isLoading || isSaving} />
+                        <p className="text-xs text-muted-foreground mt-1">Una venta tras esta pausa se clasifica como reactivación del cliente.</p>
+                    </div>
                 </div>
             </CardContent>
             {canEdit && (
