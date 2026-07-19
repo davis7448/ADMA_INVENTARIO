@@ -1,5 +1,5 @@
 import { app, db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, updateDoc, deleteDoc, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, updateDoc, deleteDoc, limit, runTransaction } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { createReservation, deleteReservation } from '@/lib/api';
 
@@ -205,15 +205,7 @@ export async function createModificacion(data: Omit<Modificacion, 'ID CONSECUTIV
         }
     }
 
-    // Calcular ID consecutivo consultando el máximo global (no acotado por fecha)
-    const maxIdQuery = query(
-        collection(db, 'modificaciones'),
-        orderBy('ID CONSECUTIVO', 'desc'),
-        limit(1)
-    );
-    const maxIdSnap = await getDocs(maxIdQuery);
-    const maxId = maxIdSnap.docs[0]?.data()?.['ID CONSECUTIVO'] || 0;
-    const nuevoIdConsecutivo = maxId + 1;
+    const nuevoIdConsecutivo = await nextConsecutivo();
 
     // Preparar datos para guardar
     const modificacionData = {
@@ -285,10 +277,33 @@ async function getCurrentUserRole(): Promise<{ role: string; email: string } | n
     return role ? { role, email: currentUser.email } : null;
 }
 
+// Consecutivo con contador dedicado. La colección tiene registros históricos con
+// 'ID CONSECUTIVO' corrupto (strings tipo "A1111…"): un max+1 ingenuo concatena
+// en vez de sumar, así que el contador se inicializa solo con valores numéricos sanos.
 async function nextConsecutivo(): Promise<number> {
-    const maxIdQuery = query(collection(db, 'modificaciones'), orderBy('ID CONSECUTIVO', 'desc'), limit(1));
-    const maxIdSnap = await getDocs(maxIdQuery);
-    return (maxIdSnap.docs[0]?.data()?.['ID CONSECUTIVO'] || 0) + 1;
+    const counterRef = doc(db, 'counters', 'modificacionesConsecutivo');
+
+    // Inicialización (solo si el contador no existe): máximo numérico razonable
+    let seed = 0;
+    const counterSnap = await getDoc(counterRef);
+    if (!counterSnap.exists()) {
+        const topSnap = await getDocs(query(collection(db, 'modificaciones'), orderBy('ID CONSECUTIVO', 'desc'), limit(100)));
+        seed = topSnap.docs
+            .map(d => d.data()['ID CONSECUTIVO'])
+            .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 10_000_000)
+            .reduce((a, b) => Math.max(a, b), 0);
+    }
+
+    return runTransaction(db, async (transaction) => {
+        const c = await transaction.get(counterRef);
+        const next = c.exists() ? c.data().currentId + 1 : seed + 1;
+        if (c.exists()) {
+            transaction.update(counterRef, { currentId: next });
+        } else {
+            transaction.set(counterRef, { currentId: next });
+        }
+        return next;
+    });
 }
 
 // Los comerciales crean solicitudes (equivalente al formulario de ClickUp); quedan 'pendiente'.
