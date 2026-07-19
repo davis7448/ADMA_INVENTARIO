@@ -75,7 +75,7 @@ function fieldValue(map: FieldMap, name: string, rawValue: unknown): { id: strin
     if (!field || rawValue === undefined || rawValue === null || rawValue === '') return null;
     if (field.type === 'drop_down') {
         const normalized = normalizeLabel(String(rawValue));
-        let optionId = field.options[normalized];
+        let optionId: string | undefined = field.options[normalized];
         if (!optionId) {
             // Empate por contención: "BODEGA INGENIO" ↔ opción "INGENIO"
             const match = Object.entries(field.options).find(([label]) =>
