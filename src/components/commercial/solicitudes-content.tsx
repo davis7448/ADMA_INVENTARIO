@@ -191,6 +191,8 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [bodega, setBodega] = useState('');
     const [pais, setPais] = useState('COLOMBIA');
     const [stock, setStock] = useState('');
+    // Stock actual del item EN LA PLATAFORMA (distinto al inventario ADMA; se digita manual)
+    const [stockPrevio, setStockPrevio] = useState('');
     const [precio, setPrecio] = useState('');
     const [tipoPrecio, setTipoPrecio] = useState<'DROPSHIPPING' | 'ESPECIAL'>('DROPSHIPPING');
     const [visibilidad, setVisibilidad] = useState<'Publico' | 'Privado'>('Publico');
@@ -242,7 +244,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setSku(''); setProductName(''); setVariable(''); setPickedVariants([]);
         setComboMode(false); setComboNombre(''); setComboUnidades('');
         setProductId(null); setEnlaceDrive(''); setPlataforma(''); setBodega('');
-        setPais('COLOMBIA'); setStock(''); setPrecio(''); setTipoPrecio('DROPSHIPPING');
+        setPais('COLOMBIA'); setStock(''); setStockPrevio(''); setPrecio(''); setTipoPrecio('DROPSHIPPING');
         setVisibilidad('Publico'); setCorreo(''); setIdPlataforma(''); setObservaciones('');
         setImageCount(0);
         setVariantStocks({});
@@ -329,6 +331,13 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     // Correo(s) finales de privatización: el campo único, o los de los repartos privados
     const correoFinal = correo.trim() || (correosDeRepartos.length > 0 ? correosDeRepartos.join(', ') : '');
 
+    // Cantidades: previa (manual, stock del item en la plataforma) → solicitada → posterior (calculada)
+    const cantidadSolicitada = esRetiro ? 0 : usaStockPorVariante ? totalVariantes : (stock ? Number(stock) : null);
+    const cantidadPrevia = esCreacion ? 0 : (stockPrevio !== '' ? Number(stockPrevio) : null);
+    const cantidadPosterior = esRetiro ? 0
+        : tipo === 'SUMA' ? (cantidadPrevia !== null && cantidadSolicitada !== null ? cantidadPrevia + cantidadSolicitada : null)
+        : cantidadSolicitada; // CREACION y AJUSTE dejan el stock en el valor solicitado
+
     // Objeto parcial para la vista previa de la instrucción (paso 4)
     const solicitudPreview: Partial<Modificacion> = {
         'CANTIDAD SOLICITADA': esRetiro ? 0 : usaStockPorVariante ? totalVariantes : (stock ? Number(stock) : null),
@@ -372,9 +381,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 'CORREO_CODIGO': correoFinal || null,
                 CREADO: 'NO',
                 SOLICITUD: (esCreacion || tipo === 'SUMA') ? 'SUMA' : 'AJUSTE',
-                'CANTIDAD PREVIA': null,
-                'CANTIDAD SOLICITADA': esRetiro ? 0 : usaStockPorVariante ? totalVariantes : (stock ? Number(stock) : null),
-                'CANTIDAD POSTERIOR': null,
+                'CANTIDAD PREVIA': cantidadPrevia,
+                'CANTIDAD SOLICITADA': cantidadSolicitada,
+                'CANTIDAD POSTERIOR': cantidadPosterior,
                 PAIS: pais,
                 tipoModificacion: (esCreacion ? 'CREACION_ITEM' : 'AJUSTE_STOCK') as TipoModificacion,
                 productId: productId || undefined,
@@ -561,6 +570,13 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                                 <Input id="sol-idp" value={idPlataforma} onChange={e => setIdPlataforma(e.target.value)} className="mt-1" placeholder="Ej: 2158539" />
                             </div>
                         )}
+                        {!esCreacion && (
+                            <div>
+                                <Label htmlFor="sol-previo">Stock actual en plataforma</Label>
+                                <Input id="sol-previo" type="number" min="0" value={stockPrevio} onChange={e => setStockPrevio(e.target.value)} className="mt-1" placeholder="El que muestra hoy el item" />
+                                <p className="text-xs text-muted-foreground mt-1">Es el de la plataforma, NO el del inventario ADMA. Sirve para calcular el stock final.</p>
+                            </div>
+                        )}
                         {!usaStockPorVariante && (
                             <div>
                                 <Label htmlFor="sol-stock">{comboMode ? 'Nº de paquetes/combos *' : 'Stock'}</Label>
@@ -727,6 +743,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                         <p><span className="text-muted-foreground">Producto:</span> {productName || '—'}{sku ? ` (${sku})` : ''}</p>
                         <p><span className="text-muted-foreground">Plataforma:</span> {plataforma || '—'} · {pais}{bodega ? ` · ${bodega}` : ''}{idPlataforma ? ` · ID ${idPlataforma}` : ''}</p>
                         <p><span className="text-muted-foreground">Stock:</span> {esRetiro ? '0 (retiro)' : usaStockPorVariante ? `${totalVariantes} unds en ${stockPorVariante.length} variante(s)` : (stock || '—')}{comboMode && stock && comboUnidades ? ` paquetes (${Number(stock) * Number(comboUnidades)} unds)` : ''} · <span className="text-muted-foreground">Precio:</span> {precio ? `$${Number(precio).toLocaleString('es-CO')}` : '—'}</p>
+                        <p><span className="text-muted-foreground">Stock en plataforma:</span> {cantidadPrevia ?? '¿?'} → {cantidadSolicitada ?? '—'} solicitadas → <strong>{cantidadPosterior ?? '¿?'} final</strong>{tipo === 'SUMA' && cantidadPrevia === null ? ' (sin stock previo no se puede calcular el final)' : ''}</p>
                         {instruccionGenerada && (
                             <p className="pt-1 border-t mt-2"><span className="text-muted-foreground">Instrucción para plataformas:</span> {instruccionGenerada}</p>
                         )}
