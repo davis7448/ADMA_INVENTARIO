@@ -1,6 +1,6 @@
 # Plan de integración — Proceso ADMA Company en ADMA Inventario
 
-**Fecha:** 2026-07-18 · **Estado:** aprobado por el dueño, pendiente inicio de implementación
+**Fecha:** 2026-07-18 · **Estado:** ✅ TODAS LAS FASES IMPLEMENTADAS EN STAGING (2026-07-19). Extras sobre el plan: puente bidireccional con ClickUp (4b), operaciones estructuradas de observaciones (4c), wizard + imágenes a ClickUp (4d), difusión integrada al CRM con seguimiento/tiers/alertas (5b), y KPIs en `/reporte-proceso` (6). Pendiente: validación del equipo en staging → aprobación → merge a `main` (producción) + re-registro del webhook de ClickUp de producción + rotación del token de ClickUp.
 **Modo de trabajo:** implementación iterativa en **staging** (rama `test` → backend App Hosting `Studio-Staging`). Cada fase se despliega a staging, el dueño la prueba y se pule; el paso a producción (merge a `main`) requiere aprobación explícita. **Regla de oro:** todo cambio va con commit + push a GitHub para permitir reversiones controladas.
 
 ---

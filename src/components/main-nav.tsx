@@ -67,6 +67,7 @@ const navItems: NavItem[] = [
     ],
   },
   { href: '/history', label: 'Historial', roles: ['admin', 'logistics', 'plataformas'] },
+  { href: '/reporte-proceso', label: 'KPIs Proceso', roles: ['admin', 'coordinacion', 'commercial_director', 'plataformas', 'marketing', 'consulta'] },
   {
     label: 'Alertas',
     roles: ['admin', 'logistics', 'commercial', 'plataformas'],
