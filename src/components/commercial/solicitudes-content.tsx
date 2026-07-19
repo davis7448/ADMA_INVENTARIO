@@ -17,6 +17,7 @@ import { createSolicitud, getSolicitudesByEmail, type DistribucionStock, type Es
 import { syncSolicitudToClickUpAction, uploadSolicitudImagesAction } from '@/app/actions/clickup';
 import { buildObservacionesText } from '@/lib/solicitud-text';
 import { ProductSearchPicker } from '@/components/product-search-picker';
+import { SolicitudEvidenceDialog } from '@/components/solicitud-evidence-dialog';
 import type { Platform, Warehouse } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -52,6 +53,7 @@ export function SolicitudesContent({ platforms, warehouses }: SolicitudesContent
     const [solicitudes, setSolicitudes] = useState<(Modificacion & { id: string })[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
+    const [evidenceOf, setEvidenceOf] = useState<(Modificacion & { id: string }) | null>(null);
 
     const load = async () => {
         if (!user?.email) return;
@@ -127,6 +129,12 @@ export function SolicitudesContent({ platforms, warehouses }: SolicitudesContent
                                                 {s.estadoSolicitud === 'rechazado' && s.motivoRechazo && (
                                                     <p className="text-xs text-destructive mt-1 max-w-[200px]">{s.motivoRechazo}</p>
                                                 )}
+                                                {s.estadoSolicitud === 'creado' && s.clickupTaskId && (
+                                                    <Button
+                                                        variant="link" size="sm" className="h-auto p-0 text-xs"
+                                                        onClick={() => setEvidenceOf(s)}
+                                                    >Ver evidencia</Button>
+                                                )}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -140,6 +148,12 @@ export function SolicitudesContent({ platforms, warehouses }: SolicitudesContent
                     )}
                 </CardContent>
             </Card>
+
+            <SolicitudEvidenceDialog
+                modificacionId={evidenceOf?.id || null}
+                productName={evidenceOf?.PRODUCTO || undefined}
+                onClose={() => setEvidenceOf(null)}
+            />
         </div>
     );
 }

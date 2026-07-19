@@ -18,6 +18,7 @@ import { getProducts } from '@/lib/api';
 import { Textarea } from '@/components/ui/textarea';
 import { Download, Loader2, Search, Eye, Pencil, Trash2, Plus, Filter, ClipboardList, BarChart3, ArrowDownUp, XCircle, ChevronDown } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { SolicitudEvidenceDialog } from '@/components/solicitud-evidence-dialog';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
@@ -152,6 +153,7 @@ export function ModificacionesContent() {
     const [sheetOpen, setSheetOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<(Modificacion & { id: string }) | null>(null);
     const [detailItem, setDetailItem] = useState<(Modificacion & { id: string }) | null>(null);
+    const [evidenceOf, setEvidenceOf] = useState<(Modificacion & { id: string }) | null>(null);
 
     // Form state
     const [formData, setFormData] = useState<Partial<Modificacion>>(EMPTY_FORM);
@@ -739,6 +741,13 @@ export function ModificacionesContent() {
                                 {detailItem.OBSERVACIONES && <DetailRow label="Observaciones" value={detailItem.OBSERVACIONES} />}
                                 {detailItem.motivoRechazo && <DetailRow label="Motivo de rechazo" value={detailItem.motivoRechazo} />}
                                 {detailItem.solicitadoPor?.name && <DetailRow label="Solicitado por" value={detailItem.solicitadoPor.name} />}
+                                {detailItem.clickupTaskId && (
+                                    <div className="pt-1">
+                                        <Button variant="outline" size="sm" onClick={() => setEvidenceOf(detailItem)}>
+                                            Ver evidencia de creación (ClickUp)
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                             {(detailItem.tipoModificacion === 'RESERVA_INVENTARIO' || detailItem.reservationId) && (
                                 <>
@@ -971,6 +980,12 @@ export function ModificacionesContent() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <SolicitudEvidenceDialog
+                modificacionId={evidenceOf?.id || null}
+                productName={evidenceOf?.PRODUCTO || undefined}
+                onClose={() => setEvidenceOf(null)}
+            />
         </div>
     );
 }

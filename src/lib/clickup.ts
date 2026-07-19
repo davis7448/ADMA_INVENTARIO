@@ -221,6 +221,27 @@ export async function uploadAttachmentsToTask(taskId: string, files: File[]): Pr
     return { uploaded, errors };
 }
 
+export type ClickUpAttachment = {
+    id: string;
+    title: string;
+    url: string;
+    thumbnailUrl?: string;
+    isImage: boolean;
+};
+
+// Adjuntos de la tarea (evidencia de creación): se leen en vivo desde ClickUp,
+// las imágenes NO se copian a ADMA/Firebase.
+export async function getTaskAttachments(taskId: string): Promise<ClickUpAttachment[]> {
+    const task = await clickupFetch(`/task/${taskId}?include_attachments=true`);
+    return (task.attachments || []).map((a: any) => ({
+        id: a.id,
+        title: a.title || 'adjunto',
+        url: a.url,
+        thumbnailUrl: a.thumbnail_large || a.thumbnail_medium || undefined,
+        isImage: /\.(png|jpe?g|webp|gif|heic)$/i.test(a.title || '') || (a.mimetype || '').startsWith('image/'),
+    }));
+}
+
 // Consulta el estado actual de una tarea (para el cron de respaldo)
 export async function getClickUpTaskStatus(taskId: string): Promise<string | null> {
     try {
