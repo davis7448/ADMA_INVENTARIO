@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Download, Loader2, Search, Eye, Pencil, Trash2, Plus, Filter, ClipboardList, BarChart3, ArrowDownUp, XCircle, ChevronDown } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SolicitudEvidenceDialog } from '@/components/solicitud-evidence-dialog';
+import { buildObservacionesText } from '@/lib/solicitud-text';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
 
@@ -394,26 +395,37 @@ export function ModificacionesContent() {
             const excelData = allData.map(row => ({
                 'Fecha': row.FECHA ? new Date(row.FECHA).toLocaleDateString() : '',
                 'ID': row.ID || '',
-                'Tipo': row.tipoModificacion || '',
+                'Tipo': row.tipoModificacion === 'CREACION_ITEM' ? 'CREACION ITEM' : row.ES_RETIRO ? 'RETIRO' : (row.tipoModificacion || ''),
                 'Producto': row.PRODUCTO || '',
                 'Variable': row.VARIABLE || '',
                 'SKU': row["SKU "] || '',
                 'Precio': row["PRECIO "] || '',
+                'Tipo Precio': row.TIPO_PRECIO || '',
                 'Plataforma': row.PLATAFORMA || '',
                 'Bodega': row.BODEGA || '',
-                'Comercial': row.COMERCIAL || '',
+                'Comercial': row.COMERCIAL || row.solicitadoPor?.name || '',
                 'Código Comercial': row["CODIGO COMERCIAL"] || '',
                 'Privado/Público': row["PRIVADO_PUBLICO"] || '',
                 'Correo/Código': row["CORREO_CODIGO"] || '',
+                'Acción Privatización': row.ACCION_PRIVATIZACION === 'quitar_privatizacion' ? 'QUITAR' : row.ACCION_PRIVATIZACION === 'privatizar' ? 'PRIVATIZAR' : '',
                 'Creado': row.CREADO || '',
                 'Solicitud': row.SOLICITUD || '',
                 'Cantidad Previa': row["CANTIDAD PREVIA"] || '',
-                'Cantidad Solicitada': row["CANTIDAD SOLICITADA"] || '',
+                'Cantidad Solicitada': row["CANTIDAD SOLICITADA"] ?? '',
                 'Cantidad Posterior': row["CANTIDAD POSTERIOR"] || '',
+                'Stock por Variante': (row.STOCK_POR_VARIANTE || []).map(v => `${v.cantidad}→${v.variante}`).join(' | '),
+                'Distribución': (row.DISTRIBUCION || []).map(d => `${d.cantidad}→${d.destino}${d.correo ? `(${d.correo})` : ''}${d.variante ? `[${d.variante}]` : ''}`).join(' | '),
+                'Combo': row.COMBO ? `${row.COMBO.nombre} x${row.COMBO.unidadesPorCombo}` : '',
+                'Enlace Drive': row.ENLACE_DRIVE || '',
+                'Observaciones': row.OBSERVACIONES || '',
+                'Instrucción Plataformas': buildObservacionesText(row),
                 'ID Consecutivo': row["ID CONSECUTIVO"] || '',
                 'País': row.PAIS || '',
                 'ID Reserva': row.reservationId || '',
                 'Estado': row.estadoSolicitud || '',
+                'Motivo Rechazo': row.motivoRechazo || '',
+                'Solicitado Por': row.solicitadoPor?.name || '',
+                'Tarea ClickUp': row.clickupTaskId ? `https://app.clickup.com/t/${row.clickupTaskId}` : '',
             }));
             const ws = XLSX.utils.json_to_sheet(excelData);
             const wb = XLSX.utils.book_new();
@@ -618,7 +630,7 @@ export function ModificacionesContent() {
                                                 </TableCell>
                                                 <TableCell className="text-sm">{row.PAIS || '—'}</TableCell>
                                                 <TableCell className="text-sm truncate max-w-[120px]">{row.PLATAFORMA || '—'}</TableCell>
-                                                <TableCell className="text-sm">{row["CODIGO COMERCIAL"] || row.COMERCIAL || '—'}</TableCell>
+                                                <TableCell className="text-sm">{row.COMERCIAL || row.solicitadoPor?.name || row["CODIGO COMERCIAL"] || '—'}</TableCell>
                                                 <TableCell className="text-center">
                                                     <span className="text-xs text-muted-foreground">{row["CANTIDAD PREVIA"] ?? '—'}</span>
                                                     <span className="text-xs mx-1">→</span>
@@ -741,6 +753,12 @@ export function ModificacionesContent() {
                                 {detailItem.OBSERVACIONES && <DetailRow label="Observaciones" value={detailItem.OBSERVACIONES} />}
                                 {detailItem.motivoRechazo && <DetailRow label="Motivo de rechazo" value={detailItem.motivoRechazo} />}
                                 {detailItem.solicitadoPor?.name && <DetailRow label="Solicitado por" value={detailItem.solicitadoPor.name} />}
+                                {buildObservacionesText(detailItem) && (
+                                    <div className="pt-1">
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Instrucción para plataformas</p>
+                                        <p className="text-sm bg-muted/40 rounded-md p-2">{buildObservacionesText(detailItem)}</p>
+                                    </div>
+                                )}
                                 {detailItem.clickupTaskId && (
                                     <div className="pt-1">
                                         <Button variant="outline" size="sm" onClick={() => setEvidenceOf(detailItem)}>
