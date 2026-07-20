@@ -23,6 +23,8 @@ export type PlatformSale = {
     esEntregado: boolean;
     itemIds: string[];
     total: number;
+    quantity?: number; // unidades reales (si el archivo trae CANTIDAD)
+    itemQuantities?: Record<string, number>; // unidades por item
     // Atribución (se llena con el mapeo)
     clientId?: string;
     clientName?: string;
@@ -69,6 +71,9 @@ export type ParsedRow = {
     estado: string;
     itemIds: string[];
     total: number;
+    quantity?: number; // unidades reales (columna CANTIDAD)
+    itemQuantities?: Record<string, number>;
+    itemInfo?: Record<string, { sku?: string; productName?: string }>; // para auto-mapeo desde el archivo
     clientEmail?: string; // solo si el archivo trae columnas de dropshipper
     clientName?: string;
 };
@@ -132,7 +137,15 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
     const iFecha = find(['FECHA'], ['FECHA'], ['REPORTE', 'NOVEDAD', 'SOLUCION', 'ENTREGADO', 'DEVOLUCION', 'MOVIMIENTO', 'ACLARACION', 'PENDIENTE', 'PROCESAM', 'PRODUCIDA', 'GENERACION', 'TRANSACCION', 'ALISTAMIENTO', 'RECOGIDA', 'PAGO']);
     const iTotal = find(['TOTAL DE LA ORDEN', 'TOTAL VENTA', 'TOTAL ORDEN'], ['TOTAL DE LA ORDEN', 'TOTAL VENTA'], []);
     const iEmail = find(['EMAIL'], ['EMAIL'], ['PROVEEDOR', 'FACTURACION', 'COMPRADOR', 'REFERIDO']);
-    const iDropshipper = find(['DROPSHIPPER', 'TIENDA VENTA'], ['DROPSHIPPER'], ['ID', 'CATEGORIA']);
+    const iDropshipper = find(['DROPSHIPPER', 'TIENDA VENTA'], ['DROPSHIPPER'], ['ID', 'CATEGORIA', 'ORDEN']);
+    // Formato "una fila por producto": PRODUCTO ID + SKU + CANTIDAD dedicados.
+    // OJO: en ese formato EMAIL/NOMBRE CLIENTE son del comprador final, no del
+    // dropshipper → solo se usa EMAIL como cliente si existe columna DROPSHIPPER.
+    const iProductoId = find(['PRODUCTO ID'], [], []);
+    const iSku = find(['SKU'], [], []);
+    const iCantidad = find(['CANTIDAD'], [], ['PRECIO']);
+    const iProductoNombre = find(['PRODUCTO'], [], []);
+    const usarEmail = iDropshipper !== -1;
 
     const faltantes: string[] = [];
     if (iGuia === -1) faltantes.push('número de guía');
@@ -150,8 +163,23 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
         const estado = String(row[iEstado] ?? '').trim().toUpperCase();
         if (!guia || !estado) continue;
 
-        const productosRaw = String(row[iProductos] ?? '');
-        const itemIds = productosRaw.split(/[-,;\s]+/).map(s => s.trim()).filter(s => /^\d{3,}$/.test(s));
+        let itemIds: string[] = [];
+        if (iProductoId !== -1) {
+            const pid = String(row[iProductoId] ?? '').replace(/\.0$/, '').trim();
+            if (/^\d{3,}$/.test(pid)) itemIds = [pid];
+        } else {
+            const productosRaw = String(row[iProductos] ?? '');
+            itemIds = productosRaw.split(/[-,;\s]+/).map(s => s.trim()).filter(s => /^\d{3,}$/.test(s));
+        }
+
+        const qty = iCantidad !== -1 ? (Number(row[iCantidad]) || 1) : undefined;
+        const itemQuantities = qty !== undefined && itemIds.length === 1 ? { [itemIds[0]]: qty } : undefined;
+        const itemInfo = itemIds.length === 1 && (iSku !== -1 || iProductoNombre !== -1) ? {
+            [itemIds[0]]: {
+                sku: iSku !== -1 ? String(row[iSku] ?? '').trim() || undefined : undefined,
+                productName: iProductoNombre !== -1 ? String(row[iProductoNombre] ?? '').trim() || undefined : undefined,
+            }
+        } : undefined;
 
         parsed.push({
             guia,
@@ -159,12 +187,34 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
             estado,
             itemIds,
             total: iTotal !== -1 ? (Number(row[iTotal]) || 0) : 0,
-            clientEmail: iEmail !== -1 ? String(row[iEmail] ?? '').trim().toLowerCase() || undefined : undefined,
+            quantity: qty,
+            itemQuantities,
+            itemInfo,
+            clientEmail: usarEmail && iEmail !== -1 ? String(row[iEmail] ?? '').trim().toLowerCase() || undefined : undefined,
             clientName: iDropshipper !== -1 ? String(row[iDropshipper] ?? '').trim() || undefined : undefined,
         });
     }
-    if (parsed.length === 0) errors.push('No se encontraron filas válidas.');
-    return { parsed, errors };
+
+    // Agrupar por guía (el formato por-producto repite la guía en varias filas)
+    const byGuia = new Map<string, ParsedRow>();
+    for (const row of parsed) {
+        const prev = byGuia.get(row.guia);
+        if (!prev) { byGuia.set(row.guia, row); continue; }
+        for (const id of row.itemIds) if (!prev.itemIds.includes(id)) prev.itemIds.push(id);
+        if (row.itemQuantities) {
+            prev.itemQuantities = prev.itemQuantities || {};
+            for (const [id, q] of Object.entries(row.itemQuantities)) {
+                prev.itemQuantities[id] = (prev.itemQuantities[id] || 0) + q;
+            }
+        }
+        if (row.itemInfo) prev.itemInfo = { ...(prev.itemInfo || {}), ...row.itemInfo };
+        if (row.quantity) prev.quantity = (prev.quantity || 0) + row.quantity;
+        // TOTAL DE LA ORDEN es el mismo en todas las filas de la orden: no se suma
+    }
+    const grouped = Array.from(byGuia.values());
+
+    if (grouped.length === 0) errors.push('No se encontraron filas válidas.');
+    return { parsed: grouped, errors };
 }
 
 // --- Mapeo de items ---
@@ -257,7 +307,30 @@ export async function importPlatformSales(
     progress('Cargando mapeos de items…');
     const mappings = await loadMappings(platform);
     const itemIdsInFile = new Set(parsed.flatMap(p => p.itemIds));
-    const mapeosCreados = await buildMappingsFromSolicitudes(platform, itemIdsInFile, mappings);
+    let mapeosCreados = await buildMappingsFromSolicitudes(platform, itemIdsInFile, mappings);
+
+    // Si el archivo trae SKU/nombre por item (formato por-producto), crear mapeos
+    // de producto para los items que sigan sin mapeo (sin cliente: quedan como
+    // 'desconocido' hasta que una solicitud o un mapeo manual diga si son privados)
+    const fileInfoBatch = writeBatch(db);
+    let fileInfoCount = 0;
+    for (const row of parsed) {
+        for (const [itemId, info] of Object.entries(row.itemInfo || {})) {
+            if (mappings.has(itemId) || (!info.sku && !info.productName)) continue;
+            const mapping: PlatformItemMapping = {
+                platform, itemId, visibility: 'desconocido',
+                sku: info.sku, productName: info.productName, source: 'archivo',
+            };
+            const clean: Record<string, any> = { ...mapping };
+            Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k]);
+            fileInfoBatch.set(doc(db, 'platformItemMappings', `${platform}_${itemId}`), clean, { merge: true });
+            mappings.set(itemId, mapping);
+            fileInfoCount++;
+            if (fileInfoCount >= 400) break;
+        }
+        if (fileInfoCount >= 400) break;
+    }
+    if (fileInfoCount > 0) { await fileInfoBatch.commit(); mapeosCreados += fileInfoCount; }
 
     // 2. Clientes por correo
     progress('Cargando clientes del CRM…');
@@ -291,7 +364,9 @@ export async function importPlatformSales(
         const sale: PlatformSale = {
             id: docId, platform, guia: row.guia, orderDate, month,
             estado: row.estado, esFinal, esEntregado,
-            itemIds: row.itemIds, total: row.total, importedAt: now,
+            itemIds: row.itemIds, total: row.total,
+            quantity: row.quantity, itemQuantities: row.itemQuantities,
+            importedAt: now,
         };
 
         // Atribución: columnas del archivo (si vienen) > mapeo del primer item
@@ -482,7 +557,8 @@ export async function getAssignmentConsumption(platform: string): Promise<Array<
     for (const d of salesSnap.docs) {
         const sale = d.data() as PlatformSale;
         for (const itemId of sale.itemIds || []) {
-            soldByItem.set(itemId, (soldByItem.get(itemId) || 0) + 1); // 1 orden ≈ 1 unidad
+            const qty = sale.itemQuantities?.[itemId] ?? 1; // unidades reales si el archivo las trae
+            soldByItem.set(itemId, (soldByItem.get(itemId) || 0) + qty);
         }
     }
     const rows = [];
