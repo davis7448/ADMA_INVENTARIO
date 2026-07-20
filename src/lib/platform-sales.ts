@@ -509,21 +509,32 @@ export async function getReportMonths(): Promise<ReportMonth[]> {
         .sort((a, b) => b.month.localeCompare(a.month));
 }
 
-export async function getUnmappedItems(platform: string): Promise<Array<{ itemId: string; ventas: number; entregadas: number }>> {
+// Items que necesitan revisión: sin mapeo alguno, o con producto pero SIN cliente
+// (visibilidad desconocida — típico de mapeos aprendidos del archivo)
+export async function getUnmappedItems(platform: string): Promise<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>> {
     const snap = await getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000)));
     const mappings = await loadMappings(platform);
     const counter = new Map<string, { ventas: number; entregadas: number }>();
     for (const d of snap.docs) {
         const sale = d.data() as PlatformSale;
         for (const itemId of sale.itemIds || []) {
-            if (mappings.has(itemId)) continue;
+            const m = mappings.get(itemId);
+            // Completo: tiene cliente, o está declarado público
+            if (m && (m.clientEmail || m.visibility === 'publico')) continue;
             const c = counter.get(itemId) || { ventas: 0, entregadas: 0 };
             c.ventas++; if (sale.esEntregado) c.entregadas++;
             counter.set(itemId, c);
         }
     }
     return Array.from(counter.entries())
-        .map(([itemId, c]) => ({ itemId, ...c }))
+        .map(([itemId, c]) => {
+            const m = mappings.get(itemId);
+            return {
+                itemId, ...c,
+                productName: m?.productName,
+                motivo: (m ? 'sin_cliente' : 'sin_mapeo') as 'sin_mapeo' | 'sin_cliente',
+            };
+        })
         .sort((a, b) => b.entregadas - a.entregadas);
 }
 

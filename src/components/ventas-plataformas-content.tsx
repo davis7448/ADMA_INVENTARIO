@@ -35,7 +35,7 @@ export function VentasPlataformasContent() {
 
     const [months, setMonths] = useState<ReportMonth[]>([]);
     const [byMonthCommercial, setByMonthCommercial] = useState<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>>(new Map());
-    const [unmapped, setUnmapped] = useState<Array<{ itemId: string; ventas: number; entregadas: number }>>([]);
+    const [unmapped, setUnmapped] = useState<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>>([]);
     const [consumption, setConsumption] = useState<Array<{ itemId: string; productName?: string; clientEmail?: string; assignedQty: number; soldQty: number; pct: number }>>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [mappingItem, setMappingItem] = useState<string | null>(null);
@@ -264,14 +264,27 @@ export function VentasPlataformasContent() {
             {unmapped.length > 0 && (
                 <Card>
                     <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" />Items sin Vincular ({unmapped.length})</CardTitle>
-                        <CardDescription>Ventas de items que no están en ninguna solicitud. Vincúlalos una vez y queda aprendido.</CardDescription>
+                        <CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" />Items por Revisar ({unmapped.length})</CardTitle>
+                        <CardDescription>
+                            Items con ventas que necesitan vinculación: sin mapeo, o con producto conocido pero sin dueño
+                            (si es privado, indica el correo; si es público, márcalo como público y deja de aparecer aquí).
+                            Después de vincular, re-sube el archivo para atribuir sus ventas.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="flex flex-wrap gap-2">
                             {unmapped.slice(0, 30).map(u => (
-                                <Button key={u.itemId} variant="outline" size="sm" onClick={() => setMappingItem(u.itemId)}>
-                                    {u.itemId} <Badge variant="secondary" className="ml-2">{u.entregadas} entregadas</Badge>
+                                <Button key={u.itemId} variant="outline" size="sm" className="h-auto py-1.5" onClick={() => setMappingItem(u.itemId)}>
+                                    <span className="flex flex-col items-start">
+                                        <span className="flex items-center gap-2">
+                                            <span className="font-mono text-xs">{u.itemId}</span>
+                                            <Badge variant={u.motivo === 'sin_mapeo' ? 'destructive' : 'secondary'} className="text-[10px]">
+                                                {u.motivo === 'sin_mapeo' ? 'sin mapeo' : 'sin cliente'}
+                                            </Badge>
+                                            <Badge variant="outline" className="text-[10px]">{u.entregadas} entregadas</Badge>
+                                        </span>
+                                        {u.productName && <span className="text-[11px] text-muted-foreground max-w-[240px] truncate">{u.productName}</span>}
+                                    </span>
                                 </Button>
                             ))}
                         </div>
