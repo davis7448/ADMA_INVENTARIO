@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
     parseDropiRows, importPlatformSales, getReportMonths, getUnmappedItems,
     getSalesByMonthAndCommercial, getAssignmentConsumption, saveManualMapping,
+    getUnmappedTiendas, saveTiendaMapping,
     type ImportSummary, type ReportMonth,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
@@ -39,19 +40,23 @@ export function VentasPlataformasContent() {
     const [consumption, setConsumption] = useState<Array<{ itemId: string; productName?: string; clientEmail?: string; assignedQty: number; soldQty: number; pct: number }>>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [mappingItem, setMappingItem] = useState<string | null>(null);
+    const [unmappedTiendas, setUnmappedTiendas] = useState<Array<{ tienda: string; ventas: number }>>([]);
+    const [tiendaDialog, setTiendaDialog] = useState<string | null>(null);
+    const [tiendaEmail, setTiendaEmail] = useState('');
 
     const canImport = !!user && ['admin', 'coordinacion', 'commercial_director', 'plataformas'].includes(user.role);
 
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [m, s, u, c] = await Promise.all([
+            const [m, s, u, c, t] = await Promise.all([
                 getReportMonths(),
                 getSalesByMonthAndCommercial(),
                 getUnmappedItems(platform),
                 getAssignmentConsumption(platform),
+                getUnmappedTiendas(platform),
             ]);
-            setMonths(m); setByMonthCommercial(s); setUnmapped(u); setConsumption(c);
+            setMonths(m); setByMonthCommercial(s); setUnmapped(u); setConsumption(c); setUnmappedTiendas(t);
         } catch (error) {
             console.error(error);
         } finally {
@@ -163,6 +168,8 @@ export function VentasPlataformasContent() {
                                 <Badge variant="secondary">{summary.publicas} públicas</Badge>
                                 {summary.sinMapear > 0 && <Badge variant="destructive">{summary.sinMapear} sin mapear</Badge>}
                                 {summary.sobreCupo > 0 && <Badge variant="destructive">{summary.sobreCupo} sobre cupo (exceden lo solicitado)</Badge>}
+                                {summary.posiblesCompartidas > 0 && <Badge variant="secondary">{summary.posiblesCompartidas} posibles compartidas (vincula tiendas para precisar)</Badge>}
+                                {summary.tiendasAprendidas > 0 && <Badge variant="outline">{summary.tiendasAprendidas} tiendas aprendidas</Badge>}
                                 <Badge variant="outline">{summary.mapeosCreados} mapeos creados</Badge>
                                 <Badge variant="default">{summary.ofertasConvertidas} ofertas → pedido</Badge>
                             </div>
@@ -292,6 +299,54 @@ export function VentasPlataformasContent() {
                     </CardContent>
                 </Card>
             )}
+
+            {unmappedTiendas.length > 0 && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Tiendas sin Vincular ({unmappedTiendas.length})</CardTitle>
+                        <CardDescription>
+                            La tienda identifica quién vendió cuando un item lo comparten varios clientes.
+                            Vincula cada tienda a su cliente una vez y las ventas compartidas quedan exactas.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                            {unmappedTiendas.slice(0, 30).map(t => (
+                                <Button key={t.tienda} variant="outline" size="sm" onClick={() => { setTiendaDialog(t.tienda); setTiendaEmail(''); }}>
+                                    {t.tienda} <Badge variant="secondary" className="ml-2">{t.ventas}</Badge>
+                                </Button>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            <Dialog open={!!tiendaDialog} onOpenChange={(open) => !open && setTiendaDialog(null)}>
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <DialogTitle>Vincular Tienda</DialogTitle>
+                        <DialogDescription>"{tiendaDialog}" — ¿a qué cliente pertenece esta tienda?</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-2">
+                        <Label htmlFor="tienda-email">Correo del cliente (el del CRM)</Label>
+                        <Input id="tienda-email" value={tiendaEmail} onChange={e => setTiendaEmail(e.target.value)} className="mt-1" placeholder="cliente@correo.com" />
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button variant="secondary">Cancelar</Button></DialogClose>
+                        <Button onClick={async () => {
+                            if (!tiendaDialog || !tiendaEmail.trim()) return;
+                            try {
+                                await saveTiendaMapping(tiendaDialog, tiendaEmail);
+                                toast({ title: 'Tienda vinculada', description: 'Re-importa el archivo para aplicar la atribución exacta.' });
+                                setTiendaDialog(null);
+                                loadData();
+                            } catch {
+                                toast({ title: 'Error', description: 'No se pudo guardar.', variant: 'destructive' });
+                            }
+                        }}>Vincular</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <ManualMappingDialog
                 platform={platform}

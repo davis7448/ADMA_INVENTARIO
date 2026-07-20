@@ -149,11 +149,6 @@ service cloud.firestore {
        allow create, update: if isRoleIn(['admin', 'coordinacion', 'commercial_director', 'plataformas']) || isAdminAccess();
        allow delete: if isRole('admin') || isAdminAccess();
      }
-     match /tiendaClienteMappings/{tiendaId} {
-       allow read: if isSignedIn() || isAdminAccess();
-       allow create, update: if isRoleIn(['admin', 'coordinacion', 'commercial_director', 'plataformas']) || isAdminAccess();
-       allow delete: if isRole('admin') || isAdminAccess();
-     }
      match /platformReportMonths/{monthId} {
        allow read: if isSignedIn() || isAdminAccess();
        allow create, update: if isRoleIn(['admin', 'coordinacion', 'commercial_director', 'plataformas']) || isAdminAccess();

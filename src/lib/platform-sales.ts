@@ -35,6 +35,8 @@ export type PlatformSale = {
     commercialName?: string;
     classification?: SaleClassification;
     sobreCupo?: boolean; // venta que excede el cupo asignado al dueño vigente
+    tienda?: string; // tienda del dropshipper (columna TIENDA), desempate de items compartidos
+    posibleCompartida?: boolean; // atribuida por tenencia pero con dueño anterior con remanente
     importedAt: number;
 };
 
@@ -79,6 +81,7 @@ export type ParsedRow = {
     itemInfo?: Record<string, { sku?: string; productName?: string; variantName?: string }>; // para auto-mapeo desde el archivo
     clientEmail?: string; // solo si el archivo trae columnas de dropshipper
     clientName?: string;
+    tienda?: string; // tienda del dropshipper que generó la orden
 };
 
 // --- Parser del reporte de Dropi (por nombre de columna, robusto al orden) ---
@@ -149,6 +152,7 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
     const iCantidad = find(['CANTIDAD'], [], ['PRECIO']);
     const iProductoNombre = find(['PRODUCTO'], [], []);
     const iVariacion = find(['VARIACION'], [], ['ID']);
+    const iTienda = find(['TIENDA', 'NOMBRE TIENDA'], [], ['TIPO', 'ORDEN', 'PROVEEDOR', 'TELEFONO', 'PEDIDO']);
     const usarEmail = iDropshipper !== -1;
 
     const faltantes: string[] = [];
@@ -197,6 +201,7 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
             itemInfo,
             clientEmail: usarEmail && iEmail !== -1 ? String(row[iEmail] ?? '').trim().toLowerCase() || undefined : undefined,
             clientName: iDropshipper !== -1 ? String(row[iDropshipper] ?? '').trim() || undefined : undefined,
+            tienda: iTienda !== -1 ? String(row[iTienda] ?? '').trim() || undefined : undefined,
         });
     }
 
@@ -213,6 +218,7 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
             }
         }
         if (row.itemInfo) prev.itemInfo = { ...(prev.itemInfo || {}), ...row.itemInfo };
+        if (row.tienda && !prev.tienda) prev.tienda = row.tienda;
         if (row.quantity) prev.quantity = (prev.quantity || 0) + row.quantity;
         // TOTAL DE LA ORDEN es el mismo en todas las filas de la orden: no se suma
     }
@@ -315,6 +321,50 @@ export async function buildMappingsFromSolicitudes(platform: string, itemIds: Se
     return { created, timelines };
 }
 
+// --- Mapeo tienda → cliente (desempate de items compartidos) ---
+
+function normTienda(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+export async function loadTiendaMappings(): Promise<Map<string, string>> {
+    const snap = await getDocs(query(collection(db, 'tiendaClienteMappings'), limit(3000)));
+    const map = new Map<string, string>();
+    for (const d of snap.docs) {
+        const data = d.data();
+        if (data.tienda && data.clientEmail) map.set(normTienda(data.tienda), String(data.clientEmail).toLowerCase());
+    }
+    return map;
+}
+
+export async function saveTiendaMapping(tienda: string, clientEmail: string): Promise<void> {
+    const norm = normTienda(tienda);
+    await setDoc(doc(db, 'tiendaClienteMappings', norm.replace(/[^A-Z0-9]/g, '_').slice(0, 100) || 'X'), {
+        tienda: tienda.trim(),
+        clientEmail: clientEmail.trim().toLowerCase(),
+        updatedAt: Date.now(),
+    }, { merge: true });
+}
+
+// Tiendas vistas en ventas sin mapeo a cliente (para la cola de vinculación)
+export async function getUnmappedTiendas(platform: string): Promise<Array<{ tienda: string; ventas: number }>> {
+    const [salesSnap, tiendaMap] = await Promise.all([
+        getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000))),
+        loadTiendaMappings(),
+    ]);
+    const counter = new Map<string, { tienda: string; ventas: number }>();
+    for (const d of salesSnap.docs) {
+        const sale = d.data() as PlatformSale;
+        if (!sale.tienda) continue;
+        const norm = normTienda(sale.tienda);
+        if (tiendaMap.has(norm)) continue;
+        const entry = counter.get(norm) || { tienda: sale.tienda, ventas: 0 };
+        entry.ventas++;
+        counter.set(norm, entry);
+    }
+    return Array.from(counter.values()).sort((a, b) => b.ventas - a.ventas);
+}
+
 export async function saveManualMapping(platform: string, itemId: string, data: Partial<PlatformItemMapping>): Promise<void> {
     const clean: Record<string, any> = { platform, itemId, source: 'manual', ...data };
     Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k]);
@@ -332,6 +382,8 @@ export type ImportSummary = {
     publicas: number;
     sinMapear: number;
     sobreCupo: number;
+    posiblesCompartidas: number;
+    tiendasAprendidas: number;
     mapeosCreados: number;
     ofertasConvertidas: number;
     mesesAbiertos: string[];
@@ -351,6 +403,7 @@ export async function importPlatformSales(
     const itemIdsInFile = new Set(parsed.flatMap(p => p.itemIds));
     const solicitudesResult = await buildMappingsFromSolicitudes(platform, itemIdsInFile, mappings);
     let mapeosCreados = solicitudesResult.created;
+    let summaryTiendas = 0;
     const timelines = solicitudesResult.timelines;
 
     // Si el archivo trae SKU/nombre por item (formato por-producto), crear mapeos
@@ -376,6 +429,27 @@ export async function importPlatformSales(
     }
     if (fileInfoCount > 0) { await fileInfoBatch.commit(); mapeosCreados += fileInfoCount; }
 
+    // 1b. Mapeos tienda → cliente (desempate de items compartidos)
+    const tiendaMap = await loadTiendaMappings();
+    // Auto-aprendizaje: filas que traen dropshipper (email) Y tienda enseñan el vínculo
+    const tiendaLearnBatch = writeBatch(db);
+    let tiendasAprendidas = 0;
+    const yaAprendidas = new Set<string>();
+    for (const row of parsed) {
+        if (!row.clientEmail || !row.tienda) continue;
+        const norm = normTienda(row.tienda);
+        if (tiendaMap.has(norm) || yaAprendidas.has(norm)) continue;
+        tiendaLearnBatch.set(doc(db, 'tiendaClienteMappings', norm.replace(/[^A-Z0-9]/g, '_').slice(0, 100) || 'X'), {
+            tienda: row.tienda, clientEmail: row.clientEmail, source: 'archivo', updatedAt: Date.now(),
+        }, { merge: true });
+        tiendaMap.set(norm, row.clientEmail);
+        yaAprendidas.add(norm);
+        tiendasAprendidas++;
+        if (tiendasAprendidas >= 400) break;
+    }
+    if (tiendasAprendidas > 0) await tiendaLearnBatch.commit();
+    summaryTiendas = tiendasAprendidas;
+
     // 2. Clientes por correo
     progress('Cargando clientes del CRM…');
     const clientsSnap = await getDocs(query(collection(db, 'clients'), limit(3000)));
@@ -395,7 +469,7 @@ export async function importPlatformSales(
 
     // 4. Construir las ventas del archivo
     const now = Date.now();
-    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, sobreCupo: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
+    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, sobreCupo: 0, posiblesCompartidas: 0, tiendasAprendidas: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
     const sales: PlatformSale[] = [];
 
     for (const row of parsed) {
@@ -410,6 +484,7 @@ export async function importPlatformSales(
             estado: row.estado, esFinal, esEntregado,
             itemIds: row.itemIds, total: row.total,
             quantity: row.quantity, itemQuantities: row.itemQuantities,
+            tienda: row.tienda,
             importedAt: now,
         };
 
@@ -474,25 +549,42 @@ export async function importPlatformSales(
         if (!sale.clientEmail && cupos.length > 0) {
             const units = saleUnits(sale);
             const fecha = sale.orderDate || 0;
-            // Candidatos: cupos ya iniciados a la fecha de la venta; si la venta es
-            // anterior a la primera solicitud, se permite el primer cupo (histórico)
             const iniciados = cupos.filter(q => q.fecha <= fecha);
             const candidatos = iniciados.length > 0 ? iniciados : [cupos[0]];
-            // FIFO: el cupo más antiguo con espacio (y no cerrado por otro dueño)
-            const cupo = candidatos.find(q => {
+
+            // PRIORIDAD 1 — Evidencia de TIENDA: si la tienda que generó la orden
+            // pertenece a un cliente con cupo iniciado, la venta es suya aunque el
+            // cupo esté "cerrado" por una solicitud posterior (items compartidos:
+            // varios correos privatizados vendiendo a la vez).
+            const tiendaCorreo = sale.tienda ? tiendaMap.get(normTienda(sale.tienda)) : undefined;
+            const cupoTienda = tiendaCorreo ? candidatos.find(q => q.correo === tiendaCorreo) : undefined;
+
+            // PRIORIDAD 2 — Tenencia: el cupo más antiguo abierto con espacio
+            const cupoTenencia = candidatos.find(q => {
                 if (q.cerradoDesde && fecha >= q.cerradoDesde) return false;
-                if (q.cantidad === undefined) return true; // ilimitado (mientras no esté cerrado)
+                if (q.cantidad === undefined) return true;
                 return q.consumido + units <= q.cantidad;
             });
 
+            const cupo = cupoTienda || cupoTenencia;
             if (cupo?.correo) {
                 sale.clientEmail = cupo.correo;
                 const client = emailToClient.get(cupo.correo);
                 if (client) { sale.clientId = client.id; sale.clientName = client.name; }
                 sale.commercialName = cupo.comercial || sale.commercialName;
                 if (sale.esEntregado) cupo.consumido += units;
+
+                // Sin evidencia de tienda y con un dueño anterior que aún tenía
+                // remanente al cerrarse: la atribución por tenencia es incierta
+                if (!cupoTienda && sale.esEntregado) {
+                    const anteriorConRemanente = candidatos.some(q =>
+                        q !== cupo && q.correo && q.correo !== cupo.correo &&
+                        q.cerradoDesde && fecha >= q.cerradoDesde &&
+                        (q.cantidad === undefined || q.consumido < q.cantidad)
+                    );
+                    if (anteriorConRemanente) sale.posibleCompartida = true;
+                }
             } else if (sale.esEntregado) {
-                // Todos los cupos agotados o cerrados: la venta no es de nadie
                 sale.sobreCupo = true;
                 const ultimo = candidatos[candidatos.length - 1];
                 sale.commercialName = ultimo?.comercial || sale.commercialName;
@@ -522,9 +614,11 @@ export async function importPlatformSales(
             sale.classification = 'sin_atribuir';
         }
     }
+    summary.tiendasAprendidas = summaryTiendas;
     for (const sale of sales) {
         if (!sale.esEntregado) continue;
         if (sale.sobreCupo) summary.sobreCupo++;
+        if (sale.posibleCompartida) summary.posiblesCompartidas++;
         if (sale.classification === 'publica') summary.publicas++;
         else if (sale.classification === 'sin_atribuir') summary.sinMapear++;
         else if (sale.clientId) summary.atribuidas++;
