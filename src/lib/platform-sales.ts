@@ -47,6 +47,8 @@ export type PlatformItemMapping = {
     clientName?: string;
     productId?: string;
     productName?: string;
+    variantId?: string;
+    variantName?: string;
     sku?: string;
     commercialName?: string;
     assignedQty?: number; // unidades asignadas (privatizaciones/sumas)
@@ -73,7 +75,7 @@ export type ParsedRow = {
     total: number;
     quantity?: number; // unidades reales (columna CANTIDAD)
     itemQuantities?: Record<string, number>;
-    itemInfo?: Record<string, { sku?: string; productName?: string }>; // para auto-mapeo desde el archivo
+    itemInfo?: Record<string, { sku?: string; productName?: string; variantName?: string }>; // para auto-mapeo desde el archivo
     clientEmail?: string; // solo si el archivo trae columnas de dropshipper
     clientName?: string;
 };
@@ -145,6 +147,7 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
     const iSku = find(['SKU'], [], []);
     const iCantidad = find(['CANTIDAD'], [], ['PRECIO']);
     const iProductoNombre = find(['PRODUCTO'], [], []);
+    const iVariacion = find(['VARIACION'], [], ['ID']);
     const usarEmail = iDropshipper !== -1;
 
     const faltantes: string[] = [];
@@ -178,6 +181,7 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
             [itemIds[0]]: {
                 sku: iSku !== -1 ? String(row[iSku] ?? '').trim() || undefined : undefined,
                 productName: iProductoNombre !== -1 ? String(row[iProductoNombre] ?? '').trim() || undefined : undefined,
+                variantName: iVariacion !== -1 ? String(row[iVariacion] ?? '').trim() || undefined : undefined,
             }
         } : undefined;
 
@@ -319,7 +323,7 @@ export async function importPlatformSales(
             if (mappings.has(itemId) || (!info.sku && !info.productName)) continue;
             const mapping: PlatformItemMapping = {
                 platform, itemId, visibility: 'desconocido',
-                sku: info.sku, productName: info.productName, source: 'archivo',
+                sku: info.sku, productName: info.productName, variantName: info.variantName, source: 'archivo',
             };
             const clean: Record<string, any> = { ...mapping };
             Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k]);
@@ -511,7 +515,7 @@ export async function getReportMonths(): Promise<ReportMonth[]> {
 
 // Items que necesitan revisión: sin mapeo alguno, o con producto pero SIN cliente
 // (visibilidad desconocida — típico de mapeos aprendidos del archivo)
-export async function getUnmappedItems(platform: string): Promise<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>> {
+export async function getUnmappedItems(platform: string): Promise<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; variantName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>> {
     const snap = await getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000)));
     const mappings = await loadMappings(platform);
     const counter = new Map<string, { ventas: number; entregadas: number }>();
@@ -532,6 +536,7 @@ export async function getUnmappedItems(platform: string): Promise<Array<{ itemId
             return {
                 itemId, ...c,
                 productName: m?.productName,
+                variantName: m?.variantName,
                 motivo: (m ? 'sin_cliente' : 'sin_mapeo') as 'sin_mapeo' | 'sin_cliente',
             };
         })

@@ -35,7 +35,7 @@ export function VentasPlataformasContent() {
 
     const [months, setMonths] = useState<ReportMonth[]>([]);
     const [byMonthCommercial, setByMonthCommercial] = useState<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>>(new Map());
-    const [unmapped, setUnmapped] = useState<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>>([]);
+    const [unmapped, setUnmapped] = useState<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; variantName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>>([]);
     const [consumption, setConsumption] = useState<Array<{ itemId: string; productName?: string; clientEmail?: string; assignedQty: number; soldQty: number; pct: number }>>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [mappingItem, setMappingItem] = useState<string | null>(null);
@@ -283,7 +283,7 @@ export function VentasPlataformasContent() {
                                             </Badge>
                                             <Badge variant="outline" className="text-[10px]">{u.entregadas} entregadas</Badge>
                                         </span>
-                                        {u.productName && <span className="text-[11px] text-muted-foreground max-w-[240px] truncate">{u.productName}</span>}
+                                        {u.productName && <span className="text-[11px] text-muted-foreground max-w-[240px] truncate">{u.productName}{u.variantName ? ` · ${u.variantName}` : ''}</span>}
                                     </span>
                                 </Button>
                             ))}
@@ -312,6 +312,10 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
     const [isSaving, setIsSaving] = useState(false);
     const [productId, setProductId] = useState<string | undefined>();
     const [productName, setProductName] = useState('');
+    const [pickedVariants, setPickedVariants] = useState<Array<{ id: string; name: string; sku: string }>>([]);
+    const [variantId, setVariantId] = useState<string | undefined>();
+    const [variantName, setVariantName] = useState<string | undefined>();
+    const [variantSku, setVariantSku] = useState<string | undefined>();
     const [clientEmail, setClientEmail] = useState('');
     const [visibility, setVisibility] = useState<'privado' | 'publico'>('publico');
     const [assignedQty, setAssignedQty] = useState('');
@@ -327,12 +331,16 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
             await saveManualMapping(platform, itemId, {
                 productId,
                 productName: productName.trim() || undefined,
+                variantId,
+                variantName,
+                sku: variantSku,
                 clientEmail: clientEmail.trim().toLowerCase() || undefined,
                 visibility: clientEmail.trim() ? 'privado' : visibility,
                 assignedQty: assignedQty ? Number(assignedQty) : undefined,
             });
             toast({ title: 'Item vinculado', description: `El item ${itemId} quedó mapeado. Re-importa el archivo para atribuir sus ventas.` });
             setProductId(undefined); setProductName(''); setClientEmail(''); setAssignedQty('');
+            setPickedVariants([]); setVariantId(undefined); setVariantName(undefined); setVariantSku(undefined);
             onSaved();
         } catch (error) {
             toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo guardar.', variant: 'destructive' });
@@ -352,10 +360,34 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
                     <div>
                         <Label>Producto del inventario</Label>
                         <div className="mt-1">
-                            <ProductSearchPicker onSelect={(p) => { setProductId(p.id); setProductName(p.name); }} />
+                            <ProductSearchPicker onSelect={(p) => {
+                                setProductId(p.id);
+                                setProductName(p.name);
+                                setVariantId(undefined); setVariantName(undefined); setVariantSku(undefined);
+                                setPickedVariants(p.productType === 'variable' ? (p.variants || []).map(v => ({ id: v.id, name: v.name, sku: v.sku })) : []);
+                            }} />
                         </div>
-                        {productName && <p className="text-xs text-green-600 mt-1">✓ {productName}</p>}
+                        {productName && <p className="text-xs text-green-600 mt-1">✓ {productName}{variantName ? ` — ${variantName}` : ''}</p>}
                     </div>
+                    {pickedVariants.length > 0 && (
+                        <div>
+                            <Label>¿A qué variante corresponde este item?</Label>
+                            <Select onValueChange={(v) => {
+                                if (v === 'todas') { setVariantId(undefined); setVariantName(undefined); setVariantSku(undefined); return; }
+                                const variant = pickedVariants.find(x => x.id === v);
+                                if (variant) { setVariantId(variant.id); setVariantName(variant.name); setVariantSku(variant.sku); }
+                            }}>
+                                <SelectTrigger className="mt-1"><SelectValue placeholder="Elige la variante…" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todas">El producto completo (todas)</SelectItem>
+                                    {pickedVariants.map(v => (
+                                        <SelectItem key={v.id} value={v.id}>{v.name} — SKU {v.sku}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground mt-1">Cada ID de plataforma suele corresponder a UNA variante específica.</p>
+                        </div>
+                    )}
                     <div>
                         <Label htmlFor="map-email">Correo del cliente (si el item es privado)</Label>
                         <Input id="map-email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} className="mt-1" placeholder="cliente@correo.com" />
