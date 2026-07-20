@@ -233,11 +233,26 @@ export async function loadMappings(platform: string): Promise<Map<string, Platfo
     return map;
 }
 
-// Crea/actualiza mapeos desde las solicitudes de ADMA que tengan ID de plataforma
-export async function buildMappingsFromSolicitudes(platform: string, itemIds: Set<string>, existing: Map<string, PlatformItemMapping>): Promise<number> {
-    const missing = Array.from(itemIds).filter(id => !existing.has(id));
-    if (missing.length === 0) return 0;
+// Vigencia de un item: quién era el dueño (correo/comercial) en cada momento,
+// según las solicitudes ordenadas por fecha. Permite atribuir cada venta al
+// dueño VIGENTE a la fecha de la venta (no al dueño actual).
+export type ItemOwnership = { fecha: number; correo?: string; comercial?: string; cantidad?: number };
+export type ItemTimelines = Map<string, ItemOwnership[]>;
 
+export function ownerAtDate(timeline: ItemOwnership[] | undefined, saleDate: number | null): ItemOwnership | undefined {
+    if (!timeline?.length) return undefined;
+    if (!saleDate) return timeline[timeline.length - 1]; // sin fecha: dueño actual
+    let owner: ItemOwnership | undefined;
+    for (const entry of timeline) {
+        if (entry.fecha <= saleDate) owner = entry;
+        else break;
+    }
+    // Venta anterior a la primera solicitud: se asume el primer dueño conocido
+    return owner ?? timeline[0];
+}
+
+// Crea/actualiza mapeos desde las solicitudes de ADMA que tengan ID de plataforma
+export async function buildMappingsFromSolicitudes(platform: string, itemIds: Set<string>, existing: Map<string, PlatformItemMapping>): Promise<{ created: number; timelines: ItemTimelines }> {
     const solsSnap = await getDocs(query(collection(db, 'modificaciones'), where('ID', '!=', null), limit(3000)));
     const byItemId = new Map<string, (Modificacion & { id: string })[]>();
     for (const d of solsSnap.docs) {
@@ -248,6 +263,24 @@ export async function buildMappingsFromSolicitudes(platform: string, itemIds: Se
         byItemId.get(itemId)!.push(s);
     }
 
+    // Línea de tiempo por item (todas las solicitudes, ordenadas por fecha)
+    const timelines: ItemTimelines = new Map();
+    for (const [itemId, sols] of byItemId) {
+        const entries = sols
+            .filter(s => s.FECHA)
+            .sort((a, b) => (a.FECHA || 0) - (b.FECHA || 0))
+            .map(s => ({
+                fecha: s.FECHA!,
+                correo: (s.CORREO_CODIGO || '').split(/[,;\s]+/)[0]?.trim().toLowerCase() || undefined,
+                comercial: s.solicitadoPor?.name || s.COMERCIAL || undefined,
+                cantidad: Number(s['CANTIDAD SOLICITADA']) || undefined,
+            }));
+        if (entries.length) timelines.set(itemId, entries);
+    }
+
+    const missing = Array.from(itemIds).filter(id => !existing.has(id));
+    if (missing.length === 0) return { created: 0, timelines };
+
     let created = 0;
     const batch = writeBatch(db);
     for (const itemId of missing) {
@@ -255,7 +288,10 @@ export async function buildMappingsFromSolicitudes(platform: string, itemIds: Se
         if (!sols?.length) continue;
         const latest = sols.sort((a, b) => (b.FECHA || 0) - (a.FECHA || 0))[0];
         const correo = (latest.CORREO_CODIGO || '').split(/[,;\s]+/)[0]?.trim().toLowerCase() || undefined;
-        const assignedQty = sols.reduce((acc, s) => acc + (Number(s['CANTIDAD SOLICITADA']) || 0), 0);
+        // Stock asignado SOLO del dueño actual (no mezclar asignaciones de dueños anteriores)
+        const assignedQty = sols
+            .filter(s => ((s.CORREO_CODIGO || '').split(/[,;\s]+/)[0]?.trim().toLowerCase() || undefined) === correo)
+            .reduce((acc, s) => acc + (Number(s['CANTIDAD SOLICITADA']) || 0), 0);
         const mapping: PlatformItemMapping = {
             platform,
             itemId,
@@ -275,7 +311,7 @@ export async function buildMappingsFromSolicitudes(platform: string, itemIds: Se
         created++;
     }
     if (created > 0) await batch.commit();
-    return created;
+    return { created, timelines };
 }
 
 export async function saveManualMapping(platform: string, itemId: string, data: Partial<PlatformItemMapping>): Promise<void> {
@@ -311,7 +347,9 @@ export async function importPlatformSales(
     progress('Cargando mapeos de items…');
     const mappings = await loadMappings(platform);
     const itemIdsInFile = new Set(parsed.flatMap(p => p.itemIds));
-    let mapeosCreados = await buildMappingsFromSolicitudes(platform, itemIdsInFile, mappings);
+    const solicitudesResult = await buildMappingsFromSolicitudes(platform, itemIdsInFile, mappings);
+    let mapeosCreados = solicitudesResult.created;
+    const timelines = solicitudesResult.timelines;
 
     // Si el archivo trae SKU/nombre por item (formato por-producto), crear mapeos
     // de producto para los items que sigan sin mapeo (sin cliente: quedan como
@@ -373,15 +411,20 @@ export async function importPlatformSales(
             importedAt: now,
         };
 
-        // Atribución: columnas del archivo (si vienen) > mapeo del primer item
+        // Atribución: columnas del archivo (si vienen) > dueño VIGENTE a la fecha
+        // de la venta (vigencias de solicitudes) > mapeo estático del item
         const mapping = row.itemIds.map(id => mappings.get(id)).find(Boolean);
-        const email = row.clientEmail || mapping?.clientEmail;
+        const timeline = row.itemIds.map(id => timelines.get(id)).find(Boolean);
+        const owner = ownerAtDate(timeline, orderDate);
         if (mapping) {
             sale.productId = mapping.productId;
             sale.productName = mapping.productName;
-            sale.commercialName = mapping.commercialName;
+            sale.commercialName = owner?.comercial || mapping.commercialName;
+        } else if (owner?.comercial) {
+            sale.commercialName = owner.comercial;
         }
-        if (email && (row.clientEmail || mapping?.visibility === 'privado')) {
+        const email = row.clientEmail || owner?.correo || mapping?.clientEmail;
+        if (email && (row.clientEmail || owner?.correo || mapping?.visibility === 'privado')) {
             sale.clientEmail = email;
             const client = emailToClient.get(email);
             if (client) { sale.clientId = client.id; sale.clientName = client.name; }
