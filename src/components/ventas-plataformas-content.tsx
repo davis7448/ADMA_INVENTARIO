@@ -162,6 +162,7 @@ export function VentasPlataformasContent() {
                                 <Badge variant="secondary">{summary.atribuidas} atribuidas a cliente</Badge>
                                 <Badge variant="secondary">{summary.publicas} públicas</Badge>
                                 {summary.sinMapear > 0 && <Badge variant="destructive">{summary.sinMapear} sin mapear</Badge>}
+                                {summary.sobreCupo > 0 && <Badge variant="destructive">{summary.sobreCupo} sobre cupo (exceden lo solicitado)</Badge>}
                                 <Badge variant="outline">{summary.mapeosCreados} mapeos creados</Badge>
                                 <Badge variant="default">{summary.ofertasConvertidas} ofertas → pedido</Badge>
                             </div>

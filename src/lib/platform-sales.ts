@@ -34,6 +34,7 @@ export type PlatformSale = {
     commercialId?: string;
     commercialName?: string;
     classification?: SaleClassification;
+    sobreCupo?: boolean; // venta que excede el cupo asignado al dueño vigente
     importedAt: number;
 };
 
@@ -330,6 +331,7 @@ export type ImportSummary = {
     atribuidas: number;
     publicas: number;
     sinMapear: number;
+    sobreCupo: number;
     mapeosCreados: number;
     ofertasConvertidas: number;
     mesesAbiertos: string[];
@@ -393,7 +395,7 @@ export async function importPlatformSales(
 
     // 4. Construir las ventas del archivo
     const now = Date.now();
-    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
+    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, sobreCupo: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
     const sales: PlatformSale[] = [];
 
     for (const row of parsed) {
@@ -411,22 +413,18 @@ export async function importPlatformSales(
             importedAt: now,
         };
 
-        // Atribución: columnas del archivo (si vienen) > dueño VIGENTE a la fecha
-        // de la venta (vigencias de solicitudes) > mapeo estático del item
+        // Producto desde el mapeo; el cliente por vigencia+cupo se resuelve en el
+        // pase cronológico. Si el archivo trae columnas de dropshipper, ese
+        // cliente manda (dato directo de la plataforma).
         const mapping = row.itemIds.map(id => mappings.get(id)).find(Boolean);
-        const timeline = row.itemIds.map(id => timelines.get(id)).find(Boolean);
-        const owner = ownerAtDate(timeline, orderDate);
         if (mapping) {
             sale.productId = mapping.productId;
             sale.productName = mapping.productName;
-            sale.commercialName = owner?.comercial || mapping.commercialName;
-        } else if (owner?.comercial) {
-            sale.commercialName = owner.comercial;
+            sale.commercialName = mapping.commercialName;
         }
-        const email = row.clientEmail || owner?.correo || mapping?.clientEmail;
-        if (email && (row.clientEmail || owner?.correo || mapping?.visibility === 'privado')) {
-            sale.clientEmail = email;
-            const client = emailToClient.get(email);
+        if (row.clientEmail) {
+            sale.clientEmail = row.clientEmail;
+            const client = emailToClient.get(row.clientEmail);
             if (client) { sale.clientId = client.id; sale.clientName = client.name; }
             else if (row.clientName) sale.clientName = row.clientName;
         }
@@ -442,8 +440,46 @@ export async function importPlatformSales(
     const all = Array.from(prevSales.values()).sort((a, b) => (a.orderDate || 0) - (b.orderDate || 0));
     const firstSaleByClientProduct = new Map<string, number>(); // clientId_productKey → fecha primera entrega
     const lastSaleByClient = new Map<string, number>();
+    // Cupos: unidades consumidas por item+correo (las entregas descuentan del
+    // cupo del dueño vigente; lo que exceda NO se atribuye → sobreCupo)
+    const consumedByItemOwner = new Map<string, number>();
+    const saleUnits = (sale: PlatformSale) => {
+        const qty = Object.values(sale.itemQuantities || {}).reduce((a, b) => a + b, 0);
+        return qty > 0 ? qty : 1;
+    };
 
     for (const sale of all) {
+        // Atribución por vigencia (si el archivo no trajo el cliente directo)
+        const itemId = sale.itemIds[0];
+        const timeline = sale.itemIds.map(id => timelines.get(id)).find(Boolean);
+        if (!sale.clientEmail && timeline) {
+            const owner = ownerAtDate(timeline, sale.orderDate);
+            if (owner?.correo) {
+                const key = `${itemId}_${owner.correo}`;
+                const entries = timeline.filter(e => e.correo === owner.correo && (!sale.orderDate || e.fecha <= sale.orderDate));
+                const sinCantidad = entries.some(e => !e.cantidad);
+                const cupo = sinCantidad ? Infinity : entries.reduce((a, e) => a + (e.cantidad || 0), 0);
+                const consumido = consumedByItemOwner.get(key) || 0;
+                const units = saleUnits(sale);
+
+                if (sale.esEntregado && consumido + units > cupo) {
+                    // Excede lo solicitado por este dueño: no es de su cliente
+                    sale.sobreCupo = true;
+                    sale.commercialName = owner.comercial || sale.commercialName;
+                } else {
+                    sale.clientEmail = owner.correo;
+                    const client = emailToClient.get(owner.correo);
+                    if (client) { sale.clientId = client.id; sale.clientName = client.name; }
+                    sale.commercialName = owner.comercial || sale.commercialName;
+                    if (sale.esEntregado) consumedByItemOwner.set(key, consumido + units);
+                }
+            }
+        } else if (sale.clientEmail && sale.esEntregado && timeline) {
+            // Cliente venía del archivo o de import anterior: igual consume su cupo
+            const key = `${itemId}_${sale.clientEmail}`;
+            consumedByItemOwner.set(key, (consumedByItemOwner.get(key) || 0) + saleUnits(sale));
+        }
+
         if (!sale.esEntregado) continue;
         const productKey = sale.productId || sale.itemIds[0] || '?';
         if (sale.clientId) {
@@ -465,6 +501,7 @@ export async function importPlatformSales(
     }
     for (const sale of sales) {
         if (!sale.esEntregado) continue;
+        if (sale.sobreCupo) summary.sobreCupo++;
         if (sale.classification === 'publica') summary.publicas++;
         else if (sale.classification === 'sin_atribuir') summary.sinMapear++;
         else if (sale.clientId) summary.atribuidas++;
