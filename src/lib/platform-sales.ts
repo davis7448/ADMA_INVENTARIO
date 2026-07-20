@@ -440,20 +440,21 @@ export async function importPlatformSales(
     const all = Array.from(prevSales.values()).sort((a, b) => (a.orderDate || 0) - (b.orderDate || 0));
     const firstSaleByClientProduct = new Map<string, number>(); // clientId_productKey → fecha primera entrega
     const lastSaleByClient = new Map<string, number>();
-    // Cupos FIFO por item: cada solicitud abre un cupo (correo, comercial,
-    // cantidad, desde su fecha). Las ventas consumen los cupos en orden — primero
-    // el más antiguo abierto — sin importar solicitudes posteriores cercanas.
-    // Un cupo SIN cantidad (histórico) queda abierto hasta que llegue una
-    // solicitud de OTRO cliente (corte por fecha). Sin cupo abierto → sobreCupo.
+    // Cupos por tenencia: cada solicitud abre un cupo (correo, comercial,
+    // cantidad, desde su fecha). Reglas:
+    // 1. Un cupo se CIERRA por fecha cuando entra una solicitud de OTRO cliente
+    //    (la privatización cambió: el anterior ya no puede vender, aunque le
+    //    sobraran unidades — el remanente se pierde, no absorbe ventas ajenas).
+    // 2. Dentro de la tenencia, el tope es la cantidad: exceso → sobreCupo.
+    // 3. Cupos del MISMO cliente se encadenan (no se cierran entre sí).
     type Cupo = { fecha: number; correo?: string; comercial?: string; cantidad?: number; consumido: number; cerradoDesde?: number };
     const cuposPorItem = new Map<string, Cupo[]>();
     const getCupos = (itemId: string): Cupo[] => {
         if (!cuposPorItem.has(itemId)) {
             const timeline = timelines.get(itemId) || [];
             const cupos: Cupo[] = timeline.map(e => ({ fecha: e.fecha, correo: e.correo, comercial: e.comercial, cantidad: e.cantidad, consumido: 0 }));
-            // Cierre de cupos ilimitados: cuando entra un cupo de otro correo
+            // Todo cupo se cierra cuando llega una solicitud de OTRO correo
             for (let i = 0; i < cupos.length; i++) {
-                if (cupos[i].cantidad) continue;
                 const next = cupos.slice(i + 1).find(x => x.correo !== cupos[i].correo);
                 if (next) cupos[i].cerradoDesde = next.fecha;
             }
