@@ -440,44 +440,66 @@ export async function importPlatformSales(
     const all = Array.from(prevSales.values()).sort((a, b) => (a.orderDate || 0) - (b.orderDate || 0));
     const firstSaleByClientProduct = new Map<string, number>(); // clientId_productKey → fecha primera entrega
     const lastSaleByClient = new Map<string, number>();
-    // Cupos: unidades consumidas por item+correo (las entregas descuentan del
-    // cupo del dueño vigente; lo que exceda NO se atribuye → sobreCupo)
-    const consumedByItemOwner = new Map<string, number>();
+    // Cupos FIFO por item: cada solicitud abre un cupo (correo, comercial,
+    // cantidad, desde su fecha). Las ventas consumen los cupos en orden — primero
+    // el más antiguo abierto — sin importar solicitudes posteriores cercanas.
+    // Un cupo SIN cantidad (histórico) queda abierto hasta que llegue una
+    // solicitud de OTRO cliente (corte por fecha). Sin cupo abierto → sobreCupo.
+    type Cupo = { fecha: number; correo?: string; comercial?: string; cantidad?: number; consumido: number; cerradoDesde?: number };
+    const cuposPorItem = new Map<string, Cupo[]>();
+    const getCupos = (itemId: string): Cupo[] => {
+        if (!cuposPorItem.has(itemId)) {
+            const timeline = timelines.get(itemId) || [];
+            const cupos: Cupo[] = timeline.map(e => ({ fecha: e.fecha, correo: e.correo, comercial: e.comercial, cantidad: e.cantidad, consumido: 0 }));
+            // Cierre de cupos ilimitados: cuando entra un cupo de otro correo
+            for (let i = 0; i < cupos.length; i++) {
+                if (cupos[i].cantidad) continue;
+                const next = cupos.slice(i + 1).find(x => x.correo !== cupos[i].correo);
+                if (next) cupos[i].cerradoDesde = next.fecha;
+            }
+            cuposPorItem.set(itemId, cupos);
+        }
+        return cuposPorItem.get(itemId)!;
+    };
     const saleUnits = (sale: PlatformSale) => {
         const qty = Object.values(sale.itemQuantities || {}).reduce((a, b) => a + b, 0);
         return qty > 0 ? qty : 1;
     };
 
     for (const sale of all) {
-        // Atribución por vigencia (si el archivo no trajo el cliente directo)
         const itemId = sale.itemIds[0];
-        const timeline = sale.itemIds.map(id => timelines.get(id)).find(Boolean);
-        if (!sale.clientEmail && timeline) {
-            const owner = ownerAtDate(timeline, sale.orderDate);
-            if (owner?.correo) {
-                const key = `${itemId}_${owner.correo}`;
-                const entries = timeline.filter(e => e.correo === owner.correo && (!sale.orderDate || e.fecha <= sale.orderDate));
-                const sinCantidad = entries.some(e => !e.cantidad);
-                const cupo = sinCantidad ? Infinity : entries.reduce((a, e) => a + (e.cantidad || 0), 0);
-                const consumido = consumedByItemOwner.get(key) || 0;
-                const units = saleUnits(sale);
+        const cupos = itemId ? getCupos(itemId) : [];
 
-                if (sale.esEntregado && consumido + units > cupo) {
-                    // Excede lo solicitado por este dueño: no es de su cliente
-                    sale.sobreCupo = true;
-                    sale.commercialName = owner.comercial || sale.commercialName;
-                } else {
-                    sale.clientEmail = owner.correo;
-                    const client = emailToClient.get(owner.correo);
-                    if (client) { sale.clientId = client.id; sale.clientName = client.name; }
-                    sale.commercialName = owner.comercial || sale.commercialName;
-                    if (sale.esEntregado) consumedByItemOwner.set(key, consumido + units);
-                }
+        if (!sale.clientEmail && cupos.length > 0) {
+            const units = saleUnits(sale);
+            const fecha = sale.orderDate || 0;
+            // Candidatos: cupos ya iniciados a la fecha de la venta; si la venta es
+            // anterior a la primera solicitud, se permite el primer cupo (histórico)
+            const iniciados = cupos.filter(q => q.fecha <= fecha);
+            const candidatos = iniciados.length > 0 ? iniciados : [cupos[0]];
+            // FIFO: el cupo más antiguo con espacio (y no cerrado por otro dueño)
+            const cupo = candidatos.find(q => {
+                if (q.cerradoDesde && fecha >= q.cerradoDesde) return false;
+                if (q.cantidad === undefined) return true; // ilimitado (mientras no esté cerrado)
+                return q.consumido + units <= q.cantidad;
+            });
+
+            if (cupo?.correo) {
+                sale.clientEmail = cupo.correo;
+                const client = emailToClient.get(cupo.correo);
+                if (client) { sale.clientId = client.id; sale.clientName = client.name; }
+                sale.commercialName = cupo.comercial || sale.commercialName;
+                if (sale.esEntregado) cupo.consumido += units;
+            } else if (sale.esEntregado) {
+                // Todos los cupos agotados o cerrados: la venta no es de nadie
+                sale.sobreCupo = true;
+                const ultimo = candidatos[candidatos.length - 1];
+                sale.commercialName = ultimo?.comercial || sale.commercialName;
             }
-        } else if (sale.clientEmail && sale.esEntregado && timeline) {
-            // Cliente venía del archivo o de import anterior: igual consume su cupo
-            const key = `${itemId}_${sale.clientEmail}`;
-            consumedByItemOwner.set(key, (consumedByItemOwner.get(key) || 0) + saleUnits(sale));
+        } else if (sale.clientEmail && sale.esEntregado && cupos.length > 0) {
+            // Cliente directo del archivo: consume su propio cupo si existe
+            const propio = cupos.find(q => q.correo === sale.clientEmail && (q.cantidad === undefined || q.consumido + saleUnits(sale) <= q.cantidad));
+            if (propio) propio.consumido += saleUnits(sale);
         }
 
         if (!sale.esEntregado) continue;
