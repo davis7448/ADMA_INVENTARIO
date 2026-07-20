@@ -84,26 +84,66 @@ function parseDate(raw: string): number | null {
     return isNaN(d.getTime()) ? null : d.getTime();
 }
 
+// Normaliza encabezados: mayúsculas, sin tildes, espacios colapsados
+function normHeader(value: any): string {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+}
+
 export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: string[] } {
     const errors: string[] = [];
     if (!rows.length) return { parsed: [], errors: ['Archivo vacío'] };
 
-    const headers = rows[0].map((h: any) => String(h || '').trim().toUpperCase());
-    const idx = (name: string) => headers.findIndex(h => h === name);
-    const iGuia = idx('NÚMERO GUIA') !== -1 ? idx('NÚMERO GUIA') : idx('NUMERO GUIA');
-    const iFecha = idx('FECHA');
-    const iEstado = idx('ESTATUS');
-    const iProductos = idx('PRODUCTOS');
-    const iTotal = idx('TOTAL DE LA ORDEN');
-    const iEmail = idx('EMAIL'); // primer EMAIL = dropshipper (si el archivo lo trae)
-    const iDropshipper = idx('DROPSHIPPER');
+    // Detectar la fila de encabezados en las primeras 10 filas (algunos exports
+    // traen títulos arriba): la que contenga GUIA y ESTATUS/ESTADO.
+    let headerRow = -1;
+    let headers: string[] = [];
+    for (let r = 0; r < Math.min(10, rows.length); r++) {
+        const h = (rows[r] || []).map(normHeader);
+        if (h.some(x => x.includes('GUIA')) && h.some(x => x.includes('ESTATUS') || x.includes('ESTADO'))) {
+            headerRow = r;
+            headers = h;
+            break;
+        }
+    }
+    if (headerRow === -1) {
+        const found = (rows[0] || []).map(normHeader).filter(Boolean).slice(0, 15).join(', ');
+        return { parsed: [], errors: [`No se encontró la fila de encabezados (se busca una con GUIA y ESTATUS/ESTADO). Columnas de la primera fila: ${found || '(vacías)'}. Envíame una captura de los encabezados de tu archivo para agregar el formato.`] };
+    }
 
-    if (iGuia === -1 || iEstado === -1 || iProductos === -1) {
-        return { parsed: [], errors: ['No se reconocen las columnas del reporte de Dropi (se esperan NÚMERO GUIA, ESTATUS, PRODUCTOS).'] };
+    // Búsqueda flexible: exacto primero, luego por contención con exclusiones
+    const find = (exact: string[], contains: string[], exclude: string[] = []): number => {
+        for (const e of exact) {
+            const i = headers.findIndex(h => h === e);
+            if (i !== -1) return i;
+        }
+        return headers.findIndex(h =>
+            contains.some(c => h.includes(c)) && !exclude.some(x => h.includes(x))
+        );
+    };
+
+    const iGuia = find(['NUMERO GUIA', '# DE GUIA', 'GUIA'], ['GUIA'], ['ORIGINAL', 'GENERACION', 'FECHA']);
+    const iEstado = find(['ESTATUS', 'ESTADO PEDIDO', 'ESTADO'], ['ESTATUS', 'ESTADO'], ['TRANSPORTE']);
+    const iProductos = find(['PRODUCTOS', 'PRODUCTO'], ['PRODUCTO'], []);
+    const iFecha = find(['FECHA'], ['FECHA'], ['REPORTE', 'NOVEDAD', 'SOLUCION', 'ENTREGADO', 'DEVOLUCION', 'MOVIMIENTO', 'ACLARACION', 'PENDIENTE', 'PROCESAM', 'PRODUCIDA', 'GENERACION', 'TRANSACCION', 'ALISTAMIENTO', 'RECOGIDA', 'PAGO']);
+    const iTotal = find(['TOTAL DE LA ORDEN', 'TOTAL VENTA', 'TOTAL ORDEN'], ['TOTAL DE LA ORDEN', 'TOTAL VENTA'], []);
+    const iEmail = find(['EMAIL'], ['EMAIL'], ['PROVEEDOR', 'FACTURACION', 'COMPRADOR', 'REFERIDO']);
+    const iDropshipper = find(['DROPSHIPPER', 'TIENDA VENTA'], ['DROPSHIPPER'], ['ID', 'CATEGORIA']);
+
+    const faltantes: string[] = [];
+    if (iGuia === -1) faltantes.push('número de guía');
+    if (iEstado === -1) faltantes.push('estado/estatus');
+    if (iProductos === -1) faltantes.push('productos');
+    if (faltantes.length > 0) {
+        return { parsed: [], errors: [`Faltan columnas: ${faltantes.join(', ')}. Columnas detectadas: ${headers.filter(Boolean).slice(0, 20).join(', ')}. Envíame los encabezados de tu archivo para agregar el formato.`] };
     }
 
     const parsed: ParsedRow[] = [];
-    for (let r = 1; r < rows.length; r++) {
+    for (let r = headerRow + 1; r < rows.length; r++) {
         const row = rows[r];
         if (!row || row.length === 0) continue;
         const guia = String(row[iGuia] ?? '').trim();
