@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
     parseDropiRows, importPlatformSales, getReportMonths, getUnmappedItems,
     getSalesByMonthAndCommercial, getAssignmentConsumption, saveManualMapping,
-    getUnmappedTiendas, saveTiendaMapping,
+    getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown,
     type ImportSummary, type ReportMonth,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
@@ -24,11 +24,17 @@ import { ProductSearchPicker } from '@/components/product-search-picker';
 import { AlertTriangle, FileUp, Link2, Upload } from 'lucide-react';
 
 const PLATFORMS = ['DROPI', 'VENNDELO'];
+const BODEGAS = ['INGENIO', 'LABORATORIO', 'IMPORTACIONES', 'OTRA'];
+const PAISES_VENTA = ['COLOMBIA', 'MEXICO', 'ECUADOR', 'PARAGUAY', 'ARGENTINA', 'GUATEMALA'];
+type Breakdown = Map<string, Map<string, { ventas: number; total: number }>>;
 
 export function VentasPlataformasContent() {
     const { user } = useAuth();
     const { toast } = useToast();
     const [platform, setPlatform] = useState('DROPI');
+    const [bodega, setBodega] = useState('INGENIO');
+    const [bodegaOtra, setBodegaOtra] = useState('');
+    const [pais, setPais] = useState('COLOMBIA');
     const [file, setFile] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [progressMsg, setProgressMsg] = useState('');
@@ -41,6 +47,8 @@ export function VentasPlataformasContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [mappingItem, setMappingItem] = useState<string | null>(null);
     const [unmappedTiendas, setUnmappedTiendas] = useState<Array<{ tienda: string; ventas: number }>>([]);
+    const [byBodega, setByBodega] = useState<Breakdown>(new Map());
+    const [byPais, setByPais] = useState<Breakdown>(new Map());
     const [tiendaDialog, setTiendaDialog] = useState<string | null>(null);
     const [tiendaEmail, setTiendaEmail] = useState('');
 
@@ -49,14 +57,16 @@ export function VentasPlataformasContent() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [m, s, u, c, t] = await Promise.all([
+            const [m, s, u, c, t, b] = await Promise.all([
                 getReportMonths(),
                 getSalesByMonthAndCommercial(),
                 getUnmappedItems(platform),
                 getAssignmentConsumption(platform),
                 getUnmappedTiendas(platform),
+                getSalesBreakdown(),
             ]);
             setMonths(m); setByMonthCommercial(s); setUnmapped(u); setConsumption(c); setUnmappedTiendas(t);
+            setByBodega(b.byBodega); setByPais(b.byPais);
         } catch (error) {
             console.error(error);
         } finally {
@@ -90,7 +100,8 @@ export function VentasPlataformasContent() {
             }
 
             const config = await loadCrmConfig();
-            const result = await importPlatformSales(platform, parsed, (config as any).reactivationDays || 45, setProgressMsg);
+            const bodegaFinal = bodega === 'OTRA' ? (bodegaOtra.trim() || undefined) : bodega;
+            const result = await importPlatformSales(platform, parsed, (config as any).reactivationDays || 45, { bodega: bodegaFinal, pais }, setProgressMsg);
             setSummary(result);
             toast({
                 title: '¡Importación completada!',
@@ -145,9 +156,28 @@ export function VentasPlataformasContent() {
                             <div>
                                 <Label>Plataforma</Label>
                                 <Select value={platform} onValueChange={setPlatform}>
-                                    <SelectTrigger className="w-40 mt-1"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="w-32 mt-1"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         {PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label>Bodega del reporte</Label>
+                                <Select value={bodega} onValueChange={setBodega}>
+                                    <SelectTrigger className="w-40 mt-1"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {BODEGAS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                                {bodega === 'OTRA' && <Input value={bodegaOtra} onChange={e => setBodegaOtra(e.target.value)} placeholder="Nombre de la bodega" className="mt-1 w-40" />}
+                            </div>
+                            <div>
+                                <Label>País</Label>
+                                <Select value={pais} onValueChange={setPais}>
+                                    <SelectTrigger className="w-36 mt-1"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {PAISES_VENTA.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -229,6 +259,14 @@ export function VentasPlataformasContent() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Desglose por bodega y país */}
+            {(byBodega.size > 0 || byPais.size > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <BreakdownCard titulo="Ventas por Bodega" data={byBodega} />
+                    <BreakdownCard titulo="Ventas por País" data={byPais} />
+                </div>
+            )}
 
             {/* Asignado vs vendido */}
             {(sobreventas.length > 0 || porAgotarse.length > 0) && (
@@ -471,5 +509,43 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+    );
+}
+
+
+function BreakdownCard({ titulo, data }: { titulo: string; data: Breakdown }) {
+    const meses = Array.from(data.keys()).sort().reverse();
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <CardTitle className="text-base">{titulo}</CardTitle>
+                <CardDescription>Ventas entregadas mes a mes</CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Mes</TableHead>
+                            <TableHead>Origen</TableHead>
+                            <TableHead className="text-right">Ventas</TableHead>
+                            <TableHead className="text-right">Total (COP)</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {meses.flatMap(mes => {
+                            const rows = Array.from(data.get(mes)!.entries()).sort((a, b) => b[1].ventas - a[1].ventas);
+                            return rows.map(([origen, v], i) => (
+                                <TableRow key={`${mes}_${origen}`}>
+                                    <TableCell className="font-medium">{i === 0 ? mes : ''}</TableCell>
+                                    <TableCell>{origen}</TableCell>
+                                    <TableCell className="text-right">{v.ventas}</TableCell>
+                                    <TableCell className="text-right">${v.total.toLocaleString('es-CO')}</TableCell>
+                                </TableRow>
+                            ));
+                        })}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
     );
 }

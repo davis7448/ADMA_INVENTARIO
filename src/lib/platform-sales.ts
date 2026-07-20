@@ -37,6 +37,8 @@ export type PlatformSale = {
     sobreCupo?: boolean; // venta que excede el cupo asignado al dueño vigente
     tienda?: string; // tienda del dropshipper (columna TIENDA), desempate de items compartidos
     posibleCompartida?: boolean; // atribuida por tenencia pero con dueño anterior con remanente
+    bodega?: string; // origen del reporte (INGENIO/LABORATORIO/IMPORTACIONES…)
+    pais?: string;
     importedAt: number;
 };
 
@@ -82,6 +84,7 @@ export type ParsedRow = {
     clientEmail?: string; // solo si el archivo trae columnas de dropshipper
     clientName?: string;
     tienda?: string; // tienda del dropshipper que generó la orden
+    bodega?: string; // columna BODEGA (formato COMPANY)
 };
 
 // --- Parser del reporte de Dropi (por nombre de columna, robusto al orden) ---
@@ -153,6 +156,7 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
     const iProductoNombre = find(['PRODUCTO'], [], []);
     const iVariacion = find(['VARIACION'], [], ['ID']);
     const iTienda = find(['TIENDA', 'NOMBRE TIENDA'], [], ['TIPO', 'ORDEN', 'PROVEEDOR', 'TELEFONO', 'PEDIDO']);
+    const iBodega = find(['BODEGA'], [], ['ID']);
     const usarEmail = iDropshipper !== -1;
 
     const faltantes: string[] = [];
@@ -202,6 +206,7 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
             clientEmail: usarEmail && iEmail !== -1 ? String(row[iEmail] ?? '').trim().toLowerCase() || undefined : undefined,
             clientName: iDropshipper !== -1 ? String(row[iDropshipper] ?? '').trim() || undefined : undefined,
             tienda: iTienda !== -1 ? String(row[iTienda] ?? '').trim() || undefined : undefined,
+            bodega: iBodega !== -1 ? String(row[iBodega] ?? '').trim() || undefined : undefined,
         });
     }
 
@@ -393,6 +398,7 @@ export async function importPlatformSales(
     platform: string,
     parsed: ParsedRow[],
     reactivationDays: number,
+    context?: { bodega?: string; pais?: string },
     onProgress?: (msg: string) => void
 ): Promise<ImportSummary> {
     const progress = (msg: string) => onProgress?.(msg);
@@ -485,6 +491,8 @@ export async function importPlatformSales(
             itemIds: row.itemIds, total: row.total,
             quantity: row.quantity, itemQuantities: row.itemQuantities,
             tienda: row.tienda,
+            bodega: row.bodega || context?.bodega,
+            pais: context?.pais,
             importedAt: now,
         };
 
@@ -758,6 +766,29 @@ export async function getSalesByMonthAndCommercial(): Promise<Map<string, Map<st
         byCom.set(commercial, entry);
     }
     return result;
+}
+
+// Desglose de ventas entregadas por bodega y por país (mes a mes)
+export async function getSalesBreakdown(): Promise<{
+    byBodega: Map<string, Map<string, { ventas: number; total: number }>>;
+    byPais: Map<string, Map<string, { ventas: number; total: number }>>;
+}> {
+    const snap = await getDocs(query(collection(db, 'platformSales'), where('esEntregado', '==', true), limit(10000)));
+    const byBodega = new Map<string, Map<string, { ventas: number; total: number }>>();
+    const byPais = new Map<string, Map<string, { ventas: number; total: number }>>();
+    for (const d of snap.docs) {
+        const sale = d.data() as PlatformSale;
+        if (!sale.month) continue;
+        for (const [map, key] of [[byBodega, sale.bodega || '(sin bodega)'], [byPais, sale.pais || '(sin país)']] as const) {
+            if (!map.has(sale.month)) map.set(sale.month, new Map());
+            const inner = map.get(sale.month)!;
+            const entry = inner.get(key) || { ventas: 0, total: 0 };
+            entry.ventas++;
+            entry.total += sale.total || 0;
+            inner.set(key, entry);
+        }
+    }
+    return { byBodega, byPais };
 }
 
 // Consumo del stock asignado por item privado (asignado vs vendido)
