@@ -944,6 +944,31 @@ export async function getBaseUnitConsumption(platform: string): Promise<Array<{ 
         .sort((a, b) => b.unidadesBase - a.unidadesBase);
 }
 
+// Items con ventas cuyo SKU (del reporte) NO cruzó con el inventario:
+// pendientes de vincular al producto real (necesario para costos/margen).
+export async function getUnlinkedSkuItems(platform: string): Promise<Array<{ itemId: string; sku?: string; productName?: string; entregadas: number }>> {
+    const [mappings, salesSnap] = await Promise.all([
+        loadMappings(platform),
+        getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000))),
+    ]);
+    const entregadasByItem = new Map<string, number>();
+    for (const d of salesSnap.docs) {
+        const sale = d.data() as PlatformSale;
+        for (const itemId of sale.itemIds || []) {
+            if (sale.esEntregado) entregadasByItem.set(itemId, (entregadasByItem.get(itemId) || 0) + 1);
+            else if (!entregadasByItem.has(itemId)) entregadasByItem.set(itemId, 0);
+        }
+    }
+    const rows = [];
+    for (const [itemId] of entregadasByItem) {
+        const m = mappings.get(itemId);
+        if (m?.productId) continue; // ya vinculado al inventario
+        if (!m?.sku) continue; // sin SKU no aplica a "SKU sin cruce" (va a la otra cola)
+        rows.push({ itemId, sku: m.sku, productName: m.productName, entregadas: entregadasByItem.get(itemId) || 0 });
+    }
+    return rows.sort((a, b) => b.entregadas - a.entregadas);
+}
+
 // Items detectados como combo/bundle que necesitan confirmar su composición
 export async function getItemsNeedingComposition(platform: string): Promise<Array<{ itemId: string; productName?: string; sku?: string; unitsPerOrder?: number }>> {
     const mappings = await loadMappings(platform);

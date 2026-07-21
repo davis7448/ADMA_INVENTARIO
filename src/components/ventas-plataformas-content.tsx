@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
     parseDropiRows, importPlatformSales, getReportMonths, getUnmappedItems,
     getSalesByMonthAndCommercial, getAssignmentConsumption, saveManualMapping,
-    getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown, getBaseUnitConsumption,
+    getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown, getBaseUnitConsumption, getUnlinkedSkuItems,
     type ImportSummary, type ReportMonth,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
@@ -50,6 +50,7 @@ export function VentasPlataformasContent() {
     const [byBodega, setByBodega] = useState<Breakdown>(new Map());
     const [byPais, setByPais] = useState<Breakdown>(new Map());
     const [baseUnits, setBaseUnits] = useState<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>>([]);
+    const [unlinkedSku, setUnlinkedSku] = useState<Array<{ itemId: string; sku?: string; productName?: string; entregadas: number }>>([]);
     const [tiendaDialog, setTiendaDialog] = useState<string | null>(null);
     const [tiendaEmail, setTiendaEmail] = useState('');
 
@@ -58,7 +59,7 @@ export function VentasPlataformasContent() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [m, s, u, c, t, b, bu] = await Promise.all([
+            const [m, s, u, c, t, b, bu, usk] = await Promise.all([
                 getReportMonths(),
                 getSalesByMonthAndCommercial(),
                 getUnmappedItems(platform),
@@ -66,9 +67,10 @@ export function VentasPlataformasContent() {
                 getUnmappedTiendas(platform),
                 getSalesBreakdown(),
                 getBaseUnitConsumption(platform),
+                getUnlinkedSkuItems(platform),
             ]);
             setMonths(m); setByMonthCommercial(s); setUnmapped(u); setConsumption(c); setUnmappedTiendas(t);
-            setByBodega(b.byBodega); setByPais(b.byPais); setBaseUnits(bu);
+            setByBodega(b.byBodega); setByPais(b.byPais); setBaseUnits(bu); setUnlinkedSku(usk);
         } catch (error) {
             console.error(error);
         } finally {
@@ -335,6 +337,34 @@ export function VentasPlataformasContent() {
                                 ))}
                             </TableBody>
                         </Table>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* SKU sin cruce con inventario (para costos) */}
+            {unlinkedSku.length > 0 && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" />SKU sin cruce con Inventario ({unlinkedSku.length})</CardTitle>
+                        <CardDescription>
+                            Estos items tienen SKU en el reporte pero no cruzaron con ningún producto del inventario
+                            (SKU inexistente, o Dropi usó el ID como SKU). Vincúlalos al producto real para habilitar costo/margen.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                            {unlinkedSku.slice(0, 40).map(u => (
+                                <Button key={u.itemId} variant="outline" size="sm" className="h-auto py-1.5" onClick={() => setMappingItem(u.itemId)}>
+                                    <span className="flex flex-col items-start">
+                                        <span className="flex items-center gap-2">
+                                            <span className="font-mono text-xs">SKU {u.sku}</span>
+                                            <Badge variant="outline" className="text-[10px]">{u.entregadas} entregadas</Badge>
+                                        </span>
+                                        {u.productName && <span className="text-[11px] text-muted-foreground max-w-[240px] truncate">{u.productName}</span>}
+                                    </span>
+                                </Button>
+                            ))}
+                        </div>
                     </CardContent>
                 </Card>
             )}
