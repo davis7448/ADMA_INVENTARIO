@@ -264,6 +264,40 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
     return { parsed: grouped, errors };
 }
 
+// Normaliza SKU para cruce con inventario: corta el sufijo de Dropi (*Cxxx),
+// espacios y mayúsculas. '20231140*C009' → '20231140'.
+export function normalizeSku(sku: string): string {
+    return String(sku || '').split('*')[0].replace(/\s+/g, '').trim().toUpperCase();
+}
+
+type InvHit = { productId: string; productName: string; variantId?: string; variantName?: string };
+
+// Índice SKU → producto/variante del inventario
+export async function loadInventorySkuIndex(): Promise<Map<string, InvHit>> {
+    const snap = await getDocs(query(collection(db, 'products'), limit(5000)));
+    const map = new Map<string, InvHit>();
+    for (const d of snap.docs) {
+        const p: any = d.data();
+        if (p.sku) map.set(normalizeSku(p.sku), { productId: d.id, productName: p.name });
+        for (const v of p.variants || []) if (v.sku) map.set(normalizeSku(v.sku), { productId: d.id, productName: p.name, variantId: v.id, variantName: v.name });
+    }
+    return map;
+}
+
+// Resuelve el SKU del reporte contra inventario. Bundles (A+B+C) → cada
+// componente por separado; el primero que cruce es el productId principal.
+export function resolveSku(sku: string | undefined, index: Map<string, InvHit>): { primary?: InvHit; bundle: InvHit[]; isBundle: boolean } {
+    if (!sku) return { bundle: [], isBundle: false };
+    const parts = sku.split('+').map(s => normalizeSku(s)).filter(Boolean);
+    const isBundle = parts.length > 1;
+    const hits: InvHit[] = [];
+    for (const part of parts) {
+        const hit = index.get(part);
+        if (hit && !hits.some(h => h.productId === hit.productId && h.variantId === hit.variantId)) hits.push(hit);
+    }
+    return { primary: hits[0], bundle: hits, isBundle };
+}
+
 // Detecta multiplicidad (x2, x3) y bundles (A+B) desde SKU o nombre.
 // factor = unidades del producto base por venta; isBundle = productos distintos.
 export function detectComposition(sku?: string, productName?: string, comboUnits?: number): { factor: number; isBundle: boolean } {
@@ -442,6 +476,7 @@ export type ImportSummary = {
     sobreCupo: number;
     posiblesCompartidas: number;
     tiendasAprendidas: number;
+    skusVinculados: number;
     mapeosCreados: number;
     ofertasConvertidas: number;
     mesesAbiertos: string[];
@@ -463,6 +498,7 @@ export async function importPlatformSales(
     const solicitudesResult = await buildMappingsFromSolicitudes(platform, itemIdsInFile, mappings);
     let mapeosCreados = solicitudesResult.created;
     let summaryTiendas = 0;
+    let summarySkusVinculados = 0;
     const timelines = solicitudesResult.timelines;
 
     // Si el archivo trae SKU/nombre por item (formato por-producto), crear mapeos
@@ -513,6 +549,32 @@ export async function importPlatformSales(
     if (tiendasAprendidas > 0) await tiendaLearnBatch.commit();
     summaryTiendas = tiendasAprendidas;
 
+    // 1c. Cruce SKU (del reporte) → inventario: vincula productId a los mapeos que
+    // tengan SKU y aún no estén enlazados. NO se cruza por nombre de ClickUp.
+    progress('Cruzando SKUs con el inventario…');
+    const skuIndex = await loadInventorySkuIndex();
+    const linkBatch = writeBatch(db);
+    let skusVinculados = 0;
+    for (const m of mappings.values()) {
+        if (!m.sku || m.productId) continue;
+        const res = resolveSku(m.sku, skuIndex);
+        if (!res.primary) continue;
+        const updates: Record<string, any> = {
+            productId: res.primary.productId,
+            productName: m.productName || res.primary.productName,
+        };
+        if (res.primary.variantId) { updates.variantId = res.primary.variantId; updates.variantName = res.primary.variantName; }
+        if (res.isBundle && res.bundle.length > 1) {
+            updates.bundleWith = res.bundle.slice(1).map(h => ({ productId: h.productId, productName: h.productName }));
+            updates.needsComposition = false;
+        }
+        Object.assign(m, updates);
+        linkBatch.set(doc(db, 'platformItemMappings', `${platform}_${m.itemId}`), updates, { merge: true });
+        skusVinculados++;
+    }
+    if (skusVinculados > 0) await linkBatch.commit();
+    summarySkusVinculados = skusVinculados;
+
     // 2. Clientes por correo
     progress('Cargando clientes del CRM…');
     const clientsSnap = await getDocs(query(collection(db, 'clients'), limit(3000)));
@@ -532,7 +594,7 @@ export async function importPlatformSales(
 
     // 4. Construir las ventas del archivo
     const now = Date.now();
-    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, sobreCupo: 0, posiblesCompartidas: 0, tiendasAprendidas: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
+    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, sobreCupo: 0, posiblesCompartidas: 0, tiendasAprendidas: 0, skusVinculados: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
     const sales: PlatformSale[] = [];
 
     for (const row of parsed) {
@@ -683,6 +745,7 @@ export async function importPlatformSales(
         }
     }
     summary.tiendasAprendidas = summaryTiendas;
+    summary.skusVinculados = summarySkusVinculados;
     for (const sale of sales) {
         if (!sale.esEntregado) continue;
         if (sale.sobreCupo) summary.sobreCupo++;

@@ -202,6 +202,7 @@ export function VentasPlataformasContent() {
                                 {summary.sobreCupo > 0 && <Badge variant="destructive">{summary.sobreCupo} sobre cupo (exceden lo solicitado)</Badge>}
                                 {summary.posiblesCompartidas > 0 && <Badge variant="secondary">{summary.posiblesCompartidas} posibles compartidas (vincula tiendas para precisar)</Badge>}
                                 {summary.tiendasAprendidas > 0 && <Badge variant="outline">{summary.tiendasAprendidas} tiendas aprendidas</Badge>}
+                                {summary.skusVinculados > 0 && <Badge variant="outline">{summary.skusVinculados} SKUs vinculados a inventario</Badge>}
                                 <Badge variant="outline">{summary.mapeosCreados} mapeos creados</Badge>
                                 <Badge variant="default">{summary.ofertasConvertidas} ofertas → pedido</Badge>
                             </div>
