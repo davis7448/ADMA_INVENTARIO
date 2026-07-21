@@ -214,7 +214,7 @@ export function VentasPlataformasContent() {
             <Card>
                 <CardHeader className="pb-3">
                     <CardTitle className="text-base">Ventas Entregadas × Mes × Comercial</CardTitle>
-                    <CardDescription>Con clasificación: activaciones, reactivaciones y ventas públicas.</CardDescription>
+                    <CardDescription>Total = ingreso ADMA (precio proveedor). Con clasificación: activaciones, reactivaciones y ventas públicas.</CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
                     {isLoading ? <Skeleton className="h-32 w-full" /> : sortedMonths.length > 0 ? (

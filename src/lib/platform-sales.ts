@@ -22,7 +22,10 @@ export type PlatformSale = {
     esFinal: boolean;
     esEntregado: boolean;
     itemIds: string[];
-    total: number;
+    total: number; // INGRESO ADMA (precio proveedor × cantidad); fallback: total orden
+    totalClienteFinal?: number; // lo que paga el comprador final (referencia)
+    comision?: number; // comisión de la plataforma (referencia para margen neto)
+    flete?: number;
     quantity?: number; // unidades reales (si el archivo trae CANTIDAD)
     itemQuantities?: Record<string, number>; // unidades por item
     // Atribución (se llena con el mapeo)
@@ -80,7 +83,10 @@ export type ParsedRow = {
     fecha: string; // como venga en el archivo
     estado: string;
     itemIds: string[];
-    total: number;
+    total: number; // ingreso ADMA (precio proveedor) o, si no viene, total orden
+    totalClienteFinal?: number;
+    comision?: number;
+    flete?: number;
     quantity?: number; // unidades reales (columna CANTIDAD)
     itemQuantities?: Record<string, number>;
     itemInfo?: Record<string, { sku?: string; productName?: string; variantName?: string }>; // para auto-mapeo desde el archivo
@@ -160,6 +166,12 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
     const iVariacion = find(['VARIACION'], [], ['ID']);
     const iTienda = find(['TIENDA', 'NOMBRE TIENDA'], [], ['TIPO', 'ORDEN', 'PROVEEDOR', 'TELEFONO', 'PEDIDO']);
     const iBodega = find(['BODEGA'], [], ['ID']);
+    // Financieras: ingreso ADMA = precio proveedor (lo que el dropshipper paga a ADMA)
+    const iProvTotal = find(['PRECIO PROVEEDOR X CANTIDAD'], ['PRECIO PROVEEDOR X'], []);
+    const iProvUnit = find(['PRECIO PROVEEDOR'], ['PRECIO PROVEEDOR'], ['X CANTIDAD', 'CANTIDAD']);
+    const iComision = find(['COMISION', 'COMISION DE LA PLATAFORMA'], ['COMISION'], ['%']);
+    const iFlete = find(['PRECIO FLETE'], ['FLETE'], ['COSTO', 'DEVOLUCION', 'ASUMIDO', 'CANAL']);
+    const hasProviderPrice = iProvTotal !== -1 || iProvUnit !== -1;
     const usarEmail = iDropshipper !== -1;
 
     const faltantes: string[] = [];
@@ -197,12 +209,21 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
             }
         } : undefined;
 
+        const totalOrden = iTotal !== -1 ? (Number(row[iTotal]) || 0) : 0;
+        let ingreso = totalOrden;
+        if (hasProviderPrice) {
+            if (iProvTotal !== -1) ingreso = Number(row[iProvTotal]) || 0;
+            else ingreso = (Number(row[iProvUnit]) || 0) * (qty ?? 1);
+        }
         parsed.push({
             guia,
             fecha: iFecha !== -1 ? String(row[iFecha] ?? '') : '',
             estado,
             itemIds,
-            total: iTotal !== -1 ? (Number(row[iTotal]) || 0) : 0,
+            total: ingreso,
+            totalClienteFinal: totalOrden || undefined,
+            comision: iComision !== -1 ? (Number(row[iComision]) || undefined) : undefined,
+            flete: iFlete !== -1 ? (Number(row[iFlete]) || undefined) : undefined,
             quantity: qty,
             itemQuantities,
             itemInfo,
@@ -227,8 +248,15 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
         }
         if (row.itemInfo) prev.itemInfo = { ...(prev.itemInfo || {}), ...row.itemInfo };
         if (row.tienda && !prev.tienda) prev.tienda = row.tienda;
+        if (row.bodega && !prev.bodega) prev.bodega = row.bodega;
         if (row.quantity) prev.quantity = (prev.quantity || 0) + row.quantity;
-        // TOTAL DE LA ORDEN es el mismo en todas las filas de la orden: no se suma
+        // Ingreso ADMA (precio proveedor) es por producto → se suma entre filas.
+        // Si no hubo precio proveedor (fallback = total orden), NO se suma (se repite).
+        if (hasProviderPrice) prev.total += row.total;
+        // Total cliente final / comisión / flete son de orden: se toman de la primera fila
+        if (!prev.totalClienteFinal && row.totalClienteFinal) prev.totalClienteFinal = row.totalClienteFinal;
+        if (!prev.comision && row.comision) prev.comision = row.comision;
+        if (!prev.flete && row.flete) prev.flete = row.flete;
     }
     const grouped = Array.from(byGuia.values());
 
@@ -518,6 +546,9 @@ export async function importPlatformSales(
             id: docId, platform, guia: row.guia, orderDate, month,
             estado: row.estado, esFinal, esEntregado,
             itemIds: row.itemIds, total: row.total,
+            totalClienteFinal: row.totalClienteFinal,
+            comision: row.comision,
+            flete: row.flete,
             quantity: row.quantity, itemQuantities: row.itemQuantities,
             tienda: row.tienda,
             bodega: row.bodega || context?.bodega,
