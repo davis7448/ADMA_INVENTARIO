@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
     parseDropiRows, importPlatformSales, getReportMonths, getUnmappedItems,
     getSalesByMonthAndCommercial, getAssignmentConsumption, saveManualMapping,
-    getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown,
+    getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown, getBaseUnitConsumption,
     type ImportSummary, type ReportMonth,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
@@ -49,6 +49,7 @@ export function VentasPlataformasContent() {
     const [unmappedTiendas, setUnmappedTiendas] = useState<Array<{ tienda: string; ventas: number }>>([]);
     const [byBodega, setByBodega] = useState<Breakdown>(new Map());
     const [byPais, setByPais] = useState<Breakdown>(new Map());
+    const [baseUnits, setBaseUnits] = useState<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>>([]);
     const [tiendaDialog, setTiendaDialog] = useState<string | null>(null);
     const [tiendaEmail, setTiendaEmail] = useState('');
 
@@ -57,16 +58,17 @@ export function VentasPlataformasContent() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [m, s, u, c, t, b] = await Promise.all([
+            const [m, s, u, c, t, b, bu] = await Promise.all([
                 getReportMonths(),
                 getSalesByMonthAndCommercial(),
                 getUnmappedItems(platform),
                 getAssignmentConsumption(platform),
                 getUnmappedTiendas(platform),
                 getSalesBreakdown(),
+                getBaseUnitConsumption(platform),
             ]);
             setMonths(m); setByMonthCommercial(s); setUnmapped(u); setConsumption(c); setUnmappedTiendas(t);
-            setByBodega(b.byBodega); setByPais(b.byPais);
+            setByBodega(b.byBodega); setByPais(b.byPais); setBaseUnits(bu);
         } catch (error) {
             console.error(error);
         } finally {
@@ -306,6 +308,36 @@ export function VentasPlataformasContent() {
                 </Card>
             )}
 
+            {/* Consumo de inventario en unidades base */}
+            {baseUnits.some(b => b.tieneCombo) && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Consumo de Inventario (unidades base)</CardTitle>
+                        <CardDescription>Órdenes entregadas × factor del combo. Muestra cuántas unidades reales del producto se despacharon (los combos x2/x3 cuentan doble/triple).</CardDescription>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead className="text-right">Órdenes</TableHead>
+                                    <TableHead className="text-right">Unidades base</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {baseUnits.filter(b => b.tieneCombo || b.unidadesBase !== b.ordenes).slice(0, 20).map(b => (
+                                    <TableRow key={b.productName}>
+                                        <TableCell className="max-w-[280px] truncate">{b.productName} {b.tieneCombo && <Badge variant="secondary" className="ml-1 text-[10px]">combo</Badge>}</TableCell>
+                                        <TableCell className="text-right">{b.ordenes}</TableCell>
+                                        <TableCell className="text-right font-medium">{b.unidadesBase.toLocaleString('es-CO')}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Items sin mapear */}
             {unmapped.length > 0 && (
                 <Card>
@@ -413,6 +445,7 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
     const [clientEmail, setClientEmail] = useState('');
     const [visibility, setVisibility] = useState<'privado' | 'publico'>('publico');
     const [assignedQty, setAssignedQty] = useState('');
+    const [unitsPerOrder, setUnitsPerOrder] = useState('');
 
     const handleSave = async () => {
         if (!itemId) return;
@@ -431,9 +464,11 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
                 clientEmail: clientEmail.trim().toLowerCase() || undefined,
                 visibility: clientEmail.trim() ? 'privado' : visibility,
                 assignedQty: assignedQty ? Number(assignedQty) : undefined,
+                unitsPerOrder: unitsPerOrder && Number(unitsPerOrder) > 1 ? Number(unitsPerOrder) : undefined,
+                needsComposition: false,
             });
             toast({ title: 'Item vinculado', description: `El item ${itemId} quedó mapeado. Re-importa el archivo para atribuir sus ventas.` });
-            setProductId(undefined); setProductName(''); setClientEmail(''); setAssignedQty('');
+            setProductId(undefined); setProductName(''); setClientEmail(''); setAssignedQty(''); setUnitsPerOrder('');
             setPickedVariants([]); setVariantId(undefined); setVariantName(undefined); setVariantSku(undefined);
             onSaved();
         } catch (error) {
@@ -501,6 +536,11 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
                     <div>
                         <Label htmlFor="map-qty">Stock asignado (opcional)</Label>
                         <Input id="map-qty" type="number" min="0" value={assignedQty} onChange={e => setAssignedQty(e.target.value)} className="mt-1" />
+                    </div>
+                    <div>
+                        <Label htmlFor="map-factor">Unidades del producto por venta (combo)</Label>
+                        <Input id="map-factor" type="number" min="1" value={unitsPerOrder} onChange={e => setUnitsPerOrder(e.target.value)} className="mt-1" placeholder="1 (normal) · 2 si es x2 · 3 si es x3" />
+                        <p className="text-xs text-muted-foreground mt-1">Si el item es un combo (SKUx2, SKUx3), cada venta descuenta este número de unidades base del inventario.</p>
                     </div>
                 </div>
                 <DialogFooter>

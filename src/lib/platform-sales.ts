@@ -56,7 +56,10 @@ export type PlatformItemMapping = {
     variantName?: string;
     sku?: string;
     commercialName?: string;
-    assignedQty?: number; // unidades asignadas (privatizaciones/sumas)
+    assignedQty?: number; // unidades asignadas (privatizaciones/sumas), en combos
+    unitsPerOrder?: number; // unidades del producto base por venta (x2, x3, combo). Default 1
+    bundleWith?: Array<{ productId?: string; productName: string }>; // productos DISTINTOS del bundle (SKU+SKU)
+    needsComposition?: boolean; // detectado como combo/bundle sin factor confirmado
     source: 'solicitud' | 'clickup' | 'manual' | 'archivo';
 };
 
@@ -233,6 +236,24 @@ export function parseDropiRows(rows: any[][]): { parsed: ParsedRow[]; errors: st
     return { parsed: grouped, errors };
 }
 
+// Detecta multiplicidad (x2, x3) y bundles (A+B) desde SKU o nombre.
+// factor = unidades del producto base por venta; isBundle = productos distintos.
+export function detectComposition(sku?: string, productName?: string, comboUnits?: number): { factor: number; isBundle: boolean } {
+    if (comboUnits && comboUnits > 1) return { factor: comboUnits, isBundle: false };
+    const texts = [sku || '', productName || ''];
+    // x2..x9 pegado o con espacio: "SKUx2", "COMBO X3", "PACK X 2"
+    let factor = 1;
+    for (const t of texts) {
+        const m = t.toUpperCase().match(/X\s?([2-9])\b/);
+        if (m) { factor = Math.max(factor, Number(m[1])); }
+    }
+    // Bundle de productos distintos: SKU con "+" o palabras clave con dos nombres
+    const skuBundle = (sku || '').includes('+');
+    const nameBundle = /\b(COMBO|KIT|PACK|DUO|TRIO|BUNDLE)\b/i.test(productName || '') && (productName || '').includes('+');
+    const isBundle = skuBundle || nameBundle;
+    return { factor, isBundle };
+}
+
 // --- Mapeo de items ---
 
 export async function loadMappings(platform: string): Promise<Map<string, PlatformItemMapping>> {
@@ -304,6 +325,8 @@ export async function buildMappingsFromSolicitudes(platform: string, itemIds: Se
         const assignedQty = sols
             .filter(s => ((s.CORREO_CODIGO || '').split(/[,;\s]+/)[0]?.trim().toLowerCase() || undefined) === correo)
             .reduce((acc, s) => acc + (Number(s['CANTIDAD SOLICITADA']) || 0), 0);
+        const comboUnits = (latest as any).COMBO?.unidadesPorCombo as number | undefined;
+        const det = detectComposition(latest['SKU '] ? String(latest['SKU ']) : undefined, latest.PRODUCTO || undefined, comboUnits);
         const mapping: PlatformItemMapping = {
             platform,
             itemId,
@@ -314,6 +337,8 @@ export async function buildMappingsFromSolicitudes(platform: string, itemIds: Se
             sku: latest['SKU '] ? String(latest['SKU ']) : undefined,
             commercialName: latest.solicitadoPor?.name || latest.COMERCIAL || undefined,
             assignedQty: assignedQty || undefined,
+            unitsPerOrder: det.factor > 1 ? det.factor : undefined,
+            needsComposition: det.isBundle || undefined,
             source: 'solicitud',
         };
         const clean: Record<string, any> = { ...mapping };
@@ -420,9 +445,13 @@ export async function importPlatformSales(
     for (const row of parsed) {
         for (const [itemId, info] of Object.entries(row.itemInfo || {})) {
             if (mappings.has(itemId) || (!info.sku && !info.productName)) continue;
+            const det = detectComposition(info.sku, info.productName);
             const mapping: PlatformItemMapping = {
                 platform, itemId, visibility: 'desconocido',
-                sku: info.sku, productName: info.productName, variantName: info.variantName, source: 'archivo',
+                sku: info.sku, productName: info.productName, variantName: info.variantName,
+                unitsPerOrder: det.factor > 1 ? det.factor : undefined,
+                needsComposition: det.isBundle || undefined,
+                source: 'archivo',
             };
             const clean: Record<string, any> = { ...mapping };
             Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k]);
@@ -789,6 +818,44 @@ export async function getSalesBreakdown(): Promise<{
         }
     }
     return { byBodega, byPais };
+}
+
+// Consumo real de inventario en UNIDADES BASE por producto: cada orden entregada
+// aporta unitsPerOrder unidades del producto principal + 1 de cada producto del
+// bundle (SKU+SKU). Vista aparte del "asignado vs vendido" (que va en combos).
+export async function getBaseUnitConsumption(platform: string): Promise<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>> {
+    const [mappings, salesSnap] = await Promise.all([
+        loadMappings(platform),
+        getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), where('esEntregado', '==', true), limit(10000))),
+    ]);
+    const acc = new Map<string, { ordenes: number; unidadesBase: number; tieneCombo: boolean }>();
+    const add = (name: string, ordenes: number, unidades: number, combo: boolean) => {
+        const e = acc.get(name) || { ordenes: 0, unidadesBase: 0, tieneCombo: false };
+        e.ordenes += ordenes; e.unidadesBase += unidades; e.tieneCombo = e.tieneCombo || combo;
+        acc.set(name, e);
+    };
+    for (const d of salesSnap.docs) {
+        const sale = d.data() as PlatformSale;
+        for (const itemId of sale.itemIds || []) {
+            const m = mappings.get(itemId);
+            if (!m?.productName) continue;
+            const ordenes = sale.itemQuantities?.[itemId] ?? 1; // órdenes/combos vendidos
+            const factor = m.unitsPerOrder && m.unitsPerOrder > 1 ? m.unitsPerOrder : 1;
+            add(m.productName, ordenes, ordenes * factor, factor > 1);
+            for (const bp of m.bundleWith || []) add(bp.productName, ordenes, ordenes, true);
+        }
+    }
+    return Array.from(acc.entries())
+        .map(([productName, v]) => ({ productName, ...v }))
+        .sort((a, b) => b.unidadesBase - a.unidadesBase);
+}
+
+// Items detectados como combo/bundle que necesitan confirmar su composición
+export async function getItemsNeedingComposition(platform: string): Promise<Array<{ itemId: string; productName?: string; sku?: string; unitsPerOrder?: number }>> {
+    const mappings = await loadMappings(platform);
+    return Array.from(mappings.values())
+        .filter(m => m.needsComposition)
+        .map(m => ({ itemId: m.itemId, productName: m.productName, sku: m.sku, unitsPerOrder: m.unitsPerOrder }));
 }
 
 // Consumo del stock asignado por item privado (asignado vs vendido)
