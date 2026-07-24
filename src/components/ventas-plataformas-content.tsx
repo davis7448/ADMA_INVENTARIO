@@ -216,6 +216,47 @@ export function VentasPlataformasContent() {
                 </Card>
             )}
 
+            {/* Unificar comerciales */}
+            {(() => {
+                const gruposConVariantes = new Map<string, string[]>();
+                for (const c of comerciales) {
+                    if (!gruposConVariantes.has(c.canonical)) gruposConVariantes.set(c.canonical, []);
+                    gruposConVariantes.get(c.canonical)!.push(c.raw);
+                }
+                const canonicos = Array.from(new Set(comerciales.map(c => c.canonical))).sort();
+                return canImport && comerciales.length > 0 ? (
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Unificar Comerciales ({comerciales.length} nombres)</CardTitle>
+                            <CardDescription>
+                                Las mayúsculas/tildes ya se fusionan solas. Para nombres distintos del mismo comercial
+                                (ej: "Maryori Victoria" = "Maryori"), escribe el nombre unificado. No re-importa nada.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="overflow-x-auto">
+                            <datalist id="canon-comerciales">
+                                {canonicos.map(cn => <option key={cn} value={cn} />)}
+                            </datalist>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Nombre en los datos</TableHead>
+                                        <TableHead className="text-right">Ventas</TableHead>
+                                        <TableHead>Se muestra como</TableHead>
+                                        <TableHead>Unificar como</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {comerciales.map(com => (
+                                        <ComercialAliasRow key={com.raw} com={com} onSaved={loadData} />
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                ) : null;
+            })()}
+
             {/* Ventas × mes × comercial */}
             <Card>
                 <CardHeader className="pb-3">
@@ -697,5 +738,37 @@ function UnificarComercialesCard({ comerciales, onSaved }: { comerciales: Array<
                 </div>
             </CardContent>
         </Card>
+    );
+}
+
+
+function ComercialAliasRow({ com, onSaved }: { com: { raw: string; canonical: string; ventas: number }; onSaved: () => void }) {
+    const { toast } = useToast();
+    const [value, setValue] = useState(com.canonical);
+    const [saving, setSaving] = useState(false);
+    const dirty = value.trim() && value.trim() !== com.canonical;
+    const save = async () => {
+        if (!dirty) return;
+        setSaving(true);
+        try {
+            await saveCommercialAlias(com.raw, value.trim());
+            toast({ title: 'Unificado', description: `"${com.raw}" → "${value.trim()}"` });
+            onSaved();
+        } catch {
+            toast({ title: 'Error', description: 'No se pudo guardar.', variant: 'destructive' });
+        } finally { setSaving(false); }
+    };
+    return (
+        <TableRow>
+            <TableCell className="font-medium">{com.raw}</TableCell>
+            <TableCell className="text-right">{com.ventas}</TableCell>
+            <TableCell className="text-muted-foreground">{com.canonical}</TableCell>
+            <TableCell>
+                <div className="flex gap-1">
+                    <Input list="canon-comerciales" value={value} onChange={e => setValue(e.target.value)} className="h-8 w-48" />
+                    <Button size="sm" className="h-8" onClick={save} disabled={!dirty || saving}>{saving ? '…' : 'OK'}</Button>
+                </div>
+            </TableCell>
+        </TableRow>
     );
 }

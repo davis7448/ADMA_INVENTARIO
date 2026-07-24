@@ -925,9 +925,18 @@ export async function loadCommercialAliases(): Promise<Map<string, string>> {
     return map;
 }
 
+function titleCaseName(s: string): string {
+    return s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+// Canónico del comercial: alias explícito si existe; si no, la forma normalizada
+// (mayúsculas/tildes/paréntesis colapsados) en Título → 'MARCELA' y 'marcela'
+// se fusionan solas en 'Marcela'.
 export function canonicalCommercial(name: string | undefined, aliases: Map<string, string>): string {
-    if (!name) return '(sin comercial)';
-    return aliases.get(normCommercial(name)) || name;
+    if (!name || !name.trim()) return '(sin comercial)';
+    const norm = normCommercial(name);
+    if (!norm) return '(sin comercial)';
+    return aliases.get(norm) || titleCaseName(norm);
 }
 
 export async function saveCommercialAlias(rawName: string, canonical: string): Promise<void> {
@@ -939,14 +948,14 @@ export async function saveCommercialAlias(rawName: string, canonical: string): P
 
 // Nombres de comercial distintos vistos en ventas, con su canónico actual
 export async function getDistinctCommercials(): Promise<Array<{ raw: string; canonical: string; ventas: number }>> {
-    const [aliases, mapSnap] = await Promise.all([
+    const [aliases, sales] = await Promise.all([
         loadCommercialAliases(),
-        getDocs(query(collection(db, 'platformItemMappings'), limit(5000))),
+        fetchAllSales(s => s.esEntregado),
     ]);
     const counter = new Map<string, number>();
-    for (const d of mapSnap.docs) {
-        const raw = (d.data() as any).commercialName;
-        if (raw) counter.set(raw, (counter.get(raw) || 0) + 1);
+    for (const s of sales) {
+        const raw = s.commercialName;
+        if (raw && raw.trim()) counter.set(raw, (counter.get(raw) || 0) + 1);
     }
     return Array.from(counter.entries())
         .map(([raw, ventas]) => ({ raw, canonical: canonicalCommercial(raw, aliases), ventas }))
