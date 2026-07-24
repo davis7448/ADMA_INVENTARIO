@@ -17,6 +17,7 @@ import {
     parseDropiRows, importPlatformSales, getReportMonths, getUnmappedItems,
     getSalesByMonthAndCommercial, getAssignmentConsumption, saveManualMapping,
     getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown, getBaseUnitConsumption, getUnlinkedSkuItems,
+    getDistinctCommercials, saveCommercialAlias,
     type ImportSummary, type ReportMonth,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
@@ -51,6 +52,7 @@ export function VentasPlataformasContent() {
     const [byPais, setByPais] = useState<Breakdown>(new Map());
     const [baseUnits, setBaseUnits] = useState<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>>([]);
     const [unlinkedSku, setUnlinkedSku] = useState<Array<{ itemId: string; sku?: string; productName?: string; entregadas: number }>>([]);
+    const [comerciales, setComerciales] = useState<Array<{ raw: string; canonical: string; ventas: number }>>([]);
     const [tiendaDialog, setTiendaDialog] = useState<string | null>(null);
     const [tiendaEmail, setTiendaEmail] = useState('');
 
@@ -59,7 +61,7 @@ export function VentasPlataformasContent() {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [m, s, u, c, t, b, bu, usk] = await Promise.all([
+            const [m, s, u, c, t, b, bu, usk, dc] = await Promise.all([
                 getReportMonths(),
                 getSalesByMonthAndCommercial(),
                 getUnmappedItems(platform),
@@ -68,9 +70,10 @@ export function VentasPlataformasContent() {
                 getSalesBreakdown(),
                 getBaseUnitConsumption(platform),
                 getUnlinkedSkuItems(platform),
+                getDistinctCommercials(),
             ]);
             setMonths(m); setByMonthCommercial(s); setUnmapped(u); setConsumption(c); setUnmappedTiendas(t);
-            setByBodega(b.byBodega); setByPais(b.byPais); setBaseUnits(bu); setUnlinkedSku(usk);
+            setByBodega(b.byBodega); setByPais(b.byPais); setBaseUnits(bu); setUnlinkedSku(usk); setComerciales(dc);
         } catch (error) {
             console.error(error);
         } finally {
@@ -264,6 +267,11 @@ export function VentasPlataformasContent() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Unificar comerciales */}
+            {canImport && comerciales.length > 0 && (
+                <UnificarComercialesCard comerciales={comerciales} onSaved={loadData} />
+            )}
 
             {/* Desglose por bodega y país */}
             {(byBodega.size > 0 || byPais.size > 0) && (
@@ -616,6 +624,77 @@ function BreakdownCard({ titulo, data }: { titulo: string; data: Breakdown }) {
                         })}
                     </TableBody>
                 </Table>
+            </CardContent>
+        </Card>
+    );
+}
+
+
+function UnificarComercialesCard({ comerciales, onSaved }: { comerciales: Array<{ raw: string; canonical: string; ventas: number }>; onSaved: () => void }) {
+    const { toast } = useToast();
+    const [edits, setEdits] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
+
+    // Nombres canónicos ya usados (para sugerir en el datalist)
+    const canonicos = Array.from(new Set(comerciales.map(x => x.canonical))).sort();
+
+    const handleSave = async () => {
+        const cambios = Object.entries(edits).filter(([raw, val]) => val.trim() && val.trim() !== raw);
+        if (cambios.length === 0) { toast({ title: 'Sin cambios' }); return; }
+        setSaving(true);
+        try {
+            for (const [raw, canonical] of cambios) await saveCommercialAlias(raw, canonical.trim());
+            toast({ title: 'Comerciales unificados', description: `${cambios.length} alias guardados. Los reportes ya agrupan por el nombre unificado.` });
+            setEdits({});
+            onSaved();
+        } catch {
+            toast({ title: 'Error', description: 'No se pudo guardar.', variant: 'destructive' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <CardTitle className="text-base">Unificar Comerciales ({comerciales.length} nombres)</CardTitle>
+                <CardDescription>
+                    Escribe el nombre unificado para cada variante (ej: 'josemsuarez' y 'JOSE MANUEL SUAREZ' → el mismo).
+                    Los reportes agruparán por el nombre unificado.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <datalist id="canonicos-comerciales">
+                    {canonicos.map(c => <option key={c} value={c} />)}
+                </datalist>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Nombre en los datos</TableHead>
+                            <TableHead className="text-right">Items</TableHead>
+                            <TableHead>Nombre unificado</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {comerciales.map(c => (
+                            <TableRow key={c.raw}>
+                                <TableCell className="font-mono text-xs">{c.raw}</TableCell>
+                                <TableCell className="text-right">{c.ventas}</TableCell>
+                                <TableCell>
+                                    <Input
+                                        list="canonicos-comerciales"
+                                        defaultValue={c.canonical}
+                                        onChange={e => setEdits(prev => ({ ...prev, [c.raw]: e.target.value }))}
+                                        className="h-8 max-w-[240px]"
+                                    />
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+                <div className="mt-3">
+                    <Button onClick={handleSave} disabled={saving}>{saving ? 'Guardando…' : 'Guardar unificación'}</Button>
+                </div>
             </CardContent>
         </Card>
     );

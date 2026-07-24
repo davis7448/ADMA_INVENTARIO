@@ -891,13 +891,61 @@ export async function getUnmappedItems(platform: string): Promise<Array<{ itemId
         .sort((a, b) => b.entregadas - a.entregadas);
 }
 
+// --- Unificación de nombres de comercial (alias → canónico) ---
+
+export function normCommercial(name: string): string {
+    return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+export async function loadCommercialAliases(): Promise<Map<string, string>> {
+    const snap = await getDocs(query(collection(db, 'commercialAliases'), limit(1000)));
+    const map = new Map<string, string>();
+    for (const d of snap.docs) {
+        const a = d.data() as any;
+        if (a.rawNormalized && a.canonical) map.set(a.rawNormalized, a.canonical);
+    }
+    return map;
+}
+
+export function canonicalCommercial(name: string | undefined, aliases: Map<string, string>): string {
+    if (!name) return '(sin comercial)';
+    return aliases.get(normCommercial(name)) || name;
+}
+
+export async function saveCommercialAlias(rawName: string, canonical: string): Promise<void> {
+    const key = normCommercial(rawName);
+    await setDoc(doc(db, 'commercialAliases', key.replace(/[^A-Z0-9]/g, '_').slice(0, 100) || 'X'), {
+        rawName, rawNormalized: key, canonical: canonical.trim(), updatedAt: Date.now(),
+    }, { merge: true });
+}
+
+// Nombres de comercial distintos vistos en ventas, con su canónico actual
+export async function getDistinctCommercials(): Promise<Array<{ raw: string; canonical: string; ventas: number }>> {
+    const [aliases, mapSnap] = await Promise.all([
+        loadCommercialAliases(),
+        getDocs(query(collection(db, 'platformItemMappings'), limit(5000))),
+    ]);
+    const counter = new Map<string, number>();
+    for (const d of mapSnap.docs) {
+        const raw = (d.data() as any).commercialName;
+        if (raw) counter.set(raw, (counter.get(raw) || 0) + 1);
+    }
+    return Array.from(counter.entries())
+        .map(([raw, ventas]) => ({ raw, canonical: canonicalCommercial(raw, aliases), ventas }))
+        .sort((a, b) => b.ventas - a.ventas);
+}
+
 export async function getSalesByMonthAndCommercial(): Promise<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>> {
-    const snap = await getDocs(query(collection(db, 'platformSales'), where('esEntregado', '==', true), limit(10000)));
+    const [snap, aliases] = await Promise.all([
+        getDocs(query(collection(db, 'platformSales'), where('esEntregado', '==', true), limit(10000))),
+        loadCommercialAliases(),
+    ]);
     const result = new Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>();
     for (const d of snap.docs) {
         const sale = d.data() as PlatformSale;
         if (!sale.month) continue;
-        const commercial = sale.commercialName || '(sin comercial)';
+        const commercial = canonicalCommercial(sale.commercialName, aliases);
         if (!result.has(sale.month)) result.set(sale.month, new Map());
         const byCom = result.get(sale.month)!;
         const entry = byCom.get(commercial) || { ventas: 0, total: 0, activaciones: 0, reactivaciones: 0, publicas: 0 };
