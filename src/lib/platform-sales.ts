@@ -477,6 +477,7 @@ export type ImportSummary = {
     posiblesCompartidas: number;
     tiendasAprendidas: number;
     skusVinculados: number;
+    skusEnriquecidos: number;
     mapeosCreados: number;
     ofertasConvertidas: number;
     mesesAbiertos: string[];
@@ -499,34 +500,52 @@ export async function importPlatformSales(
     let mapeosCreados = solicitudesResult.created;
     let summaryTiendas = 0;
     let summarySkusVinculados = 0;
+    let summaryEnriquecidos = 0;
     const timelines = solicitudesResult.timelines;
 
-    // Si el archivo trae SKU/nombre por item (formato por-producto), crear mapeos
-    // de producto para los items que sigan sin mapeo (sin cliente: quedan como
-    // 'desconocido' hasta que una solicitud o un mapeo manual diga si son privados)
-    const fileInfoBatch = writeBatch(db);
-    let fileInfoCount = 0;
+    // Si el archivo trae SKU/nombre por item (formato por-producto):
+    // - crea mapeo para items nuevos
+    // - ENRIQUECE mapeos existentes (ej: sembrados de ClickUp sin SKU) con el SKU
+    //   del archivo, para que después crucen con el inventario. Antes se saltaban.
+    let fileInfoBatch = writeBatch(db);
+    let fileInfoCount = 0, skuEnriquecidos = 0, n = 0;
     for (const row of parsed) {
         for (const [itemId, info] of Object.entries(row.itemInfo || {})) {
-            if (mappings.has(itemId) || (!info.sku && !info.productName)) continue;
-            const det = detectComposition(info.sku, info.productName);
-            const mapping: PlatformItemMapping = {
-                platform, itemId, visibility: 'desconocido',
-                sku: info.sku, productName: info.productName, variantName: info.variantName,
-                unitsPerOrder: det.factor > 1 ? det.factor : undefined,
-                needsComposition: det.isBundle || undefined,
-                source: 'archivo',
-            };
-            const clean: Record<string, any> = { ...mapping };
-            Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k]);
-            fileInfoBatch.set(doc(db, 'platformItemMappings', `${platform}_${itemId}`), clean, { merge: true });
-            mappings.set(itemId, mapping);
-            fileInfoCount++;
-            if (fileInfoCount >= 400) break;
+            if (!info.sku && !info.productName) continue;
+            const existente = mappings.get(itemId);
+            if (existente) {
+                // Ya mapeado: solo agregar el SKU (y variante/nombre) si le falta
+                if (existente.sku || !info.sku) continue;
+                const det = detectComposition(info.sku, info.productName);
+                const updates: Record<string, any> = { sku: info.sku };
+                if (!existente.productName && info.productName) updates.productName = info.productName;
+                if (!existente.variantName && info.variantName) updates.variantName = info.variantName;
+                if (det.factor > 1 && !existente.unitsPerOrder) updates.unitsPerOrder = det.factor;
+                if (det.isBundle && existente.needsComposition === undefined) updates.needsComposition = true;
+                Object.assign(existente, updates);
+                fileInfoBatch.set(doc(db, 'platformItemMappings', `${platform}_${itemId}`), updates, { merge: true });
+                skuEnriquecidos++; n++;
+            } else {
+                const det = detectComposition(info.sku, info.productName);
+                const mapping: PlatformItemMapping = {
+                    platform, itemId, visibility: 'desconocido',
+                    sku: info.sku, productName: info.productName, variantName: info.variantName,
+                    unitsPerOrder: det.factor > 1 ? det.factor : undefined,
+                    needsComposition: det.isBundle || undefined,
+                    source: 'archivo',
+                };
+                const clean: Record<string, any> = { ...mapping };
+                Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k]);
+                fileInfoBatch.set(doc(db, 'platformItemMappings', `${platform}_${itemId}`), clean, { merge: true });
+                mappings.set(itemId, mapping);
+                fileInfoCount++; n++;
+            }
+            if (n >= 400) { await fileInfoBatch.commit(); fileInfoBatch = writeBatch(db); n = 0; }
         }
-        if (fileInfoCount >= 400) break;
     }
-    if (fileInfoCount > 0) { await fileInfoBatch.commit(); mapeosCreados += fileInfoCount; }
+    if (n > 0) await fileInfoBatch.commit();
+    mapeosCreados += fileInfoCount;
+    summaryEnriquecidos = skuEnriquecidos;
 
     // 1b. Mapeos tienda → cliente (desempate de items compartidos)
     const tiendaMap = await loadTiendaMappings();
@@ -594,7 +613,7 @@ export async function importPlatformSales(
 
     // 4. Construir las ventas del archivo
     const now = Date.now();
-    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, sobreCupo: 0, posiblesCompartidas: 0, tiendasAprendidas: 0, skusVinculados: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
+    const summary: ImportSummary = { total: parsed.length, nuevas: 0, actualizadas: 0, entregadas: 0, atribuidas: 0, publicas: 0, sinMapear: 0, sobreCupo: 0, posiblesCompartidas: 0, tiendasAprendidas: 0, skusVinculados: 0, skusEnriquecidos: 0, mapeosCreados, ofertasConvertidas: 0, mesesAbiertos: [] };
     const sales: PlatformSale[] = [];
 
     for (const row of parsed) {
@@ -746,6 +765,7 @@ export async function importPlatformSales(
     }
     summary.tiendasAprendidas = summaryTiendas;
     summary.skusVinculados = summarySkusVinculados;
+    summary.skusEnriquecidos = summaryEnriquecidos;
     for (const sale of sales) {
         if (!sale.esEntregado) continue;
         if (sale.sobreCupo) summary.sobreCupo++;
