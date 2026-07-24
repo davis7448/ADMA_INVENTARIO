@@ -4,7 +4,7 @@
 // los items públicos no se atribuyen a un cliente (van al producto y al comercial).
 import { db } from '@/lib/firebase';
 import {
-    collection, doc, getDoc, getDocs, limit, query, setDoc, where, writeBatch,
+    collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, where, writeBatch,
 } from 'firebase/firestore';
 import type { Modificacion } from '@/app/actions/modificaciones';
 
@@ -95,6 +95,26 @@ export type ParsedRow = {
     tienda?: string; // tienda del dropshipper que generó la orden
     bodega?: string; // columna BODEGA (formato COMPANY)
 };
+
+// Lee TODAS las ventas paginando (Firestore limita a 10.000 por consulta).
+async function fetchAllSales(filter?: (s: PlatformSale) => boolean): Promise<PlatformSale[]> {
+    const all: PlatformSale[] = [];
+    let last: any = null;
+    while (true) {
+        const q = last
+            ? query(collection(db, 'platformSales'), orderBy('__name__'), startAfter(last), limit(5000))
+            : query(collection(db, 'platformSales'), orderBy('__name__'), limit(5000));
+        const snap = await getDocs(q);
+        if (snap.empty) break;
+        for (const d of snap.docs) {
+            const s = { id: d.id, ...d.data() } as PlatformSale;
+            if (!filter || filter(s)) all.push(s);
+        }
+        last = snap.docs[snap.docs.length - 1];
+        if (snap.size < 5000) break;
+    }
+    return all;
+}
 
 // --- Parser del reporte de Dropi (por nombre de columna, robusto al orden) ---
 
@@ -440,13 +460,12 @@ export async function saveTiendaMapping(tienda: string, clientEmail: string): Pr
 
 // Tiendas vistas en ventas sin mapeo a cliente (para la cola de vinculación)
 export async function getUnmappedTiendas(platform: string): Promise<Array<{ tienda: string; ventas: number }>> {
-    const [salesSnap, tiendaMap] = await Promise.all([
-        getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000))),
+    const [sales, tiendaMap] = await Promise.all([
+        fetchAllSales(s => s.platform === platform),
         loadTiendaMappings(),
     ]);
     const counter = new Map<string, { tienda: string; ventas: number }>();
-    for (const d of salesSnap.docs) {
-        const sale = d.data() as PlatformSale;
+    for (const sale of sales) {
         if (!sale.tienda) continue;
         const norm = normTienda(sale.tienda);
         if (tiendaMap.has(norm)) continue;
@@ -607,9 +626,9 @@ export async function importPlatformSales(
 
     // 3. Historial existente de ventas de la plataforma (para clasificar)
     progress('Cargando historial de ventas…');
-    const prevSnap = await getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000)));
+    const prevSalesArr = await fetchAllSales(s => s.platform === platform);
     const prevSales = new Map<string, PlatformSale>();
-    for (const d of prevSnap.docs) prevSales.set(d.id, { id: d.id, ...d.data() } as PlatformSale);
+    for (const s of prevSalesArr) prevSales.set(s.id!, s);
 
     // 4. Construir las ventas del archivo
     const now = Date.now();
@@ -864,11 +883,9 @@ export async function getReportMonths(): Promise<ReportMonth[]> {
 // Items que necesitan revisión: sin mapeo alguno, o con producto pero SIN cliente
 // (visibilidad desconocida — típico de mapeos aprendidos del archivo)
 export async function getUnmappedItems(platform: string): Promise<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; variantName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>> {
-    const snap = await getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000)));
-    const mappings = await loadMappings(platform);
+    const [sales, mappings] = await Promise.all([fetchAllSales(s => s.platform === platform), loadMappings(platform)]);
     const counter = new Map<string, { ventas: number; entregadas: number }>();
-    for (const d of snap.docs) {
-        const sale = d.data() as PlatformSale;
+    for (const sale of sales) {
         for (const itemId of sale.itemIds || []) {
             const m = mappings.get(itemId);
             // Completo: tiene cliente, o está declarado público
@@ -937,13 +954,12 @@ export async function getDistinctCommercials(): Promise<Array<{ raw: string; can
 }
 
 export async function getSalesByMonthAndCommercial(): Promise<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>> {
-    const [snap, aliases] = await Promise.all([
-        getDocs(query(collection(db, 'platformSales'), where('esEntregado', '==', true), limit(10000))),
+    const [sales, aliases] = await Promise.all([
+        fetchAllSales(s => s.esEntregado),
         loadCommercialAliases(),
     ]);
     const result = new Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>();
-    for (const d of snap.docs) {
-        const sale = d.data() as PlatformSale;
+    for (const sale of sales) {
         if (!sale.month) continue;
         const commercial = canonicalCommercial(sale.commercialName, aliases);
         if (!result.has(sale.month)) result.set(sale.month, new Map());
@@ -964,11 +980,10 @@ export async function getSalesBreakdown(): Promise<{
     byBodega: Map<string, Map<string, { ventas: number; total: number }>>;
     byPais: Map<string, Map<string, { ventas: number; total: number }>>;
 }> {
-    const snap = await getDocs(query(collection(db, 'platformSales'), where('esEntregado', '==', true), limit(10000)));
+    const sales = await fetchAllSales(s => s.esEntregado);
     const byBodega = new Map<string, Map<string, { ventas: number; total: number }>>();
     const byPais = new Map<string, Map<string, { ventas: number; total: number }>>();
-    for (const d of snap.docs) {
-        const sale = d.data() as PlatformSale;
+    for (const sale of sales) {
         if (!sale.month) continue;
         for (const [map, key] of [[byBodega, sale.bodega || '(sin bodega)'], [byPais, sale.pais || '(sin país)']] as const) {
             if (!map.has(sale.month)) map.set(sale.month, new Map());
@@ -986,9 +1001,9 @@ export async function getSalesBreakdown(): Promise<{
 // aporta unitsPerOrder unidades del producto principal + 1 de cada producto del
 // bundle (SKU+SKU). Vista aparte del "asignado vs vendido" (que va en combos).
 export async function getBaseUnitConsumption(platform: string): Promise<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>> {
-    const [mappings, salesSnap] = await Promise.all([
+    const [mappings, sales] = await Promise.all([
         loadMappings(platform),
-        getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), where('esEntregado', '==', true), limit(10000))),
+        fetchAllSales(s => s.platform === platform && s.esEntregado),
     ]);
     const acc = new Map<string, { ordenes: number; unidadesBase: number; tieneCombo: boolean }>();
     const add = (name: string, ordenes: number, unidades: number, combo: boolean) => {
@@ -996,8 +1011,7 @@ export async function getBaseUnitConsumption(platform: string): Promise<Array<{ 
         e.ordenes += ordenes; e.unidadesBase += unidades; e.tieneCombo = e.tieneCombo || combo;
         acc.set(name, e);
     };
-    for (const d of salesSnap.docs) {
-        const sale = d.data() as PlatformSale;
+    for (const sale of sales) {
         for (const itemId of sale.itemIds || []) {
             const m = mappings.get(itemId);
             if (!m?.productName) continue;
@@ -1015,13 +1029,12 @@ export async function getBaseUnitConsumption(platform: string): Promise<Array<{ 
 // Items con ventas cuyo SKU (del reporte) NO cruzó con el inventario:
 // pendientes de vincular al producto real (necesario para costos/margen).
 export async function getUnlinkedSkuItems(platform: string): Promise<Array<{ itemId: string; sku?: string; productName?: string; entregadas: number }>> {
-    const [mappings, salesSnap] = await Promise.all([
+    const [mappings, sales] = await Promise.all([
         loadMappings(platform),
-        getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), limit(10000))),
+        fetchAllSales(s => s.platform === platform),
     ]);
     const entregadasByItem = new Map<string, number>();
-    for (const d of salesSnap.docs) {
-        const sale = d.data() as PlatformSale;
+    for (const sale of sales) {
         for (const itemId of sale.itemIds || []) {
             if (sale.esEntregado) entregadasByItem.set(itemId, (entregadasByItem.get(itemId) || 0) + 1);
             else if (!entregadasByItem.has(itemId)) entregadasByItem.set(itemId, 0);
@@ -1047,13 +1060,12 @@ export async function getItemsNeedingComposition(platform: string): Promise<Arra
 
 // Consumo del stock asignado por item privado (asignado vs vendido)
 export async function getAssignmentConsumption(platform: string): Promise<Array<{ itemId: string; productName?: string; clientEmail?: string; assignedQty: number; soldQty: number; pct: number }>> {
-    const [mappings, salesSnap] = await Promise.all([
+    const [mappings, sales] = await Promise.all([
         loadMappings(platform),
-        getDocs(query(collection(db, 'platformSales'), where('platform', '==', platform), where('esEntregado', '==', true), limit(10000))),
+        fetchAllSales(s => s.platform === platform && s.esEntregado),
     ]);
     const soldByItem = new Map<string, number>();
-    for (const d of salesSnap.docs) {
-        const sale = d.data() as PlatformSale;
+    for (const sale of sales) {
         for (const itemId of sale.itemIds || []) {
             const qty = sale.itemQuantities?.[itemId] ?? 1; // unidades reales si el archivo las trae
             soldByItem.set(itemId, (soldByItem.get(itemId) || 0) + qty);
