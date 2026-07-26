@@ -55,25 +55,25 @@ export function VentasPlataformasContent() {
     const [comerciales, setComerciales] = useState<Array<{ raw: string; canonical: string; ventas: number }>>([]);
     const [tiendaDialog, setTiendaDialog] = useState<string | null>(null);
     const [tiendaEmail, setTiendaEmail] = useState('');
+    // Selector de periodo (meses seleccionados). Vacío = todos.
+    const [periodo, setPeriodo] = useState<string[]>([]);
+    // Colas de revisión: se cargan bajo demanda (son pesadas)
+    const [colasCargadas, setColasCargadas] = useState(false);
+    const [cargandoColas, setCargandoColas] = useState(false);
 
     const canImport = !!user && ['admin', 'coordinacion', 'commercial_director', 'plataformas'].includes(user.role);
 
-    const loadData = async () => {
+    // Carga RÁPIDA: resúmenes por mes (pre-agregados) + meses disponibles
+    const loadResumen = async (periodoSel?: string[]) => {
         setIsLoading(true);
         try {
-            const [m, s, u, c, t, b, bu, usk, dc] = await Promise.all([
+            const [m, s, b] = await Promise.all([
                 getReportMonths(),
-                getSalesByMonthAndCommercial(),
-                getUnmappedItems(platform),
-                getAssignmentConsumption(platform),
-                getUnmappedTiendas(platform),
-                getSalesBreakdown(),
-                getBaseUnitConsumption(platform),
-                getUnlinkedSkuItems(platform),
-                getDistinctCommercials(),
+                getSalesByMonthAndCommercial(periodoSel),
+                getSalesBreakdown(periodoSel),
             ]);
-            setMonths(m); setByMonthCommercial(s); setUnmapped(u); setConsumption(c); setUnmappedTiendas(t);
-            setByBodega(b.byBodega); setByPais(b.byPais); setBaseUnits(bu); setUnlinkedSku(usk); setComerciales(dc);
+            setMonths(m); setByMonthCommercial(s);
+            setByBodega(b.byBodega); setByPais(b.byPais);
         } catch (error) {
             console.error(error);
         } finally {
@@ -81,7 +81,31 @@ export function VentasPlataformasContent() {
         }
     };
 
-    useEffect(() => { loadData(); }, [platform]);
+    // Carga PESADA (bajo demanda): colas de revisión que escanean ventas
+    const loadColas = async () => {
+        setCargandoColas(true);
+        try {
+            const [u, c, t, bu, usk, dc] = await Promise.all([
+                getUnmappedItems(platform),
+                getAssignmentConsumption(platform),
+                getUnmappedTiendas(platform),
+                getBaseUnitConsumption(platform),
+                getUnlinkedSkuItems(platform),
+                getDistinctCommercials(),
+            ]);
+            setUnmapped(u); setConsumption(c); setUnmappedTiendas(t); setBaseUnits(bu); setUnlinkedSku(usk); setComerciales(dc);
+            setColasCargadas(true);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setCargandoColas(false);
+        }
+    };
+
+    const loadData = async () => { await loadResumen(periodo.length ? periodo : undefined); };
+
+    useEffect(() => { loadResumen(); }, [platform]);
+    useEffect(() => { loadResumen(periodo.length ? periodo : undefined); }, [periodo]);
 
     const handleImport = async () => {
         if (!file) {
@@ -115,7 +139,8 @@ export function VentasPlataformasContent() {
                 description: `${result.nuevas} nuevas, ${result.actualizadas} actualizadas · ${result.entregadas} entregadas · ${result.ofertasConvertidas} oferta(s) marcadas como pedido.`,
             });
             setFile(null);
-            loadData();
+            await loadResumen(periodo.length ? periodo : undefined);
+            if (colasCargadas) await loadColas();
         } catch (error) {
             console.error(error);
             toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo importar.', variant: 'destructive' });
@@ -132,9 +157,26 @@ export function VentasPlataformasContent() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold font-headline tracking-tight">Ventas de Plataformas</h1>
-                <p className="text-muted-foreground">Importa los reportes de despachos; las ventas entregadas alimentan conversión, clasificación y volumen por cliente.</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold font-headline tracking-tight">Ventas de Plataformas</h1>
+                    <p className="text-muted-foreground">Los resúmenes se calculan al importar; la vista carga al instante.</p>
+                </div>
+                <div className="w-full sm:w-64">
+                    <Label className="text-xs">Periodo</Label>
+                    <Select
+                        value={periodo.length === 1 ? periodo[0] : periodo.length === 0 ? 'todos' : 'varios'}
+                        onValueChange={(v) => setPeriodo(v === 'todos' ? [] : [v])}
+                    >
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="todos">Todos los meses</SelectItem>
+                            {months.map(m => (
+                                <SelectItem key={m.month} value={m.month}>{m.month}{m.pendingOrders > 0 ? ' (sin cerrar)' : ''}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             {/* Alertas de reportes */}
@@ -322,6 +364,21 @@ export function VentasPlataformasContent() {
                 </div>
             )}
 
+            {/* Colas de revisión (bajo demanda — escanean todas las ventas) */}
+            {!colasCargadas ? (
+                <Card>
+                    <CardContent className="py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div>
+                            <p className="font-medium">Colas de revisión y consumo</p>
+                            <p className="text-sm text-muted-foreground">Items/tiendas sin vincular, SKU sin cruce, asignado vs vendido y consumo por unidad base. Requiere escanear todas las ventas.</p>
+                        </div>
+                        <Button onClick={loadColas} disabled={cargandoColas}>
+                            {cargandoColas ? 'Cargando…' : 'Cargar revisión'}
+                        </Button>
+                    </CardContent>
+                </Card>
+            ) : (
+            <>
             {/* Asignado vs vendido */}
             {(sobreventas.length > 0 || porAgotarse.length > 0) && (
                 <Card>
@@ -469,6 +526,8 @@ export function VentasPlataformasContent() {
                         </div>
                     </CardContent>
                 </Card>
+            )}
+            </>
             )}
 
             <Dialog open={!!tiendaDialog} onOpenChange={(open) => !open && setTiendaDialog(null)}>

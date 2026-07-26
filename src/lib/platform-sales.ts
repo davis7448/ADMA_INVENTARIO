@@ -74,8 +74,13 @@ export type ReportMonth = {
     finalOrders: number;
     pendingOrders: number;
     entregadas: number;
+    ingresoTotal?: number;
     closed: boolean;
     lastImportAt: number;
+    // Pre-agregados calculados al importar (evitan escanear todas las ventas)
+    porComercial?: Record<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
+    porBodega?: Record<string, { ventas: number; total: number }>;
+    porPais?: Record<string, { ventas: number; total: number }>;
 };
 
 export type ParsedRow = {
@@ -807,26 +812,54 @@ export async function importPlatformSales(
         await batch.commit();
     }
 
-    // 7. Cierre de meses (sobre TODO el historial de la plataforma)
-    progress('Calculando cierre de meses…');
-    const byMonth = new Map<string, { total: number; final: number; entregadas: number }>();
+    // 7. Cierre de meses + PRE-AGREGADOS por mes (se calculan una vez al importar
+    // y la página los lee directo → carga rápida sin escanear todas las ventas).
+    progress('Calculando resúmenes por mes…');
+    const aliases = await loadCommercialAliases();
+    const agg = new Map<string, {
+        total: number; final: number; entregadas: number;
+        porComercial: Record<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
+        porBodega: Record<string, { ventas: number; total: number }>;
+        porPais: Record<string, { ventas: number; total: number }>;
+        ingresoTotal: number;
+    }>();
+    const getM = (mo: string) => {
+        if (!agg.has(mo)) agg.set(mo, { total: 0, final: 0, entregadas: 0, porComercial: {}, porBodega: {}, porPais: {}, ingresoTotal: 0 });
+        return agg.get(mo)!;
+    };
     for (const sale of prevSales.values()) {
         if (!sale.month) continue;
-        const m = byMonth.get(sale.month) || { total: 0, final: 0, entregadas: 0 };
-        m.total++; if (sale.esFinal) m.final++; if (sale.esEntregado) m.entregadas++;
-        byMonth.set(sale.month, m);
+        const m = getM(sale.month);
+        m.total++; if (sale.esFinal) m.final++;
+        if (!sale.esEntregado) continue;
+        m.entregadas++;
+        m.ingresoTotal += sale.total || 0;
+        const com = canonicalCommercial(sale.commercialName, aliases);
+        const c = m.porComercial[com] || { ventas: 0, total: 0, activaciones: 0, reactivaciones: 0, publicas: 0 };
+        c.ventas++; c.total += sale.total || 0;
+        if (sale.classification === 'activacion') c.activaciones++;
+        if (sale.classification === 'reactivacion') c.reactivaciones++;
+        if (sale.classification === 'publica') c.publicas++;
+        m.porComercial[com] = c;
+        const bod = sale.bodega || '(sin bodega)';
+        const b = m.porBodega[bod] || { ventas: 0, total: 0 }; b.ventas++; b.total += sale.total || 0; m.porBodega[bod] = b;
+        const pa = sale.pais || '(sin país)';
+        const p = m.porPais[pa] || { ventas: 0, total: 0 }; p.ventas++; p.total += sale.total || 0; m.porPais[pa] = p;
     }
-    const monthBatch = writeBatch(db);
-    for (const [month, m] of byMonth) {
+    let mb = writeBatch(db); let mbn = 0;
+    for (const [month, m] of agg) {
         const pending = m.total - m.final;
         if (pending > 0) summary.mesesAbiertos.push(month);
-        monthBatch.set(doc(db, 'platformReportMonths', `${platform}_${month}`), {
+        mb.set(doc(db, 'platformReportMonths', `${platform}_${month}`), {
             platform, month, totalOrders: m.total, finalOrders: m.final,
-            pendingOrders: pending, entregadas: m.entregadas,
+            pendingOrders: pending, entregadas: m.entregadas, ingresoTotal: m.ingresoTotal,
             closed: pending === 0, lastImportAt: now,
+            porComercial: m.porComercial, porBodega: m.porBodega, porPais: m.porPais,
         });
+        mbn++;
+        if (mbn >= 400) { await mb.commit(); mb = writeBatch(db); mbn = 0; }
     }
-    await monthBatch.commit();
+    if (mbn > 0) await mb.commit();
     summary.mesesAbiertos.sort();
 
     // 8. Conversión automática: ventas atribuidas ENTREGADAS marcan ofertas como 'pedido'
@@ -962,45 +995,42 @@ export async function getDistinctCommercials(): Promise<Array<{ raw: string; can
         .sort((a, b) => b.ventas - a.ventas);
 }
 
-export async function getSalesByMonthAndCommercial(): Promise<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>> {
-    const [sales, aliases] = await Promise.all([
-        fetchAllSales(s => s.esEntregado),
-        loadCommercialAliases(),
-    ]);
+// Lee los PRE-AGREGADOS por mes (rápido). El filtro `months` acota el periodo;
+// re-aplica los alias de comercial por si cambiaron después del import.
+export async function getSalesByMonthAndCommercial(months?: string[]): Promise<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>> {
+    const [reportMonths, aliases] = await Promise.all([getReportMonths(), loadCommercialAliases()]);
     const result = new Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>();
-    for (const sale of sales) {
-        if (!sale.month) continue;
-        const commercial = canonicalCommercial(sale.commercialName, aliases);
-        if (!result.has(sale.month)) result.set(sale.month, new Map());
-        const byCom = result.get(sale.month)!;
-        const entry = byCom.get(commercial) || { ventas: 0, total: 0, activaciones: 0, reactivaciones: 0, publicas: 0 };
-        entry.ventas++;
-        entry.total += sale.total || 0;
-        if (sale.classification === 'activacion') entry.activaciones++;
-        if (sale.classification === 'reactivacion') entry.reactivaciones++;
-        if (sale.classification === 'publica') entry.publicas++;
-        byCom.set(commercial, entry);
+    for (const rm of reportMonths) {
+        if (months && !months.includes(rm.month)) continue;
+        const byCom = new Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>();
+        for (const [raw, v] of Object.entries((rm as any).porComercial || {})) {
+            // Re-canonizar (por si el nombre guardado ya era canónico o cambió el alias)
+            const com = canonicalCommercial(raw, aliases);
+            const e = byCom.get(com) || { ventas: 0, total: 0, activaciones: 0, reactivaciones: 0, publicas: 0 };
+            const val = v as any;
+            e.ventas += val.ventas || 0; e.total += val.total || 0;
+            e.activaciones += val.activaciones || 0; e.reactivaciones += val.reactivaciones || 0; e.publicas += val.publicas || 0;
+            byCom.set(com, e);
+        }
+        if (byCom.size > 0) result.set(rm.month, byCom);
     }
     return result;
 }
 
-// Desglose de ventas entregadas por bodega y por país (mes a mes)
-export async function getSalesBreakdown(): Promise<{
+// Desglose por bodega y país desde los pre-agregados por mes
+export async function getSalesBreakdown(months?: string[]): Promise<{
     byBodega: Map<string, Map<string, { ventas: number; total: number }>>;
     byPais: Map<string, Map<string, { ventas: number; total: number }>>;
 }> {
-    const sales = await fetchAllSales(s => s.esEntregado);
+    const reportMonths = await getReportMonths();
     const byBodega = new Map<string, Map<string, { ventas: number; total: number }>>();
     const byPais = new Map<string, Map<string, { ventas: number; total: number }>>();
-    for (const sale of sales) {
-        if (!sale.month) continue;
-        for (const [map, key] of [[byBodega, sale.bodega || '(sin bodega)'], [byPais, sale.pais || '(sin país)']] as const) {
-            if (!map.has(sale.month)) map.set(sale.month, new Map());
-            const inner = map.get(sale.month)!;
-            const entry = inner.get(key) || { ventas: 0, total: 0 };
-            entry.ventas++;
-            entry.total += sale.total || 0;
-            inner.set(key, entry);
+    for (const rm of reportMonths) {
+        if (months && !months.includes(rm.month)) continue;
+        for (const [target, field] of [[byBodega, 'porBodega'], [byPais, 'porPais']] as const) {
+            const data = (rm as any)[field] || {};
+            if (Object.keys(data).length === 0) continue;
+            target.set(rm.month, new Map(Object.entries(data) as any));
         }
     }
     return { byBodega, byPais };
