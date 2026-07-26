@@ -173,6 +173,18 @@ export function VentasPlataformasContent() {
     };
 
     const openMonths = months.filter(m => !m.closed);
+    // Un mes puede tener varios docs (uno por plataforma). Fusionar por mes para
+    // el selector (sin duplicados) y para el badge de cierre (totales sumados).
+    const mesesResumen = useMemo(() => {
+        const map = new Map<string, { month: string; pendingOrders: number; closed: boolean }>();
+        for (const m of months) {
+            const e = map.get(m.month) || { month: m.month, pendingOrders: 0, closed: true };
+            e.pendingOrders += m.pendingOrders || 0;
+            e.closed = e.closed && m.closed;
+            map.set(m.month, e);
+        }
+        return Array.from(map.values()).sort((a, b) => b.month.localeCompare(a.month));
+    }, [months]);
     const sortedMonths = useMemo(() => Array.from(byMonthCommercial.keys()).sort().reverse(), [byMonthCommercial]);
     const sobreventas = consumption.filter(c => c.pct > 100);
     const porAgotarse = consumption.filter(c => c.pct >= 80 && c.pct <= 100);
@@ -193,7 +205,7 @@ export function VentasPlataformasContent() {
                         <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="todos">Todos los meses</SelectItem>
-                            {months.map(m => (
+                            {mesesResumen.map(m => (
                                 <SelectItem key={m.month} value={m.month}>{m.month}{m.pendingOrders > 0 ? ' (sin cerrar)' : ''}</SelectItem>
                             ))}
                         </SelectContent>
@@ -362,7 +374,7 @@ export function VentasPlataformasContent() {
                             </TableHeader>
                             <TableBody>
                                 {sortedMonths.flatMap(month => {
-                                    const monthInfo = months.find(m => m.month === month);
+                                    const monthInfo = mesesResumen.find(m => m.month === month);
                                     const rows = Array.from(byMonthCommercial.get(month)!.entries()).sort((a, b) => b[1].ventas - a[1].ventas);
                                     return rows.map(([commercial, v], i) => (
                                         <TableRow key={`${month}_${commercial}`}>

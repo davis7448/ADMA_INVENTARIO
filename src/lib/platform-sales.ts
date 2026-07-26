@@ -1002,7 +1002,9 @@ export async function getSalesByMonthAndCommercial(months?: string[]): Promise<M
     const result = new Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>();
     for (const rm of reportMonths) {
         if (months && !months.includes(rm.month)) continue;
-        const byCom = new Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>();
+        // Un mes puede tener VARIOS docs (uno por plataforma: DROPI, VENNDELO…).
+        // Acumular sobre el mapa del mes en vez de sobrescribirlo.
+        const byCom = result.get(rm.month) || new Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>();
         for (const [raw, v] of Object.entries((rm as any).porComercial || {})) {
             // Re-canonizar (por si el nombre guardado ya era canónico o cambió el alias)
             const com = canonicalCommercial(raw, aliases);
@@ -1030,7 +1032,15 @@ export async function getSalesBreakdown(months?: string[]): Promise<{
         for (const [target, field] of [[byBodega, 'porBodega'], [byPais, 'porPais']] as const) {
             const data = (rm as any)[field] || {};
             if (Object.keys(data).length === 0) continue;
-            target.set(rm.month, new Map(Object.entries(data) as any));
+            // Acumular por mes across plataformas (no sobrescribir el doc anterior).
+            const monthMap = target.get(rm.month) || new Map<string, { ventas: number; total: number }>();
+            for (const [k, v] of Object.entries(data)) {
+                const val = v as { ventas?: number; total?: number };
+                const e = monthMap.get(k) || { ventas: 0, total: 0 };
+                e.ventas += val.ventas || 0; e.total += val.total || 0;
+                monthMap.set(k, e);
+            }
+            target.set(rm.month, monthMap);
         }
     }
     return { byBodega, byPais };
