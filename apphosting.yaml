@@ -49,3 +49,8 @@ env:
      secret: CLICKUP_WEBHOOK_SECRETS
      availability:
        - RUNTIME
+
+   - variable: VENNDELO_REFRESH_TOKEN
+     secret: VENNDELO_REFRESH_TOKEN
+     availability:
+       - RUNTIME

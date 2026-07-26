@@ -21,6 +21,7 @@ import {
     type ImportSummary, type ReportMonth,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
+import { syncVenndeloAction } from '@/app/actions/venndelo';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { AlertTriangle, FileUp, Link2, Upload } from 'lucide-react';
 
@@ -60,6 +61,8 @@ export function VentasPlataformasContent() {
     // Colas de revisión: se cargan bajo demanda (son pesadas)
     const [colasCargadas, setColasCargadas] = useState(false);
     const [cargandoColas, setCargandoColas] = useState(false);
+    const [isSyncingVenndelo, setIsSyncingVenndelo] = useState(false);
+    const [venndeloResumen, setVenndeloResumen] = useState<string>('');
 
     const canImport = !!user && ['admin', 'coordinacion', 'commercial_director', 'plataformas'].includes(user.role);
 
@@ -99,6 +102,25 @@ export function VentasPlataformasContent() {
             console.error(error);
         } finally {
             setCargandoColas(false);
+        }
+    };
+
+    const handleVenndeloSync = async () => {
+        setIsSyncingVenndelo(true);
+        setVenndeloResumen('');
+        try {
+            const r = await syncVenndeloAction(30);
+            if (r.success) {
+                const res = r.resumen;
+                setVenndeloResumen(res.filas === 0 ? 'Sin órdenes nuevas.' : `${res.nuevas} nuevas · ${res.actualizadas} actualizadas · ${res.entregadas} entregadas · ${res.skusVinculados} SKUs vinculados`);
+                toast({ title: '¡Venndelo sincronizado!', description: `${res.filas || 0} líneas procesadas.` });
+                await loadResumen(periodo.length ? periodo : undefined);
+                if (colasCargadas) await loadColas();
+            } else {
+                toast({ title: 'Error', description: r.error, variant: 'destructive' });
+            }
+        } finally {
+            setIsSyncingVenndelo(false);
         }
     };
 
@@ -193,11 +215,29 @@ export function VentasPlataformasContent() {
                 </div>
             )}
 
+            {/* Sincronizar Venndelo por API */}
+            {canImport && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base"><Upload className="h-4 w-4" />Venndelo — Sincronización automática</CardTitle>
+                        <CardDescription>Trae las órdenes de Venndelo por API (bodega INGENIO, país COLOMBIA). El cron lo hace solo cada día; este botón sincroniza ahora.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-3">
+                            <Button onClick={handleVenndeloSync} disabled={isSyncingVenndelo}>
+                                {isSyncingVenndelo ? 'Sincronizando…' : 'Sincronizar Venndelo (30 días)'}
+                            </Button>
+                            {venndeloResumen && <span className="text-sm text-muted-foreground">{venndeloResumen}</span>}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Importar */}
             {canImport && (
                 <Card>
                     <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-base"><FileUp className="h-4 w-4" />Importar Reporte de Despachos</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-base"><FileUp className="h-4 w-4" />Importar Reporte de Despachos (Dropi)</CardTitle>
                         <CardDescription>Se deduplica por número de guía: puedes subir el mismo periodo varias veces y solo se actualizan los estados.</CardDescription>
                     </CardHeader>
                     <CardContent>
