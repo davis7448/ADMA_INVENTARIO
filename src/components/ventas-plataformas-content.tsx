@@ -173,17 +173,30 @@ export function VentasPlataformasContent() {
     };
 
     const openMonths = months.filter(m => !m.closed);
-    // Un mes puede tener varios docs (uno por plataforma). Fusionar por mes para
-    // el selector (sin duplicados) y para el badge de cierre (totales sumados).
-    const mesesResumen = useMemo(() => {
-        const map = new Map<string, { month: string; pendingOrders: number; closed: boolean }>();
+    // Un mes puede tener varios docs (uno por plataforma). Fusionar por mes para:
+    // el TOTAL del mes, el desglose por plataforma, el selector y el badge de cierre.
+    const { mesesResumen, totalByMonth, byMonthPlatform } = useMemo(() => {
+        const totalMap = new Map<string, { ventas: number; total: number; pendingOrders: number; closed: boolean }>();
+        const platformMap = new Map<string, Map<string, { ventas: number; total: number }>>();
         for (const m of months) {
-            const e = map.get(m.month) || { month: m.month, pendingOrders: 0, closed: true };
-            e.pendingOrders += m.pendingOrders || 0;
-            e.closed = e.closed && m.closed;
-            map.set(m.month, e);
+            const t = totalMap.get(m.month) || { ventas: 0, total: 0, pendingOrders: 0, closed: true };
+            t.ventas += m.entregadas || 0;
+            t.total += m.ingresoTotal || 0;
+            t.pendingOrders += m.pendingOrders || 0;
+            t.closed = t.closed && m.closed;
+            totalMap.set(m.month, t);
+
+            if (!platformMap.has(m.month)) platformMap.set(m.month, new Map());
+            const pm = platformMap.get(m.month)!;
+            const e = pm.get(m.platform) || { ventas: 0, total: 0 };
+            e.ventas += m.entregadas || 0;
+            e.total += m.ingresoTotal || 0;
+            pm.set(m.platform, e);
         }
-        return Array.from(map.values()).sort((a, b) => b.month.localeCompare(a.month));
+        const lista = Array.from(totalMap.entries())
+            .map(([month, v]) => ({ month, pendingOrders: v.pendingOrders, closed: v.closed }))
+            .sort((a, b) => b.month.localeCompare(a.month));
+        return { mesesResumen: lista, totalByMonth: totalMap, byMonthPlatform: platformMap };
     }, [months]);
     const sortedMonths = useMemo(() => Array.from(byMonthCommercial.keys()).sort().reverse(), [byMonthCommercial]);
     const sobreventas = consumption.filter(c => c.pct > 100);
@@ -351,69 +364,28 @@ export function VentasPlataformasContent() {
                 ) : null;
             })()}
 
-            {/* Ventas × mes × comercial */}
-            <Card>
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Ventas Entregadas × Mes × Comercial</CardTitle>
-                    <CardDescription>Total = ingreso ADMA (precio proveedor). Con clasificación: activaciones, reactivaciones y ventas públicas.</CardDescription>
-                </CardHeader>
-                <CardContent className="overflow-x-auto">
-                    {isLoading ? <Skeleton className="h-32 w-full" /> : sortedMonths.length > 0 ? (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Mes</TableHead>
-                                    <TableHead>Comercial</TableHead>
-                                    <TableHead className="text-right">Ventas</TableHead>
-                                    <TableHead className="text-right">Total (COP)</TableHead>
-                                    <TableHead className="text-right">🟢 Activ.</TableHead>
-                                    <TableHead className="text-right">🟠 React.</TableHead>
-                                    <TableHead className="text-right">⚪ Públicas</TableHead>
-                                    <TableHead>Cierre</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {sortedMonths.flatMap(month => {
-                                    const monthInfo = mesesResumen.find(m => m.month === month);
-                                    const rows = Array.from(byMonthCommercial.get(month)!.entries()).sort((a, b) => b[1].ventas - a[1].ventas);
-                                    return rows.map(([commercial, v], i) => (
-                                        <TableRow key={`${month}_${commercial}`}>
-                                            <TableCell className="font-medium">{i === 0 ? month : ''}</TableCell>
-                                            <TableCell>{commercial}</TableCell>
-                                            <TableCell className="text-right">{v.ventas}</TableCell>
-                                            <TableCell className="text-right">${v.total.toLocaleString('es-CO')}</TableCell>
-                                            <TableCell className="text-right">{v.activaciones || '—'}</TableCell>
-                                            <TableCell className="text-right">{v.reactivaciones || '—'}</TableCell>
-                                            <TableCell className="text-right">{v.publicas || '—'}</TableCell>
-                                            <TableCell>
-                                                {i === 0 && monthInfo && (
-                                                    <Badge variant={monthInfo.closed ? 'outline' : 'destructive'}>
-                                                        {monthInfo.closed ? 'Cerrado' : `${monthInfo.pendingOrders} pendientes`}
-                                                    </Badge>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ));
-                                })}
-                            </TableBody>
-                        </Table>
-                    ) : (
-                        <p className="text-sm text-muted-foreground text-center py-6">Aún no hay ventas importadas. Sube el primer reporte.</p>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Unificar comerciales */}
-            {canImport && comerciales.length > 0 && (
-                <UnificarComercialesCard comerciales={comerciales} onSaved={loadData} />
-            )}
-
-            {/* Desglose por bodega y país */}
-            {(byBodega.size > 0 || byPais.size > 0) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <BreakdownCard titulo="Ventas por Bodega" data={byBodega} />
-                    <BreakdownCard titulo="Ventas por País" data={byPais} />
+            {/* Resumen por mes: TOTAL + desglose por plataforma, comercial y país */}
+            {isLoading ? (
+                <Skeleton className="h-64 w-full" />
+            ) : sortedMonths.length > 0 ? (
+                <div className="space-y-4">
+                    {sortedMonths.map(month => (
+                        <MonthSummaryCard
+                            key={month}
+                            month={month}
+                            total={totalByMonth.get(month)}
+                            plataforma={byMonthPlatform.get(month)}
+                            comercial={byMonthCommercial.get(month)}
+                            pais={byPais.get(month)}
+                        />
+                    ))}
                 </div>
+            ) : (
+                <Card>
+                    <CardContent className="py-8">
+                        <p className="text-sm text-muted-foreground text-center">Aún no hay ventas en el periodo seleccionado. Sube un reporte de Dropi o sincroniza Venndelo.</p>
+                    </CardContent>
+                </Card>
             )}
 
             {/* Colas de revisión (bajo demanda — escanean todas las ventas) */}
@@ -743,6 +715,97 @@ function ManualMappingDialog({ platform, itemId, onClose, onSaved }: {
     );
 }
 
+
+const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+function formatMonthLabel(m: string): string {
+    const [y, mo] = m.split('-');
+    return `${MESES_ES[Number(mo) - 1] || mo} ${y}`;
+}
+
+// Cuenta compacta de clasificación (activaciones / reactivaciones / públicas)
+function ClasifDots({ v }: { v: { activaciones?: number; reactivaciones?: number; publicas?: number } }) {
+    if (!v.activaciones && !v.reactivaciones && !v.publicas) return null;
+    return (
+        <span className="ml-1.5 text-[10px] text-muted-foreground whitespace-nowrap">
+            {v.activaciones ? <span className="text-green-600">🟢{v.activaciones} </span> : null}
+            {v.reactivaciones ? <span className="text-amber-600">🟠{v.reactivaciones} </span> : null}
+            {v.publicas ? <span>⚪{v.publicas}</span> : null}
+        </span>
+    );
+}
+
+// Mini-tabla de un desglose (plataforma / comercial / país) dentro de la tarjeta de mes
+function MiniBreakdown({ titulo, rows }: {
+    titulo: string;
+    rows: Array<{ label: string; ventas: number; total: number; clasif?: { activaciones?: number; reactivaciones?: number; publicas?: number } }>;
+}) {
+    return (
+        <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{titulo}</h4>
+            {rows.length === 0 ? (
+                <p className="text-xs text-muted-foreground">—</p>
+            ) : (
+                <table className="w-full text-sm">
+                    <tbody>
+                        {rows.map(r => (
+                            <tr key={r.label} className="border-b border-border/40 last:border-0">
+                                <td className="py-1 pr-2 align-top">
+                                    <span className="font-medium">{r.label}</span>
+                                    {r.clasif && <ClasifDots v={r.clasif} />}
+                                </td>
+                                <td className="py-1 text-right tabular-nums whitespace-nowrap align-top">{r.ventas}</td>
+                                <td className="py-1 pl-3 text-right tabular-nums whitespace-nowrap text-muted-foreground align-top">${r.total.toLocaleString('es-CO')}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        </div>
+    );
+}
+
+// Tarjeta de un mes: cabecera con el TOTAL y tres columnas de desglose
+function MonthSummaryCard({ month, total, plataforma, comercial, pais }: {
+    month: string;
+    total?: { ventas: number; total: number; pendingOrders: number; closed: boolean };
+    plataforma?: Map<string, { ventas: number; total: number }>;
+    comercial?: Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
+    pais?: Map<string, { ventas: number; total: number }>;
+}) {
+    const platRows = Array.from(plataforma?.entries() || [])
+        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
+        .sort((a, b) => b.ventas - a.ventas);
+    const comRows = Array.from(comercial?.entries() || [])
+        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total, clasif: { activaciones: v.activaciones, reactivaciones: v.reactivaciones, publicas: v.publicas } }))
+        .sort((a, b) => b.ventas - a.ventas);
+    const paisRows = Array.from(pais?.entries() || [])
+        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
+        .sort((a, b) => b.ventas - a.ventas);
+
+    return (
+        <Card>
+            <CardHeader className="pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle className="text-lg capitalize">{formatMonthLabel(month)}</CardTitle>
+                    <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-sm px-2.5 py-1">{(total?.ventas ?? 0).toLocaleString('es-CO')} ventas</Badge>
+                        <Badge variant="default" className="text-sm px-2.5 py-1">${(total?.total ?? 0).toLocaleString('es-CO')}</Badge>
+                        {total && (total.closed
+                            ? <Badge variant="outline">Cerrado</Badge>
+                            : <Badge variant="destructive">{total.pendingOrders} pendientes</Badge>)}
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
+                    <MiniBreakdown titulo="Por plataforma" rows={platRows} />
+                    <MiniBreakdown titulo="Por comercial" rows={comRows} />
+                    <MiniBreakdown titulo="Por país" rows={paisRows} />
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
 
 function BreakdownCard({ titulo, data }: { titulo: string; data: Breakdown }) {
     const meses = Array.from(data.keys()).sort().reverse();
