@@ -21,6 +21,17 @@ const STATUS_MAP: Record<string, string> = {
     PENDING: 'PENDIENTE',
 };
 
+// Firestore no admite '/', '.', '#', '$', '[', ']' ni '..' en un ID de documento.
+// Guía e itemId se usan como componentes de doc ID, así que los saneamos en el
+// origen para que claves de mapas y doc IDs queden consistentes.
+function safeId(s: string): string {
+    return String(s || '')
+        .replace(/[\/\\.#$\[\]]/g, '_')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'X';
+}
+
 async function getRefreshToken(): Promise<string> {
     // Prioriza el rotado guardado en Firestore; si no, el del entorno
     try {
@@ -43,9 +54,14 @@ export async function getAccessToken(): Promise<string> {
         throw new Error(`Venndelo OAuth ${res.status}: ${(await res.text()).slice(0, 200)}`);
     }
     const data = await res.json();
-    // Si el refresh_token rotó, guardar el nuevo
+    // Si el refresh_token rotó, guardar el nuevo. No debe abortar la sync si la
+    // escritura falla (ya tenemos un access token válido para esta corrida).
     if (data.refresh_token && data.refresh_token !== refreshToken) {
-        await setDoc(doc(db, 'settings', 'venndelo_auth'), { refreshToken: data.refresh_token, updatedAt: Date.now() }, { merge: true });
+        try {
+            await setDoc(doc(db, 'settings', 'venndelo_auth'), { refreshToken: data.refresh_token, updatedAt: Date.now() }, { merge: true });
+        } catch (e) {
+            console.error('Venndelo: no se pudo persistir el refresh_token rotado:', e);
+        }
     }
     return data.access_token;
 }
@@ -79,9 +95,9 @@ export async function fetchVenndeloOrders(days: number, onProgress?: (msg: strin
             // de fecha simple); solo entran órdenes dentro de la ventana.
             if (created && created < sinceMs) continue;
 
-            // Guía: del envío si existe, si no el id de la orden
+            // Guía: del envío si existe, si no el id de la orden (saneada para doc ID)
             const shipment = (order.shipments || [])[0];
-            const guia = shipment?.tracking_number || order.pin || order.id;
+            const guia = safeId(String(shipment?.tracking_number || order.pin || order.id || ''));
             const estado = STATUS_MAP[order.status] || String(order.status || '').toUpperCase();
             // Fecha: entrega si está, si no creación
             const fecha = shipment?.delivery_date || order.created_at || '';
@@ -92,10 +108,11 @@ export async function fetchVenndeloOrders(days: number, onProgress?: (msg: strin
             // Una fila por línea de producto (el motor agrupa por guía)
             for (const li of lineItems) {
                 const sku = li.sku ? String(li.sku) : undefined;
-                const itemId = li.variation_id ? String(li.variation_id) : (sku || String(li.id || ''));
+                // sku queda crudo (para cruce con inventario); itemId saneado (es doc ID)
+                const itemId = safeId(li.variation_id ? String(li.variation_id) : (sku || String(li.id || '')));
                 const qty = Number(li.quantity) || 1;
                 rows.push({
-                    guia: String(guia),
+                    guia,
                     fecha: typeof fecha === 'string' ? fecha : new Date(fecha).toISOString(),
                     estado,
                     itemIds: itemId ? [itemId] : [],

@@ -243,6 +243,11 @@ service cloud.firestore {
         allow write: if isRole('admin') || isAdminAccess();
      }
 
+     // Venndelo OAuth: el refresh_token rotado se guarda aquí (acceso servidor/admin)
+     match /settings/venndelo_auth {
+        allow read, write: if isSignedIn() || isAdminAccess();
+     }
+
      // TASK SYSTEM - Areas (admin only)
      match /areas/{areaId} {
         allow read: if isSignedIn();
