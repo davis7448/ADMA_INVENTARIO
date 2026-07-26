@@ -121,6 +121,9 @@ export function parseEffiFiles(alistamientoRows: any[][], guiasRows: any[][]): P
                 // Cliente = Distribuidor (como Venndelo; sin email → clave estable por nombre)
                 clientName,
                 clientEmail: clientName ? norm(clientName).toLowerCase() : undefined,
+                // El distribuidor entra como "comercial": el sistema de alias
+                // (Unificar Comerciales) lo traduce al comercial real en lectura.
+                commercialName: info?.distribuidor || undefined,
             };
             porGuia.set(guia, sale);
         }

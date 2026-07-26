@@ -97,6 +97,7 @@ export type ParsedRow = {
     itemInfo?: Record<string, { sku?: string; productName?: string; variantName?: string }>; // para auto-mapeo desde el archivo
     clientEmail?: string; // solo si el archivo trae columnas de dropshipper
     clientName?: string;
+    commercialName?: string; // comercial/responsable si la plataforma lo trae (EFFI: distribuidor)
     tienda?: string; // tienda del dropshipper que generó la orden
     bodega?: string; // columna BODEGA (formato COMPANY)
 };
@@ -670,6 +671,8 @@ export async function importPlatformSales(
             sale.productName = mapping.productName;
             sale.commercialName = mapping.commercialName;
         }
+        // Si la plataforma trae comercial/responsable directo (EFFI: distribuidor), manda.
+        if (row.commercialName) sale.commercialName = row.commercialName;
         if (row.clientEmail) {
             sale.clientEmail = row.clientEmail;
             const client = emailToClient.get(row.clientEmail);

@@ -401,7 +401,9 @@ export function VentasPlataformasContent() {
                             <CardTitle className="text-base">Unificar Comerciales ({comerciales.length} nombres)</CardTitle>
                             <CardDescription>
                                 Las mayúsculas/tildes ya se fusionan solas. Para nombres distintos del mismo comercial
-                                (ej: "Maryori Victoria" = "Maryori"), escribe el nombre unificado. No re-importa nada.
+                                (ej: "Maryori Victoria" = "Maryori"), escribe el nombre unificado. También sirve para
+                                asignar los <b>distribuidores de EFFI</b> (TIENDAVIRTUAL4030, JP&M…) a su comercial real.
+                                No re-importa nada.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="overflow-x-auto">
