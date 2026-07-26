@@ -21,11 +21,12 @@ import {
     type ImportSummary, type ReportMonth,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
+import { parseEffiFiles } from '@/lib/effi';
 import { syncVenndeloAction } from '@/app/actions/venndelo';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { AlertTriangle, FileUp, Link2, Upload } from 'lucide-react';
 
-const PLATFORMS = ['DROPI', 'VENNDELO'];
+const PLATFORMS = ['DROPI', 'VENNDELO', 'EFFI'];
 const BODEGAS = ['INGENIO', 'LABORATORIO', 'IMPORTACIONES', 'OTRA'];
 const PAISES_VENTA = ['COLOMBIA', 'MEXICO', 'ECUADOR', 'PARAGUAY', 'ARGENTINA', 'GUATEMALA'];
 type Breakdown = Map<string, Map<string, { ventas: number; total: number }>>;
@@ -38,6 +39,9 @@ export function VentasPlataformasContent() {
     const [bodegaOtra, setBodegaOtra] = useState('');
     const [pais, setPais] = useState('COLOMBIA');
     const [file, setFile] = useState<File | null>(null);
+    // EFFI necesita dos archivos: alistamiento (.xls HTML) y guías (.xlsx)
+    const [effiAlist, setEffiAlist] = useState<File | null>(null);
+    const [effiGuias, setEffiGuias] = useState<File | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [progressMsg, setProgressMsg] = useState('');
     const [summary, setSummary] = useState<ImportSummary | null>(null);
@@ -130,6 +134,45 @@ export function VentasPlataformasContent() {
     useEffect(() => { loadResumen(periodo.length ? periodo : undefined); }, [periodo]);
 
     const handleImport = async () => {
+        // --- EFFI: dos archivos (alistamiento HTML/latin1 + guías xlsx) ---
+        if (platform === 'EFFI') {
+            if (!effiAlist || !effiGuias) {
+                toast({ title: 'Faltan archivos', description: 'EFFI requiere cargar AMBOS: el reporte de alistamiento y el de guías de transporte.', variant: 'destructive' });
+                return;
+            }
+            setIsImporting(true);
+            setSummary(null);
+            try {
+                // Alistamiento: es HTML en latin1 → decodificar y parsear como string
+                const alistStr = new TextDecoder('iso-8859-1').decode(await effiAlist.arrayBuffer());
+                const wbA = XLSX.read(alistStr, { type: 'string' });
+                const alistRows = XLSX.utils.sheet_to_json<any[]>(wbA.Sheets[wbA.SheetNames[0]], { header: 1, raw: false, defval: '' });
+                // Guías: xlsx normal
+                const wbG = XLSX.read(await effiGuias.arrayBuffer());
+                const guiasRows = XLSX.utils.sheet_to_json<any[]>(wbG.Sheets[wbG.SheetNames[0]], { header: 1, raw: true, defval: '' });
+
+                const parsed = parseEffiFiles(alistRows as any[][], guiasRows as any[][]);
+                if (parsed.length === 0) {
+                    toast({ title: 'Sin datos', description: 'No se encontraron guías. Verifica que subiste los archivos correctos.', variant: 'destructive' });
+                    return;
+                }
+                const config = await loadCrmConfig();
+                const result = await importPlatformSales('EFFI', parsed, (config as any).reactivationDays || 45, { bodega: 'INGENIO', pais: 'COLOMBIA' }, setProgressMsg);
+                setSummary(result);
+                toast({ title: '¡EFFI importado!', description: `${result.nuevas} nuevas · ${result.actualizadas} actualizadas · ${result.entregadas} entregadas.` });
+                setEffiAlist(null); setEffiGuias(null);
+                await loadResumen(periodo.length ? periodo : undefined);
+                if (colasCargadas) await loadColas();
+            } catch (error) {
+                console.error(error);
+                toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo importar EFFI.', variant: 'destructive' });
+            } finally {
+                setIsImporting(false);
+                setProgressMsg('');
+            }
+            return;
+        }
+
         if (!file) {
             toast({ title: 'Error', description: 'Selecciona el archivo del reporte de despachos.', variant: 'destructive' });
             return;
@@ -262,8 +305,12 @@ export function VentasPlataformasContent() {
             {canImport && (
                 <Card>
                     <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-base"><FileUp className="h-4 w-4" />Importar Reporte de Despachos (Dropi)</CardTitle>
-                        <CardDescription>Se deduplica por número de guía: puedes subir el mismo periodo varias veces y solo se actualizan los estados.</CardDescription>
+                        <CardTitle className="flex items-center gap-2 text-base"><FileUp className="h-4 w-4" />Importar Reporte de Despachos</CardTitle>
+                        <CardDescription>
+                            {platform === 'EFFI'
+                                ? 'EFFI requiere DOS archivos (alistamiento + guías); se cruzan por ID guía. Bodega INGENIO · País COLOMBIA. Se deduplica por guía.'
+                                : 'Se deduplica por número de guía: puedes subir el mismo periodo varias veces y solo se actualizan los estados.'}
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
@@ -276,30 +323,47 @@ export function VentasPlataformasContent() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div>
-                                <Label>Bodega del reporte</Label>
-                                <Select value={bodega} onValueChange={setBodega}>
-                                    <SelectTrigger className="w-40 mt-1"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {BODEGAS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                                {bodega === 'OTRA' && <Input value={bodegaOtra} onChange={e => setBodegaOtra(e.target.value)} placeholder="Nombre de la bodega" className="mt-1 w-40" />}
-                            </div>
-                            <div>
-                                <Label>País</Label>
-                                <Select value={pais} onValueChange={setPais}>
-                                    <SelectTrigger className="w-36 mt-1"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {PAISES_VENTA.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="flex-1 w-full">
-                                <Label htmlFor="sales-file">Archivo (.xlsx)</Label>
-                                <Input id="sales-file" type="file" accept=".xlsx,.xls" className="mt-1" onChange={e => setFile(e.target.files?.[0] || null)} />
-                            </div>
-                            <Button onClick={handleImport} disabled={isImporting || !file}>
+                            {platform !== 'EFFI' && (
+                                <div>
+                                    <Label>Bodega del reporte</Label>
+                                    <Select value={bodega} onValueChange={setBodega}>
+                                        <SelectTrigger className="w-40 mt-1"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {BODEGAS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    {bodega === 'OTRA' && <Input value={bodegaOtra} onChange={e => setBodegaOtra(e.target.value)} placeholder="Nombre de la bodega" className="mt-1 w-40" />}
+                                </div>
+                            )}
+                            {platform !== 'EFFI' && (
+                                <div>
+                                    <Label>País</Label>
+                                    <Select value={pais} onValueChange={setPais}>
+                                        <SelectTrigger className="w-36 mt-1"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {PAISES_VENTA.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+                            {platform === 'EFFI' ? (
+                                <>
+                                    <div className="flex-1 w-full">
+                                        <Label htmlFor="effi-alist">1) Reporte de alistamiento (.xls)</Label>
+                                        <Input id="effi-alist" type="file" accept=".xls,.xlsx,.htm,.html" className="mt-1" onChange={e => setEffiAlist(e.target.files?.[0] || null)} />
+                                    </div>
+                                    <div className="flex-1 w-full">
+                                        <Label htmlFor="effi-guias">2) Guías de transporte (.xlsx)</Label>
+                                        <Input id="effi-guias" type="file" accept=".xlsx,.xls" className="mt-1" onChange={e => setEffiGuias(e.target.files?.[0] || null)} />
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex-1 w-full">
+                                    <Label htmlFor="sales-file">Archivo (.xlsx)</Label>
+                                    <Input id="sales-file" type="file" accept=".xlsx,.xls" className="mt-1" onChange={e => setFile(e.target.files?.[0] || null)} />
+                                </div>
+                            )}
+                            <Button onClick={handleImport} disabled={isImporting || (platform === 'EFFI' ? (!effiAlist || !effiGuias) : !file)}>
                                 <Upload className="h-4 w-4 mr-2" />{isImporting ? (progressMsg || 'Importando…') : 'Importar'}
                             </Button>
                         </div>
