@@ -439,6 +439,38 @@ export async function buildMappingsFromSolicitudes(platform: string, itemIds: Se
     return { created, timelines };
 }
 
+// Cupos por SKU (para plataformas donde el item de la venta es el SKU, ej. EFFI):
+// agrupa las solicitudes de esa plataforma por SKU y devuelve timelines con el
+// mismo shape que buildMappingsFromSolicitudes, para reusar la atribución por cupo.
+async function buildTimelinesBySku(platformMatch: string): Promise<ItemTimelines> {
+    const clean = (s: any) => String(s ?? '').trim()
+        .replace(/[\/\\.#$\[\]]/g, '_').replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    const solsSnap = await getDocs(query(collection(db, 'modificaciones'), limit(5000)));
+    const bySku = new Map<string, (Modificacion & { id: string })[]>();
+    for (const d of solsSnap.docs) {
+        const s = { id: d.id, ...d.data() } as Modificacion & { id: string };
+        if (!String((s as any).PLATAFORMA || '').toUpperCase().includes(platformMatch)) continue;
+        const sku = clean((s as any)['SKU '] ?? (s as any).SKU);
+        if (!sku) continue;
+        if (!bySku.has(sku)) bySku.set(sku, []);
+        bySku.get(sku)!.push(s);
+    }
+    const timelines: ItemTimelines = new Map();
+    for (const [sku, sols] of bySku) {
+        const entries = sols
+            .filter(s => s.FECHA)
+            .sort((a, b) => (a.FECHA || 0) - (b.FECHA || 0))
+            .map(s => ({
+                fecha: s.FECHA!,
+                correo: (s.CORREO_CODIGO || '').split(/[,;\s]+/)[0]?.trim().toLowerCase() || undefined,
+                comercial: s.solicitadoPor?.name || s.COMERCIAL || undefined,
+                cantidad: Number(s['CANTIDAD SOLICITADA']) || undefined,
+            }));
+        if (entries.length) timelines.set(sku, entries);
+    }
+    return timelines;
+}
+
 // --- Mapeo tienda → cliente (desempate de items compartidos) ---
 
 function normTienda(value: string): string {
@@ -526,7 +558,11 @@ export async function importPlatformSales(
     let summaryTiendas = 0;
     let summarySkusVinculados = 0;
     let summaryEnriquecidos = 0;
-    const timelines = solicitudesResult.timelines;
+    // EFFI: el item de la venta es el SKU (Referencia), que NO coincide con el ID de
+    // plataforma de las solicitudes. Los cupos se arman por SKU desde las solicitudes EFFI.
+    const timelines = platform === 'EFFI'
+        ? await buildTimelinesBySku('EFFI')
+        : solicitudesResult.timelines;
 
     // Si el archivo trae SKU/nombre por item (formato por-producto):
     // - crea mapeo para items nuevos
@@ -657,6 +693,7 @@ export async function importPlatformSales(
             flete: row.flete,
             quantity: row.quantity, itemQuantities: row.itemQuantities,
             tienda: row.tienda,
+            clientName: row.clientName,
             bodega: row.bodega || context?.bodega,
             pais: context?.pais,
             importedAt: now,

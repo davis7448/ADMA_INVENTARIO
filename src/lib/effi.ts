@@ -118,12 +118,13 @@ export function parseEffiFiles(alistamientoRows: any[][], guiasRows: any[][]): P
                 quantity: 0,
                 itemQuantities: {},
                 itemInfo: {},
-                // Cliente = Distribuidor (como Venndelo; sin email → clave estable por nombre)
+                // El Distribuidor es la TIENDA (evidencia), NO el comercial. El
+                // comercial se resuelve por la MISMA regla de cupo que Dropi: cada
+                // solicitud EFFI privatiza una cantidad del SKU a un comercial; las
+                // ventas consumen ese cupo y lo que excede queda público. Por eso NO
+                // se fija clientEmail ni commercialName aquí (los pone la atribución).
                 clientName,
-                clientEmail: clientName ? norm(clientName).toLowerCase() : undefined,
-                // El distribuidor entra como "comercial": el sistema de alias
-                // (Unificar Comerciales) lo traduce al comercial real en lectura.
-                commercialName: info?.distribuidor || undefined,
+                tienda: clientName,
             };
             porGuia.set(guia, sale);
         }
