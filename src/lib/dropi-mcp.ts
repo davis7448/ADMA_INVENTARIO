@@ -204,6 +204,7 @@ async function mcpToolText(access: string, name: string, args: any, sid: string 
 export async function fetchDropiOrders(
     account: { id: string; label: string; refreshToken?: string; bodega?: string; pais?: string },
     days: number,
+    opts?: { skipGuias?: Set<string> },
     onProgress?: (msg: string) => void,
 ): Promise<ParsedRow[]> {
     if (!account.refreshToken) throw new Error(`Cuenta ${account.label} sin refresh_token`);
@@ -232,14 +233,29 @@ export async function fetchDropiOrders(
         if (start > 20000) break; // salvaguarda
     }
 
-    // 2) get_order por orden para los items (product_id, qty, unit_price)
+    // 2) get_order (caro, rate-limited) SOLO para las ENTREGADAS: son las que
+    //    necesitan items para el ingreso ADMA y la atribución por cupo. Las demás se
+    //    guardan a nivel orden (estado) para seguimiento. Las entregadas ya importadas
+    //    (skipGuias) no se vuelven a consultar → el cron diario solo trae entregas nuevas.
+    const skip = opts?.skipGuias;
     const rows: ParsedRow[] = [];
-    let n = 0;
+    let entregadas = 0; let nuevasEntregadas = 0;
     for (const o of summaries) {
-        n++;
-        if (n % 25 === 0) onProgress?.(`Dropi ${account.label}: items ${n}/${summaries.length}…`);
+        const guia = safeId(o.tracking_code || o.order_id);
+        const estado = mapDropiEstado(o.status);
+        const totalCF = Number(o.total) || undefined;
+
+        if (estado !== 'ENTREGADO') {
+            rows.push({ guia, fecha: o.created_at || '', estado, itemIds: [], total: 0, totalClienteFinal: totalCF });
+            continue;
+        }
+        entregadas++;
+        if (skip?.has(guia)) continue; // ya importada como entregada con items
+
+        nuevasEntregadas++;
+        if (nuevasEntregadas % 20 === 0) onProgress?.(`Dropi ${account.label}: items entregadas ${nuevasEntregadas}…`);
         const it = await mcpToolText(access, 'get_order', { id: String(o.order_id) }, sid, onProgress);
-        await sleep(300); // throttle base para no gatillar rate limit
+        await sleep(300); // throttle base
         const items = parseGetOrderItems(it);
         const itemIds: string[] = []; const itemQuantities: Record<string, number> = {};
         const itemInfo: Record<string, { sku?: string; productName?: string }> = {};
@@ -254,17 +270,12 @@ export async function fetchDropiOrders(
             unidades += item.qty;
         }
         rows.push({
-            guia: safeId(o.tracking_code || o.order_id),
-            fecha: o.created_at || '',
-            estado: mapDropiEstado(o.status),
-            itemIds,
+            guia, fecha: o.created_at || '', estado, itemIds,
             total: ingresoAdma, // ingreso ADMA = Σ(unit_price × qty)
-            totalClienteFinal: Number(o.total) || undefined,
-            quantity: unidades,
-            itemQuantities,
-            itemInfo,
+            totalClienteFinal: totalCF, quantity: unidades, itemQuantities, itemInfo,
         });
     }
+    onProgress?.(`Dropi ${account.label}: ${summaries.length} órdenes · ${entregadas} entregadas · ${nuevasEntregadas} con items nuevos`);
     return rows;
 }
 
