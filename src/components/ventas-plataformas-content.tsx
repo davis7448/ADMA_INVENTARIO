@@ -348,7 +348,7 @@ export function VentasPlataformasContent() {
                                 </Select>
                             </div>
                             <Button
-                                onClick={() => { window.location.href = `/api/dropi/oauth/start?label=${encodeURIComponent(dropiLabel.trim())}&bodega=${encodeURIComponent(dropiBodega)}&pais=${encodeURIComponent(dropiPais)}`; }}
+                                onClick={() => { window.location.href = `/api/dropi/oauth/start?label=${encodeURIComponent(dropiLabel.trim())}&bodega=${encodeURIComponent(dropiBodega)}&pais=${encodeURIComponent(dropiPais)}&origin=${encodeURIComponent(window.location.origin)}`; }}
                                 disabled={!dropiLabel.trim()}
                             >
                                 Agregar cuenta Dropi
