@@ -13,6 +13,15 @@ const SCOPE = 'mcp';
 
 const b64url = (buf: Buffer) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+// En App Hosting/Cloud Run, request.nextUrl.origin da el host interno (0.0.0.0:8080).
+// La URL pública viene en los headers x-forwarded-*.
+export function publicOrigin(headers: Headers, fallback: string): string {
+    const host = headers.get('x-forwarded-host') || headers.get('host');
+    if (!host) return fallback;
+    const proto = headers.get('x-forwarded-proto') || 'https';
+    return `${proto}://${host.split(',')[0].trim()}`;
+}
+
 export function genPkce() {
     const verifier = b64url(crypto.randomBytes(32));
     const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());

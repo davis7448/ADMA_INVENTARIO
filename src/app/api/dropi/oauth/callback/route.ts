@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exchangeCode, takePendingOauth, saveDropiAccount } from '@/lib/dropi-mcp';
+import { exchangeCode, takePendingOauth, saveDropiAccount, publicOrigin } from '@/lib/dropi-mcp';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 // Callback OAuth de Dropi: intercambia el code por tokens y guarda el refresh_token
 // de la cuenta. Vuelve a /ventas-plataformas con el resultado.
 export async function GET(request: NextRequest) {
-    const base = request.nextUrl.origin;
+    const base = publicOrigin(request.headers, request.nextUrl.origin);
     const back = (params: string) => NextResponse.redirect(`${base}/ventas-plataformas?${params}`);
 
     const code = request.nextUrl.searchParams.get('code');
