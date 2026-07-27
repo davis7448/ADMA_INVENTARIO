@@ -72,6 +72,7 @@ export function VentasPlataformasContent() {
     const [cargandoColas, setCargandoColas] = useState(false);
     const [isSyncingVenndelo, setIsSyncingVenndelo] = useState(false);
     const [venndeloResumen, setVenndeloResumen] = useState<string>('');
+    const [dropiLabel, setDropiLabel] = useState('');
 
     const canImport = !!user && ['admin', 'coordinacion', 'commercial_director', 'plataformas'].includes(user.role);
 
@@ -137,6 +138,15 @@ export function VentasPlataformasContent() {
 
     useEffect(() => { loadResumen(); }, [platform]);
     useEffect(() => { loadResumen(periodo.length ? periodo : undefined); }, [periodo]);
+    // Resultado del OAuth de Dropi (redirect de vuelta)
+    useEffect(() => {
+        const p = new URLSearchParams(window.location.search);
+        const r = p.get('dropi');
+        if (!r) return;
+        if (r === 'ok') toast({ title: '¡Cuenta Dropi conectada!', description: p.get('cuenta') || '' });
+        else toast({ title: 'Error conectando Dropi', description: p.get('msg') || '', variant: 'destructive' });
+        window.history.replaceState({}, '', window.location.pathname);
+    }, []);
 
     const handleImport = async () => {
         // --- EFFI: dos archivos (alistamiento HTML/latin1 + guías xlsx) ---
@@ -299,6 +309,30 @@ export function VentasPlataformasContent() {
                                 {isSyncingVenndelo ? 'Sincronizando…' : 'Sincronizar Venndelo (30 días)'}
                             </Button>
                             {venndeloResumen && <span className="text-sm text-muted-foreground">{venndeloResumen}</span>}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Cuentas Dropi (MCP) */}
+            {canImport && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base"><Upload className="h-4 w-4" />Dropi (MCP) — Cuentas conectadas</CardTitle>
+                        <CardDescription>Conecta una o varias cuentas Dropi por OAuth (una autorización por cuenta). Después se podrán sincronizar por API sin subir Excel.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                            <div className="flex-1 w-full max-w-xs">
+                                <Label htmlFor="dropi-label">Nombre de la cuenta</Label>
+                                <Input id="dropi-label" value={dropiLabel} onChange={e => setDropiLabel(e.target.value)} placeholder="Ej: Dropi Principal" className="mt-1" />
+                            </div>
+                            <Button
+                                onClick={() => { window.location.href = `/api/dropi/oauth/start?label=${encodeURIComponent(dropiLabel.trim())}`; }}
+                                disabled={!dropiLabel.trim()}
+                            >
+                                Agregar cuenta Dropi
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>

@@ -248,6 +248,14 @@ service cloud.firestore {
         allow read, write: if isSignedIn() || isAdminAccess();
      }
 
+     // Dropi MCP: cuentas (refresh_token por cuenta) y estado OAuth temporal (PKCE)
+     match /dropiAccounts/{accountId} {
+        allow read, write: if isSignedIn() || isAdminAccess();
+     }
+     match /dropiOauthPending/{state} {
+        allow read, write: if isSignedIn() || isAdminAccess();
+     }
+
      // TASK SYSTEM - Areas (admin only)
      match /areas/{areaId} {
         allow read: if isSignedIn();
