@@ -6,7 +6,7 @@
 cd /opt/workspaces/ADMA_INVENTARIO || exit 1
 mkdir -p logs
 LOG=/opt/workspaces/ADMA_INVENTARIO/logs/dropi-sync.log
-DAYS="${1:-10}"
+DAYS="${1:-15}"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Dropi MCP sync (ventana ${DAYS}d)…" >> "$LOG"
 NODE_PATH=/opt/workspaces/ADMA_INVENTARIO/node_modules /opt/workspaces/ADMA_INVENTARIO/node_modules/.bin/tsx \
   /opt/workspaces/ADMA_INVENTARIO/scripts/dropi-sync.ts "$DAYS" >> "$LOG" 2>&1
