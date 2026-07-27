@@ -9,6 +9,7 @@ export const DROPI_CLIENT_ID = 'adma-inventario-a51a3a3c';
 const AUTHORIZE_URL = 'https://oauth.dropi.co/oauth/authorize';
 const TOKEN_URL = 'https://integrations.dropi.co/bff/oauth/token';
 const MCP_URL = 'https://mcp.dropi.co/mcp';
+const RESOURCE = 'https://mcp.dropi.co/mcp'; // RFC 8707: el token debe emitirse para este resource
 const SCOPE = 'mcp';
 
 const b64url = (buf: Buffer) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -32,6 +33,7 @@ export function buildAuthUrl(redirectUri: string, state: string, challenge: stri
     const p = new URLSearchParams({
         response_type: 'code', client_id: DROPI_CLIENT_ID, redirect_uri: redirectUri,
         scope: SCOPE, state, code_challenge: challenge, code_challenge_method: 'S256',
+        resource: RESOURCE,
     });
     return `${AUTHORIZE_URL}?${p.toString()}`;
 }
@@ -48,11 +50,11 @@ async function tokenRequest(body: Record<string, string>): Promise<any> {
 }
 
 export function exchangeCode(code: string, redirectUri: string, verifier: string) {
-    return tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: DROPI_CLIENT_ID, code_verifier: verifier });
+    return tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: DROPI_CLIENT_ID, code_verifier: verifier, resource: RESOURCE });
 }
 
 export function refreshAccess(refreshToken: string) {
-    return tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: DROPI_CLIENT_ID });
+    return tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: DROPI_CLIENT_ID, resource: RESOURCE });
 }
 
 // --- Persistencia de cuentas y estado OAuth ---
