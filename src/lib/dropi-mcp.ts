@@ -47,25 +47,26 @@ export function refreshAccess(refreshToken: string) {
 }
 
 // --- Persistencia de cuentas y estado OAuth ---
-export async function savePendingOauth(state: string, verifier: string, redirectUri: string, label?: string, bodega?: string) {
-    await setDoc(doc(db, 'dropiOauthPending', state), { verifier, redirectUri, label: label || '', bodega: bodega || '', createdAt: Date.now() });
+export async function savePendingOauth(state: string, verifier: string, redirectUri: string, label?: string, bodega?: string, pais?: string) {
+    await setDoc(doc(db, 'dropiOauthPending', state), { verifier, redirectUri, label: label || '', bodega: bodega || '', pais: pais || '', createdAt: Date.now() });
 }
-export async function takePendingOauth(state: string): Promise<{ verifier: string; redirectUri: string; label?: string; bodega?: string } | null> {
+export async function takePendingOauth(state: string): Promise<{ verifier: string; redirectUri: string; label?: string; bodega?: string; pais?: string } | null> {
     const snap = await getDoc(doc(db, 'dropiOauthPending', state));
     if (!snap.exists()) return null;
     const data = snap.data() as any;
     await deleteDoc(doc(db, 'dropiOauthPending', state)).catch(() => {});
-    return { verifier: data.verifier, redirectUri: data.redirectUri, label: data.label, bodega: data.bodega };
+    return { verifier: data.verifier, redirectUri: data.redirectUri, label: data.label, bodega: data.bodega, pais: data.pais };
 }
 
-export async function saveDropiAccount(accountId: string, label: string, tokens: any, bodega?: string) {
+export async function saveDropiAccount(accountId: string, label: string, tokens: any, bodega?: string, pais?: string) {
     const payload: Record<string, any> = {
         label, refreshToken: tokens.refresh_token, scope: tokens.scope || SCOPE, updatedAt: Date.now(),
     };
     if (bodega) payload.bodega = bodega; // bodega a la que pertenece la cuenta (INGENIO/LABORATORIO)
+    if (pais) payload.pais = pais;       // país de la cuenta (COLOMBIA/MEXICO/...)
     await setDoc(doc(db, 'dropiAccounts', accountId), payload, { merge: true });
 }
-export async function listDropiAccounts(): Promise<Array<{ id: string; label: string; refreshToken?: string; bodega?: string; updatedAt?: number }>> {
+export async function listDropiAccounts(): Promise<Array<{ id: string; label: string; refreshToken?: string; bodega?: string; pais?: string; updatedAt?: number }>> {
     const snap = await getDocs(collection(db, 'dropiAccounts'));
     return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
 }

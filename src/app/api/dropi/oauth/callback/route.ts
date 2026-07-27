@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
 
         const label = pending.label?.trim() || `Cuenta ${new Date().toISOString().slice(0, 10)}`;
         const accountId = label.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60) || `DROPI_${Date.now()}`;
-        await saveDropiAccount(accountId, label, tokens, pending.bodega);
-        return back(`dropi=ok&cuenta=${encodeURIComponent(label)}${pending.bodega ? `&bodega=${encodeURIComponent(pending.bodega)}` : ''}`);
+        await saveDropiAccount(accountId, label, tokens, pending.bodega, pending.pais);
+        return back(`dropi=ok&cuenta=${encodeURIComponent(label)}${pending.bodega ? `&bodega=${encodeURIComponent(pending.bodega)}` : ''}${pending.pais ? `&pais=${encodeURIComponent(pending.pais)}` : ''}`);
     } catch (e) {
         return back(`dropi=error&msg=${encodeURIComponent(e instanceof Error ? e.message.slice(0, 120) : 'error')}`);
     }

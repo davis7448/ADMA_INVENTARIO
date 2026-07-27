@@ -74,6 +74,7 @@ export function VentasPlataformasContent() {
     const [venndeloResumen, setVenndeloResumen] = useState<string>('');
     const [dropiLabel, setDropiLabel] = useState('');
     const [dropiBodega, setDropiBodega] = useState('INGENIO');
+    const [dropiPais, setDropiPais] = useState('COLOMBIA');
 
     const canImport = !!user && ['admin', 'coordinacion', 'commercial_director', 'plataformas'].includes(user.role);
 
@@ -329,16 +330,25 @@ export function VentasPlataformasContent() {
                                 <Input id="dropi-label" value={dropiLabel} onChange={e => setDropiLabel(e.target.value)} placeholder="Ej: Dropi Principal" className="mt-1" />
                             </div>
                             <div>
-                                <Label>Bodega a la que pertenece</Label>
+                                <Label>Bodega</Label>
                                 <Select value={dropiBodega} onValueChange={setDropiBodega}>
-                                    <SelectTrigger className="w-44 mt-1"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="w-40 mt-1"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         {['INGENIO', 'LABORATORIO'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
+                            <div>
+                                <Label>País</Label>
+                                <Select value={dropiPais} onValueChange={setDropiPais}>
+                                    <SelectTrigger className="w-36 mt-1"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {PAISES_VENTA.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <Button
-                                onClick={() => { window.location.href = `/api/dropi/oauth/start?label=${encodeURIComponent(dropiLabel.trim())}&bodega=${encodeURIComponent(dropiBodega)}`; }}
+                                onClick={() => { window.location.href = `/api/dropi/oauth/start?label=${encodeURIComponent(dropiLabel.trim())}&bodega=${encodeURIComponent(dropiBodega)}&pais=${encodeURIComponent(dropiPais)}`; }}
                                 disabled={!dropiLabel.trim()}
                             >
                                 Agregar cuenta Dropi
