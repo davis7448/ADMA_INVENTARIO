@@ -26,7 +26,12 @@ import { syncVenndeloAction } from '@/app/actions/venndelo';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { AlertTriangle, FileUp, Link2, Upload } from 'lucide-react';
 
-const PLATFORMS = ['DROPI', 'VENNDELO', 'EFFI'];
+// EFFI y VENNDELO tienen flujo propio; el resto usa la estructura de Dropi por defecto.
+const PLATFORMS = [
+    'DROPI', 'VENNDELO', 'EFFI',
+    'ADMA MB', 'SEVENTY MB', 'DROPLATAM MB', 'FOGO SHIIPY MB', 'ACADROP MB', 'FUBUKY MB',
+    'ADMA', 'DROPLATAM', 'ACADROP', 'BODEGA ELITE', 'WIMPY', 'MASTER SHOP', 'CAPSLATAM', 'HOKO',
+];
 const BODEGAS = ['INGENIO', 'LABORATORIO', 'IMPORTACIONES', 'OTRA'];
 const PAISES_VENTA = ['COLOMBIA', 'MEXICO', 'ECUADOR', 'PARAGUAY', 'ARGENTINA', 'GUATEMALA'];
 type Breakdown = Map<string, Map<string, { ventas: number; total: number }>>;
@@ -177,10 +182,8 @@ export function VentasPlataformasContent() {
             toast({ title: 'Error', description: 'Selecciona el archivo del reporte de despachos.', variant: 'destructive' });
             return;
         }
-        if (platform !== 'DROPI') {
-            toast({ title: 'Próximamente', description: 'Por ahora solo está soportado el formato de Dropi (98% del volumen).', variant: 'destructive' });
-            return;
-        }
+        // Todas las plataformas usan por defecto la estructura de Dropi (EFFI y VENNDELO
+        // tienen su propio flujo). Las marcas blancas y demás se importan igual que Dropi.
         setIsImporting(true);
         setSummary(null);
         try {
