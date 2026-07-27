@@ -4,6 +4,7 @@
 import { db } from '@/lib/firebase';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import crypto from 'crypto';
+import type { ParsedRow } from '@/lib/platform-sales';
 
 export const DROPI_CLIENT_ID = 'adma-inventario-a51a3a3c';
 const AUTHORIZE_URL = 'https://oauth.dropi.co/oauth/authorize';
@@ -112,6 +113,159 @@ export async function mcpCall(accessToken: string, method: string, params: any, 
     const json = parseMcp(text);
     if (json?.error) throw new Error(`MCP ${method}: ${JSON.stringify(json.error).slice(0, 300)}`);
     return { result: json?.result, sessionId: sid };
+}
+
+// --- Parsing del formato compacto del MCP (YAML-lite + CSV en items) ---
+function textOf(r: { result?: any }): string {
+    const c = r.result;
+    if (c?.content) for (const p of c.content) if (p.type === 'text') return p.text;
+    return typeof c === 'string' ? c : JSON.stringify(c || '');
+}
+function splitCsv(line: string): string[] {
+    const out: string[] = []; let cur = ''; let q = false;
+    for (const ch of line) {
+        if (ch === '"') { q = !q; continue; }
+        if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
+        cur += ch;
+    }
+    out.push(cur);
+    return out.map(s => s.trim());
+}
+// list_orders → lista YAML de órdenes (nivel orden)
+function parseListOrders(text: string): Record<string, string>[] {
+    const orders: Record<string, string>[] = [];
+    let cur: Record<string, string> | null = null;
+    for (const raw of text.split('\n')) {
+        const line = raw.replace(/\s+$/, '');
+        const m = line.match(/^\s*-\s+order_id:\s*"?([^"]+?)"?\s*$/);
+        if (m) { cur = { order_id: m[1] }; orders.push(cur); continue; }
+        if (!cur) continue;
+        const kv = line.match(/^\s+([a-z_]+):\s*"?(.*?)"?\s*$/);
+        if (kv) cur[kv[1]] = kv[2];
+    }
+    return orders;
+}
+// get_order → items (bloque `items[N]{cols}:` con filas CSV). product_name puede traer comas.
+function parseGetOrderItems(text: string): Array<{ product_id: string; product_name: string; qty: number; unit_price: number }> {
+    const items: Array<{ product_id: string; product_name: string; qty: number; unit_price: number }> = [];
+    let inItems = false;
+    for (const raw of text.split('\n')) {
+        const line = raw.replace(/\s+$/, '');
+        if (/^\s*items\[\d+\]\{[^}]*\}:/.test(line)) { inItems = true; continue; }
+        if (!inItems) continue;
+        const t = line.trim();
+        if (!t) continue;
+        if (/^[a-z_]+:/.test(t)) { inItems = false; continue; } // siguiente clave top-level
+        const v = splitCsv(t);
+        if (v.length < 4) continue;
+        // cols: product_id, product_name, qty, unit_price, subtotal → parsear desde la derecha
+        items.push({
+            product_id: v[0],
+            product_name: v.slice(1, v.length - 3).join(','),
+            qty: Number(v[v.length - 3]) || 1,
+            unit_price: Number(v[v.length - 2]) || 0,
+        });
+    }
+    return items;
+}
+function safeId(s: string): string {
+    return String(s || '').replace(/[\/\\.#$\[\]]/g, '_').replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'X';
+}
+// Estado Dropi → estado interno (venta = ENTREGADO; finales = ENTREGADO/DEVOLUCION/CANCELADO/RECHAZADO)
+function mapDropiEstado(s: string): string {
+    const n = String(s || '').toUpperCase();
+    if (n.includes('ENTREGAD')) return 'ENTREGADO';
+    if (n.includes('DEVOL') || n.includes('DEVUELT')) return 'DEVOLUCION';
+    if (n.includes('RECHAZ')) return 'RECHAZADO';
+    if (n.includes('CANCEL') || n.includes('ANULAD')) return 'CANCELADO';
+    return n || 'GENERADA';
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const RATE_RE = /rate limit|too many requests|\b429\b/i;
+// Llama una tool del MCP con reintentos ante rate limit (429 llega como texto).
+async function mcpToolText(access: string, name: string, args: any, sid: string | undefined, onProgress?: (m: string) => void): Promise<string> {
+    for (let attempt = 0; attempt < 7; attempt++) {
+        const t = textOf(await mcpCall(access, 'tools/call', { name, arguments: args }, sid));
+        if (RATE_RE.test(t)) {
+            const wait = Math.min(2000 * 2 ** attempt, 30000);
+            onProgress?.(`Dropi: rate limit, esperando ${Math.round(wait / 1000)}s…`);
+            await sleep(wait);
+            continue;
+        }
+        return t;
+    }
+    throw new Error(`Dropi MCP: rate limit persistente en ${name}`);
+}
+
+// Trae las órdenes de una cuenta Dropi (últimos `days` días) vía MCP y las mapea a
+// ParsedRow (una por orden). Ingreso ADMA = Σ(unit_price × qty). itemId = product_id.
+// El MCP tiene rate limit → se llama con throttle + backoff.
+export async function fetchDropiOrders(
+    account: { id: string; label: string; refreshToken?: string; bodega?: string; pais?: string },
+    days: number,
+    onProgress?: (msg: string) => void,
+): Promise<ParsedRow[]> {
+    if (!account.refreshToken) throw new Error(`Cuenta ${account.label} sin refresh_token`);
+    const tokens = await refreshAccess(account.refreshToken);
+    if (tokens.refresh_token && tokens.refresh_token !== account.refreshToken) {
+        await saveDropiAccount(account.id, account.label, tokens, account.bodega, account.pais);
+    }
+    const access = tokens.access_token;
+    const init = await mcpInit(access);
+    const sid = init.sessionId;
+
+    const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    const until = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+    // 1) Paginar list_orders (nivel orden)
+    const summaries: Record<string, string>[] = [];
+    let start = 0; const pageSize = 100;
+    while (true) {
+        const t = await mcpToolText(access, 'list_orders', { from, until, result_number: pageSize, start }, sid, onProgress);
+        const page = parseListOrders(t);
+        summaries.push(...page);
+        onProgress?.(`Dropi ${account.label}: ${summaries.length} órdenes…`);
+        if (page.length < pageSize) break;
+        start += pageSize;
+        await sleep(300);
+        if (start > 20000) break; // salvaguarda
+    }
+
+    // 2) get_order por orden para los items (product_id, qty, unit_price)
+    const rows: ParsedRow[] = [];
+    let n = 0;
+    for (const o of summaries) {
+        n++;
+        if (n % 25 === 0) onProgress?.(`Dropi ${account.label}: items ${n}/${summaries.length}…`);
+        const it = await mcpToolText(access, 'get_order', { id: String(o.order_id) }, sid, onProgress);
+        await sleep(300); // throttle base para no gatillar rate limit
+        const items = parseGetOrderItems(it);
+        const itemIds: string[] = []; const itemQuantities: Record<string, number> = {};
+        const itemInfo: Record<string, { sku?: string; productName?: string }> = {};
+        let ingresoAdma = 0; let unidades = 0;
+        for (const item of items) {
+            const pid = safeId(item.product_id);
+            if (!pid) continue;
+            if (!itemIds.includes(pid)) itemIds.push(pid);
+            itemQuantities[pid] = (itemQuantities[pid] || 0) + item.qty;
+            itemInfo[pid] = { productName: item.product_name || undefined };
+            ingresoAdma += item.unit_price * item.qty;
+            unidades += item.qty;
+        }
+        rows.push({
+            guia: safeId(o.tracking_code || o.order_id),
+            fecha: o.created_at || '',
+            estado: mapDropiEstado(o.status),
+            itemIds,
+            total: ingresoAdma, // ingreso ADMA = Σ(unit_price × qty)
+            totalClienteFinal: Number(o.total) || undefined,
+            quantity: unidades,
+            itemQuantities,
+            itemInfo,
+        });
+    }
+    return rows;
 }
 
 // Inicializa sesión MCP y devuelve el sessionId + capacidades
