@@ -9,9 +9,10 @@ export const dynamic = 'force-dynamic';
 // Genera PKCE + state, los guarda, y redirige al login de Dropi.
 export async function GET(request: NextRequest) {
     const label = request.nextUrl.searchParams.get('label') || '';
+    const bodega = request.nextUrl.searchParams.get('bodega') || '';
     const redirectUri = `${request.nextUrl.origin}/api/dropi/oauth/callback`;
     const state = crypto.randomUUID();
     const { verifier, challenge } = genPkce();
-    await savePendingOauth(state, verifier, redirectUri, label);
+    await savePendingOauth(state, verifier, redirectUri, label, bodega);
     return NextResponse.redirect(buildAuthUrl(redirectUri, state, challenge));
 }

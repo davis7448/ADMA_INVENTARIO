@@ -73,6 +73,7 @@ export function VentasPlataformasContent() {
     const [isSyncingVenndelo, setIsSyncingVenndelo] = useState(false);
     const [venndeloResumen, setVenndeloResumen] = useState<string>('');
     const [dropiLabel, setDropiLabel] = useState('');
+    const [dropiBodega, setDropiBodega] = useState('INGENIO');
 
     const canImport = !!user && ['admin', 'coordinacion', 'commercial_director', 'plataformas'].includes(user.role);
 
@@ -327,8 +328,17 @@ export function VentasPlataformasContent() {
                                 <Label htmlFor="dropi-label">Nombre de la cuenta</Label>
                                 <Input id="dropi-label" value={dropiLabel} onChange={e => setDropiLabel(e.target.value)} placeholder="Ej: Dropi Principal" className="mt-1" />
                             </div>
+                            <div>
+                                <Label>Bodega a la que pertenece</Label>
+                                <Select value={dropiBodega} onValueChange={setDropiBodega}>
+                                    <SelectTrigger className="w-44 mt-1"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {['INGENIO', 'LABORATORIO'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <Button
-                                onClick={() => { window.location.href = `/api/dropi/oauth/start?label=${encodeURIComponent(dropiLabel.trim())}`; }}
+                                onClick={() => { window.location.href = `/api/dropi/oauth/start?label=${encodeURIComponent(dropiLabel.trim())}&bodega=${encodeURIComponent(dropiBodega)}`; }}
                                 disabled={!dropiLabel.trim()}
                             >
                                 Agregar cuenta Dropi
