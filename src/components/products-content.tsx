@@ -437,6 +437,9 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
             if (wh) allExtNames.add(wh.name);
         }
 
+        const locNameById: Record<string, string> = {};
+        for (const l of allLocations) locNameById[l.id] = l.name;
+
         const dataToExport = initialProducts.flatMap(p => {
             const extEntries = externalStockMap[p.id] ?? [];
             const byName: Record<string, number> = {};
@@ -448,6 +451,7 @@ export function ProductsContent({ initialProducts, totalPages, initialSupplierNa
             }
 
             const baseData = {
+                'Ubicación': locNameById[p.locationId || ''] || p.locationId || '',
                 'Categoría': initialCategoryNames[p.categoryId] || 'Desconocida',
                 'Rotación': p.rotationCategoryName || 'N/A',
                 'Stock Pendiente': p.pendingStock || 0,
