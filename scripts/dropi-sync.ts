@@ -51,6 +51,8 @@ async function main() {
 
     for (const acc of accounts) {
         if (!acc.refreshToken) { console.log(`- ${acc.label}: sin token, se omite`); continue; }
+        const mode = (acc as any).syncMode;
+        if (mode === 'excel' || mode === 'off') { console.log(`- ${acc.label}: modo '${mode}' (alto volumen) — no se hace get_order por MCP; se gestiona por Excel. Se omite.`); continue; }
         console.log(`== ${acc.label} [${acc.bodega || '?'}/${acc.pais || '?'}] ==`);
         const t0 = Date.now();
         const rows = await fetchDropiOrders(acc as any, days, { skipGuias }, m => process.stdout.write('\r' + m + '          '));
