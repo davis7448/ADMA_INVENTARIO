@@ -22,6 +22,7 @@ import {
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
 import { parseEffiFiles } from '@/lib/effi';
+import { queueLargeImport } from '@/lib/large-import';
 import { syncVenndeloAction } from '@/app/actions/venndelo';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { AlertTriangle, FileUp, Link2, Upload } from 'lucide-react';
@@ -75,6 +76,7 @@ export function VentasPlataformasContent() {
     const [dropiLabel, setDropiLabel] = useState('');
     const [dropiBodega, setDropiBodega] = useState('INGENIO');
     const [dropiPais, setDropiPais] = useState('COLOMBIA');
+    const [procesarEnServidor, setProcesarEnServidor] = useState(false);
 
     const canImport = !!user && ['admin', 'coordinacion', 'commercial_director', 'plataformas'].includes(user.role);
 
@@ -192,6 +194,21 @@ export function VentasPlataformasContent() {
 
         if (!file) {
             toast({ title: 'Error', description: 'Selecciona el archivo del reporte de despachos.', variant: 'destructive' });
+            return;
+        }
+        // Archivo grande: se sube a Storage y lo procesa el servidor (no se parsea en el navegador).
+        if (procesarEnServidor) {
+            setIsImporting(true);
+            try {
+                const bodegaFinal = bodega === 'OTRA' ? (bodegaOtra.trim() || undefined) : bodega;
+                await queueLargeImport(file, { platform, bodega: bodegaFinal, pais, uploadedBy: user?.name });
+                toast({ title: 'Archivo en cola', description: 'Se subió correctamente. El servidor lo procesará en unos minutos; los datos aparecerán al terminar.' });
+                setFile(null); setProcesarEnServidor(false);
+            } catch (e) {
+                toast({ title: 'Error al subir', description: e instanceof Error ? e.message : 'No se pudo subir el archivo.', variant: 'destructive' });
+            } finally {
+                setIsImporting(false);
+            }
             return;
         }
         // Todas las plataformas usan por defecto la estructura de Dropi (EFFI y VENNDELO
@@ -418,6 +435,10 @@ export function VentasPlataformasContent() {
                                 <div className="flex-1 w-full">
                                     <Label htmlFor="sales-file">Archivo (.xlsx)</Label>
                                     <Input id="sales-file" type="file" accept=".xlsx,.xls" className="mt-1" onChange={e => setFile(e.target.files?.[0] || null)} />
+                                    <label className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                                        <input type="checkbox" checked={procesarEnServidor} onChange={e => setProcesarEnServidor(e.target.checked)} />
+                                        Archivo grande (procesar en servidor, no en el navegador)
+                                    </label>
                                 </div>
                             )}
                             <Button onClick={handleImport} disabled={isImporting || (platform === 'EFFI' ? (!effiAlist || !effiGuias) : !file)}>

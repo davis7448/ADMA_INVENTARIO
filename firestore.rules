@@ -252,6 +252,11 @@ service cloud.firestore {
      match /dropiAccounts/{accountId} {
         allow read, write: if isSignedIn() || isAdminAccess();
      }
+
+     // Cola de importaciones de archivos grandes (procesadas en el servidor/VPS)
+     match /pendingImports/{importId} {
+        allow read, write: if isSignedIn() || isAdminAccess();
+     }
      match /dropiOauthPending/{state} {
         allow read, write: if isSignedIn() || isAdminAccess();
      }
