@@ -184,22 +184,23 @@ function mapDropiEstado(s: string): string {
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const DAY_MS = 86400000;
 const RATE_RE = /rate limit|too many requests|\b429\b/i;
-const BACKEND_ERR_RE = /backend respondió\s*(4|5)\d\d|status_code:\s*(4|5)\d\d/i;
-// Llama una tool del MCP con reintentos ante rate limit (429 llega como texto).
-// Otros errores del backend (4xx/5xx) se lanzan en vez de tragarse como respuesta vacía.
+const SERVER_ERR_RE = /respondió\s*5\d\d|status_code:\s*5\d\d/i;   // 5xx: transitorio → reintentar
+const CLIENT_ERR_RE = /respondió\s*4\d\d|status_code:\s*4\d\d/i;   // 4xx: cliente → lanzar (excepto 429)
+// Llama una tool del MCP con reintentos ante rate limit (429) y errores 5xx (transitorios,
+// p.ej. 504 timeout). Los 4xx (rango inválido, etc.) se lanzan; nunca se tragan como vacío.
 async function mcpToolText(access: string, name: string, args: any, sid: string | undefined, onProgress?: (m: string) => void): Promise<string> {
-    for (let attempt = 0; attempt < 7; attempt++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
         const t = textOf(await mcpCall(access, 'tools/call', { name, arguments: args }, sid));
-        if (RATE_RE.test(t)) {
+        if (RATE_RE.test(t) || SERVER_ERR_RE.test(t)) {
             const wait = Math.min(2000 * 2 ** attempt, 30000);
-            onProgress?.(`Dropi: rate limit, esperando ${Math.round(wait / 1000)}s…`);
+            onProgress?.(`Dropi: ${RATE_RE.test(t) ? 'rate limit' : 'error servidor'}, esperando ${Math.round(wait / 1000)}s…`);
             await sleep(wait);
             continue;
         }
-        if (BACKEND_ERR_RE.test(t)) throw new Error(`Dropi MCP ${name}: ${t.replace(/\s+/g, ' ').slice(0, 180)}`);
+        if (CLIENT_ERR_RE.test(t)) throw new Error(`Dropi MCP ${name}: ${t.replace(/\s+/g, ' ').slice(0, 180)}`);
         return t;
     }
-    throw new Error(`Dropi MCP: rate limit persistente en ${name}`);
+    throw new Error(`Dropi MCP: reintentos agotados en ${name}`);
 }
 
 // Trae las órdenes de una cuenta Dropi (últimos `days` días) vía MCP y las mapea a
@@ -220,9 +221,9 @@ export async function fetchDropiOrders(
     const init = await mcpInit(access);
     const sid = init.sessionId;
 
-    // 1) Paginar list_orders (nivel orden). Dropi limita el rango a <=90 días → se
-    //    parte en chunks de 85 días hacia atrás y se deduplica por order_id.
-    const CHUNK_DAYS = 85;
+    // 1) Paginar list_orders (nivel orden). Dropi limita el rango a <=90 días Y da 504
+    //    en paginación profunda → chunks chicos (20 días) para mantener pocas páginas.
+    const CHUNK_DAYS = 20;
     const summaries: Record<string, string>[] = [];
     const seen = new Set<string>();
     let end = Date.now() + DAY_MS;
