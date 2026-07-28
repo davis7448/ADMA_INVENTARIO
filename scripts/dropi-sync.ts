@@ -1,16 +1,23 @@
-// Sincroniza las cuentas Dropi vía MCP: trae órdenes (últimos N días) e importa con
-// el motor (plataforma DROPI, atribución por cupo). Corre LOCAL (sin límite HTTP).
-// Optimización: get_order (rate-limited) solo para ENTREGADAS nuevas; las ya
-// importadas se saltean. Uso: npx tsx scripts/dropi-sync.ts [días]
+// Sincroniza las cuentas Dropi vía MCP e importa al motor (plataforma DROPI,
+// atribución por cupo). Corre LOCAL (sin límite HTTP). Uso: npx tsx scripts/dropi-sync.ts [díasMin]
+//
+// Estrategia (cerrar meses): la ventana se calcula DINÁMICAMENTE para cubrir la
+// orden ABIERTA más vieja. Así list_orders (barato) refresca el estado de todas las
+// abiertas y get_order (caro/rate-limited) se llama SOLO para las recién entregadas
+// (las ya entregadas se saltean). Cuando una orden pasa a estado final (entregado,
+// devolución, cancelado), el mes avanza hacia cerrarse.
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy, startAt, startAfter, limit } from 'firebase/firestore';
 import { listDropiAccounts, fetchDropiOrders } from '@/lib/dropi-mcp';
 import { importPlatformSales } from '@/lib/platform-sales';
 
-// Guías DROPI ya entregadas con items (docId = DROPI_<guia>) — para no re-consultarlas.
-// Recorre por __name__ desde 'DROPI_' y corta al salir del prefijo (sin índice compuesto).
-async function loadDeliveredGuias(): Promise<Set<string>> {
-    const set = new Set<string>();
+const DAY = 86400000;
+
+// Un solo recorrido de las ventas DROPI (docId = DROPI_*): junta las guías ya
+// entregadas con items (para saltearlas) y la fecha de la orden ABIERTA más antigua.
+async function loadDropiState(): Promise<{ skipGuias: Set<string>; minOpenMs: number }> {
+    const skipGuias = new Set<string>();
+    let minOpenMs = Infinity;
     let last: any = undefined;
     outer: while (true) {
         const q = last
@@ -21,20 +28,26 @@ async function loadDeliveredGuias(): Promise<Set<string>> {
         for (const d of snap.docs) {
             if (!d.id.startsWith('DROPI_')) break outer;
             const x = d.data() as any;
-            if (x.esEntregado && (x.itemIds?.length || 0) > 0 && x.guia) set.add(x.guia);
+            if (x.esEntregado && (x.itemIds?.length || 0) > 0 && x.guia) skipGuias.add(x.guia);
+            if (!x.esFinal && x.orderDate) minOpenMs = Math.min(minOpenMs, x.orderDate);
         }
         if (snap.size < 5000) break;
         last = snap.docs[snap.docs.length - 1];
     }
-    return set;
+    return { skipGuias, minOpenMs };
 }
 
 async function main() {
-    const days = Number(process.argv[2]) || 15;
+    const minDays = Number(process.argv[2]) || 5; // ventana mínima (órdenes nuevas)
+    const MAX_DAYS = 95; // tope (list_orders parte en chunks de 85 días; cubre ~3 meses de seguimiento)
     const accounts = await listDropiAccounts();
-    console.log(`Cuentas Dropi: ${accounts.length} · ventana ${days} días`);
-    const skipGuias = await loadDeliveredGuias();
-    console.log(`Guías entregadas ya importadas (se saltean): ${skipGuias.size}\n`);
+    console.log(`Cuentas Dropi: ${accounts.length}`);
+
+    const { skipGuias, minOpenMs } = await loadDropiState();
+    // Ventana = cubrir la orden abierta más vieja (para cerrar sus meses), acotada.
+    const dinamico = Number.isFinite(minOpenMs) ? Math.ceil((Date.now() - minOpenMs) / DAY) + 2 : minDays;
+    const days = Math.min(MAX_DAYS, Math.max(minDays, dinamico));
+    console.log(`Guías entregadas ya importadas: ${skipGuias.size} · orden abierta más vieja: ${Number.isFinite(minOpenMs) ? new Date(minOpenMs).toISOString().slice(0, 10) : '(ninguna)'} → ventana ${days} días\n`);
 
     for (const acc of accounts) {
         if (!acc.refreshToken) { console.log(`- ${acc.label}: sin token, se omite`); continue; }
@@ -43,7 +56,7 @@ async function main() {
         const rows = await fetchDropiOrders(acc as any, days, { skipGuias }, m => process.stdout.write('\r' + m + '          '));
         console.log(`\n${rows.length} órdenes a importar en ${((Date.now() - t0) / 1000).toFixed(0)}s. Importando…`);
         const r = await importPlatformSales('DROPI', rows, 45, { bodega: acc.bodega, pais: acc.pais });
-        console.log('  →', JSON.stringify({ nuevas: r.nuevas, actualizadas: r.actualizadas, entregadas: r.entregadas, atribuidas: r.atribuidas, publicas: r.publicas, sobreCupo: r.sobreCupo }), '\n');
+        console.log('  →', JSON.stringify({ nuevas: r.nuevas, actualizadas: r.actualizadas, entregadas: r.entregadas, atribuidas: r.atribuidas, publicas: r.publicas, sobreCupo: r.sobreCupo, mesesAbiertos: r.mesesAbiertos }), '\n');
     }
     process.exit(0);
 }

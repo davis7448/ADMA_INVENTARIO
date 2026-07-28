@@ -182,8 +182,11 @@ function mapDropiEstado(s: string): string {
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const DAY_MS = 86400000;
 const RATE_RE = /rate limit|too many requests|\b429\b/i;
+const BACKEND_ERR_RE = /backend respondió\s*(4|5)\d\d|status_code:\s*(4|5)\d\d/i;
 // Llama una tool del MCP con reintentos ante rate limit (429 llega como texto).
+// Otros errores del backend (4xx/5xx) se lanzan en vez de tragarse como respuesta vacía.
 async function mcpToolText(access: string, name: string, args: any, sid: string | undefined, onProgress?: (m: string) => void): Promise<string> {
     for (let attempt = 0; attempt < 7; attempt++) {
         const t = textOf(await mcpCall(access, 'tools/call', { name, arguments: args }, sid));
@@ -193,6 +196,7 @@ async function mcpToolText(access: string, name: string, args: any, sid: string 
             await sleep(wait);
             continue;
         }
+        if (BACKEND_ERR_RE.test(t)) throw new Error(`Dropi MCP ${name}: ${t.replace(/\s+/g, ' ').slice(0, 180)}`);
         return t;
     }
     throw new Error(`Dropi MCP: rate limit persistente en ${name}`);
@@ -216,21 +220,30 @@ export async function fetchDropiOrders(
     const init = await mcpInit(access);
     const sid = init.sessionId;
 
-    const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-    const until = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-
-    // 1) Paginar list_orders (nivel orden)
+    // 1) Paginar list_orders (nivel orden). Dropi limita el rango a <=90 días → se
+    //    parte en chunks de 85 días hacia atrás y se deduplica por order_id.
+    const CHUNK_DAYS = 85;
     const summaries: Record<string, string>[] = [];
-    let start = 0; const pageSize = 100;
-    while (true) {
-        const t = await mcpToolText(access, 'list_orders', { from, until, result_number: pageSize, start }, sid, onProgress);
-        const page = parseListOrders(t);
-        summaries.push(...page);
-        onProgress?.(`Dropi ${account.label}: ${summaries.length} órdenes…`);
-        if (page.length < pageSize) break;
-        start += pageSize;
-        await sleep(300);
-        if (start > 20000) break; // salvaguarda
+    const seen = new Set<string>();
+    let end = Date.now() + DAY_MS;
+    let remaining = days;
+    while (remaining > 0) {
+        const chunkDays = Math.min(CHUNK_DAYS, remaining);
+        const from = new Date(end - chunkDays * DAY_MS).toISOString().slice(0, 10);
+        const until = new Date(end).toISOString().slice(0, 10);
+        let start = 0; const pageSize = 100;
+        while (true) {
+            const t = await mcpToolText(access, 'list_orders', { from, until, result_number: pageSize, start }, sid, onProgress);
+            const page = parseListOrders(t);
+            for (const o of page) { const id = String(o.order_id); if (id && !seen.has(id)) { seen.add(id); summaries.push(o); } }
+            onProgress?.(`Dropi ${account.label}: ${summaries.length} órdenes…`);
+            if (page.length < pageSize) break;
+            start += pageSize;
+            await sleep(300);
+            if (start > 20000) break; // salvaguarda
+        }
+        end -= chunkDays * DAY_MS;
+        remaining -= chunkDays;
     }
 
     // 2) get_order (caro, rate-limited) SOLO para las ENTREGADAS: son las que
