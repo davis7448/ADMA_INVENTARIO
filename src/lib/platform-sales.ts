@@ -10,6 +10,11 @@ import type { Modificacion } from '@/app/actions/modificaciones';
 
 export const FINAL_STATES = ['ENTREGADO', 'DEVOLUCION', 'CANCELADO', 'RECHAZADO'];
 
+// Clientes que NO cuentan para los comerciales (aunque tengan solicitudes/cupo):
+// sus ventas se agrupan en "(sin comercial)". Ej: el que mueve BELLA SKIN/BELLA MUJER.
+export const EXCLUDED_COMMERCIAL_CLIENTS = new Set<string>(['botymaxcolombia1@gmail.com']);
+const SIN_COMERCIAL = '(sin comercial)';
+
 export type SaleClassification = 'activacion' | 'continuidad' | 'reactivacion' | 'publica' | 'sin_atribuir';
 
 export type PlatformSale = {
@@ -861,10 +866,11 @@ export async function importPlatformSales(
         porComercial: Record<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
         porBodega: Record<string, { ventas: number; total: number }>;
         porPais: Record<string, { ventas: number; total: number }>;
+        porBodegaComercial: Record<string, Record<string, { ventas: number; total: number }>>;
         ingresoTotal: number;
     }>();
     const getM = (mo: string) => {
-        if (!agg.has(mo)) agg.set(mo, { total: 0, final: 0, entregadas: 0, porComercial: {}, porBodega: {}, porPais: {}, ingresoTotal: 0 });
+        if (!agg.has(mo)) agg.set(mo, { total: 0, final: 0, entregadas: 0, porComercial: {}, porBodega: {}, porPais: {}, porBodegaComercial: {}, ingresoTotal: 0 });
         return agg.get(mo)!;
     };
     for (const sale of prevSales.values()) {
@@ -874,7 +880,9 @@ export async function importPlatformSales(
         if (!sale.esEntregado) continue;
         m.entregadas++;
         m.ingresoTotal += sale.total || 0;
-        const com = canonicalCommercial(sale.commercialName, aliases);
+        // Cliente excluido (ej. BELLA SKIN/MUJER) → no cuenta para el comercial
+        const excluido = EXCLUDED_COMMERCIAL_CLIENTS.has((sale.clientEmail || '').toLowerCase());
+        const com = excluido ? SIN_COMERCIAL : canonicalCommercial(sale.commercialName, aliases);
         const c = m.porComercial[com] || { ventas: 0, total: 0, activaciones: 0, reactivaciones: 0, publicas: 0 };
         c.ventas++; c.total += sale.total || 0;
         if (sale.classification === 'activacion') c.activaciones++;
@@ -885,6 +893,10 @@ export async function importPlatformSales(
         const b = m.porBodega[bod] || { ventas: 0, total: 0 }; b.ventas++; b.total += sale.total || 0; m.porBodega[bod] = b;
         const pa = sale.pais || '(sin país)';
         const p = m.porPais[pa] || { ventas: 0, total: 0 }; p.ventas++; p.total += sale.total || 0; m.porPais[pa] = p;
+        // Cruce bodega × comercial
+        if (!m.porBodegaComercial[bod]) m.porBodegaComercial[bod] = {};
+        const bc = m.porBodegaComercial[bod][com] || { ventas: 0, total: 0 };
+        bc.ventas++; bc.total += sale.total || 0; m.porBodegaComercial[bod][com] = bc;
     }
     let mb = writeBatch(db); let mbn = 0;
     for (const [month, m] of agg) {
@@ -895,6 +907,7 @@ export async function importPlatformSales(
             pendingOrders: pending, entregadas: m.entregadas, ingresoTotal: m.ingresoTotal,
             closed: pending === 0, lastImportAt: now,
             porComercial: m.porComercial, porBodega: m.porBodega, porPais: m.porPais,
+            porBodegaComercial: m.porBodegaComercial,
         });
         mbn++;
         if (mbn >= 400) { await mb.commit(); mb = writeBatch(db); mbn = 0; }
@@ -1063,10 +1076,12 @@ export async function getSalesByMonthAndCommercial(months?: string[]): Promise<M
 export async function getSalesBreakdown(months?: string[]): Promise<{
     byBodega: Map<string, Map<string, { ventas: number; total: number }>>;
     byPais: Map<string, Map<string, { ventas: number; total: number }>>;
+    byBodegaComercial: Map<string, Map<string, Map<string, { ventas: number; total: number }>>>;
 }> {
-    const reportMonths = await getReportMonths();
+    const [reportMonths, aliases] = await Promise.all([getReportMonths(), loadCommercialAliases()]);
     const byBodega = new Map<string, Map<string, { ventas: number; total: number }>>();
     const byPais = new Map<string, Map<string, { ventas: number; total: number }>>();
+    const byBodegaComercial = new Map<string, Map<string, Map<string, { ventas: number; total: number }>>>();
     for (const rm of reportMonths) {
         if (months && !months.includes(rm.month)) continue;
         for (const [target, field] of [[byBodega, 'porBodega'], [byPais, 'porPais']] as const) {
@@ -1082,8 +1097,25 @@ export async function getSalesBreakdown(months?: string[]): Promise<{
             }
             target.set(rm.month, monthMap);
         }
+        // Cruce bodega × comercial (re-canoniza el comercial por si cambió el alias)
+        const bcData = (rm as any).porBodegaComercial || {};
+        if (Object.keys(bcData).length > 0) {
+            const monthMap = byBodegaComercial.get(rm.month) || new Map<string, Map<string, { ventas: number; total: number }>>();
+            for (const [bod, coms] of Object.entries(bcData)) {
+                const bodMap = monthMap.get(bod) || new Map<string, { ventas: number; total: number }>();
+                for (const [rawCom, v] of Object.entries(coms as any)) {
+                    const com = canonicalCommercial(rawCom, aliases);
+                    const val = v as { ventas?: number; total?: number };
+                    const e = bodMap.get(com) || { ventas: 0, total: 0 };
+                    e.ventas += val.ventas || 0; e.total += val.total || 0;
+                    bodMap.set(com, e);
+                }
+                monthMap.set(bod, bodMap);
+            }
+            byBodegaComercial.set(rm.month, monthMap);
+        }
     }
-    return { byBodega, byPais };
+    return { byBodega, byPais, byBodegaComercial };
 }
 
 // Consumo real de inventario en UNIDADES BASE por producto: cada orden entregada

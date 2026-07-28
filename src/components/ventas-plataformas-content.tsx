@@ -61,6 +61,7 @@ export function VentasPlataformasContent() {
     const [unmappedTiendas, setUnmappedTiendas] = useState<Array<{ tienda: string; ventas: number }>>([]);
     const [byBodega, setByBodega] = useState<Breakdown>(new Map());
     const [byPais, setByPais] = useState<Breakdown>(new Map());
+    const [byBodegaComercial, setByBodegaComercial] = useState<Map<string, Map<string, Map<string, { ventas: number; total: number }>>>>(new Map());
     const [baseUnits, setBaseUnits] = useState<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>>([]);
     const [unlinkedSku, setUnlinkedSku] = useState<Array<{ itemId: string; sku?: string; productName?: string; entregadas: number }>>([]);
     const [comerciales, setComerciales] = useState<Array<{ raw: string; canonical: string; ventas: number }>>([]);
@@ -90,7 +91,7 @@ export function VentasPlataformasContent() {
                 getSalesBreakdown(periodoSel),
             ]);
             setMonths(m); setByMonthCommercial(s);
-            setByBodega(b.byBodega); setByPais(b.byPais);
+            setByBodega(b.byBodega); setByPais(b.byPais); setByBodegaComercial(b.byBodegaComercial);
         } catch (error) {
             console.error(error);
         } finally {
@@ -521,6 +522,7 @@ export function VentasPlataformasContent() {
                             comercial={byMonthCommercial.get(month)}
                             pais={byPais.get(month)}
                             bodega={byBodega.get(month)}
+                            bodegaComercial={byBodegaComercial.get(month)}
                         />
                     ))}
                 </div>
@@ -908,14 +910,57 @@ function MiniBreakdown({ titulo, rows }: {
     );
 }
 
+// Desglose por bodega, y dentro de cada bodega, por comercial.
+function BodegaComercialBreakdown({ bodega, bodegaComercial }: {
+    bodega?: Map<string, { ventas: number; total: number }>;
+    bodegaComercial?: Map<string, Map<string, { ventas: number; total: number }>>;
+}) {
+    const bodegas = Array.from(bodega?.entries() || []).sort((a, b) => b[1].ventas - a[1].ventas);
+    if (bodegas.length === 0) return null;
+    return (
+        <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Por bodega y comercial</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                {bodegas.map(([bod, v]) => {
+                    const coms = Array.from(bodegaComercial?.get(bod)?.entries() || [])
+                        .map(([label, x]) => ({ label, ventas: x.ventas, total: x.total }))
+                        .sort((a, b) => b.ventas - a.ventas);
+                    return (
+                        <div key={bod}>
+                            <div className="flex items-center justify-between border-b pb-1 mb-1">
+                                <span className="font-semibold text-sm">{bod}</span>
+                                <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{v.ventas.toLocaleString('es-CO')} · ${v.total.toLocaleString('es-CO')}</span>
+                            </div>
+                            {coms.length === 0 ? <p className="text-xs text-muted-foreground">—</p> : (
+                                <table className="w-full text-sm">
+                                    <tbody>
+                                        {coms.map(r => (
+                                            <tr key={r.label} className="border-b border-border/30 last:border-0">
+                                                <td className="py-0.5 pr-2">{r.label}</td>
+                                                <td className="py-0.5 text-right tabular-nums whitespace-nowrap">{r.ventas}</td>
+                                                <td className="py-0.5 pl-3 text-right tabular-nums whitespace-nowrap text-muted-foreground">${r.total.toLocaleString('es-CO')}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 // Tarjeta de un mes: cabecera con el TOTAL y tres columnas de desglose
-function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega }: {
+function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega, bodegaComercial }: {
     month: string;
     total?: { ventas: number; total: number; pendingOrders: number; closed: boolean };
     plataforma?: Map<string, { ventas: number; total: number }>;
     comercial?: Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
     pais?: Map<string, { ventas: number; total: number }>;
     bodega?: Map<string, { ventas: number; total: number }>;
+    bodegaComercial?: Map<string, Map<string, { ventas: number; total: number }>>;
 }) {
     const platRows = Array.from(plataforma?.entries() || [])
         .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
@@ -924,9 +969,6 @@ function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega }:
         .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total, clasif: { activaciones: v.activaciones, reactivaciones: v.reactivaciones, publicas: v.publicas } }))
         .sort((a, b) => b.ventas - a.ventas);
     const paisRows = Array.from(pais?.entries() || [])
-        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
-        .sort((a, b) => b.ventas - a.ventas);
-    const bodegaRows = Array.from(bodega?.entries() || [])
         .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
         .sort((a, b) => b.ventas - a.ventas);
 
@@ -944,13 +986,13 @@ function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega }:
                     </div>
                 </div>
             </CardHeader>
-            <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-6">
+            <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
                     <MiniBreakdown titulo="Por comercial" rows={comRows} />
-                    <MiniBreakdown titulo="Por bodega" rows={bodegaRows} />
                     <MiniBreakdown titulo="Por plataforma" rows={platRows} />
                     <MiniBreakdown titulo="Por país" rows={paisRows} />
                 </div>
+                <BodegaComercialBreakdown bodega={bodega} bodegaComercial={bodegaComercial} />
             </CardContent>
         </Card>
     );
