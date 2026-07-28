@@ -520,6 +520,7 @@ export function VentasPlataformasContent() {
                             plataforma={byMonthPlatform.get(month)}
                             comercial={byMonthCommercial.get(month)}
                             pais={byPais.get(month)}
+                            bodega={byBodega.get(month)}
                         />
                     ))}
                 </div>
@@ -908,12 +909,13 @@ function MiniBreakdown({ titulo, rows }: {
 }
 
 // Tarjeta de un mes: cabecera con el TOTAL y tres columnas de desglose
-function MonthSummaryCard({ month, total, plataforma, comercial, pais }: {
+function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega }: {
     month: string;
     total?: { ventas: number; total: number; pendingOrders: number; closed: boolean };
     plataforma?: Map<string, { ventas: number; total: number }>;
     comercial?: Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
     pais?: Map<string, { ventas: number; total: number }>;
+    bodega?: Map<string, { ventas: number; total: number }>;
 }) {
     const platRows = Array.from(plataforma?.entries() || [])
         .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
@@ -922,6 +924,9 @@ function MonthSummaryCard({ month, total, plataforma, comercial, pais }: {
         .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total, clasif: { activaciones: v.activaciones, reactivaciones: v.reactivaciones, publicas: v.publicas } }))
         .sort((a, b) => b.ventas - a.ventas);
     const paisRows = Array.from(pais?.entries() || [])
+        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
+        .sort((a, b) => b.ventas - a.ventas);
+    const bodegaRows = Array.from(bodega?.entries() || [])
         .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
         .sort((a, b) => b.ventas - a.ventas);
 
@@ -940,9 +945,10 @@ function MonthSummaryCard({ month, total, plataforma, comercial, pais }: {
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-6">
-                    <MiniBreakdown titulo="Por plataforma" rows={platRows} />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-6">
                     <MiniBreakdown titulo="Por comercial" rows={comRows} />
+                    <MiniBreakdown titulo="Por bodega" rows={bodegaRows} />
+                    <MiniBreakdown titulo="Por plataforma" rows={platRows} />
                     <MiniBreakdown titulo="Por país" rows={paisRows} />
                 </div>
             </CardContent>
