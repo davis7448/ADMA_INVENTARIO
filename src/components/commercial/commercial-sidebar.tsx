@@ -12,7 +12,8 @@ import {
     GraduationCap,
     TrendingUp,
     Menu,
-    ClipboardList
+    ClipboardList,
+    Megaphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +26,7 @@ import { useState } from 'react';
 const sidebarItems = [
     { href: '/commercial/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/commercial/crm/dashboard', label: 'CRM / Clientes', icon: Users },
+    { href: '/commercial/difusion', label: 'Difusión', icon: Megaphone },
     { href: '/commercial/catalog', label: 'Catálogo', icon: ShoppingBag },
     { href: '/commercial/solicitudes', label: 'Solicitudes', icon: ClipboardList },
     { href: '/commercial/challenges', label: 'Retos y Misiones', icon: Trophy },

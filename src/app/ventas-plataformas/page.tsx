@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export default function VentasPlataformasPage() {
     return (
         <Suspense>
-            <AuthProviderWrapper allowedRoles={['admin', 'coordinacion', 'commercial_director', 'plataformas', 'marketing', 'consulta']}>
+            <AuthProviderWrapper allowedRoles={['admin', 'coordinacion', 'commercial_director', 'plataformas', 'marketing', 'consulta', 'commercial']}>
                 <VentasPlataformasContent />
             </AuthProviderWrapper>
         </Suspense>
