@@ -13,7 +13,8 @@ import {
     TrendingUp,
     Menu,
     ClipboardList,
-    Megaphone
+    Megaphone,
+    BookOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,6 +33,7 @@ const sidebarItems = [
     { href: '/commercial/challenges', label: 'Retos y Misiones', icon: Trophy },
     { href: '/commercial/tareas', label: 'Tareas', icon: Star },
     { href: '/commercial/academy', label: 'Academia', icon: GraduationCap },
+    { href: '/manual', label: 'Capacitación', icon: BookOpen },
 ];
 
 function SidebarContent() {

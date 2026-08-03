@@ -66,6 +66,7 @@ const navItems: NavItem[] = [
       { href: '/cancellations', label: 'Anulaciones', roles: ['admin', 'commercial', 'consulta', 'logistics'] },
     ],
   },
+  { href: '/manual', label: 'Capacitación', roles: ['admin', 'logistics', 'commercial', 'commercial_director', 'consulta', 'plataformas', 'mercado_libre', 'coordinacion', 'marketing'] },
   { href: '/history', label: 'Historial', roles: ['admin', 'logistics', 'plataformas'] },
   { href: '/reporte-proceso', label: 'KPIs Proceso', roles: ['admin', 'coordinacion', 'commercial_director', 'plataformas', 'marketing', 'consulta'] },
   { href: '/ventas-plataformas', label: 'Ventas Plataformas', roles: ['admin', 'coordinacion', 'commercial_director', 'plataformas', 'marketing', 'consulta', 'commercial'] },

@@ -257,6 +257,12 @@ service cloud.firestore {
      match /pendingImports/{importId} {
         allow read, write: if isSignedIn() || isAdminAccess();
      }
+
+     // Manual / Capacitación: lo lee todo el equipo; lo edita admin (o el servidor)
+     match /manuales/{guiaId} {
+        allow read: if isSignedIn() || isAdminAccess();
+        allow write: if isRole('admin') || isAdminAccess();
+     }
      match /dropiOauthPending/{state} {
         allow read, write: if isSignedIn() || isAdminAccess();
      }
