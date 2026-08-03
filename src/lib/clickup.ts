@@ -78,21 +78,33 @@ function fieldValue(map: FieldMap, name: string, rawValue: unknown, qualifier?: 
     if (!field || rawValue === undefined || rawValue === null || rawValue === '') return null;
     if (field.type === 'drop_down') {
         const normalized = normalizeLabel(String(rawValue));
+        // Variantes del valor: completo y primer token ("ADMA-MB" → "ADMA",
+        // "DROPLATAM -MB" → "DROPLATAM") porque ClickUp usa el nombre base.
+        const valueTokens = [normalized];
+        const firstToken = normalized.split(/[^A-Z0-9]+/).filter(Boolean)[0];
+        if (firstToken && firstToken !== normalized) valueTokens.push(firstToken);
+        // El qualifier puede venir como "Bodega INGENIO" → se usa "INGENIO"
         const qual = qualifier !== undefined && qualifier !== null && qualifier !== ''
-            ? normalizeLabel(String(qualifier)) : '';
+            ? normalizeLabel(String(qualifier)).replace(/^BODEGA\s+/, '') : '';
         const entries = Object.entries(field.options);
         let optionId: string | undefined;
 
         if (qual) {
             // 1) Opción exacta "VALOR QUALIFIER" (ej. "DROPI INGENIO")
-            optionId = field.options[normalizeLabel(`${rawValue} ${qualifier}`)];
+            for (const v of valueTokens) {
+                optionId = field.options[`${v} ${qual}`];
+                if (optionId) break;
+            }
             // 2) Opción que contenga AMBOS (ej. "DROPI - BODEGA INGENIO")
             if (!optionId) {
-                optionId = entries.find(([label]) => label.includes(normalized) && label.includes(qual))?.[1];
+                for (const v of valueTokens) {
+                    optionId = entries.find(([label]) => label.includes(v) && label.includes(qual))?.[1];
+                    if (optionId) break;
+                }
             }
         }
         // 3) Coincidencia exacta del valor solo
-        if (!optionId) optionId = field.options[normalized];
+        if (!optionId) for (const v of valueTokens) { optionId = field.options[v]; if (optionId) break; }
         if (!optionId) {
             // 4) Empate por contención: "BODEGA INGENIO" ↔ opción "INGENIO".
             //    Si hay VARIAS candidatas y teníamos qualifier, no adivinamos
