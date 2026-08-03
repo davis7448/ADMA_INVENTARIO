@@ -70,18 +70,38 @@ async function getListFieldMap(): Promise<FieldMap> {
     return map;
 }
 
-function fieldValue(map: FieldMap, name: string, rawValue: unknown): { id: string; value: unknown } | null {
+// `qualifier` desambigua cuando ClickUp abre una opción por cada combinación:
+// p.ej. PLATAFORMA "DROPI" con opciones "DROPI INGENIO" / "DROPI LABORATORIO" →
+// se pasa la BODEGA como qualifier para elegir la correcta.
+function fieldValue(map: FieldMap, name: string, rawValue: unknown, qualifier?: unknown): { id: string; value: unknown } | null {
     const field = map[normalizeLabel(name)];
     if (!field || rawValue === undefined || rawValue === null || rawValue === '') return null;
     if (field.type === 'drop_down') {
         const normalized = normalizeLabel(String(rawValue));
-        let optionId: string | undefined = field.options[normalized];
+        const qual = qualifier !== undefined && qualifier !== null && qualifier !== ''
+            ? normalizeLabel(String(qualifier)) : '';
+        const entries = Object.entries(field.options);
+        let optionId: string | undefined;
+
+        if (qual) {
+            // 1) Opción exacta "VALOR QUALIFIER" (ej. "DROPI INGENIO")
+            optionId = field.options[normalizeLabel(`${rawValue} ${qualifier}`)];
+            // 2) Opción que contenga AMBOS (ej. "DROPI - BODEGA INGENIO")
+            if (!optionId) {
+                optionId = entries.find(([label]) => label.includes(normalized) && label.includes(qual))?.[1];
+            }
+        }
+        // 3) Coincidencia exacta del valor solo
+        if (!optionId) optionId = field.options[normalized];
         if (!optionId) {
-            // Empate por contención: "BODEGA INGENIO" ↔ opción "INGENIO"
-            const match = Object.entries(field.options).find(([label]) =>
+            // 4) Empate por contención: "BODEGA INGENIO" ↔ opción "INGENIO".
+            //    Si hay VARIAS candidatas y teníamos qualifier, no adivinamos
+            //    (elegir al azar fue el bug de DROPI→LABORATORIO): se deja vacío.
+            const matches = entries.filter(([label]) =>
                 normalized.includes(label) || label.includes(normalized)
             );
-            optionId = match?.[1];
+            if (matches.length === 1) optionId = matches[0][1];
+            else if (matches.length > 1 && !qual) optionId = matches[0][1];
         }
         return optionId ? { id: field.id, value: optionId } : null;
     }
@@ -107,7 +127,9 @@ export async function createClickUpTaskForSolicitud(modificacionId: string): Pro
         const observaciones = buildObservacionesText(solicitud);
         const customFields = [
             fieldValue(map, 'TIPO DE STOCK', solicitud.SOLICITUD),
-            fieldValue(map, 'PLATAFORMA', solicitud.PLATAFORMA),
+            // La bodega cualifica la plataforma: en ClickUp las opciones vienen por
+            // bodega (DROPI INGENIO / DROPI LABORATORIO).
+            fieldValue(map, 'PLATAFORMA', solicitud.PLATAFORMA, solicitud.BODEGA),
             fieldValue(map, 'BODEGA', solicitud.BODEGA),
             fieldValue(map, 'PAIS', solicitud.PAIS),
             fieldValue(map, 'STOCK', solicitud['CANTIDAD SOLICITADA']),
