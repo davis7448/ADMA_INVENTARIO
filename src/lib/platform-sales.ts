@@ -4,7 +4,7 @@
 // los items públicos no se atribuyen a un cliente (van al producto y al comercial).
 import { db } from '@/lib/firebase';
 import {
-    collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, where, writeBatch,
+    collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, startAt, where, writeBatch,
 } from 'firebase/firestore';
 import type { Modificacion } from '@/app/actions/modificaciones';
 
@@ -107,20 +107,30 @@ export type ParsedRow = {
     bodega?: string; // columna BODEGA (formato COMPANY)
 };
 
-// Lee TODAS las ventas paginando (Firestore limita a 10.000 por consulta).
-async function fetchAllSales(filter?: (s: PlatformSale) => boolean): Promise<PlatformSale[]> {
+// Lee las ventas paginando (Firestore limita a 10.000 por consulta).
+// `platform` acota la lectura al RANGO de IDs de esa plataforma (el id es
+// `${platform}_${guia}`): sin esto se leía la colección completa (cientos de miles
+// de docs de todas las plataformas) y el proceso se quedaba sin memoria.
+async function fetchAllSales(filter?: (s: PlatformSale) => boolean, platform?: string): Promise<PlatformSale[]> {
     const all: PlatformSale[] = [];
+    const prefix = platform ? `${platform}_` : undefined;
     let last: any = null;
     while (true) {
+        const base = [orderBy('__name__')] as any[];
         const q = last
-            ? query(collection(db, 'platformSales'), orderBy('__name__'), startAfter(last), limit(5000))
-            : query(collection(db, 'platformSales'), orderBy('__name__'), limit(5000));
+            ? query(collection(db, 'platformSales'), ...base, startAfter(last), limit(5000))
+            : prefix
+                ? query(collection(db, 'platformSales'), ...base, startAt(prefix), limit(5000))
+                : query(collection(db, 'platformSales'), ...base, limit(5000));
         const snap = await getDocs(q);
         if (snap.empty) break;
+        let salioDelPrefijo = false;
         for (const d of snap.docs) {
+            if (prefix && !d.id.startsWith(prefix)) { salioDelPrefijo = true; break; }
             const s = { id: d.id, ...d.data() } as PlatformSale;
             if (!filter || filter(s)) all.push(s);
         }
+        if (salioDelPrefijo) break;
         last = snap.docs[snap.docs.length - 1];
         if (snap.size < 5000) break;
     }
@@ -504,7 +514,7 @@ export async function saveTiendaMapping(tienda: string, clientEmail: string): Pr
 // Tiendas vistas en ventas sin mapeo a cliente (para la cola de vinculación)
 export async function getUnmappedTiendas(platform: string): Promise<Array<{ tienda: string; ventas: number }>> {
     const [sales, tiendaMap] = await Promise.all([
-        fetchAllSales(s => s.platform === platform),
+        fetchAllSales(s => s.platform === platform, platform),
         loadTiendaMappings(),
     ]);
     const counter = new Map<string, { tienda: string; ventas: number }>();
@@ -673,7 +683,7 @@ export async function importPlatformSales(
 
     // 3. Historial existente de ventas de la plataforma (para clasificar)
     progress('Cargando historial de ventas…');
-    const prevSalesArr = await fetchAllSales(s => s.platform === platform);
+    const prevSalesArr = await fetchAllSales(s => s.platform === platform, platform);
     const prevSales = new Map<string, PlatformSale>();
     for (const s of prevSalesArr) prevSales.set(s.id!, s);
 
@@ -969,7 +979,7 @@ export async function getReportMonths(): Promise<ReportMonth[]> {
 // Items que necesitan revisión: sin mapeo alguno, o con producto pero SIN cliente
 // (visibilidad desconocida — típico de mapeos aprendidos del archivo)
 export async function getUnmappedItems(platform: string): Promise<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; variantName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>> {
-    const [sales, mappings] = await Promise.all([fetchAllSales(s => s.platform === platform), loadMappings(platform)]);
+    const [sales, mappings] = await Promise.all([fetchAllSales(s => s.platform === platform, platform), loadMappings(platform)]);
     const counter = new Map<string, { ventas: number; entregadas: number }>();
     for (const sale of sales) {
         for (const itemId of sale.itemIds || []) {
@@ -1124,7 +1134,7 @@ export async function getSalesBreakdown(months?: string[]): Promise<{
 export async function getBaseUnitConsumption(platform: string): Promise<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>> {
     const [mappings, sales] = await Promise.all([
         loadMappings(platform),
-        fetchAllSales(s => s.platform === platform && s.esEntregado),
+        fetchAllSales(s => s.platform === platform && s.esEntregado, platform),
     ]);
     const acc = new Map<string, { ordenes: number; unidadesBase: number; tieneCombo: boolean }>();
     const add = (name: string, ordenes: number, unidades: number, combo: boolean) => {
@@ -1152,7 +1162,7 @@ export async function getBaseUnitConsumption(platform: string): Promise<Array<{ 
 export async function getUnlinkedSkuItems(platform: string): Promise<Array<{ itemId: string; sku?: string; productName?: string; entregadas: number }>> {
     const [mappings, sales] = await Promise.all([
         loadMappings(platform),
-        fetchAllSales(s => s.platform === platform),
+        fetchAllSales(s => s.platform === platform, platform),
     ]);
     const entregadasByItem = new Map<string, number>();
     for (const sale of sales) {
@@ -1183,7 +1193,7 @@ export async function getItemsNeedingComposition(platform: string): Promise<Arra
 export async function getAssignmentConsumption(platform: string): Promise<Array<{ itemId: string; productName?: string; clientEmail?: string; assignedQty: number; soldQty: number; pct: number }>> {
     const [mappings, sales] = await Promise.all([
         loadMappings(platform),
-        fetchAllSales(s => s.platform === platform && s.esEntregado),
+        fetchAllSales(s => s.platform === platform && s.esEntregado, platform),
     ]);
     const soldByItem = new Map<string, number>();
     for (const sale of sales) {

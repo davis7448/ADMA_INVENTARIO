@@ -8,7 +8,9 @@ mkdir -p logs
 LOG=/opt/workspaces/ADMA_INVENTARIO/logs/dropi-sync.log
 DAYS="${1:-15}"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Dropi MCP sync (ventana ${DAYS}d)…" >> "$LOG"
-NODE_PATH=/opt/workspaces/ADMA_INVENTARIO/node_modules /opt/workspaces/ADMA_INVENTARIO/node_modules/.bin/tsx \
+# El import carga todo el histórico DROPI en memoria (>160k ventas): sin ampliar el
+# heap Node topa en ~2GB y muere con "JavaScript heap out of memory".
+NODE_OPTIONS="--max-old-space-size=5120" NODE_PATH=/opt/workspaces/ADMA_INVENTARIO/node_modules /opt/workspaces/ADMA_INVENTARIO/node_modules/.bin/tsx \
   /opt/workspaces/ADMA_INVENTARIO/scripts/dropi-sync.ts "$DAYS" >> "$LOG" 2>&1
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] fin Dropi MCP sync" >> "$LOG"
 echo "---" >> "$LOG"
