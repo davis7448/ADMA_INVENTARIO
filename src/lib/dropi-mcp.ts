@@ -209,7 +209,7 @@ async function mcpToolText(access: string, name: string, args: any, sid: string 
 export async function fetchDropiOrders(
     account: { id: string; label: string; refreshToken?: string; bodega?: string; pais?: string },
     days: number,
-    opts?: { skipGuias?: Set<string> },
+    opts?: { skipGuias?: Set<string>; soloEstados?: boolean },
     onProgress?: (msg: string) => void,
 ): Promise<ParsedRow[]> {
     if (!account.refreshToken) throw new Error(`Cuenta ${account.label} sin refresh_token`);
@@ -259,6 +259,12 @@ export async function fetchDropiOrders(
         const estado = mapDropiEstado(o.status);
         const totalCF = Number(o.total) || undefined;
 
+        // soloEstados: no se consulta get_order (1 petición por orden). Se devuelve
+        // el nivel orden para actualizar estados en cuentas de alto volumen.
+        if (opts?.soloEstados) {
+            rows.push({ guia, fecha: o.created_at || '', estado, itemIds: [], total: 0, totalClienteFinal: totalCF });
+            continue;
+        }
         if (estado !== 'ENTREGADO') {
             rows.push({ guia, fecha: o.created_at || '', estado, itemIds: [], total: 0, totalClienteFinal: totalCF });
             continue;
