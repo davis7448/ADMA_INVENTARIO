@@ -4,16 +4,17 @@
 // los items públicos no se atribuyen a un cliente (van al producto y al comercial).
 import { db } from '@/lib/firebase';
 import {
-    collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, startAt, where, writeBatch,
+    collection, deleteField, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, startAt, where, writeBatch,
 } from 'firebase/firestore';
 import type { Modificacion } from '@/app/actions/modificaciones';
 
 export const FINAL_STATES = ['ENTREGADO', 'DEVOLUCION', 'CANCELADO', 'RECHAZADO'];
 
 // Clientes que NO cuentan para los comerciales (aunque tengan solicitudes/cupo):
-// sus ventas se agrupan en "(sin comercial)". Ej: el que mueve BELLA SKIN/BELLA MUJER.
+// sus ventas se agrupan como orgánicas. Ej: el que mueve BELLA SKIN/BELLA MUJER.
 export const EXCLUDED_COMMERCIAL_CLIENTS = new Set<string>(['botymaxcolombia1@gmail.com']);
-const SIN_COMERCIAL = '(sin comercial)';
+// Ventas sin solicitud/cupo detrás: nadie las gestionó → demanda orgánica.
+const SIN_COMERCIAL = 'Orgánicas';
 
 export type SaleClassification = 'activacion' | 'continuidad' | 'reactivacion' | 'publica' | 'sin_atribuir';
 
@@ -862,6 +863,12 @@ export async function importPlatformSales(
             const clean: Record<string, any> = { ...sale };
             delete clean.id;
             Object.keys(clean).forEach(k => clean[k] === undefined && delete clean[k]);
+            // Campos que se RECALCULAN en cada import: si ahora quedan vacíos hay que
+            // borrarlos, porque con merge:true un valor viejo sobreviviría (fue el caso
+            // de EFFI, donde quedó el nombre de la tienda como comercial).
+            for (const campo of ['commercialName', 'clientEmail', 'clientId', 'clientName'] as const) {
+                if ((sale as any)[campo] === undefined) clean[campo] = deleteField();
+            }
             batch.set(doc(db, 'platformSales', sale.id!), clean, { merge: true });
         }
         await batch.commit();
@@ -1029,9 +1036,9 @@ function titleCaseName(s: string): string {
 // (mayúsculas/tildes/paréntesis colapsados) en Título → 'MARCELA' y 'marcela'
 // se fusionan solas en 'Marcela'.
 export function canonicalCommercial(name: string | undefined, aliases: Map<string, string>): string {
-    if (!name || !name.trim()) return '(sin comercial)';
+    if (!name || !name.trim()) return 'Orgánicas';
     const norm = normCommercial(name);
-    if (!norm) return '(sin comercial)';
+    if (!norm) return 'Orgánicas';
     return aliases.get(norm) || titleCaseName(norm);
 }
 
