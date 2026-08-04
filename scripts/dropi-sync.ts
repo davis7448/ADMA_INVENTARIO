@@ -52,10 +52,14 @@ async function main() {
     for (const acc of accounts) {
         if (!acc.refreshToken) { console.log(`- ${acc.label}: sin token, se omite`); continue; }
         const mode = (acc as any).syncMode;
-        if (mode === 'excel' || mode === 'off') { console.log(`- ${acc.label}: modo '${mode}' (alto volumen) — no se hace get_order por MCP; se gestiona por Excel. Se omite.`); continue; }
-        console.log(`== ${acc.label} [${acc.bodega || '?'}/${acc.pais || '?'}] ==`);
+        if (mode === 'off') { console.log(`- ${acc.label}: modo 'off'. Se omite.`); continue; }
+        // Cuentas de alto volumen (ej. LABORATORIO ~60k órdenes/mes) usan una ventana
+        // más corta: recorrer 95 días serían miles de páginas de list_orders.
+        const tope = Number((acc as any).maxDias) || MAX_DAYS;
+        const diasCuenta = Math.min(days, tope);
+        console.log(`== ${acc.label} [${acc.bodega || '?'}/${acc.pais || '?'}] · ventana ${diasCuenta}d ==`);
         const t0 = Date.now();
-        const rows = await fetchDropiOrders(acc as any, days, { skipGuias }, m => process.stdout.write('\r' + m + '          '));
+        const rows = await fetchDropiOrders(acc as any, diasCuenta, { skipGuias }, m => process.stdout.write('\r' + m + '          '));
         console.log(`\n${rows.length} órdenes a importar en ${((Date.now() - t0) / 1000).toFixed(0)}s. Importando…`);
         const r = await importPlatformSales('DROPI', rows, 45, { bodega: acc.bodega, pais: acc.pais });
         console.log('  →', JSON.stringify({ nuevas: r.nuevas, actualizadas: r.actualizadas, entregadas: r.entregadas, atribuidas: r.atribuidas, publicas: r.publicas, sobreCupo: r.sobreCupo, mesesAbiertos: r.mesesAbiertos }), '\n');

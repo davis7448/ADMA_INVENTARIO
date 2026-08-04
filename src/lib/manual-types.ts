@@ -27,6 +27,8 @@ export type ManualPaso = {
     // Ruta de la pantalla (se usa para capturar el pantallazo automáticamente)
     ruta?: string;
     anotaciones?: ManualAnotacion[];
+    // Clics previos a la captura (para fotografiar pasos intermedios de un flujo)
+    acciones?: Array<{ click?: string; esperar?: number }>;
 };
 
 export type ManualSeccion = {

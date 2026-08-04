@@ -30,10 +30,33 @@ def login(page, email, password):
     page.wait_for_timeout(6000)
 
 
-def capturar(page, ruta, destino, anotaciones):
+def ejecutar_acciones(page, acciones):
+    """Interacciones previas a la captura: permite fotografiar pantallas
+    intermedias de un flujo (abrir un diálogo, avanzar un paso del asistente)."""
+    for acc in acciones or []:
+        try:
+            objetivo = acc.get("click")
+            if objetivo:
+                for hacer in (
+                    lambda: page.get_by_role("button", name=objetivo, exact=False).first,
+                    lambda: page.get_by_role("tab", name=objetivo, exact=False).first,
+                    lambda: page.get_by_text(objetivo, exact=False).first,
+                ):
+                    try:
+                        hacer().click(timeout=4000)
+                        break
+                    except Exception:
+                        continue
+            page.wait_for_timeout(acc.get("esperar", 2500))
+        except Exception:
+            pass
+
+
+def capturar(page, ruta, destino, anotaciones, acciones=None):
     """Navega, captura y devuelve las anotaciones con coordenadas en %."""
     page.goto(BASE + ruta, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(7000)  # dar tiempo a que carguen los datos
+    ejecutar_acciones(page, acciones)
     # Tamaño real de la captura (viewport)
     vp = page.viewport_size
     page.screenshot(path=destino)
@@ -99,7 +122,7 @@ def main():
                     nombre = f"{guia['slug']}-{si}-{pi}.png"
                     destino = os.path.join(out_dir, nombre)
                     try:
-                        anots = capturar(page, ruta, destino, paso.get("anotaciones"))
+                        anots = capturar(page, ruta, destino, paso.get("anotaciones"), paso.get("acciones"))
                         manifest.append({
                             "slug": guia["slug"], "seccion": si, "paso": pi,
                             "archivo": nombre, "anotaciones": anots,
