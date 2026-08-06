@@ -22,20 +22,10 @@ import { SolicitudEvidenceDialog } from '@/components/solicitud-evidence-dialog'
 import { buildObservacionesText } from '@/lib/solicitud-text';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
-
-const PAISES = [
-    'Argentina',
-    'Chile',
-    'Colombia',
-    'Ecuador',
-    'Guatemala',
-    'México',
-    'Panamá',
-    'Paraguay',
-    'Perú',
-    'República Dominicana',
-    'Uruguay',
-].sort();
+// Lista compartida. Antes esta pantalla tenía su propia copia en "Title Case" con tildes,
+// lo que partía en dos el filtro por país ("Colombia" vs "COLOMBIA"); los registros
+// históricos ya se normalizaron con scripts/normalizar-pais.ts.
+import { PAISES } from '@/lib/paises';
 
 const TIPOS_MODIFICACION: { value: TipoModificacion; label: string }[] = [
     { value: 'RESERVA_INVENTARIO', label: 'Reserva de Inventario' },
