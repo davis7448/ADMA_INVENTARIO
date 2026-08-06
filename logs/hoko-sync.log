@@ -26,3 +26,16 @@
   estados: {}
 [2026-08-05 07:30:34] fin HOKO sync
 ---
+[2026-08-06 07:30:01] HOKO sync (ventana 30d)…
+
+== HOKO IMPORTACIONES · ventana 30 días ==
+  HOKO IMPORTACIONES: 2026-08-06 · 0 órdenes          HOKO IMPORTACIONES: 2026-08-01 · 0 órdenes          HOKO IMPORTACIONES: 2026-07-27 · 0 órdenes          HOKO IMPORTACIONES: 2026-07-22 · 0 órdenes          HOKO IMPORTACIONES: 2026-07-17 · 0 órdenes          HOKO IMPORTACIONES: 2026-07-12 · 0 órdenes        
+  0 órdenes en 11s
+  estados: {}
+
+== HOKO LABORATORIO · ventana 30 días ==
+  HOKO LABORATORIO: 2026-08-06 · 0 órdenes          HOKO LABORATORIO: 2026-08-01 · 0 órdenes          HOKO LABORATORIO: 2026-07-27 · 0 órdenes          HOKO LABORATORIO: 2026-07-22 · 0 órdenes          HOKO LABORATORIO: 2026-07-17 · 0 órdenes          HOKO LABORATORIO: 2026-07-12 · 0 órdenes        
+  0 órdenes en 22s
+  estados: {}
+[2026-08-06 07:30:36] fin HOKO sync
+---

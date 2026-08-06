@@ -19,10 +19,9 @@ import { buildObservacionesText } from '@/lib/solicitud-text';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { SolicitudEvidenceDialog } from '@/components/solicitud-evidence-dialog';
 import type { Platform, Warehouse } from '@/lib/types';
+import { PAISES } from '@/lib/paises';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-const PAISES = ['COLOMBIA', 'MEXICO', 'ECUADOR', 'PARAGUAY', 'ARGENTINA', 'GUATEMALA'];
 
 export const ESTADO_SOLICITUD_LABELS: Record<EstadoSolicitud, string> = {
     pendiente: 'Pendiente',
@@ -186,6 +185,10 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [comboNombre, setComboNombre] = useState('');
     const [comboUnidades, setComboUnidades] = useState('');
     const [productId, setProductId] = useState<string | null>(null);
+    // Productos del inventario que componen ESTE ID de plataforma. Con más de uno,
+    // el ID es combinado: el SKU se une con "+" y cada venta descuenta las unidades
+    // indicadas de cada producto.
+    const [componentes, setComponentes] = useState<Array<{ productId?: string; producto: string; sku: string; unidades: number }>>([]);
     const [enlaceDrive, setEnlaceDrive] = useState('');
     const [plataforma, setPlataforma] = useState('');
     const [bodega, setBodega] = useState('');
@@ -203,6 +206,17 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [imageCount, setImageCount] = useState(0);
     // Stock por variante (cuando el producto tiene variantes y la solicitud aplica a varias)
     const [variantStocks, setVariantStocks] = useState<Record<string, string>>({});
+
+    // ID combinado: varios productos del inventario bajo un mismo ID de plataforma
+    const esCombinado = componentes.length > 1;
+    // El SKU combinado usa "+" porque es el formato que el motor de ventas reconoce
+    // para descontar del inventario cada producto del paquete.
+    const skuFinal = esCombinado
+        ? componentes.map(c => c.sku).filter(Boolean).join('+')
+        : sku;
+    const productoFinal = esCombinado
+        ? componentes.map(c => c.producto).join(' + ')
+        : productName;
 
     const esRetiro = tipo === 'RETIRO';
     const esCreacion = tipo === 'CREACION_ITEM';
@@ -248,10 +262,19 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setVisibilidad('Publico'); setCorreo(''); setIdPlataforma(''); setObservaciones('');
         setImageCount(0);
         setVariantStocks({});
+        setComponentes([]);
         if (imagesInputRef.current) imagesInputRef.current.value = '';
     };
 
     const handleProductPick = (product: { id: string; name: string; sku?: string; contentLink?: string; priceDropshipping?: number; productType?: string; variants?: Array<{ id: string; name: string; sku: string; priceDropshipping?: number }> }) => {
+        // Si ya hay un producto elegido, el nuevo se SUMA como componente del mismo ID
+        if (componentes.length > 0) {
+            if (componentes.some(c => c.productId === product.id)) return; // ya está
+            setComponentes(prev => [...prev, {
+                productId: product.id, producto: product.name, sku: product.sku || '', unidades: 1,
+            }]);
+            return;
+        }
         setProductId(product.id);
         setProductName(product.name);
         setSku(product.sku || '');
@@ -261,6 +284,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setComboUnidades('');
         setPickedVariants(product.productType === 'variable' ? (product.variants || []) : []);
         setVariantStocks({});
+        setComponentes([{ productId: product.id, producto: product.name, sku: product.sku || '', unidades: 1 }]);
         if (product.contentLink) setEnlaceDrive(product.contentLink);
         if (product.priceDropshipping) setPrecio(String(product.priceDropshipping));
     };
@@ -290,6 +314,14 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             if (!productName.trim()) return 'Busca el producto en el inventario o escribe su nombre.';
             if (comboMode && (!comboNombre.trim() || !comboUnidades || Number(comboUnidades) < 2)) {
                 return 'Para el combo indica su nombre y cuántas unidades del producto trae (mínimo 2).';
+            }
+            if (esCombinado) {
+                if (componentes.some(c => !c.unidades || c.unidades < 1)) {
+                    return 'Indica cuántas unidades de cada producto lleva el ID (mínimo 1).';
+                }
+                if (componentes.some(c => !c.sku?.trim())) {
+                    return 'Todos los productos del ID combinado deben tener SKU para poder descontar el inventario.';
+                }
             }
             return null;
         }
@@ -349,6 +381,12 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         ACCION_PRIVATIZACION: esCreacion ? undefined : accionPriv,
         DISTRIBUCION: distribucion.filter(d => d.cantidad > 0),
         COMBO: comboMode ? { nombre: comboNombre.trim(), unidadesPorCombo: Number(comboUnidades) } : undefined,
+        COMPONENTES: esCombinado ? componentes.map(c => ({
+            producto: c.producto,
+            unidades: c.unidades,
+            ...(c.productId ? { productId: c.productId } : {}),
+            ...(c.sku ? { sku: c.sku } : {}),
+        })) : undefined,
     };
     const instruccionGenerada = buildObservacionesText(solicitudPreview);
 
@@ -369,9 +407,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             const solicitudId = await createSolicitud({
                 FECHA: Date.now(),
                 ID: idPlataforma.trim() ? Number(idPlataforma) || null : null,
-                PRODUCTO: productName.trim(),
+                PRODUCTO: productoFinal.trim(),
                 VARIABLE: comboMode ? comboNombre.trim() : (variable.trim() || null),
-                'SKU ': sku.trim() || null,
+                'SKU ': skuFinal.trim() || null,
                 'PRECIO ': precio ? Number(precio) : null,
                 PLATAFORMA: plataforma,
                 BODEGA: bodega || null,
@@ -394,6 +432,13 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                 ACCION_PRIVATIZACION: esCreacion ? undefined : accionPriv,
                 DISTRIBUCION: distribucionValida.length > 0 ? distribucionValida : undefined,
                 COMBO: comboMode ? { nombre: comboNombre.trim(), unidadesPorCombo: Number(comboUnidades) } : undefined,
+                // Firestore rechaza undefined dentro de arrays: se omiten las claves vacías
+                COMPONENTES: esCombinado ? componentes.map(c => ({
+                    producto: c.producto,
+                    unidades: c.unidades,
+                    ...(c.productId ? { productId: c.productId } : {}),
+                    ...(c.sku ? { sku: c.sku } : {}),
+                })) : undefined,
                 STOCK_POR_VARIANTE: usaStockPorVariante && stockPorVariante.length > 0 ? stockPorVariante : undefined,
                 solicitadoPor: { id: user.id, name: user.name, email: user.email },
             } as Omit<Modificacion, 'ID CONSECUTIVO'>);
@@ -468,14 +513,62 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                         </Select>
                     </div>
                     <div>
-                        <Label>Busca el producto</Label>
+                        <Label>{componentes.length > 0 ? 'Agregar otro producto al mismo ID' : 'Busca el producto'}</Label>
                         <div className="mt-1">
                             <ProductSearchPicker onSelect={handleProductPick} />
                         </div>
-                        {productId
-                            ? <p className="text-xs text-green-600 mt-1">✓ Vinculado al inventario{sku ? ` (SKU: ${sku})` : ''}</p>
+                        {componentes.length > 0
+                            ? <p className="text-xs text-muted-foreground mt-1">
+                                Si este ID entrega VARIOS productos (ej: Bella Skin + Bella Pompis), búscalos y agrégalos aquí.
+                              </p>
                             : <p className="text-xs text-muted-foreground mt-1">Si el producto aún no existe en inventario, escribe su nombre y SKU abajo.</p>}
                     </div>
+
+                    {/* Productos que componen el ID (con más de uno, el ID es combinado) */}
+                    {componentes.length > 0 && (
+                        <div className="rounded-lg border p-3 bg-muted/20">
+                            <div className="flex items-center justify-between mb-2">
+                                <Label className="text-sm">
+                                    {esCombinado ? 'Productos que entrega este ID' : 'Producto del ID'}
+                                </Label>
+                                {esCombinado && <Badge variant="secondary">ID combinado</Badge>}
+                            </div>
+                            <div className="space-y-2">
+                                {componentes.map((c, i) => (
+                                    <div key={c.productId || i} className="flex items-center gap-2">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">{c.producto}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {c.sku ? `SKU ${c.sku}` : <span className="text-destructive">Sin SKU</span>}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Input
+                                                type="number" min="1" value={c.unidades}
+                                                onChange={e => {
+                                                    const v = Math.max(1, Number(e.target.value) || 1);
+                                                    setComponentes(prev => prev.map((x, j) => j === i ? { ...x, unidades: v } : x));
+                                                }}
+                                                className="h-9 w-20"
+                                            />
+                                            <span className="text-xs text-muted-foreground whitespace-nowrap">unds</span>
+                                        </div>
+                                        <Button
+                                            type="button" variant="ghost" size="sm" className="h-9 px-2"
+                                            onClick={() => setComponentes(prev => prev.filter((_, j) => j !== i))}
+                                            title="Quitar del ID"
+                                        >✕</Button>
+                                    </div>
+                                ))}
+                            </div>
+                            {esCombinado && (
+                                <p className="text-xs text-muted-foreground mt-2 border-t pt-2">
+                                    Cada venta de este ID descuenta del inventario las unidades indicadas de cada producto.
+                                    SKU del item: <span className="font-mono">{skuFinal || '—'}</span>
+                                </p>
+                            )}
+                        </div>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="col-span-2 sm:col-span-1">
                             <Label htmlFor="sol-name">Nombre del producto *</Label>
@@ -740,7 +833,12 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                     <div className="border rounded-lg p-3 bg-muted/30 space-y-1 text-sm">
                         <p className="font-medium">Resumen</p>
                         <p><span className="text-muted-foreground">Tipo:</span> {esCreacion ? 'Creación de item' : esRetiro ? 'Retiro / dejar en cero' : tipo === 'SUMA' ? 'Suma de stock' : 'Ajuste de stock'}</p>
-                        <p><span className="text-muted-foreground">Producto:</span> {productName || '—'}{sku ? ` (${sku})` : ''}</p>
+                        <p><span className="text-muted-foreground">Producto:</span> {productoFinal || '—'}{skuFinal ? ` (${skuFinal})` : ''}</p>
+                        {esCombinado && (
+                            <p className="text-muted-foreground">
+                                ID combinado: {componentes.map(c => `${c.unidades} × ${c.producto}`).join(' + ')}
+                            </p>
+                        )}
                         <p><span className="text-muted-foreground">Plataforma:</span> {plataforma || '—'} · {pais}{bodega ? ` · ${bodega}` : ''}{idPlataforma ? ` · ID ${idPlataforma}` : ''}</p>
                         <p><span className="text-muted-foreground">Stock:</span> {esRetiro ? '0 (retiro)' : usaStockPorVariante ? `${totalVariantes} unds en ${stockPorVariante.length} variante(s)` : (stock || '—')}{comboMode && stock && comboUnidades ? ` paquetes (${Number(stock) * Number(comboUnidades)} unds)` : ''} · <span className="text-muted-foreground">Precio:</span> {precio ? `$${Number(precio).toLocaleString('es-CO')}` : '—'}</p>
                         <p><span className="text-muted-foreground">Stock en plataforma:</span> {cantidadPrevia ?? '¿?'} → {cantidadSolicitada ?? '—'} solicitadas → <strong>{cantidadPosterior ?? '¿?'} final</strong>{tipo === 'SUMA' && cantidadPrevia === null ? ' (sin stock previo no se puede calcular el final)' : ''}</p>

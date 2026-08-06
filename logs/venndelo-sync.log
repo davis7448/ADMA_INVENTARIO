@@ -10,3 +10,6 @@
 [2026-08-05 07:00:02] Iniciando sync Venndelo…
 [2026-08-05 07:01:00] Respuesta: {"success":true,"days":30,"filas":22,"nuevas":0,"actualizadas":22,"entregadas":12,"atribuidas":6,"skusVinculados":0,"mesesAbiertos":["2026-04","2026-07","2026-08"]}
 ---
+[2026-08-06 07:00:01] Iniciando sync Venndelo…
+[2026-08-06 07:01:05] Respuesta: {"success":true,"days":30,"filas":22,"nuevas":0,"actualizadas":22,"entregadas":17,"atribuidas":11,"skusVinculados":0,"mesesAbiertos":["2026-04","2026-07","2026-08"]}
+---

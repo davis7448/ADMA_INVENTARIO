@@ -9,6 +9,13 @@ export function buildObservacionesText(solicitud: Partial<Modificacion>): string
     if (solicitud.ES_RETIRO) {
         parts.push('DEJAR EL ID EN CERO (retirar stock de plataforma)');
     }
+    // Un solo ID de plataforma armado con varios productos del inventario
+    if (solicitud.COMPONENTES && solicitud.COMPONENTES.length > 1) {
+        const detalle = solicitud.COMPONENTES
+            .map(c => `${c.unidades} × ${c.producto}${c.sku ? ` (SKU ${c.sku})` : ''}`)
+            .join(' + ');
+        parts.push(`ID COMBINADO — cada venta entrega: ${detalle}`);
+    }
     if (solicitud.COMBO) {
         const paquetes = solicitud['CANTIDAD SOLICITADA'] || 0;
         const totalUnidades = paquetes * solicitud.COMBO.unidadesPorCombo;

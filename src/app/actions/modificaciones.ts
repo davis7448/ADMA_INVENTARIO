@@ -53,6 +53,7 @@ export type Modificacion = {
     ES_RETIRO?: boolean; // dejar el ID en cero / retirar de plataforma
     DISTRIBUCION?: DistribucionStock[];
     COMBO?: ComboSolicitud; // crear variante tipo combo/paquete (ej: Bella Skin x2)
+    COMPONENTES?: ComponenteCombo[]; // un solo ID armado con varios productos de inventario
     STOCK_POR_VARIANTE?: StockPorVariante[]; // reparto de stock entre variantes registradas
 };
 
@@ -67,6 +68,17 @@ export type StockPorVariante = {
 export type ComboSolicitud = {
     nombre: string; // ej: "Combo x2"
     unidadesPorCombo: number;
+};
+
+// Item compuesto por VARIOS productos del inventario bajo UN SOLO ID de plataforma.
+// Ej: un ID que al venderse entrega 2 unds de Bella Skin + 1 de Bella Pompis.
+// El SKU del item se arma uniendo los SKU con "+", formato que el motor de ventas
+// ya reconoce para descontar del inventario cada producto del paquete.
+export type ComponenteCombo = {
+    productId?: string;
+    producto: string;  // nombre del producto
+    sku?: string;
+    unidades: number;  // unidades de ESTE producto por cada venta del ID
 };
 
 // Reparto del stock entre destinos (ej: 75 unds privado a correo X variante 1.5)
