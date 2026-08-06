@@ -258,6 +258,14 @@ service cloud.firestore {
         allow read, write: if isSignedIn() || isAdminAccess();
      }
 
+     // Historial de interacciones con el cliente (quién hizo qué). Con la cartera
+     // compartida es la trazabilidad del equipo: cualquier comercial puede registrar
+     // y consultar. No se permite editar ni borrar eventos ya escritos.
+     match /client_events/{eventId} {
+        allow read, create: if isSignedIn() || isAdminAccess();
+        allow update, delete: if isRole('admin') || isAdminAccess();
+     }
+
      // Manual / Capacitación: lo lee todo el equipo; lo edita admin (o el servidor)
      match /manuales/{guiaId} {
         allow read: if isSignedIn() || isAdminAccess();

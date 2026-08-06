@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { getStatusLabel } from '@/lib/crm-metrics';
 import { DEFAULT_CRM_CONFIG, daysSinceLastContact, getClientVolume, loadCrmConfig, type CrmConfig } from '@/lib/client-volume';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { banderaPais } from '@/lib/paises';
 
 const columns: { id: string; label: string }[] = [
     { id: 'finding_winner', label: getStatusLabel('finding_winner') },
@@ -54,7 +55,12 @@ export default function CrmKanbanBoard({ clients, onDragEnd }: CrmKanbanBoardPro
                                                         <Link href={`/commercial/crm/client/${client.id}`}>
                                                             <Card className={`cursor-pointer hover:shadow-md transition-shadow border-l-4 border-l-primary/50 ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary' : ''}`}>
                                                                 <CardContent className="p-4">
-                                                                    <div className="font-bold text-base truncate">{client.name}</div>
+                                                                    <div className="font-bold text-base truncate flex items-center gap-1.5">
+                                                                        {client.country && (
+                                                                            <span title={client.country} className="shrink-0">{banderaPais(client.country)}</span>
+                                                                        )}
+                                                                        <span className="truncate">{client.name}</span>
+                                                                    </div>
                                                                     <div className="text-xs text-muted-foreground mb-2 truncate">{client.email}</div>
 
                                                                     <div className="flex flex-wrap gap-1 mt-2">

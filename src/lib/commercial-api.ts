@@ -197,14 +197,12 @@ export const getClientsByCommercial = async (commercialId: string): Promise<Comm
     }
 };
 
+// Cartera COMPARTIDA: todos los comerciales ven todos los clientes. Cada cliente
+// conserva su comercial asignado (assigned_commercial_id) y así se muestra en el
+// tablero; atender a un cliente ajeno no cambia su dueño, solo queda registrado
+// quién interactuó (ver addClientEvent).
 export const getAllClients = async (userRole?: string, userId?: string): Promise<CommercialClient[]> => {
     try {
-        // Si es comercial (no admin/director/plataformas), usar getClientsByCommercial en su lugar
-        if (userRole === 'commercial' && userId) {
-            console.warn("Commercial users should use getClientsByCommercial instead of getAllClients");
-            return getClientsByCommercial(userId);
-        }
-        
         const clientsCol = collection(db, 'clients');
         const snapshot = await getDocs(clientsCol);
         return snapshot.docs.map(doc => ({
@@ -1914,7 +1912,10 @@ function transformLegacyClientData(data: any): {
     };
 }
 
-export const addNoteToClient = async (clientId: string, content: string): Promise<string> => {
+// `actor` es el usuario que está registrando la acción. Con la cartera compartida
+// puede ser un comercial distinto al dueño del cliente: se guarda quién fue y se deja
+// el rastro en client_events, pero NO se cambia assigned_commercial_id.
+export const addNoteToClient = async (clientId: string, content: string, actor?: { id: string; name: string }): Promise<string> => {
     try {
         const clientRef = doc(db, 'clients', clientId);
         const snapshot = await getDoc(clientRef);
@@ -1951,9 +1952,10 @@ export const addNoteToClient = async (clientId: string, content: string): Promis
             clientId, // Add clientId to the note
             content,
             created_at: now,
-            created_by: 'Usuario'
+            created_by: actor?.id || 'Usuario',
+            created_by_name: actor?.name || 'Usuario'
         };
-        
+
         notes.push(newNote);
 
         await updateDoc(clientRef, {
@@ -1961,7 +1963,12 @@ export const addNoteToClient = async (clientId: string, content: string): Promis
             last_contacted_at: serverTimestamp(),
             updated_at: serverTimestamp()
         });
-        
+
+        if (actor) {
+            await addClientEvent(clientId, 'note', 'Agregó una nota', actor.id, actor.name, content.slice(0, 200))
+                .catch(e => console.error('No se pudo registrar el evento de nota:', e));
+        }
+
         return newNote.id;
     } catch (error) {
         console.error("Error adding note to client:", error);
@@ -1972,7 +1979,8 @@ export const addNoteToClient = async (clientId: string, content: string): Promis
 export const addOrderToClient = async (
     clientId: string, 
     items: { product_id: string; product_name: string; quantity: number; unit_price: number }[],
-    status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' = 'pending'
+    status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' = 'pending',
+    actor?: { id: string; name: string }
 ): Promise<string> => {
     try {
         const clientRef = doc(db, 'clients', clientId);
@@ -2004,7 +2012,8 @@ export const addOrderToClient = async (
             total,
             status,
             created_at: now,
-            created_by: 'Usuario'
+            created_by: actor?.id || 'Usuario',
+            created_by_name: actor?.name || 'Usuario'
         };
         
         orders.push(newOrder);
@@ -2018,6 +2027,12 @@ export const addOrderToClient = async (
             updated_at: serverTimestamp()
         });
 
+        if (actor) {
+            await addClientEvent(clientId, 'order', `Registró un pedido por $${total.toLocaleString('es-CO')}`,
+                actor.id, actor.name, items.map(i => `${i.quantity}x ${i.product_name}`).join(', ').slice(0, 200))
+                .catch(e => console.error('No se pudo registrar el evento de pedido:', e));
+        }
+
         return newOrder.id;
     } catch (error) {
         console.error("Error adding order to client:", error);
@@ -2029,7 +2044,8 @@ export const addTestToClient = async (
     clientId: string,
     items: { product_id: string; product_name: string; notes: string }[],
     status: 'pending' | 'in_progress' | 'completed' | 'failed' = 'pending',
-    result: 'positive' | 'negative' | 'neutral' | 'pending' = 'pending'
+    result: 'positive' | 'negative' | 'neutral' | 'pending' = 'pending',
+    actor?: { id: string; name: string }
 ): Promise<string[]> => {
     try {
         const clientRef = doc(db, 'clients', clientId);
@@ -2067,7 +2083,7 @@ export const addTestToClient = async (
                 result,
                 notes: item.notes || '',
                 created_at: now,
-                created_by: 'Usuario'
+                created_by: actor?.id || 'Usuario'
             };
             
             tests.push(newTest);
@@ -2085,6 +2101,12 @@ export const addTestToClient = async (
             ...(testedProductIds.length > 0 ? { products_testing: arrayUnion(...testedProductIds) } : {}),
             updated_at: serverTimestamp()
         });
+
+        if (actor) {
+            await addClientEvent(clientId, 'testing', `Registró ${newTestIds.length} testeo(s) de producto`,
+                actor.id, actor.name, items.map(i => i.product_name).join(', ').slice(0, 200))
+                .catch(e => console.error('No se pudo registrar el evento de testeo:', e));
+        }
 
         return newTestIds;
     } catch (error) {

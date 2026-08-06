@@ -59,6 +59,7 @@ export interface CommercialClient {
   type: ClientType;
   avg_sales: number;
   city: string;
+  country?: string; // País del cliente (COLOMBIA, ECUADOR…). Opcional: los clientes antiguos no lo tienen.
   status: ClientStatus;
   assigned_commercial_id: string; 
   assigned_commercial_name?: string; // Nombre del comercial para mostrar

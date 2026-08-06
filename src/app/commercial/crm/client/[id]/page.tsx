@@ -12,18 +12,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Pencil, TestTube, FileText, Trash2, Check, ChevronsUpDown, Megaphone } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Pencil, TestTube, FileText, Trash2, Check, ChevronsUpDown, Megaphone, History } from 'lucide-react';
 import { ClientOffersTab } from '@/components/commercial/client-offers-tab';
 import Link from 'next/link';
-import { getClientById, updateClient, addNoteToClient, addOrderToClient, addTestToClient, getProductsWithStock, type ProductForOrder } from '@/lib/commercial-api';
+import { getClientById, updateClient, addNoteToClient, addOrderToClient, addTestToClient, getProductsWithStock, getClientEvents, addClientEvent, type ProductForOrder, type ClientEvent } from '@/lib/commercial-api';
+import { useAuth } from '@/hooks/use-auth';
+import { etiquetaPais, PAISES } from '@/lib/paises';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import type { CommercialClient, ClientNote, ClientOrder, ClientTest, ClientStatus, ClientCategory, ClientType } from '@/types/commercial';
 
 export default function ClientDetailPage() {
+    const { user } = useAuth();
     const params = useParams();
     const { toast } = useToast();
     const [client, setClient] = useState<CommercialClient | null>(null);
+    // Historial de interacciones: quién hizo qué con este cliente (cartera compartida)
+    const [eventos, setEventos] = useState<ClientEvent[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Estado de edición
@@ -41,6 +46,7 @@ export default function ClientDetailPage() {
             category: client.category,
             type: client.type,
             avg_sales: client.avg_sales,
+            country: client.country || 'COLOMBIA',
             birthday: client.birthday
                 ? new Date(client.birthday).toISOString().split('T')[0]
                 : '',
@@ -56,8 +62,13 @@ export default function ClientDetailPage() {
                 ...editForm,
                 birthday: editForm.birthday ? new Date(editForm.birthday as string) : client.birthday,
             });
+            if (user) {
+                await addClientEvent(client.id, 'edit', 'Editó los datos del cliente', user.id, user.name)
+                    .catch(e => console.error('No se pudo registrar la edición:', e));
+            }
             const updated = await getClientById(client.id);
             setClient(updated);
+            setEventos(await getClientEvents(client.id).catch(() => []));
             setIsEditOpen(false);
             toast({ title: 'Cliente actualizado correctamente.' });
         } catch {
@@ -100,6 +111,7 @@ export default function ClientDetailPage() {
                     tests_count: clientData?.tests?.length
                 });
                 setClient(clientData);
+                setEventos(await getClientEvents(clientId).catch(() => []));
             } catch (error) {
                 console.error('Error fetching client:', error);
             } finally {
@@ -117,7 +129,7 @@ export default function ClientDetailPage() {
         
         setIsAddingNote(true);
         try {
-            await addNoteToClient(client.id, newNoteContent);
+            await addNoteToClient(client.id, newNoteContent, user ? { id: user.id, name: user.name } : undefined);
             // Refresh client data
             const updatedClient = await getClientById(client.id);
             setClient(updatedClient);
@@ -134,7 +146,7 @@ export default function ClientDetailPage() {
         
         setIsAddingOrder(true);
         try {
-            await addOrderToClient(client.id, orderItems, orderStatus);
+            await addOrderToClient(client.id, orderItems, orderStatus, user ? { id: user.id, name: user.name } : undefined);
             // Refresh client data
             const updatedClient = await getClientById(client.id);
             setClient(updatedClient);
@@ -153,7 +165,7 @@ export default function ClientDetailPage() {
         
         setIsAddingTest(true);
         try {
-            await addTestToClient(client.id, testItems, testStatus, testResult);
+            await addTestToClient(client.id, testItems, testStatus, testResult, user ? { id: user.id, name: user.name } : undefined);
             // Refresh client data
             const updatedClient = await getClientById(client.id);
             setClient(updatedClient);
@@ -377,6 +389,22 @@ export default function ClientDetailPage() {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
+                                    <Label>País</Label>
+                                    <Select
+                                        value={editForm.country ?? 'COLOMBIA'}
+                                        onValueChange={v => setEditForm(p => ({ ...p, country: v }))}
+                                    >
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {PAISES.map(p => (
+                                                <SelectItem key={p} value={p}>{etiquetaPais(p)}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
                                     <Label>Email</Label>
                                     <Input
                                         type="email"
@@ -497,7 +525,45 @@ export default function ClientDetailPage() {
                             <TabsTrigger value="offers" className="gap-2">
                                 <Megaphone className="h-4 w-4" /> Ofertas
                             </TabsTrigger>
+                            <TabsTrigger value="historial" className="gap-2">
+                                <History className="h-4 w-4" /> Historial
+                            </TabsTrigger>
                         </TabsList>
+
+                        {/* Quién interactuó con el cliente, aunque no sea su comercial */}
+                        <TabsContent value="historial" className="pt-4">
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base">Historial de interacciones</CardTitle>
+                                    <CardDescription>
+                                        Registro de quién atendió a este cliente. El cliente sigue asignado a su comercial.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {eventos.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground text-center py-6">
+                                            Aún no hay interacciones registradas.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {eventos.map(ev => (
+                                                <div key={ev.id} className="flex gap-3 border-b border-border/40 pb-3 last:border-0">
+                                                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium">{ev.description}</p>
+                                                        {ev.details && <p className="text-xs text-muted-foreground truncate">{ev.details}</p>}
+                                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                                            <span className="font-medium text-foreground">{ev.created_by_name || 'Usuario'}</span>
+                                                            {' · '}{formatDate(ev.created_at?.toDate ? ev.created_at.toDate() : ev.created_at)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
 
                         <TabsContent value="offers">
                             <ClientOffersTab client={client} />
@@ -552,6 +618,9 @@ export default function ClientDetailPage() {
                                                                     <Calendar className="h-3 w-3" />
                                                                     <span>{formatDate(note.created_at)}</span>
                                                                     <span className="text-blue-600 font-medium">• {getRelativeTime(note.created_at)}</span>
+                                                                    {(note as any).created_by_name && (
+                                                                        <span className="ml-auto font-medium text-gray-700">por {(note as any).created_by_name}</span>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>

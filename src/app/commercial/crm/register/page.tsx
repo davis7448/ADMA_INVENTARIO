@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { PAISES, etiquetaPais } from '@/lib/paises';
 import { useAuth } from '@/hooks/use-auth';
 import { createClient, checkClientExists, getUserById } from '@/lib/commercial-api';
 import { getUsers } from '@/lib/api';
@@ -59,6 +60,7 @@ export default function RegisterClientPage() {
         email: '',
         phone: '',
         city: '',
+        country: 'COLOMBIA',
         category: 'laboratorio',
         type: 'mixto',
         status: 'finding_winner',
@@ -310,6 +312,19 @@ export default function RegisterClientPage() {
                                     value={formData.city}
                                     onChange={(e) => handleChange('city', e.target.value)}
                                 />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="country">País</Label>
+                                <Select value={formData.country || 'COLOMBIA'} onValueChange={(val) => handleChange('country', val)}>
+                                    <SelectTrigger id="country">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {PAISES.map(p => (
+                                            <SelectItem key={p} value={p}>{etiquetaPais(p)}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="category">Categoría</Label>
