@@ -23,6 +23,7 @@ import {
 import { loadCrmConfig } from '@/lib/client-volume';
 import { parseEffiFiles } from '@/lib/effi';
 import { queueLargeImport } from '@/lib/large-import';
+import { PAISES } from '@/lib/paises';
 import { syncVenndeloAction } from '@/app/actions/venndelo';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { AlertTriangle, FileUp, Link2, Upload } from 'lucide-react';
@@ -34,7 +35,7 @@ const PLATFORMS = [
     'ADMA', 'DROPLATAM', 'ACADROP', 'BODEGA ELITE', 'WIMPY', 'MASTER SHOP', 'CAPSLATAM', 'HOKO',
 ];
 const BODEGAS = ['INGENIO', 'LABORATORIO', 'IMPORTACIONES', 'OTRA'];
-const PAISES_VENTA = ['COLOMBIA', 'MEXICO', 'ECUADOR', 'PARAGUAY', 'ARGENTINA', 'GUATEMALA'];
+const PAISES_VENTA = PAISES; // lista compartida (src/lib/paises.ts)
 type Breakdown = Map<string, Map<string, { ventas: number; total: number }>>;
 
 export function VentasPlataformasContent() {
