@@ -183,7 +183,16 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
             const exists = await checkClientExists(newClient.email.trim(), newClient.phone.trim());
             if (exists?.exists) {
                 const assigned = exists.client?.assigned_commercial_name;
-                toast({ title: 'Ya existe', description: `Este cliente ya está registrado${assigned ? ` (asignado a ${assigned})` : ''}. Búscalo en la lista.`, variant: 'destructive' });
+                // Se nombra el dato que coincidió y con quién, para que una coincidencia
+                // equivocada se detecte aquí mismo y no escale como reporte de error.
+                const coincidencia = exists.matchedBy === 'email'
+                    ? `El correo ${exists.client?.email}`
+                    : `El teléfono ${exists.client?.phone}`;
+                toast({
+                    title: 'Ya existe',
+                    description: `${coincidencia} ya está registrado a nombre de ${exists.client?.name}${assigned ? ` (cartera de ${assigned})` : ''}. Búscalo en la lista.`,
+                    variant: 'destructive',
+                });
                 return;
             }
             const id = await createClient({

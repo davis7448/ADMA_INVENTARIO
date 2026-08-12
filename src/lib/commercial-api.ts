@@ -29,6 +29,7 @@ import type {
     TaskPointsHistory
 } from "../types/commercial";
 import type { Product } from '@/lib/types';
+import { claveTelefono, clavesTelefono } from './telefono';
 import { startOfDay, endOfDay } from 'date-fns';
 
 // --- CLIENTS ---
@@ -36,80 +37,55 @@ import { startOfDay, endOfDay } from 'date-fns';
 export interface ClientExistsResult {
     exists: boolean;
     client?: CommercialClient & { assigned_commercial_name?: string };
+    // Por qué coincidió. El correo repetido es señal fuerte de duplicado y bloquea el
+    // registro; el teléfono repetido es más débil (dos tiendas pueden compartir un
+    // contacto), así que la pantalla deja continuar cuando el match vino por aquí.
+    matchedBy?: 'email' | 'phone';
 }
 
 export const checkClientExists = async (email: string, phone: string): Promise<ClientExistsResult> => {
     try {
         const clientsCol = collection(db, 'clients');
-        
-        // Buscar por email principal
-        const emailQuery = query(clientsCol, where('email', '==', email));
-        const emailSnapshot = await getDocs(emailQuery);
-        
-        if (!emailSnapshot.empty) {
-            const doc = emailSnapshot.docs[0];
-            const data = doc.data();
+
+        // Un valor en blanco no es un dato con el que buscar. Antes se consultaba igual,
+        // y `where('email', '==', '')` hacía match con cualquier cliente sin correo:
+        // registrar a alguien escribiendo primero el teléfono avisaba "ya existe" y lo
+        // atribuía al primer cliente con el campo vacío.
+        const correo = (email || '').trim();
+        const telefono = (phone || '').trim();
+        const claveTel = claveTelefono(telefono);
+
+        const criterios: Array<{ campo: string; operador: 'array-contains' | '=='; valor: string; motivo: 'email' | 'phone' }> = [];
+        if (correo) {
+            criterios.push({ campo: 'email', operador: '==', valor: correo, motivo: 'email' });
+            criterios.push({ campo: 'additional_emails', operador: 'array-contains', valor: correo, motivo: 'email' });
+        }
+        if (claveTel) {
+            // Se compara por la clave normalizada (ver src/lib/telefono.ts), no por el
+            // texto crudo: "+57 317 6266322" y "3176266322" son el mismo número.
+            criterios.push({ campo: 'phone_key', operador: '==', valor: claveTel, motivo: 'phone' });
+            criterios.push({ campo: 'additional_phone_keys', operador: 'array-contains', valor: claveTel, motivo: 'phone' });
+        }
+
+        if (!criterios.length) return { exists: false };
+
+        for (const criterio of criterios) {
+            const snapshot = await getDocs(query(clientsCol, where(criterio.campo, criterio.operador, criterio.valor)));
+            if (snapshot.empty) continue;
+
+            const encontrado = snapshot.docs[0];
+            const data = encontrado.data();
             return {
                 exists: true,
+                matchedBy: criterio.motivo,
                 client: {
-                    id: doc.id,
+                    id: encontrado.id,
                     ...data,
                     assigned_commercial_name: data.assigned_commercial_name
                 } as CommercialClient & { assigned_commercial_name?: string }
             };
         }
-        
-        // Buscar por emails adicionales
-        const additionalEmailQuery = query(clientsCol, where('additional_emails', 'array-contains', email));
-        const additionalEmailSnapshot = await getDocs(additionalEmailQuery);
-        
-        if (!additionalEmailSnapshot.empty) {
-            const doc = additionalEmailSnapshot.docs[0];
-            const data = doc.data();
-            return {
-                exists: true,
-                client: {
-                    id: doc.id,
-                    ...data,
-                    assigned_commercial_name: data.assigned_commercial_name
-                } as CommercialClient & { assigned_commercial_name?: string }
-            };
-        }
-        
-        // Buscar por teléfono principal
-        const phoneQuery = query(clientsCol, where('phone', '==', phone));
-        const phoneSnapshot = await getDocs(phoneQuery);
-        
-        if (!phoneSnapshot.empty) {
-            const doc = phoneSnapshot.docs[0];
-            const data = doc.data();
-            return {
-                exists: true,
-                client: {
-                    id: doc.id,
-                    ...data,
-                    assigned_commercial_name: data.assigned_commercial_name
-                } as CommercialClient & { assigned_commercial_name?: string }
-            };
-        }
-        
-        // Buscar por teléfonos adicionales
-        const additionalPhoneQuery = query(clientsCol, where('additional_phones', 'array-contains', phone));
-        const additionalPhoneSnapshot = await getDocs(additionalPhoneQuery);
-        
-        if (!additionalPhoneSnapshot.empty) {
-            const doc = additionalPhoneSnapshot.docs[0];
-            const data = doc.data();
-            return {
-                exists: true,
-                client: {
-                    id: doc.id,
-                    ...data,
-                    assigned_commercial_name: data.assigned_commercial_name
-                } as CommercialClient & { assigned_commercial_name?: string }
-            };
-        }
-        
+
         return { exists: false };
     } catch (error: any) {
         // Manejar errores de permisos - si no tiene permiso para leer otros clientes,
@@ -132,6 +108,10 @@ export const createClient = async (
         const clientsCol = collection(db, 'clients');
         const docRef = await addDoc(clientsCol, {
             ...client,
+            // Claves de búsqueda del teléfono. Firestore no sabe buscar por sufijo, así
+            // que hay que guardarlas para poder detectar el mismo número escrito distinto.
+            phone_key: claveTelefono(client.phone),
+            additional_phone_keys: clavesTelefono(client.additional_phones),
             created_by: actor?.id ?? null,
             created_by_name: actor?.name ?? null,
             created_at: serverTimestamp(),
@@ -171,7 +151,13 @@ export const updateClient = async (clientId: string, data: Partial<CommercialCli
         // Eliminar campos que no deben guardarse directamente
         delete dataToSave.history;
         delete dataToSave.last_event_number;
-        
+
+        // Mantener sincronizadas las claves de búsqueda del teléfono. Como esto es un
+        // merge parcial, solo se recalculan cuando el campo de origen viene en la
+        // edición; si no, se dejan como estaban.
+        if ('phone' in data) dataToSave.phone_key = claveTelefono(data.phone);
+        if ('additional_phones' in data) dataToSave.additional_phone_keys = clavesTelefono(data.additional_phones);
+
         await setDoc(clientRef, dataToSave, { merge: true });
     } catch (error) {
         console.error("Error updating client:", error);

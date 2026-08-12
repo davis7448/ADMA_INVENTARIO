@@ -27,7 +27,16 @@ export default function RegisterClientPage() {
         exists: boolean;
         clientName?: string;
         assignedTo?: string;
+        // Se muestran para que el comercial pueda juzgar si la coincidencia tiene
+        // sentido, en vez de creerle a ciegas a la alerta.
+        clientPhone?: string;
+        clientEmail?: string;
+        matchedBy?: 'email' | 'phone';
     } | null>(null);
+    // Coincidir por teléfono no siempre significa duplicado: dos tiendas distintas
+    // pueden compartir un contacto. Cuando el comercial confirma que no es el mismo,
+    // se le deja continuar. Por correo repetido no hay salida: eso sí es duplicado.
+    const [ignorarCoincidencia, setIgnorarCoincidencia] = useState(false);
 
     // Lista de comerciales para admins
     const [commercials, setCommercials] = useState<User[]>([]);
@@ -114,11 +123,15 @@ export default function RegisterClientPage() {
                 setExistingClient({
                     exists: true,
                     clientName: result.client.name,
-                    assignedTo: assignedUser?.name || 'Otro comercial'
+                    assignedTo: assignedUser?.name || 'Otro comercial',
+                    clientPhone: result.client.phone,
+                    clientEmail: result.client.email,
+                    matchedBy: result.matchedBy,
                 });
             } else {
                 setExistingClient(null);
             }
+            setIgnorarCoincidencia(false);
         } catch (error) {
             console.error('Error checking client:', error);
         }
@@ -130,18 +143,23 @@ export default function RegisterClientPage() {
 
         setSubmitting(true);
         try {
-            // Verificar si el cliente ya existe
+            // Verificar si el cliente ya existe. Si coincidió solo por teléfono y el
+            // comercial ya confirmó que no es el mismo cliente, se deja continuar.
             const result = await checkClientExists(formData.email || '', formData.phone || '');
-            if (result.exists) {
+            const puedeIgnorarse = result.matchedBy === 'phone' && ignorarCoincidencia;
+            if (result.exists && !puedeIgnorarse) {
                 const assignedUser = await getUserById(result.client!.assigned_commercial_id);
                 setExistingClient({
                     exists: true,
                     clientName: result.client!.name,
-                    assignedTo: assignedUser?.name || 'Otro comercial'
+                    assignedTo: assignedUser?.name || 'Otro comercial',
+                    clientPhone: result.client!.phone,
+                    clientEmail: result.client!.email,
+                    matchedBy: result.matchedBy,
                 });
                 toast({
                     title: "Cliente ya existe",
-                    description: `Este cliente ya pertenece a la cartera de: ${assignedUser?.name || 'Otro comercial'}`,
+                    description: `${result.client!.name} (${result.matchedBy === 'email' ? result.client!.email : result.client!.phone}) ya pertenece a la cartera de ${assignedUser?.name || 'otro comercial'}.`,
                     variant: "destructive"
                 });
                 setSubmitting(false);
@@ -206,10 +224,36 @@ export default function RegisterClientPage() {
                     {existingClient?.exists && (
                         <Alert variant="destructive" className="mb-6">
                             <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Cliente ya existe</AlertTitle>
-                            <AlertDescription>
-                                El cliente <strong>{existingClient.clientName}</strong> ya está registrado y pertenece 
-                                a la cartera de: <strong>{existingClient.assignedTo}</strong>
+                            <AlertTitle>
+                                {existingClient.matchedBy === 'email' ? 'Ese correo ya está registrado' : 'Ese teléfono ya está registrado'}
+                            </AlertTitle>
+                            <AlertDescription className="space-y-2">
+                                <p>
+                                    Coincide con <strong>{existingClient.clientName}</strong>, de la cartera
+                                    de <strong>{existingClient.assignedTo}</strong>.
+                                </p>
+                                {/* Mostrar los datos del cliente encontrado permite descartar de un
+                                    vistazo una coincidencia equivocada, en vez de confiar en el nombre. */}
+                                <p className="text-xs opacity-90">
+                                    Teléfono registrado: <strong>{existingClient.clientPhone || '—'}</strong>
+                                    {' · '}Correo: <strong>{existingClient.clientEmail || '—'}</strong>
+                                </p>
+                                {existingClient.matchedBy === 'phone' && (
+                                    ignorarCoincidencia ? (
+                                        <p className="text-xs font-medium">
+                                            Marcado como cliente distinto: puedes continuar con el registro.
+                                        </p>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setIgnorarCoincidencia(true)}
+                                        >
+                                            No es el mismo cliente, registrar de todos modos
+                                        </Button>
+                                    )
+                                )}
                             </AlertDescription>
                         </Alert>
                     )}

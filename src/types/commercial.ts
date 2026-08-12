@@ -54,6 +54,11 @@ export interface CommercialClient {
   additional_emails?: string[]; // Correos adicionales vinculados
   phone: string;
   additional_phones?: string[]; // Teléfonos adicionales
+  // Claves de búsqueda derivadas del teléfono (ver src/lib/telefono.ts). Las escribe
+  // createClient/updateClient; sirven para detectar el mismo número escrito en otro
+  // formato. No se muestran: para eso están `phone` y `additional_phones`.
+  phone_key?: string;
+  additional_phone_keys?: string[];
   birthday: Date |  any; // Timestamp from Firestore often needs handling
   category: ClientCategory;
   type: ClientType;
