@@ -63,15 +63,23 @@ export type RegistroActividad = {
     detalle: string;
 };
 
-const SIN_COMERCIAL = 'Sin asignar';
+const SIN_COMERCIAL = 'Sin identificar';
 
-// Autores que no identifican a nadie: el literal que guardaba el código antes del
-// arreglo, y los vacíos.
-const AUTORES_VACIOS = new Set(['', 'usuario', 'sin autor', 'undefined', 'null']);
+// Autores que no identifican a nadie:
+//  · 'usuario'  — el literal que guardaba el código antes del arreglo de autoría.
+//  · 'comercial' — valor por defecto de `assignedCommercialName` en el formulario de
+//    registro cuando el usuario no tiene nombre ni correo (crm/register/page.tsx).
+//    Hay 1 cliente con ese valor; sin esta lista aparecería como si fuera una persona.
+const AUTORES_VACIOS = new Set(['', 'usuario', 'comercial', 'sin autor', 'sin asignar', 'undefined', 'null']);
 
 function esAutorReal(nombre?: string | null): boolean {
     if (!nombre) return false;
     return !AUTORES_VACIOS.has(String(nombre).trim().toLowerCase());
+}
+
+// Normaliza el nombre a mostrar: los placeholders no deben leerse como un comercial.
+function nombreComercial(nombre?: string | null): string {
+    return esAutorReal(nombre) ? String(nombre) : SIN_COMERCIAL;
 }
 
 function aFecha(valor: any): Date | null {
@@ -96,7 +104,7 @@ function resolverAutor(
     }
     return {
         comercialId: cliente.assigned_commercial_id,
-        comercialNombre: cliente.assigned_commercial_name || SIN_COMERCIAL,
+        comercialNombre: nombreComercial(cliente.assigned_commercial_name),
         atribucion: 'inferida',
     };
 }
@@ -188,7 +196,7 @@ export async function getActividadComercial(opciones: {
             fecha: aFecha(oferta.date),
             tipo: 'oferta',
             comercialId: oferta.commercialId,
-            comercialNombre: oferta.commercialName || SIN_COMERCIAL,
+            comercialNombre: nombreComercial(oferta.commercialName),
             atribucion: 'confirmada',
             clienteId: oferta.clientId,
             clienteNombre: cliente?.name || oferta.clientName,
@@ -201,6 +209,9 @@ export async function getActividadComercial(opciones: {
     // De client_events solo lo que no está en las otras fuentes (ver nota de arriba).
     for (const evento of eventos) {
         if (evento.type !== 'status_change' && evento.type !== 'edit') continue;
+        // Los eventos que deja un script de mantenimiento (p. ej. la fusión de clientes
+        // duplicados) no son gestión de nadie: aparecerían como un comercial inventado.
+        if (evento.created_by === 'script') continue;
         const cliente = porCliente.get(evento.clientId);
         if (!cliente) continue;
         agregar({
@@ -321,7 +332,7 @@ export function clientesPorEstado(clientes: CommercialClient[], comercialId?: st
     const mapa = new Map<string, FilaKanban>();
     for (const c of clientes) {
         if (comercialId && c.assigned_commercial_id !== comercialId) continue;
-        const nombre = c.assigned_commercial_name || SIN_COMERCIAL;
+        const nombre = nombreComercial(c.assigned_commercial_name);
         let fila = mapa.get(nombre);
         if (!fila) {
             fila = {
