@@ -85,6 +85,11 @@ const navItems: NavItem[] = [
     href: '/commercial/dashboard',
     label: 'Módulo Comercial',
     roles: ['admin', 'commercial', 'commercial_director', 'logistics', 'plataformas']
+  },
+  {
+    href: '/commercial/actividad',
+    label: 'Actividad Comercial',
+    roles: ['admin', 'commercial', 'commercial_director']
   }
 ];
 
