@@ -303,35 +303,73 @@ function ReturnsDamagesPageContent() {
     }
   }, [globalTrackingSearch, selectedWarehouse]);
 
-  const exportToXLSX = (data: any[], filename: string, sheetName: string = 'Datos') => {
+  // El origen de una devolución queda escrito dentro de las notas, en dos formatos:
+  //   "Devolución de Cliente - Transportadora: <id> - Guía: <n>"   (90% del histórico)
+  //   "Devolución de Cliente - Proveedor: <id>"                    (el resto, sin guía)
+  // De ahí se sacan la guía y el origen; los ids se traducen a nombre cuando se puede,
+  // porque un id de Firestore en una columna de Excel no le sirve a nadie.
+  const guiaDesdeNotas = (notas: string): string => {
+    const match = String(notas || '').match(/Gu[ií]a:\s*([^\s.,]+)/);
+    return match ? match[1] : 'N/A';
+  };
+
+  const origenDesdeNotas = (notas: string): string => {
+    const texto = String(notas || '');
+    const transportadora = texto.match(/Transportadora:\s*([^\s.,-]+)/);
+    if (transportadora) {
+      return carriers.find(c => c.id === transportadora[1])?.name || transportadora[1];
+    }
+    const proveedor = texto.match(/Proveedor:\s*([^\s.,-]+)/);
+    if (proveedor) return `Proveedor ${proveedor[1]}`;
+    return '';
+  };
+
+  // El motivo viene embebido en las notas con un prefijo según el caso.
+  const motivoDesdeNotas = (notas: string, prefijo: string): string => {
+    const texto = String(notas || '');
+    if (!texto.includes(prefijo)) return texto;
+    const resto = texto.split(prefijo)[1];
+    return resto?.split('.')[0]?.trim() || resto?.trim() || texto;
+  };
+
+  // Aplana los movimientos individuales: una fila por devolución o avería, con la
+  // fecha, la guía y el usuario. Es la vista que sirve para auditar un caso concreto.
+  const filasDeMovimientos = (
+    data: any[],
+    campo: 'returnMovements' | 'damageMovements',
+    prefijoMotivo: string,
+    etiquetaMotivo: string,
+  ) =>
+    data.flatMap((item: any) =>
+      (item[campo] || []).map((movement: any) => ({
+        Fecha: format(new Date(movement.date), 'dd/MM/yyyy'),
+        Producto: item.productName,
+        SKU: item.productSku,
+        Variante: movement.variantSku || '',
+        Cantidad: movement.quantity,
+        Guía: guiaDesdeNotas(movement.notes),
+        Origen: origenDesdeNotas(movement.notes),
+        [etiquetaMotivo]: motivoDesdeNotas(movement.notes, prefijoMotivo),
+        Usuario: movement.userName || 'N/A',
+      }))
+    );
+
+  // El tipo se pasa explícito. Antes se deducía de si el nombre del archivo contenía
+  // "averias", y por eso Devoluciones y Averías terminaron exportando cosas distintas.
+  type TipoExport = 'consolidado' | 'detalle_devoluciones' | 'detalle_averias';
+
+  const exportToXLSX = (data: any[], filename: string, sheetName: string = 'Datos', tipo: TipoExport = 'consolidado') => {
     if (data.length === 0) return;
 
     let exportData: any[] = [];
 
-    if (filename.includes('averias')) {
-      // For damages, flatten individual movements
-      exportData = data.flatMap((item: any) =>
-        item.damageMovements.map((movement: any) => {
-          // Extract tracking number from notes
-          const trackingMatch = movement.notes.match(/Guía:\s*([^\s.,]+)/);
-          const trackingNumber = trackingMatch ? trackingMatch[1] : 'N/A';
-
-          return {
-            Fecha: format(new Date(movement.date), 'dd/MM/yyyy'),
-            Producto: item.productName,
-            SKU: item.productSku,
-            Cantidad: movement.quantity,
-            Guía: trackingNumber,
-            'Motivo de Avería': movement.notes.includes('Devolución averiada:') ?
-              movement.notes.split('Devolución averiada:')[1]?.split('.')[0]?.trim() ||
-              movement.notes.split('Devolución averiada:')[1]?.trim() :
-              movement.notes,
-            Usuario: movement.userName || 'N/A'
-          };
-        })
-      );
+    if (tipo === 'detalle_averias') {
+      exportData = filasDeMovimientos(data, 'damageMovements', 'Devolución averiada:', 'Motivo de Avería');
+    } else if (tipo === 'detalle_devoluciones') {
+      exportData = filasDeMovimientos(data, 'returnMovements', 'Devolución:', 'Motivo de Devolución');
     } else {
-      // For returns, keep consolidated view
+      // Consolidado por producto: se quitan los arrays de movimientos, que no caben
+      // en una celda.
       exportData = data.map(item => {
         const cleanItem: any = {};
         Object.keys(item).forEach(key => {
@@ -342,6 +380,8 @@ function ReturnsDamagesPageContent() {
         return cleanItem;
       });
     }
+
+    if (exportData.length === 0) return;
 
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
@@ -634,14 +674,26 @@ function ReturnsDamagesPageContent() {
                   Total de unidades devueltas agrupadas por producto ({returnsPagination.totalCount} productos)
                 </CardDescription>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => exportToXLSX(returnsData, 'devoluciones-por-producto.xlsx', 'Devoluciones')}
-                disabled={returnsData.length === 0}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Exportar Excel
-              </Button>
+              {/* Dos descargas: el consolidado que ya existía, y el detalle movimiento a
+                  movimiento —con fecha, guía y usuario— que es el que permite auditar
+                  una devolución concreta. */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => exportToXLSX(returnsData, 'devoluciones-por-producto.xlsx', 'Devoluciones')}
+                  disabled={returnsData.length === 0}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Consolidado
+                </Button>
+                <Button
+                  onClick={() => exportToXLSX(returnsData, 'devoluciones-detalle.xlsx', 'Detalle', 'detalle_devoluciones')}
+                  disabled={returnsData.length === 0}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Detalle
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -725,7 +777,7 @@ function ReturnsDamagesPageContent() {
                </div>
                <Button
                  variant="outline"
-                 onClick={() => exportToXLSX(filteredDamagesData, 'averias-reportadas.xlsx', 'Averías')}
+                 onClick={() => exportToXLSX(filteredDamagesData, 'averias-reportadas.xlsx', 'Averías', 'detalle_averias')}
                  disabled={filteredDamagesData.length === 0}
                >
                  <Download className="mr-2 h-4 w-4" />

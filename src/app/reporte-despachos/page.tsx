@@ -22,7 +22,8 @@ import { Button } from '@/components/ui/button';
 import { getDashboardData, getCarriers, getCategories, getPlatforms } from '@/lib/api';
 import type { DashboardData } from '@/lib/types';
 import type { Carrier, Category, Platform } from '@/lib/types';
-import { CalendarIcon, PlusCircle, Check, X } from 'lucide-react';
+import { CalendarIcon, PlusCircle, Check, X, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import {
   Accordion,
   AccordionContent,
@@ -238,6 +239,82 @@ function ReporteDespachosContent() {
     );
   });
 
+  // Descarga de todo el reporte en un solo archivo. Los datos ya están en memoria
+  // (dashboardData), así que no hace falta volver a consultar: el Excel refleja
+  // exactamente el recorte que el usuario tiene en pantalla.
+  const descargarExcel = () => {
+    const nombreDe = (lista: { id: string; name: string }[], ids: string[]) =>
+      ids.length ? ids.map(id => lista.find(x => x.id === id)?.name || id).join(', ') : 'Todas';
+
+    // Los días se formatean igual que en pantalla (zona de Bogotá). Con `new Date(dia)`
+    // a secas, un día 'YYYY-MM-DD' se interpreta como UTC y en Excel saldría corrido.
+    const diaLegible = (dia: string) =>
+      formatToTimeZone(new Date(`${dia}T00:00:00`), 'dd/MM/yyyy', { locale: es });
+
+    const wb = XLSX.utils.book_new();
+    const agregarHoja = (filas: any[], nombre: string) => {
+      if (!filas.length) return;
+      const ws = XLSX.utils.json_to_sheet(filas);
+      ws['!cols'] = Object.keys(filas[0]).map(k => ({
+        wch: Math.max(k.length, ...filas.map(f => String(f[k] ?? '').length)) + 2,
+      }));
+      XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31));
+    };
+
+    // Hoja 1 — totales y, sobre todo, de qué recorte salió este archivo
+    agregarHoja([
+      { Dato: 'Bodega', Valor: selectedWarehouse ? (allWarehouses.find(w => w.id === selectedWarehouse)?.name || selectedWarehouse) : 'Todas las bodegas' },
+      { Dato: 'Desde', Valor: dateRange?.from ? format(dateRange.from, 'dd/MM/yyyy') : '—' },
+      { Dato: 'Hasta', Valor: dateRange?.to ? format(dateRange.to, 'dd/MM/yyyy') : '—' },
+      { Dato: 'Plataformas', Valor: nombreDe(allPlatforms, filterPlatforms) },
+      { Dato: 'Transportadoras', Valor: nombreDe(allCarriers, filterCarriers) },
+      { Dato: 'Categorías', Valor: nombreDe(allCategories, filterCategories) },
+      { Dato: '', Valor: '' },
+      { Dato: 'Unidades despachadas', Valor: dashboardData.totalItemsDispatched },
+      { Dato: 'Unidades anuladas', Valor: dashboardData.totalAnnulledItems },
+      { Dato: 'Unidades pendientes', Valor: dashboardData.totalPendingUnits },
+      { Dato: 'Devoluciones', Valor: dashboardData.totalReturns },
+      { Dato: 'Ajustes de entrada', Valor: dashboardData.totalAdjustIn },
+      { Dato: 'Ajustes de salida', Valor: dashboardData.totalAdjustOut },
+      { Dato: 'Transportadora más usada', Valor: `${dashboardData.mostUsedCarrier?.name || '—'} (${dashboardData.mostUsedCarrier?.percentage || 0}%)` },
+      { Dato: 'Plataforma con más órdenes', Valor: `${dashboardData.platformWithMostOrders?.name || '—'} (${dashboardData.platformWithMostOrders?.percentage || 0}%)` },
+    ], 'Resumen');
+
+    // Hoja 2 — el resumen diario viene anidado día → plataforma → transportadora
+    const guiasPorDia: any[] = [];
+    for (const [dia, plataformas] of Object.entries(dashboardData.dailyDispatchSummaryData || {})) {
+      for (const [plataforma, transportadoras] of Object.entries(plataformas || {})) {
+        for (const [transportadora, cantidad] of Object.entries(transportadoras || {})) {
+          guiasPorDia.push({ Fecha: diaLegible(dia), Plataforma: plataforma, Transportadora: transportadora, Guías: cantidad });
+        }
+      }
+    }
+    agregarHoja(guiasPorDia, 'Guías por día');
+
+    // Hoja 3 — lo mismo que muestra el acordeón de la pantalla
+    const productosPorDia: any[] = [];
+    for (const [dia, productos] of Object.entries(dashboardData.dailyProductDispatch || {})) {
+      for (const { name, quantity } of Object.values(productos || {})) {
+        productosPorDia.push({ Fecha: diaLegible(dia), Producto: name, Cantidad: quantity });
+      }
+    }
+    agregarHoja(productosPorDia, 'Productos por día');
+
+    agregarHoja((dashboardData.productChartData || []).map(p => ({
+      Producto: p.name, Unidades: p.value, 'Porcentaje': `${p.percentage}%`, Tipo: p.productType,
+    })), 'Por producto');
+
+    agregarHoja((dashboardData.categoryChartData || []).map(c => ({
+      Categoría: c.name, Unidades: c.value, 'Porcentaje': `${c.percentage}%`,
+    })), 'Por categoría');
+
+    agregarHoja(dashboardData.platformCarrierChartData || [], 'Plataforma x transportadora');
+
+    const desde = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : 'inicio';
+    const hasta = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : 'hoy';
+    XLSX.writeFile(wb, `despachos_${desde}_${hasta}.xlsx`);
+  };
+
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -293,6 +370,10 @@ function ReporteDespachosContent() {
                   />
               </PopoverContent>
           </Popover>
+          <Button onClick={descargarExcel} disabled={loading}>
+              <Download className="mr-2 h-4 w-4" />
+              Descargar Excel
+          </Button>
         </div>
       </div>
 

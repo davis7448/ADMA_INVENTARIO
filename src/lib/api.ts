@@ -2504,7 +2504,12 @@ export const getReturnsByProduct = async (filters: { startDate?: string; endDate
     for (const productId of productIds) {
       const product = productMap.get(productId);
       if (product) {
-        returnsByProduct[productId].productSku = product.sku || product.productType === 'variable' ? 'Variable' : 'N/A';
+        // Ojo con la precedencia: antes decía `product.sku || product.productType === 'variable' ? …`,
+        // que se evalúa como `(sku || esVariable) ? 'Variable' : 'N/A'`. Es decir, todo
+        // producto CON sku salía como "Variable" y el SKU real no se mostraba nunca.
+        returnsByProduct[productId].productSku = product.productType === 'variable'
+          ? 'Variable'
+          : (product.sku || 'N/A');
       }
     }
   }
@@ -2575,7 +2580,10 @@ export const getDamagesReport = async (filters: { startDate?: string; endDate?: 
     for (const productId of productIds) {
       const product = productMap.get(productId);
       if (product) {
-        damagesByProduct[productId].productSku = product.sku || product.productType === 'variable' ? 'Variable' : 'N/A';
+        // Mismo error de precedencia que en las devoluciones (ver arriba).
+        damagesByProduct[productId].productSku = product.productType === 'variable'
+          ? 'Variable'
+          : (product.sku || 'N/A');
       }
     }
   }
