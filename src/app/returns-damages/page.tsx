@@ -324,12 +324,21 @@ function ReturnsDamagesPageContent() {
     return '';
   };
 
-  // El motivo viene embebido en las notas con un prefijo según el caso.
+  // El motivo viene embebido en las notas con un prefijo según el caso. Si el prefijo
+  // no aparece, se devuelve la nota sin la parte estructurada (transportadora, guía y
+  // proveedor ya tienen su propia columna; repetirlos aquí solo alarga la celda).
   const motivoDesdeNotas = (notas: string, prefijo: string): string => {
     const texto = String(notas || '');
-    if (!texto.includes(prefijo)) return texto;
-    const resto = texto.split(prefijo)[1];
-    return resto?.split('.')[0]?.trim() || resto?.trim() || texto;
+    if (texto.includes(prefijo)) {
+      const resto = texto.split(prefijo)[1];
+      return resto?.split('.')[0]?.trim() || resto?.trim() || texto;
+    }
+    return texto
+      .replace(/\s*-?\s*Transportadora:\s*[^\s.,-]+/gi, '')
+      .replace(/\s*-?\s*Gu[ií]a:\s*[^\s.,]+/gi, '')
+      .replace(/\s*-?\s*Proveedor:\s*[^\s.,-]+/gi, '')
+      .replace(/\s*-\s*$/, '')
+      .trim() || texto;
   };
 
   // Aplana los movimientos individuales: una fila por devolución o avería, con la

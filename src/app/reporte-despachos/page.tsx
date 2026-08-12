@@ -280,12 +280,15 @@ function ReporteDespachosContent() {
       { Dato: 'Plataforma con más órdenes', Valor: `${dashboardData.platformWithMostOrders?.name || '—'} (${dashboardData.platformWithMostOrders?.percentage || 0}%)` },
     ], 'Resumen');
 
-    // Hoja 2 — el resumen diario viene anidado día → plataforma → transportadora
+    // Hoja 2 — el resumen diario viene anidado día → TRANSPORTADORA → PLATAFORMA.
+    // Ese es el orden real (ver daily-dispatch-summary.tsx:69, que nombra los niveles);
+    // invertirlo pone "Veloces" en la columna de plataforma y "Dropi" en la de
+    // transportadora.
     const guiasPorDia: any[] = [];
-    for (const [dia, plataformas] of Object.entries(dashboardData.dailyDispatchSummaryData || {})) {
-      for (const [plataforma, transportadoras] of Object.entries(plataformas || {})) {
-        for (const [transportadora, cantidad] of Object.entries(transportadoras || {})) {
-          guiasPorDia.push({ Fecha: diaLegible(dia), Plataforma: plataforma, Transportadora: transportadora, Guías: cantidad });
+    for (const [dia, transportadoras] of Object.entries(dashboardData.dailyDispatchSummaryData || {})) {
+      for (const [transportadora, plataformas] of Object.entries(transportadoras || {})) {
+        for (const [plataforma, cantidad] of Object.entries(plataformas || {})) {
+          guiasPorDia.push({ Fecha: diaLegible(dia), Transportadora: transportadora, Plataforma: plataforma, Guías: cantidad });
         }
       }
     }
@@ -300,15 +303,22 @@ function ReporteDespachosContent() {
     }
     agregarHoja(productosPorDia, 'Productos por día');
 
+    // Los porcentajes vienen sin redondear (15.298470152984702). Se dejan en 1 decimal.
+    const pct = (n: number) => `${Number(n || 0).toFixed(1)}%`;
+
     agregarHoja((dashboardData.productChartData || []).map(p => ({
-      Producto: p.name, Unidades: p.value, 'Porcentaje': `${p.percentage}%`, Tipo: p.productType,
+      Producto: p.name, Unidades: p.value, Porcentaje: pct(p.percentage), Tipo: p.productType,
     })), 'Por producto');
 
     agregarHoja((dashboardData.categoryChartData || []).map(c => ({
-      Categoría: c.name, Unidades: c.value, 'Porcentaje': `${c.percentage}%`,
+      Categoría: c.name, Unidades: c.value, Porcentaje: pct(c.percentage),
     })), 'Por categoría');
 
-    agregarHoja(dashboardData.platformCarrierChartData || [], 'Plataforma x transportadora');
+    // Viene con forma de gráfica: `name` es la plataforma y hay una columna por
+    // transportadora. Se renombra la primera para que la hoja se entienda sola.
+    agregarHoja((dashboardData.platformCarrierChartData || []).map(({ name, ...resto }: any) => ({
+      Plataforma: name, ...resto,
+    })), 'Plataforma x transportadora');
 
     const desde = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : 'inicio';
     const hasta = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : 'hoy';
