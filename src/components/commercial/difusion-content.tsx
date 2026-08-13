@@ -20,6 +20,7 @@ import {
     type ProductPromotion, type PromotionChannel, type PromotionOutcome, type PromotionType,
 } from '@/app/actions/promotions';
 import { checkClientExists, createClient, getAllClients } from '@/lib/commercial-api';
+import { PAISES, etiquetaPais } from '@/lib/paises';
 import type { CommercialClient } from '@/types/commercial';
 import { ProductSearchPicker, type ProductPick } from '@/components/product-search-picker';
 import { format } from 'date-fns';
@@ -143,7 +144,7 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
     // Crear cliente al vuelo cuando no existe en el CRM
     const [showNewClient, setShowNewClient] = useState(false);
     const [isCreatingClient, setIsCreatingClient] = useState(false);
-    const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', city: '' });
+    const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', city: '', country: '' });
 
     useEffect(() => {
         if (!user) return;
@@ -174,14 +175,16 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
 
     const handleCreateClient = async () => {
         if (!user) return;
-        if (!newClient.name.trim() || !newClient.email.trim() || !newClient.phone.trim()) {
-            toast({ title: 'Error', description: 'Nombre, correo y teléfono son obligatorios.', variant: 'destructive' });
+        if (!newClient.name.trim() || !newClient.email.trim() || !newClient.phone.trim() || !newClient.country) {
+            toast({ title: 'Error', description: 'Nombre, correo, teléfono y país son obligatorios.', variant: 'destructive' });
             return;
         }
         setIsCreatingClient(true);
         try {
-            const exists = await checkClientExists(newClient.email.trim(), newClient.phone.trim());
-            if (exists?.exists) {
+            const exists = await checkClientExists(newClient.email.trim(), newClient.phone.trim(), newClient.country);
+            // Si la coincidencia es de otro país, es el mismo negocio en otro mercado:
+            // le corresponde una ficha aparte y no se bloquea.
+            if (exists?.exists && exists.mismoPais !== 'distinto') {
                 const assigned = exists.client?.assigned_commercial_name;
                 // Se nombra el dato que coincidió y con quién, para que una coincidencia
                 // equivocada se detecte aquí mismo y no escale como reporte de error.
@@ -200,6 +203,7 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
                 email: newClient.email.trim(),
                 phone: newClient.phone.trim(),
                 city: newClient.city.trim() || '—',
+                country: newClient.country,
                 category: 'laboratorio',
                 type: 'mixto',
                 avg_sales: 0,
@@ -214,7 +218,7 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
             setClients(prev => [created, ...prev]);
             setSelected(prev => ({ ...prev, [id]: true }));
             setShowNewClient(false);
-            setNewClient({ name: '', email: '', phone: '', city: '' });
+            setNewClient({ name: '', email: '', phone: '', city: '', country: '' });
             toast({ title: 'Cliente creado', description: `${created.name} quedó registrado en el CRM y seleccionado.` });
         } catch (error) {
             toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo crear el cliente.', variant: 'destructive' });
@@ -338,6 +342,14 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
                                 <Input placeholder="Correo *" type="email" value={newClient.email} onChange={e => setNewClient(p => ({ ...p, email: e.target.value }))} className="h-9" />
                                 <Input placeholder="Teléfono *" value={newClient.phone} onChange={e => setNewClient(p => ({ ...p, phone: e.target.value }))} className="h-9" />
                                 <Input placeholder="Ciudad" value={newClient.city} onChange={e => setNewClient(p => ({ ...p, city: e.target.value }))} className="h-9" />
+                                {/* El país es obligatorio: distingue la ficha de un mismo cliente
+                                    que opera en varios mercados con comerciales distintos. */}
+                                <Select value={newClient.country} onValueChange={v => setNewClient(p => ({ ...p, country: v }))}>
+                                    <SelectTrigger className="h-9"><SelectValue placeholder="País *" /></SelectTrigger>
+                                    <SelectContent>
+                                        {PAISES.map(p => <SelectItem key={p} value={p}>{etiquetaPais(p)}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <Button type="button" size="sm" onClick={handleCreateClient} disabled={isCreatingClient}>
                                 {isCreatingClient ? 'Creando…' : 'Crear y seleccionar'}

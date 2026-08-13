@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { PAISES, etiquetaPais } from '@/lib/paises';
 import { useAuth } from '@/hooks/use-auth';
-import { createClient, checkClientExists, getUserById } from '@/lib/commercial-api';
+import { createClient, checkClientExists, getUserById, addNoteToClient } from '@/lib/commercial-api';
 import { getUsers } from '@/lib/api';
 import { CommercialClient } from '@/types/commercial';
 import type { User } from '@/lib/types';
@@ -31,11 +32,14 @@ export default function RegisterClientPage() {
         // sentido, en vez de creerle a ciegas a la alerta.
         clientPhone?: string;
         clientEmail?: string;
+        clientCountry?: string;
         matchedBy?: 'email' | 'phone';
+        mismoPais?: 'igual' | 'distinto' | 'desconocido';
     } | null>(null);
-    // Coincidir por teléfono no siempre significa duplicado: dos tiendas distintas
-    // pueden compartir un contacto. Cuando el comercial confirma que no es el mismo,
-    // se le deja continuar. Por correo repetido no hay salida: eso sí es duplicado.
+    // Una coincidencia no siempre es un duplicado: dos tiendas pueden compartir un
+    // contacto, y un mismo negocio puede operar en varios países con un comercial
+    // distinto en cada uno. Cuando el comercial confirma que no es el mismo cliente,
+    // se le deja continuar en vez de dejarlo bloqueado sin salida.
     const [ignorarCoincidencia, setIgnorarCoincidencia] = useState(false);
 
     // Lista de comerciales para admins
@@ -69,7 +73,10 @@ export default function RegisterClientPage() {
         email: '',
         phone: '',
         city: '',
-        country: 'COLOMBIA',
+        // Sin valor por defecto: el país distingue una ficha de otra (un mismo cliente
+        // puede operar en varios países, con un comercial distinto en cada uno), así que
+        // dejarlo preseleccionado en COLOMBIA crearía fichas mal clasificadas.
+        country: '',
         category: 'laboratorio',
         type: 'mixto',
         status: 'finding_winner',
@@ -77,6 +84,10 @@ export default function RegisterClientPage() {
         additional_emails: [],
         additional_phones: []
     });
+
+    // Primera nota: se captura aquí para no obligar a crear el cliente, buscarlo y
+    // volver a entrar solo para dejar constancia de la conversación inicial.
+    const [primeraNota, setPrimeraNota] = useState('');
 
     // Emails adicionales
     const [additionalEmails, setAdditionalEmails] = useState<string[]>([]);
@@ -116,7 +127,7 @@ export default function RegisterClientPage() {
         if (!formData.email && !formData.phone) return;
         
         try {
-            const result = await checkClientExists(formData.email || '', formData.phone || '');
+            const result = await checkClientExists(formData.email || '', formData.phone || '', formData.country);
             if (result.exists && result.client) {
                 // Obtener nombre del comercial
                 const assignedUser = await getUserById(result.client.assigned_commercial_id);
@@ -126,7 +137,9 @@ export default function RegisterClientPage() {
                     assignedTo: assignedUser?.name || 'Otro comercial',
                     clientPhone: result.client.phone,
                     clientEmail: result.client.email,
+                    clientCountry: result.client.country,
                     matchedBy: result.matchedBy,
+                    mismoPais: result.mismoPais,
                 });
             } else {
                 setExistingClient(null);
@@ -137,17 +150,32 @@ export default function RegisterClientPage() {
         }
     };
 
+    // Cambiar el país cambia el veredicto: la misma coincidencia puede pasar de
+    // "duplicado" a "el mismo cliente en otro mercado". Se revisa de nuevo al elegirlo.
+    useEffect(() => {
+        if (formData.email || formData.phone) checkClient();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [formData.country]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
 
         setSubmitting(true);
         try {
-            // Verificar si el cliente ya existe. Si coincidió solo por teléfono y el
-            // comercial ya confirmó que no es el mismo cliente, se deja continuar.
-            const result = await checkClientExists(formData.email || '', formData.phone || '');
-            const puedeIgnorarse = result.matchedBy === 'phone' && ignorarCoincidencia;
-            if (result.exists && !puedeIgnorarse) {
+            if (!formData.country) {
+                toast({ title: 'Falta el país', description: 'El país define a qué mercado pertenece la ficha.', variant: 'destructive' });
+                setSubmitting(false);
+                return;
+            }
+
+            // Verificar si el cliente ya existe EN ESTE PAÍS. Un mismo negocio operando
+            // en otro país es una ficha aparte, con su propio comercial: esa coincidencia
+            // se informa pero no bloquea. Si el país coincide (o no se sabe), se avisa y
+            // se puede continuar de forma explícita.
+            const result = await checkClientExists(formData.email || '', formData.phone || '', formData.country);
+            const otroPais = result.mismoPais === 'distinto';
+            if (result.exists && !otroPais && !ignorarCoincidencia) {
                 const assignedUser = await getUserById(result.client!.assigned_commercial_id);
                 setExistingClient({
                     exists: true,
@@ -155,11 +183,13 @@ export default function RegisterClientPage() {
                     assignedTo: assignedUser?.name || 'Otro comercial',
                     clientPhone: result.client!.phone,
                     clientEmail: result.client!.email,
+                    clientCountry: result.client!.country,
                     matchedBy: result.matchedBy,
+                    mismoPais: result.mismoPais,
                 });
                 toast({
-                    title: "Cliente ya existe",
-                    description: `${result.client!.name} (${result.matchedBy === 'email' ? result.client!.email : result.client!.phone}) ya pertenece a la cartera de ${assignedUser?.name || 'otro comercial'}.`,
+                    title: "Ese cliente ya está registrado",
+                    description: `${result.client!.name} (${result.matchedBy === 'email' ? result.client!.email : result.client!.phone}) ya pertenece a la cartera de ${assignedUser?.name || 'otro comercial'}. Revisa la alerta para continuar de todos modos.`,
                     variant: "destructive"
                 });
                 setSubmitting(false);
@@ -182,7 +212,8 @@ export default function RegisterClientPage() {
                 assignedCommercialName = currentUser?.name || user.email || 'Comercial';
             }
 
-            await createClient({
+            const actor = { id: user.id, name: user.name || user.email || 'Usuario' };
+            const nuevoClienteId = await createClient({
                 ...formData as CommercialClient,
                 assigned_commercial_id: assignedCommercialId,
                 assigned_commercial_name: assignedCommercialName,
@@ -190,11 +221,27 @@ export default function RegisterClientPage() {
                 additional_phones: additionalPhones,
                 created_at: new Date(),
                 birthday: new Date(formData.birthday || new Date())
-            }, { id: user.id, name: user.name || user.email || 'Usuario' });
+            }, actor);
+
+            // La primera nota se guarda con el mismo actor, así que queda con autoría
+            // confirmada en el reporte de actividad. Si falla, el cliente ya está creado:
+            // se avisa en vez de perder el registro.
+            let notaGuardada = true;
+            if (primeraNota.trim()) {
+                try {
+                    await addNoteToClient(nuevoClienteId, primeraNota.trim(), actor);
+                } catch (error) {
+                    console.error('Cliente creado pero la nota inicial falló:', error);
+                    notaGuardada = false;
+                }
+            }
+
             toast({
                 title: "Cliente registrado",
-                description: "El cliente ha sido creado exitosamente.",
-                variant: 'default'
+                description: notaGuardada
+                    ? (primeraNota.trim() ? 'Se creó el cliente con su primera nota.' : 'El cliente ha sido creado exitosamente.')
+                    : 'El cliente se creó, pero la nota inicial no se pudo guardar. Agrégala desde su ficha.',
+                variant: notaGuardada ? 'default' : 'destructive'
             });
             router.push('/commercial/crm/dashboard');
         } catch (error) {
@@ -221,7 +268,31 @@ export default function RegisterClientPage() {
                     <CardDescription>Ingresa los datos básicos para iniciar el seguimiento.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {existingClient?.exists && (
+                    {/* Coincidencia en OTRO país: no es un duplicado, es el mismo negocio
+                        operando en otro mercado con su propio comercial. Se informa y se
+                        deja seguir sin fricción. */}
+                    {existingClient?.exists && existingClient.mismoPais === 'distinto' && (
+                        <Alert className="mb-6">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Este cliente ya opera en otro país</AlertTitle>
+                            <AlertDescription className="space-y-1">
+                                <p>
+                                    <strong>{existingClient.clientName}</strong> está registrado
+                                    en <strong>{existingClient.clientCountry}</strong>, en la cartera
+                                    de <strong>{existingClient.assignedTo}</strong>.
+                                </p>
+                                <p className="text-xs opacity-90">
+                                    Vas a crear su ficha de <strong>{formData.country}</strong>, que queda a tu
+                                    nombre y con su propio historial. Puedes continuar.
+                                </p>
+                            </AlertDescription>
+                        </Alert>
+                    )}
+
+                    {/* Coincidencia en el mismo país (o sin país registrado): sí es un
+                        posible duplicado. Se muestran los datos para poder descartarlo y
+                        se permite continuar de forma explícita. */}
+                    {existingClient?.exists && existingClient.mismoPais !== 'distinto' && (
                         <Alert variant="destructive" className="mb-6">
                             <AlertCircle className="h-4 w-4" />
                             <AlertTitle>
@@ -237,22 +308,21 @@ export default function RegisterClientPage() {
                                 <p className="text-xs opacity-90">
                                     Teléfono registrado: <strong>{existingClient.clientPhone || '—'}</strong>
                                     {' · '}Correo: <strong>{existingClient.clientEmail || '—'}</strong>
+                                    {' · '}País: <strong>{existingClient.clientCountry || 'sin registrar'}</strong>
                                 </p>
-                                {existingClient.matchedBy === 'phone' && (
-                                    ignorarCoincidencia ? (
-                                        <p className="text-xs font-medium">
-                                            Marcado como cliente distinto: puedes continuar con el registro.
-                                        </p>
-                                    ) : (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setIgnorarCoincidencia(true)}
-                                        >
-                                            No es el mismo cliente, registrar de todos modos
-                                        </Button>
-                                    )
+                                {ignorarCoincidencia ? (
+                                    <p className="text-xs font-medium">
+                                        Marcado como cliente distinto: puedes continuar con el registro.
+                                    </p>
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIgnorarCoincidencia(true)}
+                                    >
+                                        No es el mismo cliente, registrar de todos modos
+                                    </Button>
                                 )}
                             </AlertDescription>
                         </Alert>
@@ -359,9 +429,12 @@ export default function RegisterClientPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="country">País</Label>
-                                <Select value={formData.country || 'COLOMBIA'} onValueChange={(val) => handleChange('country', val)}>
+                                {/* Sin valor por defecto y obligatorio: el país determina de qué
+                                    mercado es la ficha, y un mismo cliente puede tener una por país
+                                    con un comercial distinto en cada una. */}
+                                <Select value={formData.country || ''} onValueChange={(val) => handleChange('country', val)}>
                                     <SelectTrigger id="country">
-                                        <SelectValue />
+                                        <SelectValue placeholder="Seleccionar país..." />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {PAISES.map(p => (
@@ -438,6 +511,19 @@ export default function RegisterClientPage() {
                                     </Select>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Primera conversación. Evita el rodeo de crear el cliente, buscarlo
+                            en el tablero y entrar a su ficha solo para dejar la nota inicial. */}
+                        <div className="space-y-2 pt-2">
+                            <Label htmlFor="primeraNota">Primera nota (opcional)</Label>
+                            <Textarea
+                                id="primeraNota"
+                                rows={3}
+                                placeholder="¿Qué hablaste con el cliente? Queda registrado a tu nombre en su historial."
+                                value={primeraNota}
+                                onChange={(e) => setPrimeraNota(e.target.value)}
+                            />
                         </div>
 
                         <div className="pt-4 flex justify-end">

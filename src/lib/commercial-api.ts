@@ -37,13 +37,24 @@ import { startOfDay, endOfDay } from 'date-fns';
 export interface ClientExistsResult {
     exists: boolean;
     client?: CommercialClient & { assigned_commercial_name?: string };
-    // Por qué coincidió. El correo repetido es señal fuerte de duplicado y bloquea el
-    // registro; el teléfono repetido es más débil (dos tiendas pueden compartir un
-    // contacto), así que la pantalla deja continuar cuando el match vino por aquí.
+    // Por qué coincidió: por correo o por teléfono. Un mismo negocio puede estar
+    // registrado con correos distintos y el mismo número, así que ambos criterios
+    // cuentan por igual.
     matchedBy?: 'email' | 'phone';
+    // Relación entre el país que se está registrando y el de la ficha encontrada:
+    //   'igual'       → es el mismo mercado, probablemente un duplicado de verdad
+    //   'distinto'    → el mismo cliente operando en otro país, con otro comercial.
+    //                   No es un duplicado: se espera una ficha por país.
+    //   'desconocido' → la ficha encontrada no tiene país (286 clientes antiguos),
+    //                   o no se indicó el país al consultar.
+    mismoPais?: 'igual' | 'distinto' | 'desconocido';
 }
 
-export const checkClientExists = async (email: string, phone: string): Promise<ClientExistsResult> => {
+// Normaliza el país para compararlo (tolera tildes, minúsculas y espacios)
+const clavePais = (pais?: string | null): string =>
+    (pais || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+
+export const checkClientExists = async (email: string, phone: string, pais?: string): Promise<ClientExistsResult> => {
     try {
         const clientsCol = collection(db, 'clients');
 
@@ -69,24 +80,44 @@ export const checkClientExists = async (email: string, phone: string): Promise<C
 
         if (!criterios.length) return { exists: false };
 
+        // Se recogen TODAS las coincidencias antes de decidir. Un mismo negocio puede
+        // aparecer varias veces —una ficha por país— y lo que importa no es la primera
+        // que devuelva Firestore, sino si alguna es del país que se está registrando:
+        // esa sí sería un duplicado real.
+        const encontrados = new Map<string, { doc: any; motivo: 'email' | 'phone' }>();
         for (const criterio of criterios) {
             const snapshot = await getDocs(query(clientsCol, where(criterio.campo, criterio.operador, criterio.valor)));
-            if (snapshot.empty) continue;
-
-            const encontrado = snapshot.docs[0];
-            const data = encontrado.data();
-            return {
-                exists: true,
-                matchedBy: criterio.motivo,
-                client: {
-                    id: encontrado.id,
-                    ...data,
-                    assigned_commercial_name: data.assigned_commercial_name
-                } as CommercialClient & { assigned_commercial_name?: string }
-            };
+            for (const d of snapshot.docs) {
+                if (!encontrados.has(d.id)) encontrados.set(d.id, { doc: d, motivo: criterio.motivo });
+            }
         }
 
-        return { exists: false };
+        if (!encontrados.size) return { exists: false };
+
+        const paisBuscado = clavePais(pais);
+        const candidatos = [...encontrados.values()].map(({ doc, motivo }) => {
+            const data = doc.data();
+            const paisFicha = clavePais(data.country);
+            const relacion: 'igual' | 'distinto' | 'desconocido' =
+                !paisBuscado || !paisFicha ? 'desconocido' : (paisBuscado === paisFicha ? 'igual' : 'distinto');
+            return { doc, data, motivo, relacion };
+        });
+
+        // Prioridad: mismo país (duplicado real) → país desconocido → otro país.
+        const orden = { igual: 0, desconocido: 1, distinto: 2 } as const;
+        candidatos.sort((a, b) => orden[a.relacion] - orden[b.relacion]);
+        const elegido = candidatos[0];
+
+        return {
+            exists: true,
+            matchedBy: elegido.motivo,
+            mismoPais: elegido.relacion,
+            client: {
+                id: elegido.doc.id,
+                ...elegido.data,
+                assigned_commercial_name: elegido.data.assigned_commercial_name
+            } as CommercialClient & { assigned_commercial_name?: string }
+        };
     } catch (error: any) {
         // Manejar errores de permisos - si no tiene permiso para leer otros clientes,
         // asumimos que no existe (el usuario podrá intentar crearlo)
