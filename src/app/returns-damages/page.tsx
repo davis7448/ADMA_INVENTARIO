@@ -34,6 +34,7 @@ import { AuthProviderWrapper } from '@/components/auth-provider-wrapper';
 import { Suspense } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 
 // Con 7 días la pantalla abría vacía: no siempre hay devoluciones en esa ventana (hoy
 // mismo hay 0 en 7 días y 106 en 30). 30 días es el mismo rango que ya usa la pestaña
@@ -42,6 +43,7 @@ const RANGO_POR_DEFECTO_DIAS = 30;
 
 function ReturnsDamagesPageContent() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [returnsData, setReturnsData] = useState<ReturnsByProduct[]>([]);
   const [returnsPagination, setReturnsPagination] = useState({ totalCount: 0, totalPages: 0, currentPage: 1 });
   const [damagesData, setDamagesData] = useState<DamagesReport[]>([]);
@@ -75,6 +77,7 @@ function ReturnsDamagesPageContent() {
   const [guides, setGuides] = useState<ReturnGuide[]>([]);
   const [guidesLoading, setGuidesLoading] = useState(false);
   const [guidesExporting, setGuidesExporting] = useState(false);
+  const [returnsExporting, setReturnsExporting] = useState(false);
   const [guidesPagination, setGuidesPagination] = useState({ totalCount: 0, totalPages: 1, currentPage: 1, hasMore: false });
   const [guidesCarrierFilter, setGuidesCarrierFilter] = useState('all');
   const [guidesSearch, setGuidesSearch] = useState('');
@@ -175,6 +178,34 @@ function ReturnsDamagesPageContent() {
       console.error('Error exporting guides:', e);
     } finally {
       setGuidesExporting(false);
+    }
+  };
+
+  // La tabla se pagina de 20 en 20, pero el Excel debe traer TODO el periodo elegido:
+  // exportar solo la página visible da un archivo que parece completo y no lo está.
+  // Por eso se vuelve a consultar sin paginar en el momento de descargar.
+  const exportarDevoluciones = async (tipo: 'consolidado' | 'detalle_devoluciones') => {
+    setReturnsExporting(true);
+    try {
+      const { data } = await getReturnsByProduct({
+        startDate: dateRange.from?.toISOString(),
+        endDate: dateRange.to?.toISOString(),
+        warehouseId: selectedWarehouse,
+        page: 1,
+        limit: 100000,
+      });
+      if (!data.length) {
+        toast({ title: 'Sin datos', description: 'No hay devoluciones en el periodo seleccionado.' });
+        return;
+      }
+      const nombre = tipo === 'consolidado' ? 'devoluciones-por-producto.xlsx' : 'devoluciones-detalle.xlsx';
+      exportToXLSX(data, nombre, tipo === 'consolidado' ? 'Devoluciones' : 'Detalle', tipo);
+      toast({ title: '¡Descargado!', description: `${data.length} productos del periodo completo.` });
+    } catch (error) {
+      console.error('Error exportando devoluciones:', error);
+      toast({ title: 'Error', description: 'No se pudo generar el Excel.', variant: 'destructive' });
+    } finally {
+      setReturnsExporting(false);
     }
   };
 
@@ -700,17 +731,17 @@ function ReturnsDamagesPageContent() {
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => exportToXLSX(returnsData, 'devoluciones-por-producto.xlsx', 'Devoluciones')}
-                  disabled={returnsData.length === 0}
+                  onClick={() => exportarDevoluciones('consolidado')}
+                  disabled={returnsData.length === 0 || returnsExporting}
                 >
-                  <Download className="mr-2 h-4 w-4" />
+                  {returnsExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                   Consolidado
                 </Button>
                 <Button
-                  onClick={() => exportToXLSX(returnsData, 'devoluciones-detalle.xlsx', 'Detalle', 'detalle_devoluciones')}
-                  disabled={returnsData.length === 0}
+                  onClick={() => exportarDevoluciones('detalle_devoluciones')}
+                  disabled={returnsData.length === 0 || returnsExporting}
                 >
-                  <Download className="mr-2 h-4 w-4" />
+                  {returnsExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
                   Detalle
                 </Button>
               </div>

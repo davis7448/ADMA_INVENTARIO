@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { PAISES, etiquetaPais } from '@/lib/paises';
 import { useAuth } from '@/hooks/use-auth';
-import { createClient, checkClientExists, getUserById, addNoteToClient } from '@/lib/commercial-api';
+import { createClient, checkClientExists, getUserById, addNoteToClient, vincularFichasDeCliente } from '@/lib/commercial-api';
 import { getUsers } from '@/lib/api';
 import { CommercialClient } from '@/types/commercial';
 import type { User } from '@/lib/types';
@@ -222,6 +222,12 @@ export default function RegisterClientPage() {
                 created_at: new Date(),
                 birthday: new Date(formData.birthday || new Date())
             }, actor);
+
+            // Si el mismo negocio ya tenía ficha en otro país, se enlazan las dos para
+            // poder saltar de una a otra y ver que es el mismo cliente.
+            if (result.exists && result.mismoPais === 'distinto' && result.client?.id) {
+                await vincularFichasDeCliente(nuevoClienteId, result.client.id);
+            }
 
             // La primera nota se guarda con el mismo actor, así que queda con autoría
             // confirmada en el reporte de actividad. Si falla, el cliente ya está creado:

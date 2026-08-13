@@ -29,6 +29,7 @@ export default function ClientDetailPage() {
     const [client, setClient] = useState<CommercialClient | null>(null);
     // Historial de interacciones: quién hizo qué con este cliente (cartera compartida)
     const [eventos, setEventos] = useState<ClientEvent[]>([]);
+    const [fichasHermanas, setFichasHermanas] = useState<CommercialClient[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Estado de edición
@@ -112,6 +113,16 @@ export default function ClientDetailPage() {
                 });
                 setClient(clientData);
                 setEventos(await getClientEvents(clientId).catch(() => []));
+
+                // Fichas del mismo negocio en otros países. Se cargan por id, no por
+                // búsqueda: el vínculo se guarda explícitamente al crear la ficha.
+                const hermanas = clientData?.related_client_ids || [];
+                if (hermanas.length) {
+                    const cargadas = await Promise.all(
+                        hermanas.map(id => getClientById(id).catch(() => null))
+                    );
+                    setFichasHermanas(cargadas.filter((c): c is CommercialClient => !!c));
+                }
             } catch (error) {
                 console.error('Error fetching client:', error);
             } finally {
@@ -507,6 +518,28 @@ export default function ClientDetailPage() {
                             <span className="font-bold text-lg">${(client.avg_sales || 0).toLocaleString()}</span>
                             <span className="text-xs text-muted-foreground">Ventas Promedio</span>
                         </div>
+
+                        {/* El mismo negocio operando en otros países. Cada ficha tiene su
+                            comercial y su historial; el enlace evita gestionarlas a ciegas. */}
+                        {fichasHermanas.length > 0 && (
+                            <div className="pt-4 border-t space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    Este cliente también opera en:
+                                </p>
+                                {fichasHermanas.map(h => (
+                                    <Link
+                                        key={h.id}
+                                        href={`/commercial/crm/client/${h.id}`}
+                                        className="block rounded-md border p-2 hover:bg-muted/50 transition-colors"
+                                    >
+                                        <p className="text-sm font-medium">{etiquetaPais(h.country)}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {h.name} · cartera de {h.assigned_commercial_name || '—'}
+                                        </p>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

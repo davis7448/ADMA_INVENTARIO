@@ -59,6 +59,10 @@ export interface CommercialClient {
   // formato. No se muestran: para eso están `phone` y `additional_phones`.
   phone_key?: string;
   additional_phone_keys?: string[];
+  // Fichas del MISMO negocio en otros países. Cada país tiene su ficha, su comercial y
+  // su historial; este vínculo permite saltar entre ellas y ver que es el mismo cliente.
+  // Se escribe en las dos direcciones al crear la ficha nueva.
+  related_client_ids?: string[];
   birthday: Date |  any; // Timestamp from Firestore often needs handling
   category: ClientCategory;
   type: ClientType;

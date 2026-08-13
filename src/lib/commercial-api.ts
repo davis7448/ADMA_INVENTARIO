@@ -172,10 +172,26 @@ export const createClient = async (
     }
 };
 
+// Enlaza dos fichas del mismo negocio en países distintos, en ambas direcciones.
+// Sin esto, quien abre la ficha de Ecuador no tiene forma de saber que existe una de
+// Colombia con su propio historial y su propio comercial.
+export const vincularFichasDeCliente = async (clienteA: string, clienteB: string): Promise<void> => {
+    if (!clienteA || !clienteB || clienteA === clienteB) return;
+    try {
+        await Promise.all([
+            updateDoc(doc(db, 'clients', clienteA), { related_client_ids: arrayUnion(clienteB) }),
+            updateDoc(doc(db, 'clients', clienteB), { related_client_ids: arrayUnion(clienteA) }),
+        ]);
+    } catch (error) {
+        // No debe tumbar la creación del cliente: el vínculo es información adicional.
+        console.error('No se pudieron vincular las fichas del cliente:', error);
+    }
+};
+
 export const updateClient = async (clientId: string, data: Partial<CommercialClient>) => {
     try {
         const clientRef = doc(db, 'clients', clientId);
-        
+
         // Convertir fechas a formato serializable (pero NO incluir history - ahora está en colección separada)
         const dataToSave: DocumentData = { ...data, updated_at: serverTimestamp() };
         
