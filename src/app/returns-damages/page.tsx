@@ -35,6 +35,11 @@ import { Suspense } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/hooks/use-auth';
 
+// Con 7 días la pantalla abría vacía: no siempre hay devoluciones en esa ventana (hoy
+// mismo hay 0 en 7 días y 106 en 30). 30 días es el mismo rango que ya usa la pestaña
+// de Guías Recibidas.
+const RANGO_POR_DEFECTO_DIAS = 30;
+
 function ReturnsDamagesPageContent() {
   const { user } = useAuth();
   const [returnsData, setReturnsData] = useState<ReturnsByProduct[]>([]);
@@ -54,7 +59,7 @@ function ReturnsDamagesPageContent() {
   }>(() => {
     const today = new Date();
     return {
-      from: subDays(today, 6), // 7 días incluyendo hoy
+      from: subDays(today, RANGO_POR_DEFECTO_DIAS - 1),
       to: today,
     };
   });
@@ -628,11 +633,17 @@ function ReturnsDamagesPageContent() {
             </div>
 
             <div className="flex items-end">
+              {/* Dejar el rango vacío obliga a consultar la colección completa de
+                  movimientos (125.000+), que es justo lo que rompía esta pantalla.
+                  El botón vuelve al rango por defecto en vez de quitarlo. */}
               <Button
                 variant="outline"
-                onClick={() => setDateRange({ from: undefined, to: undefined })}
+                onClick={() => {
+                  const hoy = new Date();
+                  setDateRange({ from: subDays(hoy, RANGO_POR_DEFECTO_DIAS - 1), to: hoy });
+                }}
               >
-                Limpiar fechas
+                Últimos {RANGO_POR_DEFECTO_DIAS} días
               </Button>
             </div>
           </div>

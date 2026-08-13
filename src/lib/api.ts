@@ -2450,12 +2450,19 @@ export interface DamagesReport {
 export const getReturnsByProduct = async (filters: { startDate?: string; endDate?: string; warehouseId?: string; page?: number; limit?: number } = {}): Promise<{ data: ReturnsByProduct[], totalCount: number, totalPages: number }> => {
   const { startDate, endDate, warehouseId, page = 1, limit = 20 } = filters;
 
-  // Fetch movements without date filters to avoid composite index requirements
+  // El rango de fechas se filtra en el SERVIDOR. Antes se traían todos los movimientos
+  // de tipo Entrada (45.000+) para filtrarlos en memoria, con el comentario de que era
+  // para evitar índices compuestos — pero el índice `type + date` ya existe
+  // (firestore.indexes.json). Descargar ese volumen al navegador tardaba entre 30 y 60
+  // segundos y, cuando la conexión se cortaba, la persistencia offline resolvía desde
+  // una caché vacía: la pantalla mostraba 0 devoluciones sin ningún error.
   const movementsResult = await getInventoryMovements({
     fetchAll: true,
     filters: {
       warehouseId: warehouseId === 'all' ? undefined : warehouseId,
-      movementType: 'Entrada'
+      movementType: 'Entrada',
+      startDate,
+      endDate,
     }
   });
 
@@ -2531,12 +2538,15 @@ export const getReturnsByProduct = async (filters: { startDate?: string; endDate
 export const getDamagesReport = async (filters: { startDate?: string; endDate?: string; warehouseId?: string } = {}): Promise<DamagesReport[]> => {
   const { startDate, endDate, warehouseId } = filters;
 
-  // Fetch movements without date filters to avoid composite index requirements
+  // Igual que en las devoluciones: el rango se filtra en el servidor con el índice
+  // `type + date`, no descargando la colección entera.
   const movementsResult = await getInventoryMovements({
     fetchAll: true,
     filters: {
       warehouseId: warehouseId === 'all' ? undefined : warehouseId,
-      movementType: 'Averia'
+      movementType: 'Averia',
+      startDate,
+      endDate,
     }
   });
 
