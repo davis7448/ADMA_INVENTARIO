@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -206,6 +207,14 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const [imageCount, setImageCount] = useState(0);
     // Stock por variante (cuando el producto tiene variantes y la solicitud aplica a varias)
     const [variantStocks, setVariantStocks] = useState<Record<string, string>>({});
+    // Variantes que cubre este ID de plataforma. Antes era un desplegable de selección
+    // única: se elegía "Solo: talla M" y no había forma evidente de cubrir varias, aunque
+    // el resto del formulario ya lo soportaba.
+    const [variantesMarcadas, setVariantesMarcadas] = useState<string[]>([]);
+    // SKU y precio del producto sin variante. Se guardan al elegirlo porque al marcar una
+    // sola variante se sobrescriben con los de esa variante, y hay que poder volver.
+    const [skuBaseProducto, setSkuBaseProducto] = useState('');
+    const [precioBaseProducto, setPrecioBaseProducto] = useState<number | undefined>();
 
     // ID combinado: varios productos del inventario bajo un mismo ID de plataforma
     const esCombinado = componentes.length > 1;
@@ -230,15 +239,26 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
     const quierePrivatizar = (esCreacion && visibilidad === 'Privado') || (!esCreacion && accionPriv === 'privatizar');
     const necesitaCorreo = quierePrivatizar && correosDeRepartos.length === 0;
 
+    // Variantes marcadas, en el orden en que las trae el producto
+    const variantesElegidas = pickedVariants.filter(v => variantesMarcadas.includes(v.id));
+    // Con una sola variante se comporta como siempre (un stock único, y el SKU y el
+    // precio ya se ajustaron a los de esa variante). Con dos o más, se pide el stock de
+    // cada una y la solicitud viaja con el SKU base del producto.
+    const usaStockPorVariante = variantesElegidas.length > 1 && !comboMode && !esRetiro;
+    const stockPorVariante = variantesElegidas
+        .map(v => ({ variante: v.name, sku: v.sku, cantidad: Number(variantStocks[v.id] || 0) }))
+        .filter(v => v.cantidad > 0);
+    const totalVariantes = stockPorVariante.reduce((acc, v) => acc + v.cantidad, 0);
+
     // Presupuesto del reparto: no se puede repartir más de lo solicitado
-    const totalSolicitado = esRetiro ? 0 : (pickedVariants.length > 0 && !variable && !comboMode)
-        ? pickedVariants.reduce((acc, v) => acc + Number(variantStocks[v.id] || 0), 0)
+    const totalSolicitado = esRetiro ? 0 : usaStockPorVariante
+        ? variantesElegidas.reduce((acc, v) => acc + Number(variantStocks[v.id] || 0), 0)
         : Number(stock || 0);
     const totalRepartido = distribucion.reduce((acc, d) => acc + (d.cantidad > 0 ? d.cantidad : 0), 0);
     const excedido = totalSolicitado > 0 && totalRepartido > totalSolicitado;
     // Restante por variante (cuando se pidió stock por variante)
     const restantePorVariante = (variante: string): number => {
-        const solicitada = pickedVariants
+        const solicitada = variantesElegidas
             .filter(v => v.name === variante)
             .reduce((acc, v) => acc + Number(variantStocks[v.id] || 0), 0);
         const repartida = distribucion
@@ -246,12 +266,6 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             .reduce((acc, d) => acc + d.cantidad, 0);
         return solicitada - repartida;
     };
-    // Grilla por variante activa cuando hay variantes y no se eligió una específica ni combo
-    const usaStockPorVariante = pickedVariants.length > 0 && !variable && !comboMode && !esRetiro;
-    const stockPorVariante = pickedVariants
-        .map(v => ({ variante: v.name, sku: v.sku, cantidad: Number(variantStocks[v.id] || 0) }))
-        .filter(v => v.cantidad > 0);
-    const totalVariantes = stockPorVariante.reduce((acc, v) => acc + v.cantidad, 0);
 
     const resetAll = () => {
         setPaso(1); setTipo('CREACION_ITEM'); setAccionPriv('sin_cambio'); setDistribucion([]);
@@ -262,6 +276,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setVisibilidad('Publico'); setCorreo(''); setIdPlataforma(''); setObservaciones('');
         setImageCount(0);
         setVariantStocks({});
+        setVariantesMarcadas([]);
+        setSkuBaseProducto('');
+        setPrecioBaseProducto(undefined);
         setComponentes([]);
         if (imagesInputRef.current) imagesInputRef.current.value = '';
     };
@@ -284,28 +301,51 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
         setComboUnidades('');
         setPickedVariants(product.productType === 'variable' ? (product.variants || []) : []);
         setVariantStocks({});
+        setVariantesMarcadas([]);
+        setSkuBaseProducto(product.sku || '');
+        setPrecioBaseProducto(product.priceDropshipping);
         setComponentes([{ productId: product.id, producto: product.name, sku: product.sku || '', unidades: 1 }]);
         if (product.contentLink) setEnlaceDrive(product.contentLink);
         if (product.priceDropshipping) setPrecio(String(product.priceDropshipping));
     };
 
-    const handleVariantPick = (variantId: string) => {
-        if (variantId === 'nuevo_combo') {
-            setComboMode(true);
-            setVariable('');
-            return;
-        }
+    // Marca o desmarca una variante. Si al final queda UNA sola, el SKU y el precio se
+    // ajustan a los de esa variante (comportamiento de siempre); si quedan varias, se
+    // vuelve al SKU y precio base del producto, porque el ID los cubre a todos.
+    const toggleVariante = (variantId: string) => {
+        const siguiente = variantesMarcadas.includes(variantId)
+            ? variantesMarcadas.filter(id => id !== variantId)
+            : [...variantesMarcadas, variantId];
+        aplicarSeleccionDeVariantes(siguiente);
+    };
+
+    const marcarTodasLasVariantes = () => {
+        const todas = variantesMarcadas.length === pickedVariants.length ? [] : pickedVariants.map(v => v.id);
+        aplicarSeleccionDeVariantes(todas);
+    };
+
+    const aplicarSeleccionDeVariantes = (ids: string[]) => {
         setComboMode(false);
-        if (variantId === 'todas') {
+        setVariantesMarcadas(ids);
+        const elegidas = pickedVariants.filter(v => ids.includes(v.id));
+        if (elegidas.length === 1) {
+            const v = elegidas[0];
+            setVariable(v.name);
+            setSku(v.sku);
+            if (v.priceDropshipping) setPrecio(String(v.priceDropshipping));
+        } else {
+            // Varias (o ninguna): el ID va contra el producto, no contra una variante
             setVariable('');
-            return;
+            setSku(skuBaseProducto);
+            if (precioBaseProducto) setPrecio(String(precioBaseProducto));
         }
-        const variant = pickedVariants.find(v => v.id === variantId);
-        if (variant) {
-            setVariable(variant.name);
-            setSku(variant.sku);
-            if (variant.priceDropshipping) setPrecio(String(variant.priceDropshipping));
-        }
+    };
+
+    const activarCombo = () => {
+        setComboMode(true);
+        setVariantesMarcadas([]);
+        setVariable('');
+        setSku(skuBaseProducto);
     };
 
     // Validación por paso; devuelve el error o null si puede avanzar
@@ -314,6 +354,11 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             if (!productName.trim()) return 'Busca el producto en el inventario o escribe su nombre.';
             if (comboMode && (!comboNombre.trim() || !comboUnidades || Number(comboUnidades) < 2)) {
                 return 'Para el combo indica su nombre y cuántas unidades del producto trae (mínimo 2).';
+            }
+            // Antes no se validaba porque "ninguna marcada" significaba "todas". Ahora la
+            // selección es explícita, así que hay que exigirla.
+            if (pickedVariants.length > 0 && !comboMode && variantesElegidas.length === 0) {
+                return 'Marca al menos una variante que cubra este ID.';
             }
             if (esCombinado) {
                 if (componentes.some(c => !c.unidades || c.unidades < 1)) {
@@ -339,7 +384,7 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             }
             if (excedido) return `Estás repartiendo ${totalRepartido} unidades pero solo solicitaste ${totalSolicitado}. Ajusta las cantidades.`;
             if (usaStockPorVariante) {
-                for (const v of pickedVariants) {
+                for (const v of variantesElegidas) {
                     if (restantePorVariante(v.name) < 0) {
                         return `La variante "${v.name}" tiene repartidas más unidades de las solicitadas.`;
                     }
@@ -580,20 +625,47 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                         </div>
                     </div>
                     <div>
-                        <Label htmlFor="sol-variable">¿Aplica a una variante?</Label>
+                        <Label htmlFor="sol-variable">{pickedVariants.length > 0 ? '¿Qué variantes cubre este ID? *' : '¿Aplica a una variante?'}</Label>
                         {pickedVariants.length > 0 ? (
                             <>
-                                <Select onValueChange={handleVariantPick}>
-                                    <SelectTrigger className="mt-1"><SelectValue placeholder="Elige la variante del producto…" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="todas">Varias variantes (repartirás el stock en el siguiente paso)</SelectItem>
+                                {/* Casillas en vez de un desplegable de selección única: un ID de
+                                    plataforma suele cubrir varias variantes, o todas. */}
+                                <div className="mt-1 border rounded-lg">
+                                    <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+                                        <span className="text-xs text-muted-foreground">
+                                            {variantesElegidas.length} de {pickedVariants.length} marcadas
+                                        </span>
+                                        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={marcarTodasLasVariantes}>
+                                            {variantesMarcadas.length === pickedVariants.length ? 'Quitar todas' : 'Marcar todas'}
+                                        </Button>
+                                    </div>
+                                    {/* Hay productos con hasta 20 variantes: la lista se desplaza */}
+                                    <div className="max-h-56 overflow-y-auto divide-y">
                                         {pickedVariants.map(v => (
-                                            <SelectItem key={v.id} value={v.id}>Solo: {v.name} — SKU {v.sku}</SelectItem>
+                                            <label key={v.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/40">
+                                                <Checkbox
+                                                    checked={variantesMarcadas.includes(v.id)}
+                                                    onCheckedChange={() => toggleVariante(v.id)}
+                                                    disabled={comboMode}
+                                                />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm truncate">{v.name}</p>
+                                                    <p className="text-xs text-muted-foreground font-mono">SKU {v.sku || '—'}</p>
+                                                </div>
+                                            </label>
                                         ))}
-                                        <SelectItem value="nuevo_combo">➕ Crear combo/variante nueva…</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-muted-foreground mt-1">Si eliges una sola variante, el SKU y el precio se actualizan solos. Si eliges "Varias", en el paso 2 pondrás el stock de cada una.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start justify-between gap-2 mt-1">
+                                    <p className="text-xs text-muted-foreground">
+                                        {variantesElegidas.length > 1
+                                            ? 'En el paso 2 pondrás las unidades de cada variante marcada.'
+                                            : 'Con una sola variante, el SKU y el precio se actualizan solos.'}
+                                    </p>
+                                    <Button type="button" variant={comboMode ? 'default' : 'outline'} size="sm" className="h-7 text-xs whitespace-nowrap" onClick={() => comboMode ? setComboMode(false) : activarCombo()}>
+                                        {comboMode ? '✓ Combo nuevo' : '+ Combo (x2, x3…)'}
+                                    </Button>
+                                </div>
                             </>
                         ) : (
                             <>
@@ -698,9 +770,9 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                     {usaStockPorVariante && (
                         <div className="border rounded-lg p-3 space-y-2">
                             <Label>Stock por variante *</Label>
-                            <p className="text-xs text-muted-foreground">Indica las unidades por variante (deja en blanco las que no aplican).</p>
+                            <p className="text-xs text-muted-foreground">Unidades de cada variante marcada en el paso 1.</p>
                             <div className="space-y-1.5">
-                                {pickedVariants.map(v => (
+                                {variantesElegidas.map(v => (
                                     <div key={v.id} className="flex items-center gap-2">
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm truncate">{v.name}</p>
@@ -787,12 +859,13 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
                                     <Input placeholder="correo@cliente.com" value={d.correo || ''} className="flex-1 min-w-[140px] h-8 text-xs"
                                         onChange={e => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, correo: e.target.value } : x))} />
                                 )}
-                                {pickedVariants.length > 0 ? (
+                                {variantesElegidas.length > 0 ? (
                                     <Select value={d.variante || 'sin_variante'} onValueChange={v => setDistribucion(prev => prev.map((x, j) => j === i ? { ...x, variante: v === 'sin_variante' ? undefined : v } : x))}>
                                         <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Variante…" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="sin_variante">Sin variante específica</SelectItem>
-                                            {pickedVariants.map(v => (
+                                            {/* Solo las variantes marcadas: repartir hacia una que el ID no cubre no tiene sentido */}
+                                            {variantesElegidas.map(v => (
                                                 <SelectItem key={v.id} value={v.name}>
                                                     {v.name}{usaStockPorVariante ? ` (quedan ${Math.max(0, restantePorVariante(v.name) + (d.variante === v.name ? d.cantidad : 0))})` : ''}
                                                 </SelectItem>
