@@ -54,3 +54,17 @@ env:
      secret: VENNDELO_REFRESH_TOKEN
      availability:
        - RUNTIME
+
+   # Cuenta con la que el SERVIDOR se autentica contra Firestore. Sin ella, las server
+   # actions y las rutas de API consultan sin sesión y dependen de que la regla
+   # isAdminAccess() deje pasar a los no autenticados — el agujero que hay que cerrar.
+   # Ver src/lib/firebase-server-auth.ts y scripts/crear-cuenta-servicio.ts
+   - variable: FIREBASE_SERVER_EMAIL
+     secret: FIREBASE_SERVER_EMAIL
+     availability:
+       - RUNTIME
+
+   - variable: FIREBASE_SERVER_PASSWORD
+     secret: FIREBASE_SERVER_PASSWORD
+     availability:
+       - RUNTIME
