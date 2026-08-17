@@ -1,8 +1,16 @@
 // Cliente del MCP de Dropi (solo servidor). OAuth 2.0 authorization_code + PKCE +
 // refresh_token (cliente público). Soporta VARIAS cuentas Dropi: cada una guarda su
 // propio refresh_token en Firestore (colección dropiAccounts).
-import { db } from '@/lib/firebase';
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+// Los refresh_token de Dropi se guardan con el ADMIN SDK, no con el de cliente.
+// Con el SDK de cliente esto solo funcionaba porque la regla concedía acceso cuando NO
+// había autenticación (`isAdminAccess()` = `request.auth == null`), lo que dejaba las
+// credenciales legibles desde internet. El admin SDK no pasa por las reglas.
+import { getFirestore } from 'firebase-admin/firestore';
+import { getApp } from '@/lib/firebase-admin';
+
+async function adminDb() {
+    return getFirestore(await getApp());
+}
 import crypto from 'crypto';
 import type { ParsedRow } from '@/lib/platform-sales';
 
@@ -60,13 +68,15 @@ export function refreshAccess(refreshToken: string) {
 
 // --- Persistencia de cuentas y estado OAuth ---
 export async function savePendingOauth(state: string, verifier: string, redirectUri: string, label?: string, bodega?: string, pais?: string) {
-    await setDoc(doc(db, 'dropiOauthPending', state), { verifier, redirectUri, label: label || '', bodega: bodega || '', pais: pais || '', createdAt: Date.now() });
+    await (await adminDb()).collection('dropiOauthPending').doc(state)
+        .set({ verifier, redirectUri, label: label || '', bodega: bodega || '', pais: pais || '', createdAt: Date.now() });
 }
 export async function takePendingOauth(state: string): Promise<{ verifier: string; redirectUri: string; label?: string; bodega?: string; pais?: string } | null> {
-    const snap = await getDoc(doc(db, 'dropiOauthPending', state));
-    if (!snap.exists()) return null;
+    const fs = await adminDb();
+    const snap = await fs.collection('dropiOauthPending').doc(state).get();
+    if (!snap.exists) return null;
     const data = snap.data() as any;
-    await deleteDoc(doc(db, 'dropiOauthPending', state)).catch(() => {});
+    await fs.collection('dropiOauthPending').doc(state).delete().catch(() => {});
     return { verifier: data.verifier, redirectUri: data.redirectUri, label: data.label, bodega: data.bodega, pais: data.pais };
 }
 
@@ -76,10 +86,10 @@ export async function saveDropiAccount(accountId: string, label: string, tokens:
     };
     if (bodega) payload.bodega = bodega; // bodega a la que pertenece la cuenta (INGENIO/LABORATORIO)
     if (pais) payload.pais = pais;       // país de la cuenta (COLOMBIA/MEXICO/...)
-    await setDoc(doc(db, 'dropiAccounts', accountId), payload, { merge: true });
+    await (await adminDb()).collection('dropiAccounts').doc(accountId).set(payload, { merge: true });
 }
 export async function listDropiAccounts(): Promise<Array<{ id: string; label: string; refreshToken?: string; bodega?: string; pais?: string; updatedAt?: number }>> {
-    const snap = await getDocs(collection(db, 'dropiAccounts'));
+    const snap = await (await adminDb()).collection('dropiAccounts').get();
     return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
 }
 

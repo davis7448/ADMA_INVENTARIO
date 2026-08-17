@@ -2,9 +2,18 @@
 // Auth por refresh_token (durable, en env VENNDELO_REFRESH_TOKEN); el access
 // token dura 1h y se pide al vuelo. Si Venndelo rota el refresh_token, se guarda
 // el nuevo en Firestore (settings/venndelo_auth) para no perder la conexión.
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+// El refresh_token se lee y escribe con el ADMIN SDK, no con el SDK de cliente.
+// Antes se usaba el de cliente y funcionaba porque la regla de Firestore concedía
+// acceso cuando NO había autenticación (`isAdminAccess()` = `request.auth == null`),
+// lo que dejaba esta credencial legible por cualquiera desde internet. El admin SDK
+// no pasa por las reglas, así que el documento puede quedar cerrado a todo el mundo.
+import { getFirestore } from 'firebase-admin/firestore';
+import { getApp } from '@/lib/firebase-admin';
 import type { ParsedRow } from '@/lib/platform-sales';
+
+async function adminDb() {
+    return getFirestore(await getApp());
+}
 
 const API = 'https://api.venndelo.com/v1/admin';
 
@@ -35,8 +44,8 @@ function safeId(s: string): string {
 async function getRefreshToken(): Promise<string> {
     // Prioriza el rotado guardado en Firestore; si no, el del entorno
     try {
-        const snap = await getDoc(doc(db, 'settings', 'venndelo_auth'));
-        if (snap.exists() && snap.data().refreshToken) return snap.data().refreshToken;
+        const snap = await (await adminDb()).collection('settings').doc('venndelo_auth').get();
+        if (snap.exists && snap.get('refreshToken')) return snap.get('refreshToken');
     } catch { /* ignora */ }
     const env = process.env.VENNDELO_REFRESH_TOKEN;
     if (!env) throw new Error('VENNDELO_REFRESH_TOKEN no está configurado.');
@@ -58,7 +67,8 @@ export async function getAccessToken(): Promise<string> {
     // escritura falla (ya tenemos un access token válido para esta corrida).
     if (data.refresh_token && data.refresh_token !== refreshToken) {
         try {
-            await setDoc(doc(db, 'settings', 'venndelo_auth'), { refreshToken: data.refresh_token, updatedAt: Date.now() }, { merge: true });
+            await (await adminDb()).collection('settings').doc('venndelo_auth')
+                .set({ refreshToken: data.refresh_token, updatedAt: Date.now() }, { merge: true });
         } catch (e) {
             console.error('Venndelo: no se pudo persistir el refresh_token rotado:', e);
         }
