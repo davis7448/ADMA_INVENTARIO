@@ -6,6 +6,14 @@ import type { Modificacion } from '@/app/actions/modificaciones';
 
 export const dynamic = 'force-dynamic';
 
+// Estados en los que la solicitud sigue viva: son las únicas que vale la pena
+// reintentar o consultar. 'creado' y 'rechazado' ya están cerradas.
+const ESTADOS_ABIERTOS = ['pendiente', 'en_revision', 'aprobado'];
+
+// Tope de creaciones por corrida, para no agotar el rate limit de ClickUp si se
+// acumula un atasco grande (el volumen normal es ~84 solicitudes/semana).
+const MAX_REINTENTOS = 20;
+
 // Cron de respaldo del puente ClickUp:
 // 1. Reintenta crear tareas de solicitudes que fallaron al sincronizar.
 // 2. Consulta el estado en ClickUp de solicitudes abiertas (por si el webhook se perdió).
@@ -18,20 +26,9 @@ export async function GET(request: NextRequest) {
     const summary = { retried: 0, polled: 0, updated: 0, errors: [] as string[] };
 
     try {
-        // 1. Solicitudes sin tarea en ClickUp (sync fallido)
-        const failedSnap = await getDocs(query(
-            collection(db, 'modificaciones'),
-            where('clickupSync', '==', 'error'),
-            limit(20)
-        ));
-        for (const d of failedSnap.docs) {
-            const result = await createClickUpTaskForSolicitud(d.id);
-            summary.retried++;
-            if (!result.success) summary.errors.push(`retry ${d.id}: ${result.error}`);
-        }
-
-        // 2. Solicitudes abiertas con tarea vinculada: comparar estado
-        for (const estado of ['pendiente', 'en_revision', 'aprobado']) {
+        // Una sola pasada por las solicitudes abiertas: las que no tienen tarea se
+        // reintentan, las que sí la tienen se comparan contra el estado de ClickUp.
+        for (const estado of ESTADOS_ABIERTOS) {
             const openSnap = await getDocs(query(
                 collection(db, 'modificaciones'),
                 where('estadoSolicitud', '==', estado),
@@ -39,7 +36,19 @@ export async function GET(request: NextRequest) {
             ));
             for (const d of openSnap.docs) {
                 const solicitud = d.data() as Modificacion;
-                if (!solicitud.clickupTaskId) continue;
+
+                // Sin tarea espejo: el sync falló al crear la solicitud (token caído, red…).
+                // El criterio es la AUSENCIA de clickupTaskId, no `clickupSync == 'error'`:
+                // cuando el updateDoc del catch también falla, el documento queda sin marca
+                // alguna y con el filtro anterior no se reintentaba nunca.
+                if (!solicitud.clickupTaskId) {
+                    if (summary.retried >= MAX_REINTENTOS) continue;
+                    summary.retried++;
+                    const result = await createClickUpTaskForSolicitud(d.id);
+                    if (!result.success) summary.errors.push(`retry ${d.id}: ${result.error}`);
+                    continue;
+                }
+
                 summary.polled++;
                 const clickupStatus = await getClickUpTaskStatus(solicitud.clickupTaskId);
                 if (!clickupStatus) continue;
