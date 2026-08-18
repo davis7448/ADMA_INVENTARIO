@@ -19,6 +19,7 @@ import { syncSolicitudToClickUpAction, uploadSolicitudImagesAction } from '@/app
 import { buildObservacionesText } from '@/lib/solicitud-text';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { SolicitudEvidenceDialog } from '@/components/solicitud-evidence-dialog';
+import { SolicitudAttachImagesDialog } from '@/components/solicitud-attach-images-dialog';
 import type { Platform, Warehouse } from '@/lib/types';
 import { PAISES } from '@/lib/paises';
 import { format } from 'date-fns';
@@ -54,6 +55,7 @@ export function SolicitudesContent({ platforms, warehouses }: SolicitudesContent
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [evidenceOf, setEvidenceOf] = useState<(Modificacion & { id: string }) | null>(null);
+    const [attachTo, setAttachTo] = useState<(Modificacion & { id: string }) | null>(null);
 
     const load = async () => {
         if (!user?.email) return;
@@ -135,6 +137,14 @@ export function SolicitudesContent({ platforms, warehouses }: SolicitudesContent
                                                         onClick={() => setEvidenceOf(s)}
                                                     >Ver evidencia</Button>
                                                 )}
+                                                {/* El comercial no puede subir a ClickUp (no tiene permiso de
+                                                    edición): adjunta desde aquí y lo sube el servidor. */}
+                                                {s.clickupTaskId && (
+                                                    <Button
+                                                        variant="link" size="sm" className="h-auto p-0 text-xs block"
+                                                        onClick={() => setAttachTo(s)}
+                                                    >Adjuntar imágenes</Button>
+                                                )}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -153,6 +163,12 @@ export function SolicitudesContent({ platforms, warehouses }: SolicitudesContent
                 modificacionId={evidenceOf?.id || null}
                 productName={evidenceOf?.PRODUCTO || undefined}
                 onClose={() => setEvidenceOf(null)}
+            />
+
+            <SolicitudAttachImagesDialog
+                taskId={attachTo?.clickupTaskId || null}
+                productName={attachTo?.PRODUCTO || undefined}
+                onClose={() => setAttachTo(null)}
             />
         </div>
     );
