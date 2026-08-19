@@ -8,6 +8,15 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   compress: false,
+  experimental: {
+    serverActions: {
+      // Las imágenes de las solicitudes viajan a ClickUp dentro de una server action.
+      // El límite por defecto de Next es 1 MB: las capturas pequeñas (~40 KB) pasaban y
+      // una foto de móvil de 2-5 MB hacía fallar la subida en silencio, de ahí que las
+      // solicitudes llegaran al tablero sin adjuntos.
+      bodySizeLimit: '25mb',
+    },
+  },
   images: {
     remotePatterns: [
       {

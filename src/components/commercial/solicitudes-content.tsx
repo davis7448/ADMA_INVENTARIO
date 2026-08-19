@@ -512,12 +512,27 @@ function SolicitudFormDialog({ platforms, warehouses, onCreated }: {
             const files = Array.from(imagesInputRef.current?.files || []);
             if (files.length > 0) {
                 if (sync.success && sync.taskId) {
-                    const formData = new FormData();
-                    for (const file of files) formData.append('images', file);
-                    const upload = await uploadSolicitudImagesAction(sync.taskId, formData);
-                    imagenesMsg = upload.success
-                        ? ` ${upload.uploaded} imagen(es) adjuntada(s) en ClickUp.`
-                        : ' Algunas imágenes no se pudieron adjuntar: reenvíalas desde ClickUp.';
+                    // Una llamada por imagen: el límite de tamaño de las server actions
+                    // aplica por petición, así que enviarlas juntas hacía fallar el lote
+                    // entero. Además, si una falla, las demás sí llegan.
+                    let subidas = 0;
+                    const fallidas: string[] = [];
+                    for (const file of files) {
+                        try {
+                            const formData = new FormData();
+                            formData.append('images', file);
+                            const upload = await uploadSolicitudImagesAction(sync.taskId, formData);
+                            if (upload.success) subidas += upload.uploaded || 0;
+                            else fallidas.push(file.name);
+                        } catch {
+                            // Suele ser el límite de tamaño. No debe tumbar el envío: la
+                            // solicitud y la tarea ya existen.
+                            fallidas.push(file.name);
+                        }
+                    }
+                    imagenesMsg = fallidas.length === 0
+                        ? ` ${subidas} imagen(es) adjuntada(s) en ClickUp.`
+                        : ` ${subidas} adjuntada(s); NO se pudo subir: ${fallidas.join(', ')}. Usa "Adjuntar imágenes" en la solicitud para reintentarlo.`;
                 } else {
                     imagenesMsg = ' Las imágenes no se adjuntaron (ClickUp no disponible): agrégalas a la tarea cuando se sincronice.';
                 }

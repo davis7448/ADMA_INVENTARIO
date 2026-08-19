@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // Ver next.config.js: Next 14 lee el .js, este queda sincronizado a propósito.
+    serverActions: {
+      bodySizeLimit: '25mb',
+    },
+  },
   images: {
     remotePatterns: [
       {
