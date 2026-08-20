@@ -90,6 +90,11 @@ const navItems: NavItem[] = [
     href: '/commercial/actividad',
     label: 'Actividad Comercial',
     roles: ['admin', 'commercial', 'commercial_director']
+  },
+  {
+    href: '/cotizaciones',
+    label: 'Cotizaciones',
+    roles: ['admin', 'commercial', 'commercial_director', 'coordinacion']
   }
 ];
 
