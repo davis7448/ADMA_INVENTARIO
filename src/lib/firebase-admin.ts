@@ -76,7 +76,15 @@ async function initializeAdminApp() {
         return;
     }
 
-    const privateKey = await getPrivateKey();
+    // En Cloud Run (App Hosting) se usan las credenciales de la propia máquina.
+    // Antes se intentaba primero la clave de servicio del secreto y Firestore respondía
+    // "16 UNAUTHENTICATED", así que TODA server action con admin SDK fallaba en
+    // producción —incluido el cotizador— mientras en el VPS funcionaba, porque allí la
+    // clave viene de .env.local. La cuenta de Cloud Run ya tiene roles/datastore.user,
+    // así que no hace falta clave: es además lo recomendado y una credencial menos que
+    // rotar. K_SERVICE lo define Cloud Run.
+    const enCloudRun = !!process.env.K_SERVICE;
+    const privateKey = enCloudRun ? undefined : await getPrivateKey();
 
     try {
         if (privateKey) {
