@@ -150,3 +150,53 @@ export async function cambiarEstadoCotizacion(
         return { success: false, error: 'No se pudo cambiar el estado.' };
     }
 }
+
+// --- Destinatarios del aviso de cotización nueva ---
+//
+// Viven en Firestore, no en el código, para que un admin los cambie desde la aplicación
+// sin desplegar. El worker (scripts/procesar-cotizaciones.ts) los lee de aquí.
+
+const DOC_NOTIF = 'cotizadorNotificacion';
+
+export async function obtenerDestinatarios(): Promise<string[]> {
+    try {
+        const fs = getFirestore(await getApp());
+        const snap = await fs.collection('settings').doc(DOC_NOTIF).get();
+        return snap.exists ? (snap.get('destinatarios') || []) : [];
+    } catch (error) {
+        console.error('[cotizaciones] error leyendo destinatarios:', error);
+        return [];
+    }
+}
+
+// El rol se comprueba EN EL SERVIDOR leyendo el documento del usuario: que la interfaz
+// solo enseñe el botón a los admin no impide llamar a la acción por otra vía.
+async function esAdmin(fs: FirebaseFirestore.Firestore, correoActor: string): Promise<boolean> {
+    if (!correoActor) return false;
+    const q = await fs.collection('users').where('email', '==', correoActor).limit(1).get();
+    return !q.empty && q.docs[0].get('role') === 'admin';
+}
+
+export async function guardarDestinatarios(
+    correos: string[],
+    correoActor: string,
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const fs = getFirestore(await getApp());
+        if (!(await esAdmin(fs, correoActor))) {
+            return { success: false, error: 'Solo un administrador puede cambiar los destinatarios.' };
+        }
+        const limpios = Array.from(new Set(
+            correos.map(c => c.trim().toLowerCase()).filter(c => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c))
+        ));
+        await fs.collection('settings').doc(DOC_NOTIF).set({
+            destinatarios: limpios,
+            actualizadoPor: correoActor,
+            actualizadoAt: Timestamp.now(),
+        }, { merge: true });
+        return { success: true };
+    } catch (error) {
+        console.error('[cotizaciones] error guardando destinatarios:', error);
+        return { success: false, error: 'No se pudieron guardar los destinatarios.' };
+    }
+}

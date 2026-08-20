@@ -15,11 +15,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
     listarCotizaciones, historialCotizacion, cambiarEstadoCotizacion,
+    obtenerDestinatarios, guardarDestinatarios,
     ESTADO_LABEL, TRANSICIONES,
     type CotizacionListada, type EstadoCotizacion, type EventoHistorial,
 } from '@/app/actions/cotizaciones';
 import { CATEGORIAS } from '@/lib/cotizador-catalogo';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Mail } from 'lucide-react';
 
 const COLOR: Record<EstadoCotizacion, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     recibida: 'default', triage: 'secondary', esperando_cliente: 'outline',
@@ -41,6 +42,11 @@ export function CotizacionesContent() {
     const [historial, setHistorial] = useState<EventoHistorial[]>([]);
     const [motivo, setMotivo] = useState('');
     const [guardando, setGuardando] = useState(false);
+    // Destinatarios del aviso: los administra un admin desde aquí, no viven en el código.
+    const [notifAbierto, setNotifAbierto] = useState(false);
+    const [destinatarios, setDestinatarios] = useState<string[]>([]);
+    const [nuevoCorreo, setNuevoCorreo] = useState('');
+    const esAdmin = user?.role === 'admin';
 
     const cargar = async () => {
         setCargando(true);
@@ -108,9 +114,16 @@ export function CotizacionesContent() {
                     <h1 className="text-2xl font-bold">Cotizaciones de maquila</h1>
                     <p className="text-sm text-muted-foreground">{datos.length} en total · {resumen.get('recibida') || 0} sin clasificar</p>
                 </div>
-                <Button onClick={descargar} disabled={!filtradas.length}>
-                    <Download className="mr-2 h-4 w-4" /> Descargar Excel
-                </Button>
+                <div className="flex gap-2">
+                    {esAdmin && (
+                        <Button variant="outline" onClick={async () => { setDestinatarios(await obtenerDestinatarios()); setNotifAbierto(true); }}>
+                            <Mail className="mr-2 h-4 w-4" /> Avisos por correo
+                        </Button>
+                    )}
+                    <Button onClick={descargar} disabled={!filtradas.length}>
+                        <Download className="mr-2 h-4 w-4" /> Descargar Excel
+                    </Button>
+                </div>
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -171,6 +184,55 @@ export function CotizacionesContent() {
                     </Table>
                 </CardContent>
             </Card>
+
+            <Dialog open={notifAbierto} onOpenChange={setNotifAbierto}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Avisos por correo</DialogTitle>
+                        <DialogDescription>
+                            A quién se le avisa cuando entra una cotización nueva. Si la lista está
+                            vacía no sale ningún correo y las cotizaciones solo se ven aquí.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex gap-2">
+                        <Input placeholder="correo@adma.com.co" value={nuevoCorreo}
+                            onChange={e => setNuevoCorreo(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const c = nuevoCorreo.trim().toLowerCase();
+                                    if (c && !destinatarios.includes(c)) setDestinatarios([...destinatarios, c]);
+                                    setNuevoCorreo('');
+                                }
+                            }} className="h-9" />
+                        <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => {
+                            const c = nuevoCorreo.trim().toLowerCase();
+                            if (c && !destinatarios.includes(c)) setDestinatarios([...destinatarios, c]);
+                            setNuevoCorreo('');
+                        }}>Añadir</Button>
+                    </div>
+                    <div className="space-y-1">
+                        {destinatarios.map(c => (
+                            <div key={c} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
+                                <span>{c}</span>
+                                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs"
+                                    onClick={() => setDestinatarios(destinatarios.filter(x => x !== c))}>Quitar</Button>
+                            </div>
+                        ))}
+                        {!destinatarios.length && <p className="text-xs text-muted-foreground">Sin destinatarios: no se enviará ningún aviso.</p>}
+                    </div>
+                    <Button disabled={guardando} onClick={async () => {
+                        setGuardando(true);
+                        const r = await guardarDestinatarios(destinatarios, user?.email || '');
+                        setGuardando(false);
+                        if (r.success) { toast({ title: 'Guardado', description: `${destinatarios.length} destinatario(s).` }); setNotifAbierto(false); }
+                        else toast({ title: 'No se pudo guardar', description: r.error, variant: 'destructive' });
+                    }}>
+                        {guardando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Guardar
+                    </Button>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={!!abierta} onOpenChange={o => !o && setAbierta(null)}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

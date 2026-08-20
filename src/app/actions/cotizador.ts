@@ -69,6 +69,23 @@ export async function crearCotizacion(
             actor: d.email, motivo: 'Cotización recibida', fecha: Timestamp.now(),
         });
 
+        // Aviso al equipo. Va a una cola, no se envía aquí: si el correo falla, la
+        // cotización ya está guardada y no debe perderse el aviso. Un worker la reintenta.
+        // Escribir en la cola tampoco puede tumbar el alta.
+        try {
+            await fs.collection('quoteOutbox').add({
+                quoteId: ref.id, referencia, tipo: 'nueva_cotizacion',
+                resumen: {
+                    categoria: d.categoria, formas: d.formas, presentacion: d.presentacion,
+                    cantidad: d.cantidad, nombre: d.nombre, empresa: d.empresa || '',
+                    email: d.email, telefono: d.telefono || '', ciudad: d.ciudad,
+                },
+                estado: 'pendiente', intentos: 0, createdAt: Timestamp.now(),
+            });
+        } catch (e) {
+            console.error('[cotizador] la cotización se guardó pero no se pudo encolar el aviso:', e);
+        }
+
         if (idempotencyKey) {
             await fs.collection('quoteIdempotency').doc(idempotencyKey)
                 .set({ quoteId: ref.id, referencia, createdAt: Timestamp.now() });
