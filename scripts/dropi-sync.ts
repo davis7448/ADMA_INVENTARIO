@@ -7,7 +7,7 @@
 // (las ya entregadas se saltean). Cuando una orden pasa a estado final (entregado,
 // devolución, cancelado), el mes avanza hacia cerrarse.
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, startAt, startAfter, limit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, startAt, startAfter, limit } from '@/lib/fs';
 import { listDropiAccounts, fetchDropiOrders } from '@/lib/dropi-mcp';
 import { importPlatformSales } from '@/lib/platform-sales';
 

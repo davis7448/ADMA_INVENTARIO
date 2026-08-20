@@ -2,7 +2,7 @@
 // Confirmado por el usuario. Reversible: re-importar con backfill-venndelo.ts.
 // Solo afecta VENNDELO; Dropi intacto.
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, where, writeBatch } from '@/lib/fs';
 
 const CUTOFF = '2026-01'; // se elimina todo mes < CUTOFF
 

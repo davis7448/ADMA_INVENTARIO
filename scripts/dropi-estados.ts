@@ -7,7 +7,7 @@
 //
 // Uso: npx tsx scripts/dropi-estados.ts [días] [etiquetaCuenta]
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, startAt, startAfter, limit, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, startAt, startAfter, limit, writeBatch, doc } from '@/lib/fs';
 import { listDropiAccounts, fetchDropiOrders } from '@/lib/dropi-mcp';
 import { importPlatformSales, FINAL_STATES } from '@/lib/platform-sales';
 

@@ -6,20 +6,15 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
-    // ⚠️ AGUJERO CONOCIDO, PENDIENTE DE CERRAR ⚠️
-    // Esto concede acceso a quien NO se identifica: la base es legible y escribible
-    // desde internet sin credenciales (comprobado con una petición HTTP anónima).
+    // Concedía acceso a quien NO se identifica (`request.auth == null`): la base entera
+    // quedaba legible y escribible desde internet sin credenciales. Se comprobó
+    // descargando los refresh_token de Dropi con una petición HTTP anónima.
     //
-    // NO se puede poner en `false` todavía: una docena de server actions y rutas de API
-    // (purchase-orders, receptions, warehouses, locations, cancellations, entry-reasons,
-    // venndelo…) y cuatro crons del VPS escriben con el SDK de CLIENTE sin sesión, así
-    // que dependen de esta regla. Cerrarla sin migrarlos tumba media aplicación.
-    //
-    // Plan: migrar esos archivos al admin SDK (que no pasa por las reglas) o autenticar
-    // los crons con una cuenta de servicio, y entonces poner esto en `false`.
-    // Las colecciones con credenciales ya NO dependen de esta función: están en `false`.
+    // Ya no hace falta: el servidor se autentica con su propia cuenta antes de cada
+    // consulta (src/lib/fs.ts + src/lib/firebase-server-auth.ts). Se conserva la función
+    // devolviendo false para no tocar las ~60 reglas que la nombran; es un no-op explícito.
     function isAdminAccess() {
-      return request.auth == null;
+      return false;
     }
     // Funciones de rol deshabilitadas temporalmente - usar verificación por email
     // El rol se verifica en el cliente leyendo el documento de usuario por email

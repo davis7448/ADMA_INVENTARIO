@@ -2,7 +2,7 @@
 // Editar aquí y volver a correr: npx tsx scripts/seed-manual.ts
 // Los pantallazos los agrega scripts/capture-manual.ts (no se pisan al re-sembrar).
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from '@/lib/fs';
 import type { ManualGuia } from '@/lib/manual-types';
 
 const COMERCIAL: ManualGuia = {

@@ -1,5 +1,5 @@
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from '@/lib/fs';
 
 async function updateModificacionesWithPais() {
     console.log('🔄 Iniciando actualización de modificaciones con país...\n');

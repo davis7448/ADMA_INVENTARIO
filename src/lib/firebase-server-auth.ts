@@ -13,6 +13,18 @@
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { app } from '@/lib/firebase';
 
+// Los crons del VPS no cargan .env.local (no usan dotenv), así que sin esto el helper no
+// encontraba las credenciales, seguía sin autenticar y Firestore respondía
+// permission-denied en cuanto se cerró la regla. Se carga aquí una sola vez, en servidor,
+// para que ningún script tenga que acordarse. En Next las variables ya vienen del entorno,
+// y dotenv no pisa las existentes.
+if (typeof window === 'undefined') {
+    try {
+        // require dinámico: dotenv no debe entrar en el bundle del navegador
+        (eval('require') as NodeRequire)('dotenv').config({ path: '.env.local' });
+    } catch { /* en producción las variables vienen del entorno de App Hosting */ }
+}
+
 let enCurso: Promise<void> | null = null;
 
 export async function ensureServerAuth(): Promise<void> {

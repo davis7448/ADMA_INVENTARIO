@@ -8,7 +8,7 @@
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 import { db } from '../src/lib/firebase';
-import { doc, writeBatch } from 'firebase/firestore';
+import { doc, writeBatch } from '@/lib/fs';
 
 const LIST_ID = '901319185035';
 

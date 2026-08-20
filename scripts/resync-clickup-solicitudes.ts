@@ -22,7 +22,7 @@
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 import { db } from '../src/lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from '@/lib/fs';
 import { createClickUpTaskForSolicitud } from '../src/lib/clickup';
 import type { Modificacion } from '../src/app/actions/modificaciones';
 

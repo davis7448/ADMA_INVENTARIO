@@ -2,7 +2,7 @@
 // Storage, lo parsea con Node (SheetJS aguanta cientos de miles de filas) e importa
 // con el motor. Corre en el VPS (sin límite HTTP ni navegador). Dispararlo por cron.
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, updateDoc } from '@/lib/fs';
 import * as XLSX from 'xlsx';
 import { parseDropiRows, importPlatformSales } from '@/lib/platform-sales';
 

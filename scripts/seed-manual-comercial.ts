@@ -1,7 +1,7 @@
 // Manual del Comercial — versión detallada (campo por campo, casos y errores).
 // Uso: npx tsx scripts/seed-manual-comercial.ts
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from '@/lib/fs';
 import type { ManualGuia } from '@/lib/manual-types';
 
 const GUIA: ManualGuia = {

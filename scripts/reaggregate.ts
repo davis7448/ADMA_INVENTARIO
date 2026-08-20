@@ -2,7 +2,7 @@
 // sin re-importar: importPlatformSales(platform, [], …) recorre el histórico y
 // reescribe los resúmenes con la lógica actual (bodega×comercial, exclusiones).
 import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs } from '@/lib/fs';
 import { importPlatformSales } from '@/lib/platform-sales';
 async function main(){
   const snap=await getDocs(collection(db,'platformReportMonths'));
