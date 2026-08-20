@@ -18,7 +18,7 @@ import {
     setDoc,
     arrayUnion,
     type DocumentData
-} from "firebase/firestore";
+} from "@/lib/fs";
 import type {
     CommercialClient,
     CommercialChallenge,

@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { addProduct, updateProduct, uploadImageAndGetURL, createReservation, addMultipleProducts, auditProductStock, clearProductAudit, deleteProduct, updateProductLocation } from '@/lib/api';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from '@/lib/fs';
 import { revalidatePath } from 'next/cache';
 import type { Product, ProductVariant, User } from '@/lib/types';
 import type { AddProductFormState, EditProductFormState, CreateReservationFormState, CreateReservationFormValues, ImportProductsFormState } from '@/lib/definitions';

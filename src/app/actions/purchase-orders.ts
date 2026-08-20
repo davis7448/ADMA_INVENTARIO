@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase';
 import {
     collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
     query, where, orderBy, limit, runTransaction,
-} from 'firebase/firestore';
+} from '@/lib/fs';
 import { uploadImageAndGetURL } from '@/lib/api';
 import { DEFAULT_IMPORT_TARIFF_PER_CBM } from '@/lib/types';
 import type { Product, PurchaseOrder, PurchaseOrderItem, PurchaseOrderItemStatus, PurchaseOrderStatus } from '@/lib/types';

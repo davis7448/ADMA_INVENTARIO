@@ -5,7 +5,7 @@
 import { db } from '@/lib/firebase';
 import {
     collection, deleteField, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, startAt, where, writeBatch,
-} from 'firebase/firestore';
+} from '@/lib/fs';
 import type { Modificacion } from '@/app/actions/modificaciones';
 
 export const FINAL_STATES = ['ENTREGADO', 'DEVOLUCION', 'CANCELADO', 'RECHAZADO'];

@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc } from '@/lib/fs';
 import { createClickUpTaskForSolicitud, getTaskAttachments, uploadAttachmentsToTask, type ClickUpAttachment } from '@/lib/clickup';
 
 // La solicitud ya existe en ADMA; esto crea su tarea espejo en ClickUp.

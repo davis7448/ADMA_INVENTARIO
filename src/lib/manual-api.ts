@@ -1,5 +1,5 @@
 import { db } from '@/lib/firebase';
-import { collection, doc, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where, setDoc } from '@/lib/fs';
 import type { ManualGuia } from '@/lib/manual-types';
 
 const COL = 'manuales';

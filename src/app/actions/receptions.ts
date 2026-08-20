@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase';
 import {
     collection, doc, getDoc, getDocs, addDoc, updateDoc,
     query, where, orderBy, limit, runTransaction,
-} from 'firebase/firestore';
+} from '@/lib/fs';
 import { addProduct, registerInventoryEntry, uploadImageAndGetURL } from '@/lib/api';
 import type {
     Product, PurchaseOrder, PurchaseOrderItem, Reception, ReceptionItem, User,

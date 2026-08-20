@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, doc, updateDoc, runTransaction } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, updateDoc, runTransaction } from "@/lib/fs";
 import type { DispatchOrder } from '@/lib/types';
 
 export async function reconcileCancelledExceptions(): Promise<{ reconciled: number; errors: string[] }> {

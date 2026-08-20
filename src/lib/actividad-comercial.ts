@@ -17,7 +17,7 @@
 // leyeran ambas fuentes, la gestión de cada comercial saldría inflada. Por eso de
 // client_events solo se toman los dos tipos que no están representados en ningún otro
 // lado.
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy } from '@/lib/fs';
 import { db } from './firebase';
 import { getAllClients } from './commercial-api';
 import { getPromotions, PROMOTION_CHANNEL_LABELS, PROMOTION_TYPE_LABELS } from '@/app/actions/promotions';

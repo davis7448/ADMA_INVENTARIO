@@ -3,7 +3,7 @@
 // la importación pendiente. El procesador del VPS la baja, parsea e importa.
 import { db } from '@/lib/firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc } from '@/lib/fs';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function queueLargeImport(

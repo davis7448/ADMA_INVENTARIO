@@ -1,7 +1,7 @@
 // Puente con ClickUp (fase 4b). Solo se usa en código de servidor:
 // el token vive en la variable de entorno CLICKUP_API_TOKEN.
 import { db } from '@/lib/firebase';
-import { collection, doc, getDoc, getDocs, limit, query, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, updateDoc, where } from '@/lib/fs';
 import type { EstadoSolicitud, Modificacion } from '@/app/actions/modificaciones';
 
 export const CLICKUP_TEAM_ID = '90131435012';

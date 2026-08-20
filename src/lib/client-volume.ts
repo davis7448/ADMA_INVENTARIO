@@ -1,7 +1,7 @@
 // Clasificación dinámica del cliente por volumen de compra y seguimiento de
 // último contacto. Los umbrales son configurables en Ajustes (settings/crm_config).
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, Timestamp } from '@/lib/fs';
 import type { CommercialClient } from '@/types/commercial';
 
 export type ClientTier = 'A' | 'B' | 'C' | 'Nuevo';

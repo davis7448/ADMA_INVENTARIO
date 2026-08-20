@@ -1,5 +1,5 @@
 import { app, db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, updateDoc, deleteDoc, limit, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, where, getDoc, doc, updateDoc, deleteDoc, limit, runTransaction } from '@/lib/fs';
 import { getAuth } from 'firebase/auth';
 import { createReservation, deleteReservation } from '@/lib/api';
 

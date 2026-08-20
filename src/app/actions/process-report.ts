@@ -2,7 +2,7 @@
 // (OC → recepción → liquidación → activación → difusión → clientes).
 // Solo lecturas; las agregaciones se calculan en el componente.
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where } from '@/lib/fs';
 import type { PurchaseOrder, PurchaseOrderItem, Reception, ReceptionItem } from '@/lib/types';
 import type { Modificacion } from '@/app/actions/modificaciones';
 import type { ProductPromotion } from '@/app/actions/promotions';

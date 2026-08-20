@@ -1,6 +1,6 @@
 "use server";
 
-import { runTransaction, doc, updateDoc } from 'firebase/firestore';
+import { runTransaction, doc, updateDoc } from '@/lib/fs';
 import { db } from '@/lib/firebase';
 import type { InventoryMovement, DispatchOrder } from '@/lib/types';
 

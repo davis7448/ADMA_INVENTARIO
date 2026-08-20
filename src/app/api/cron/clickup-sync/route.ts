@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, limit, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where } from '@/lib/fs';
 import { applyClickUpStatusToSolicitud, createClickUpTaskForSolicitud, getClickUpTaskStatus } from '@/lib/clickup';
 import type { Modificacion } from '@/app/actions/modificaciones';
 

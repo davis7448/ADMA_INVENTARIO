@@ -5,7 +5,7 @@ import { db } from '@/lib/firebase';
 import {
     collection, addDoc, getDocs, doc, updateDoc,
     query, where, limit, serverTimestamp,
-} from 'firebase/firestore';
+} from '@/lib/fs';
 import { addClientEvent } from '@/lib/commercial-api';
 
 export type PromotionChannel = 'whatsapp' | 'estado_instagram' | 'directo' | 'grupo' | 'otro';
