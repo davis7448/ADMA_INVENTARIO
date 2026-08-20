@@ -107,7 +107,7 @@ export type ReturnRequest = {
   date: string;
 };
 
-export type UserRole = 'admin' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre' | 'coordinacion' | 'marketing';
+export type UserRole = 'admin' | 'cliente' | 'logistics' | 'commercial' | 'commercial_director' | 'consulta' | 'plataformas' | 'mercado_libre' | 'coordinacion' | 'marketing';
 
 // --- Mercancía por llegar (órdenes de compra) ---
 
