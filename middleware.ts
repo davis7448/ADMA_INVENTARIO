@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
 import { getApp } from '@/lib/firebase-admin';
+import { esRutaPublica } from '@/lib/rutas-publicas';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,7 +11,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.includes('.') ||
-    pathname === '/login'
+    esRutaPublica(pathname)
   ) {
     return NextResponse.next();
   }

@@ -9,6 +9,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type 
 import { app } from '@/lib/firebase';
 import { useWarehouse } from '@/hooks/use-warehouse';
 import { Loader2 } from 'lucide-react';
+import { esRutaPublica } from '@/lib/rutas-publicas';
 
 
 interface AuthContextType {
@@ -86,6 +87,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loading || warehouseLoading) return;
 
     const isLoginPage = pathname === '/login';
+
+    // El cotizador y demás rutas públicas no exigen sesión: sin esto el servidor las
+    // dejaba pasar y el navegador las rebotaba a /login igual.
+    if (esRutaPublica(pathname) && !isLoginPage) return;
 
     if (!user) {
       if (!isLoginPage) {
