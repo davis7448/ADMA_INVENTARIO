@@ -57,6 +57,21 @@ service cloud.firestore {
         return isRole('commercial_director');
     }
 
+    // --- COTIZADOR DE MAQUILA ---
+    // Las cotizaciones las escribe el SERVIDOR con el admin SDK, que no pasa por reglas.
+    // Desde el navegador nadie lee ni escribe: contienen datos de contacto y fórmulas.
+    match /quoteRequests/{quoteId} {
+       allow read: if isInterno();
+       allow write: if false;
+       match /history/{eventId} {
+          allow read: if isInterno();
+          allow write: if false;
+       }
+    }
+    match /quoteIdempotency/{key} {
+       allow read, write: if false;
+    }
+
     // Default deny all access
     match /{document=**} {
       allow read, write: if false;

@@ -34,9 +34,19 @@ export const deleteDoc = conSesion(FS.deleteDoc);
 export const runTransaction = conSesion(FS.runTransaction);
 export const getCountFromServer = conSesion(FS.getCountFromServer);
 
-// writeBatch no toca la red al crearse (lo hace en .commit()), pero se envuelve igual
-// para que la sesión esté lista antes de encadenar operaciones.
-export const writeBatch = conSesion(FS.writeBatch);
+// writeBatch es SÍNCRONO: devuelve el lote para ir encadenando y la red se toca en
+// .commit(). Envolverlo con conSesion() lo convertía en asíncrono y los llamadores
+// recibían una promesa en vez del lote — "a.commit is not a function". Se envuelve el
+// commit, que es donde de verdad hace falta la sesión.
+export const writeBatch: typeof FS.writeBatch = (firestore) => {
+    const lote = FS.writeBatch(firestore);
+    const commitOriginal = lote.commit.bind(lote);
+    lote.commit = async () => {
+        await ensureServerAuth();
+        return commitOriginal();
+    };
+    return lote;
+};
 
 // El resto (query, where, orderBy, limit, doc, collection, Timestamp, tipos…) sin cambios.
 export * from 'firebase/firestore';
