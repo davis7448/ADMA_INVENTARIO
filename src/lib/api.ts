@@ -595,22 +595,28 @@ export const getUsers = async (): Promise<User[]> => {
     return userList;
 };
 
+// Firebase Auth siempre entrega el correo en minúsculas, así que un documento guardado
+// como "Carol.Perea@ADMA.COM.CO" nunca empataba en findUserByEmail y la app le creaba un
+// perfil nuevo en cada inicio de sesión. Ese fue el segundo origen de los duplicados.
+export const normalizarEmail = (email: string): string => (email || '').toLowerCase().trim();
+
 // `uid` es el UID de Firebase Auth. Pasarlo SIEMPRE que se conozca: el documento debe
 // vivir en users/{uid}. Crear el perfil con un id aleatorio (addDoc) es lo que generó
 // los 14 correos duplicados que hubo que fusionar — ver
 // scripts/fusionar-usuarios-duplicados.ts.
 export const addUser = async (user: Omit<User, 'id'>, uid?: string): Promise<string> => {
     const usersCol = collection(db, 'users');
-    const q = query(usersCol, where("email", "==", user.email));
+    const registro = { ...user, email: normalizarEmail(user.email) };
+    const q = query(usersCol, where("email", "==", registro.email));
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
         throw new Error("Ya existe un usuario con este correo electrónico.");
     }
     if (uid) {
-        await setDoc(doc(db, 'users', uid), user);
+        await setDoc(doc(db, 'users', uid), registro);
         return uid;
     }
-    const docRef = await addDoc(usersCol, user);
+    const docRef = await addDoc(usersCol, registro);
     return docRef.id;
 };
 
@@ -621,7 +627,7 @@ export const findUserByUid = async (uid: string): Promise<User | null> => {
 
 export const findUserByEmail = async (email: string): Promise<User | null> => {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where("email", "==", email));
+    const q = query(usersRef, where("email", "==", normalizarEmail(email)));
     const querySnapshot = await getDocs(q);
     
     if (querySnapshot.empty) {
