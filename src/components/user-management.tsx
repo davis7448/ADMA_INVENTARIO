@@ -80,7 +80,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate, warehouse
                     <div>
                         <CardTitle>Gestión de Usuarios</CardTitle>
                         <CardDescription>
-                            Gestiona los roles y bodegas de los usuarios. La lista de usuarios aparecerá una vez desplegada la aplicación.
+                            Gestiona los roles, códigos comerciales y bodegas de los usuarios.
                         </CardDescription>
                     </div>
                     <CreateUserDialog onUserCreated={onUsersUpdate} />
@@ -134,7 +134,7 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate, warehouse
                   {loading ? (
                      Array.from({ length: 3 }).map((_, i) => (
                         <TableRow key={i}>
-                            <TableCell colSpan={5}><Skeleton className="h-10 w-full" /></TableCell>
+                            <TableCell colSpan={6}><Skeleton className="h-10 w-full" /></TableCell>
                         </TableRow>
                      ))
                   ) : filteredUsers.length > 0 ? (
@@ -143,8 +143,8 @@ export function UserManagement({ initialUsers, loading, onUsersUpdate, warehouse
                     ))
                   ) : (
                     <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center">
-                            La lista de usuarios estará disponible después de desplegar la aplicación.
+                        <TableCell colSpan={6} className="h-24 text-center">
+                            No se encontraron usuarios con los filtros aplicados.
                         </TableCell>
                     </TableRow>
                   )}

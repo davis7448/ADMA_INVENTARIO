@@ -72,6 +72,50 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
         setLoading(false);
     };
 
+    // Los datos iniciales se piden en el servidor, donde el SDK cliente de Firestore no
+    // tiene sesión y las reglas rechazan la lectura: la página llega con las listas
+    // vacías. Se recargan en el navegador en cuanto hay un usuario autenticado.
+    const refreshSettingsData = async () => {
+        setLoading(true);
+        const [usersResult, warehousesResult, locationsResult] = await Promise.allSettled([
+            getUsers(),
+            getWarehouses(),
+            getLocations(),
+        ]);
+
+        if (usersResult.status === 'fulfilled') {
+            setUsers(usersResult.value);
+        } else {
+            console.error('No se pudo cargar la lista de usuarios:', usersResult.reason);
+        }
+        if (warehousesResult.status === 'fulfilled') {
+            setWarehouses(warehousesResult.value);
+        } else {
+            console.error('No se pudo cargar la lista de bodegas:', warehousesResult.reason);
+        }
+        if (locationsResult.status === 'fulfilled') {
+            setLocations(locationsResult.value);
+        } else {
+            console.error('No se pudo cargar la lista de ubicaciones:', locationsResult.reason);
+        }
+
+        if ([usersResult, warehousesResult, locationsResult].some(result => result.status === 'rejected')) {
+            toast({
+                title: 'Error',
+                description: 'No se pudieron cargar todos los datos de configuración. Recarga la página e inténtalo de nuevo.',
+                variant: 'destructive',
+            });
+        }
+
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        if (!user) return;
+        refreshSettingsData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id]);
+
     useEffect(() => {
         setUsers(initialUsers);
     }, [initialUsers]);

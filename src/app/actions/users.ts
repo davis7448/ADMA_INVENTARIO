@@ -37,21 +37,22 @@ export async function createUserAction(
     const adminApp = await getApp();
     const auth = getAuth(adminApp);
     // Create user in Firebase Auth
-    await auth.createUser({
+    const authUser = await auth.createUser({
       email,
       password,
       displayName: name,
     });
 
 
-    // Create user profile in Firestore
+    // El perfil vive en users/{uid}. Sin el uid quedaría un documento con id aleatorio
+    // que la app no puede relacionar con la cuenta de Auth.
     await addUser({
       name,
       email,
       role,
       avatarUrl: `https://i.pravatar.cc/150?u=${email}`,
       commercialCode: validatedFields.data.commercialCode,
-    });
+    }, authUser.uid);
     
     revalidatePath('/settings');
     return {

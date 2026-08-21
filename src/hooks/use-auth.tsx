@@ -4,7 +4,7 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { User, Warehouse } from '@/lib/types';
-import { findUserByEmail, addUser } from '@/lib/api';
+import { findUserByEmail, findUserByUid, addUser } from '@/lib/api';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, type User as FirebaseUser } from "firebase/auth";
 import { app } from '@/lib/firebase';
 import { useWarehouse } from '@/hooks/use-warehouse';
@@ -46,7 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser?.email) {
         try {
-          let appUser = await findUserByEmail(firebaseUser.email);
+          // Por UID primero: es la identidad real de la cuenta. findUserByEmail hace
+          // docs[0] y, si alguna vez vuelve a haber dos documentos con el mismo correo,
+          // devolvería uno u otro según el orden de los ids.
+          let appUser = await findUserByUid(firebaseUser.uid)
+            ?? await findUserByEmail(firebaseUser.email);
 
           if (!appUser) {
             console.log(`No se encontró perfil para ${firebaseUser.email}, creando uno...`);
@@ -56,8 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role: 'commercial',
               avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.email}`
             };
-            // Crear usuario con ID generado por Firestore (addDoc)
-            const newUserId = await addUser(newUser);
+            // El id del documento debe ser el UID de Auth.
+            const newUserId = await addUser(newUser, firebaseUser.uid);
             appUser = { id: newUserId, ...newUser };
             console.log(`Perfil creado con ID: ${newUserId}`);
           }
