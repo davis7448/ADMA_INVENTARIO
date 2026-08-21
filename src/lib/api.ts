@@ -598,7 +598,11 @@ export const getUsers = async (): Promise<User[]> => {
 // Firebase Auth siempre entrega el correo en minúsculas, así que un documento guardado
 // como "Carol.Perea@ADMA.COM.CO" nunca empataba en findUserByEmail y la app le creaba un
 // perfil nuevo en cada inicio de sesión. Ese fue el segundo origen de los duplicados.
-export const normalizarEmail = (email: string): string => (email || '').toLowerCase().trim();
+//
+// NO EXPORTAR: este archivo es "use server", así que Next convierte cada export en una
+// server action asíncrona. Exportada, esta función devolvía una Promise en vez de un
+// string y `where()` fallaba con "Unsupported field value: a custom Promise object".
+const normalizarEmail = (email: string): string => (email || '').toLowerCase().trim();
 
 // `uid` es el UID de Firebase Auth. Pasarlo SIEMPRE que se conozca: el documento debe
 // vivir en users/{uid}. Crear el perfil con un id aleatorio (addDoc) es lo que generó
