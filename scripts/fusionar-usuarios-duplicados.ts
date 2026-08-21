@@ -44,6 +44,9 @@ const DECISIONES: Record<string, { role?: string; warehouseId?: string | null }>
     'cordinador.operaciones@adma.com.co': { role: 'admin' },
     'bodega.adma0@gmail.com': { role: 'logistics', warehouseId: 'wh-bog' },
     'camilouseche22@gmail.com': { role: 'admin' },
+    // Ya aplicado a ambos documentos el 2026-08-21; queda fijado para que la fusión no
+    // lo reinterprete.
+    'directoracomercialadma@gmail.com': { role: 'admin' },
 };
 
 // Correos de datos semilla: se eliminan enteros (no tienen cuenta en Auth).
