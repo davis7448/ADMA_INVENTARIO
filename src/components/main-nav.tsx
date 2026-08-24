@@ -92,6 +92,11 @@ const navItems: NavItem[] = [
     roles: ['admin', 'commercial', 'commercial_director']
   },
   {
+    href: '/movimiento-diario',
+    label: 'Movimiento Diario',
+    roles: ['admin', 'commercial_director', 'coordinacion', 'plataformas', 'consulta']
+  },
+  {
     href: '/cotizaciones',
     label: 'Cotizaciones',
     roles: ['admin', 'commercial', 'commercial_director', 'coordinacion']

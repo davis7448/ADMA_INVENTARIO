@@ -25,6 +25,20 @@ const b64url = (buf: Buffer) => buf.toString('base64').replace(/\+/g, '-').repla
 
 // En App Hosting/Cloud Run, request.nextUrl.origin da el host interno (0.0.0.0:8080).
 // La URL pública viene en los headers x-forwarded-*.
+// Orígenes que Dropi tiene registrados como URL de retorno para nuestro client_id.
+// Si el usuario entra por otro dominio (p. ej. el propio inv.admacompany.com), Dropi
+// responde `invalid_redirect_uri`: solo acepta los que se registraron al dar de alta el
+// cliente. Por eso el flujo OAuth se fuerza al canónico aunque se inicie desde otro sitio.
+export const ORIGENES_REGISTRADOS = [
+    'https://main--studio-9748962172-82b35.us-east4.hosted.app',
+    'https://test--studio-9748962172-82b35.us-east4.hosted.app',
+];
+export const ORIGEN_CANONICO = ORIGENES_REGISTRADOS[0];
+
+export function origenRegistrado(origen: string): string {
+    return ORIGENES_REGISTRADOS.includes(origen) ? origen : ORIGEN_CANONICO;
+}
+
 export function publicOrigin(headers: Headers, fallback: string): string {
     const host = headers.get('x-forwarded-host') || headers.get('host');
     if (!host) return fallback;
