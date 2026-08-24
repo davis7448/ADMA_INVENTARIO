@@ -212,6 +212,13 @@ service cloud.firestore {
        allow create, update: if isRoleIn(['admin', 'coordinacion', 'commercial_director', 'plataformas']) || isAdminAccess();
        allow delete: if isRole('admin') || isAdminAccess();
      }
+     // Agregado día × país × bodega para el tablero de pedidos. Solo lo escribe el cron
+     // (scripts/agregar-pedidos-diarios.ts), que corre con el admin SDK y se salta las
+     // reglas; desde la aplicación es de solo lectura, para que nadie lo desincronice.
+     match /dailyOrders/{dayId} {
+       allow read: if isInterno();
+       allow write: if false;
+     }
      match /platformReportMonths/{monthId} {
        allow read: if isInterno() || isAdminAccess();
        allow create, update: if isRoleIn(['admin', 'coordinacion', 'commercial_director', 'plataformas']) || isAdminAccess();

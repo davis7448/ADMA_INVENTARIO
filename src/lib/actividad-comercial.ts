@@ -286,23 +286,11 @@ export type FilaSemana = {
     total: number;
 };
 
-export function inicioDeSemana(fecha: Date): Date {
-    const d = new Date(fecha);
-    d.setHours(0, 0, 0, 0);
-    // getDay(): 0 = domingo. Se corre para que la semana empiece en lunes.
-    const diff = (d.getDay() + 6) % 7;
-    d.setDate(d.getDate() - diff);
-    return d;
-}
-
-export function finDeSemana(lunes: Date): Date {
-    const d = new Date(lunes);
-    d.setDate(d.getDate() + 6);
-    d.setHours(23, 59, 59, 999);
-    return d;
-}
-
-export const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+// Definidos en src/lib/periodos.ts (módulo puro, sin SDK de Firebase) para que también
+// los puedan usar las server actions. Se reexportan aquí para no romper a quien ya los
+// importaba desde este módulo.
+import { inicioDeSemana, finDeSemana, DIAS_SEMANA } from './periodos';
+export { inicioDeSemana, finDeSemana, DIAS_SEMANA };
 
 export function semanaPorDia(registros: RegistroActividad[], lunes: Date): FilaSemana[] {
     const domingo = finDeSemana(lunes);

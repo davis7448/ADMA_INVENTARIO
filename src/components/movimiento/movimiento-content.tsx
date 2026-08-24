@@ -11,7 +11,30 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { getMovimientoDiario, type MovimientoDiario, type CeldaMovimiento } from '@/app/actions/movimiento-diario';
 import { etiquetaPais } from '@/lib/paises';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PedidosContent } from './pedidos-content';
 import { Download } from 'lucide-react';
+
+// Dos lecturas del mismo movimiento diario: quién lo genera (comercial) y por dónde sale
+// (país y bodega). Comparten página para no repartir el mismo dato en dos sitios.
+export function MovimientoContent() {
+    return (
+        <div className="p-4 md:p-6 space-y-4">
+            <div>
+                <h1 className="text-2xl font-bold">Movimiento diario</h1>
+                <p className="text-sm text-muted-foreground">Qué se mueve cada día, por comercial y por bodega.</p>
+            </div>
+            <Tabs defaultValue="comerciales" className="space-y-4">
+                <TabsList>
+                    <TabsTrigger value="comerciales" className="cursor-pointer">Por comercial</TabsTrigger>
+                    <TabsTrigger value="pedidos" className="cursor-pointer">Por país y bodega</TabsTrigger>
+                </TabsList>
+                <TabsContent value="comerciales" className="mt-0"><VistaComerciales /></TabsContent>
+                <TabsContent value="pedidos" className="mt-0"><PedidosContent /></TabsContent>
+            </Tabs>
+        </div>
+    );
+}
 
 const RANGOS = [
     { v: '7', l: 'Últimos 7 días' },
@@ -33,7 +56,7 @@ type Metrica = (typeof METRICAS)[number]['v'];
 const dia = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
 const num = (n: number, m: Metrica) => m === 'ingreso' ? `$${Math.round(n).toLocaleString('es-CO')}` : n.toLocaleString('es-CO');
 
-export function MovimientoContent() {
+function VistaComerciales() {
     const { toast } = useToast();
     const [datos, setDatos] = useState<MovimientoDiario | null>(null);
     const [cargando, setCargando] = useState(true);
@@ -75,20 +98,12 @@ export function MovimientoContent() {
         XLSX.writeFile(wb, `movimiento-diario_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
 
-    if (cargando || !datos) return <div className="p-6 space-y-4"><Skeleton className="h-10 w-72" /><Skeleton className="h-72 w-full" /></div>;
+    if (cargando || !datos) return <div className="space-y-4"><Skeleton className="h-10 w-72" /><Skeleton className="h-72 w-full" /></div>;
 
     const sinDatos = datos.dias.length === 0;
 
     return (
-        <div className="p-4 md:p-6 space-y-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h1 className="text-2xl font-bold">Movimiento diario</h1>
-                    <p className="text-sm text-muted-foreground">Qué mueve cada comercial, día a día y por país.</p>
-                </div>
-                <Button onClick={descargar} disabled={sinDatos}><Download className="mr-2 h-4 w-4" /> Descargar Excel</Button>
-            </div>
-
+        <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
                 <Filtro label="Periodo" value={rango} onChange={setRango} opciones={RANGOS.map(r => ({ v: r.v, l: r.l }))} ancho="w-44" />
                 <Filtro label="Métrica" value={metrica} onChange={v => setMetrica(v as Metrica)} opciones={METRICAS.map(m => ({ v: m.v, l: m.l }))} ancho="w-40" />
@@ -96,6 +111,11 @@ export function MovimientoContent() {
                     opciones={[{ v: 'todos', l: 'Todos' }, ...datos.paisesDisponibles.map(p => ({ v: p, l: etiquetaPais(p) }))]} />
                 <Filtro label="Plataforma" value={plataforma} onChange={setPlataforma} ancho="w-44"
                     opciones={[{ v: 'todas', l: 'Todas' }, ...datos.plataformasDisponibles.map(p => ({ v: p, l: p }))]} />
+                <div className="flex items-end">
+                    <Button onClick={descargar} disabled={sinDatos} className="cursor-pointer">
+                        <Download className="mr-2 h-4 w-4" /> Descargar Excel
+                    </Button>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
