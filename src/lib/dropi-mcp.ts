@@ -1,3 +1,9 @@
+// Integración con Dropi vía MCP.
+//
+// ⚠️ LEER ANTES DE TOCAR: docs/integraciones/dropi-mcp.md
+//    Los refresh_token son de un solo uso y Dropi revoca la cadena si se reutiliza
+//    uno rotado; comprobar la salud de una cuenta renovando su token la deja muerta.
+//    Y list_orders devuelve dos formatos distintos según la cuenta.
 // Cliente del MCP de Dropi (solo servidor). OAuth 2.0 authorization_code + PKCE +
 // refresh_token (cliente público). Soporta VARIAS cuentas Dropi: cada una guarda su
 // propio refresh_token en Firestore (colección dropiAccounts).
