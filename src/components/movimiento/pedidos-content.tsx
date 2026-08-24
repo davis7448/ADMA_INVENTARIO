@@ -227,7 +227,7 @@ export function PedidosContent() {
                     </Card>
 
                     <div className="grid lg:grid-cols-2 gap-4">
-                        <Card>
+                        <Card className="min-w-0">
                             <CardHeader>
                                 <CardTitle className="text-base">{etiquetaMetrica} por bodega</CardTitle>
                                 <CardDescription>Total del periodo</CardDescription>
@@ -247,7 +247,7 @@ export function PedidosContent() {
                             </CardContent>
                         </Card>
 
-                        <Card>
+                        <Card className="min-w-0">
                             <CardHeader>
                                 <CardTitle className="text-base">Detalle por país y bodega</CardTitle>
                                 <CardDescription>Mismos números de la gráfica, en cifras exactas</CardDescription>
