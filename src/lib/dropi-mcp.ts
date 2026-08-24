@@ -259,6 +259,25 @@ function parseGetOrderItems(text: string): Array<{ product_id: string; product_n
     }
     return items;
 }
+// Registra UNA vez por corrida las claves de nivel superior que devuelve get_order.
+//
+// Por qué: `list_orders` solo trae 11 columnas y ninguna es la tienda ni el comercial, así
+// que desde que el sync por MCP releva a las importaciones por Excel el 85% de las ventas
+// cae en "Orgánicas". El parser de get_order solo lee el bloque `items[...]` y descarta
+// todo lo demás, así que no sabemos si la tienda viene ahí. Esto lo enseña sin gastar ni
+// una petición extra: la respuesta ya está descargada.
+//
+// Es la misma idea que el volcado de `list_orders` cuando el parser no entiende el texto:
+// cuando Dropi cambie el formato otra vez, el log dirá qué llegó de verdad.
+let muestraGetOrderRegistrada = false;
+function registrarMuestraGetOrder(cuenta: string, texto: string) {
+    if (muestraGetOrderRegistrada) return;
+    muestraGetOrderRegistrada = true;
+    // Todo lo anterior al bloque de items = los campos de nivel orden.
+    const cabecera = texto.split(/^\s*items\[\d+\]\{/m)[0].trim();
+    console.log(`[dropi] muestra de get_order (${cuenta}) — campos de nivel orden:\n${cabecera.slice(0, 1800)}`);
+}
+
 function safeId(s: string): string {
     return String(s || '').replace(/[\/\\.#$\[\]]/g, '_').replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'X';
 }
@@ -373,6 +392,7 @@ export async function fetchDropiOrders(
         nuevasEntregadas++;
         if (nuevasEntregadas % 20 === 0) onProgress?.(`Dropi ${account.label}: items entregadas ${nuevasEntregadas}…`);
         const it = await mcpToolText(access, 'get_order', { id: String(o.order_id) }, sid, onProgress);
+        registrarMuestraGetOrder(account.label, it);
         await sleep(300); // throttle base
         const items = parseGetOrderItems(it);
         const itemIds: string[] = []; const itemQuantities: Record<string, number> = {};

@@ -49,6 +49,13 @@ async function main() {
     const days = Math.min(MAX_DAYS, Math.max(minDays, dinamico));
     console.log(`Guías entregadas ya importadas: ${skipGuias.size} · orden abierta más vieja: ${Number.isFinite(minOpenMs) ? new Date(minOpenMs).toISOString().slice(0, 10) : '(ninguna)'} → ventana ${days} días\n`);
 
+    // Cada cuenta va en su propio try: antes, un fallo en una abortaba la corrida entera y
+    // las siguientes no llegaban a sincronizarse nunca. Pasó de verdad — el 401 de
+    // IMPORTACIONES PANAMA dejó sin importar Guatemala, los tres de Ecuador y México, y
+    // desde fuera parecía que esos países "no tenían ventas".
+    const fallos: Array<{ cuenta: string; error: string }> = [];
+    const hechas: string[] = [];
+
     for (const acc of accounts) {
         if (!acc.refreshToken) { console.log(`- ${acc.label}: sin token, se omite`); continue; }
         const mode = (acc as any).syncMode;
@@ -58,12 +65,28 @@ async function main() {
         const tope = Number((acc as any).maxDias) || MAX_DAYS;
         const diasCuenta = Math.min(days, tope);
         console.log(`== ${acc.label} [${acc.bodega || '?'}/${acc.pais || '?'}] · ventana ${diasCuenta}d ==`);
-        const t0 = Date.now();
-        const rows = await fetchDropiOrders(acc as any, diasCuenta, { skipGuias }, m => process.stdout.write('\r' + m + '          '));
-        console.log(`\n${rows.length} órdenes a importar en ${((Date.now() - t0) / 1000).toFixed(0)}s. Importando…`);
-        const r = await importPlatformSales('DROPI', rows, 45, { bodega: acc.bodega, pais: acc.pais });
-        console.log('  →', JSON.stringify({ nuevas: r.nuevas, actualizadas: r.actualizadas, entregadas: r.entregadas, atribuidas: r.atribuidas, publicas: r.publicas, sobreCupo: r.sobreCupo, mesesAbiertos: r.mesesAbiertos }), '\n');
+        try {
+            const t0 = Date.now();
+            const rows = await fetchDropiOrders(acc as any, diasCuenta, { skipGuias }, m => process.stdout.write('\r' + m + '          '));
+            console.log(`\n${rows.length} órdenes a importar en ${((Date.now() - t0) / 1000).toFixed(0)}s. Importando…`);
+            const r = await importPlatformSales('DROPI', rows, 45, { bodega: acc.bodega, pais: acc.pais });
+            console.log('  →', JSON.stringify({ nuevas: r.nuevas, actualizadas: r.actualizadas, entregadas: r.entregadas, atribuidas: r.atribuidas, publicas: r.publicas, sobreCupo: r.sobreCupo, mesesAbiertos: r.mesesAbiertos }), '\n');
+            hechas.push(acc.label);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error(`\n  ✘ ${acc.label} falló: ${msg}`);
+            console.error('    Se continúa con las demás cuentas.\n');
+            fallos.push({ cuenta: acc.label, error: msg });
+        }
     }
-    process.exit(0);
+
+    console.log('=== RESUMEN ===');
+    console.log(`  sincronizadas: ${hechas.length}${hechas.length ? ' → ' + hechas.join(', ') : ''}`);
+    if (fallos.length) {
+        console.log(`  con fallo: ${fallos.length}`);
+        fallos.forEach(f => console.log(`    ✘ ${f.cuenta}: ${f.error}`));
+    }
+    // Salida distinta de 0 si alguna falló, para que el fallo sea visible en el cron.
+    process.exit(fallos.length ? 1 : 0);
 }
 main().catch(e => { console.error('ERROR:', e instanceof Error ? e.message : e); process.exit(1); });
