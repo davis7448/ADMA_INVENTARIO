@@ -22,12 +22,20 @@ Si algún día hace falta la fecha real de salida, la única fuente sería la in
 (`dispatchOrders` / `inventoryMovements`, que sí tienen fecha y bodega), pero se descartó a
 propósito: cubre solo las bodegas propias de Colombia y no tiene dimensión de país.
 
-### 1.2 Solo Dropi
+### 1.2 Las unidades no se muestran
+
+Solo el **30%** de los pedidos de Dropi trae `quantity` (1.765 de 5.804 en 30 días): el CSV
+de `list_orders` no incluye cantidad, solo la traen los pedidos enriquecidos con
+`get_order`. Una métrica de unidades mostraría un número con pinta de total midiendo un
+tercio de los datos, así que no se ofrece en la interfaz. El agregado sí la guarda, y en el
+Excel aparece marcada como «dato parcial».
+
+### 1.3 Solo Dropi
 
 El tablero cuenta únicamente `platform == 'DROPI'`. Quedan fuera HOKO (las tres bodegas
 FULFILLMENT de Medellín, Bogotá y Cali), EFFI y Venndelo. La pantalla lo dice.
 
-### 1.3 Los estados cambian, y eso obliga a recalcular
+### 1.4 Los estados cambian, y eso obliga a recalcular
 
 Un pedido creado ayer aparece hoy como DESPACHADA. Si el agregado solo sumara lo nuevo,
 quedaría congelado con el estado que tenía el día que se calculó. Por eso el cron

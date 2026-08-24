@@ -39,11 +39,14 @@ const RANGOS: Record<Granularidad, { v: string; l: string }[]> = {
 };
 const RANGO_POR_DEFECTO: Record<Granularidad, string> = { dia: '30', semana: '84', mes: '365' };
 
+// No se ofrece "Unidades": solo el 30% de los pedidos de Dropi trae `quantity` (el CSV de
+// list_orders no incluye cantidad; solo la traen los enriquecidos con get_order). Mostrarla
+// como métrica daría un número que parece el total y en realidad mide un tercio de los
+// datos. El agregado sí la guarda, por si en el futuro el enriquecimiento la cubre entera.
 const METRICAS = [
     { v: 'salidos', l: 'Despachados' },
     { v: 'creados', l: 'Creados' },
     { v: 'entregados', l: 'Entregados' },
-    { v: 'unidades', l: 'Unidades' },
 ] as const;
 type Metrica = (typeof METRICAS)[number]['v'];
 
@@ -118,7 +121,10 @@ export function PedidosContent() {
             for (const [bo, c] of Object.entries(datos.porPaisBodega[pa] || {})) {
                 filasDetalle.push({
                     País: pa, Bodega: bo, Despachados: c.salidos, Creados: c.creados,
-                    Entregados: c.entregados, Unidades: c.unidades, Ingreso: Math.round(c.ingreso),
+                    Entregados: c.entregados, Ingreso: Math.round(c.ingreso),
+                    // Dropi solo entrega cantidad en ~30% de los pedidos; se marca para que
+                    // nadie sume esta columna creyendo que es el total.
+                    'Unidades (dato parcial)': c.unidades,
                 });
             }
         }
@@ -182,7 +188,7 @@ export function PedidosContent() {
                 <Kpi l="Despachados" v={num(datos.total.salidos)} />
                 <Kpi l="Creados" v={num(datos.total.creados)} />
                 <Kpi l="Ya salieron" v={`${porcentajeSalido}%`} nota={`${num(datos.total.creados - datos.total.salidos)} aún en bodega o anulados`} />
-                <Kpi l="Unidades" v={num(datos.total.unidades)} />
+                <Kpi l="Entregados" v={num(datos.total.entregados)} />
             </div>
 
             {sinDatos ? (
