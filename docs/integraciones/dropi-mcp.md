@@ -147,3 +147,93 @@ Conectar una cuenta: abrir con la sesión de ESA cuenta de Dropi activa en el na
 3. ¿Dice `0 órdenes` sin aviso? → puede ser real; contrastar con Dropi en el navegador.
 4. ¿`401`? → reconectar por OAuth, y revisar que nadie haya ejecutado una sonda que
    consuma tokens.
+
+---
+
+## 7. El MCP de Dropi solo funciona con cuentas de Colombia
+
+**Comprobado el 2026-08-24.** Las 7 cuentas de fuera de Colombia (Ecuador ×3, Panamá ×2,
+Guatemala, México) fallan todas con el mismo error:
+
+```
+MCP initialize 401: invalid token: token has invalid claims: token has invalid issuer
+```
+
+### No es que los tokens estén muertos
+
+El canje del `refresh_token` **funciona**: si fallara, el error vendría de `tokenRequest()`
+y diría `Dropi token 400: …`. Lo que falla es el `initialize` contra el MCP, ya con el
+access_token en la mano. Volcando sus claims (helper `describirToken`):
+
+```
+iss = https://api.dropi.mx        ← lo emite el backend de México
+aud = ["https://mcp.dropi.co/mcp"] ← pero el recurso pedido es el de Colombia
+```
+
+Dropi emite el token con el emisor del país del usuario, y `mcp.dropi.co` solo confía en
+`https://integrations.dropi.co`.
+
+### Y no hay MCP en los otros países
+
+| Host | ¿Existe? |
+|---|---|
+| `api.dropi.mx` / `.ec` / `.pa` / `.gt` / `.cl` | Sí — es su backend Laravel |
+| `mcp.dropi.mx` / `.ec` / `.pa` / `.gt` / `.cl` | **No resuelve** |
+| `integrations.dropi.<país>`, `oauth.dropi.<país>` | **No resuelven** |
+| `api.dropi.mx/mcp` | 404 de Laravel |
+
+Solo existe `mcp.dropi.co`. Los metadatos que publica lo confirman:
+
+```json
+{"resource":"https://mcp.dropi.co/mcp",
+ "authorization_servers":["https://integrations.dropi.co/bff"]}
+```
+
+### Conclusión
+
+**No es un problema de configuración y no se arregla desde aquí.** Cambiar los endpoints no
+sirve porque no hay a dónde apuntar. Hace falta que Dropi haga una de dos:
+
+1. Que `mcp.dropi.co` acepte también los emisores `api.dropi.<país>`, o
+2. Que despliegue un MCP por país.
+
+Mientras tanto, esas cuentas se pueden dejar conectadas: desde el arreglo del bucle, su
+fallo ya no impide que Colombia sincronice, y el resumen final del log las lista.
+
+La alternativa, si urge, es integrar contra la API REST de `api.dropi.<país>` — pero es una
+integración distinta, no una variante de esta.
+
+---
+
+## 8. La API de Dropi no dice quién vendió el pedido
+
+**Comprobado el 2026-08-24** con las respuestas reales (traza `registrarMuestraGetOrder`).
+
+`list_orders` devuelve 11 columnas:
+
+```
+order_id, status, customer_name, customer_phone, city, total,
+currency, payment_method, shipping_company, rate_type, created_at
+```
+
+y `get_order` solo añade:
+
+```
+order_id, status
+customer: name, phone, document, address, city
+items[]: product_id, product_name, qty, unit_price, subtotal
+```
+
+**En ninguna de las dos hay tienda ni vendedor.** La atribución al comercial se deduce por
+otra vía: producto → cliente → comercial. Y los productos solo se descargan de los pedidos
+**entregados**, porque es una petición por pedido.
+
+De ahí el efecto que se ve en el tablero (últimos 30 días):
+
+| | Con comercial | Sin comercial |
+|---|---|---|
+| Entregado | 3.807 | 1.375 |
+| No entregado | 1 | 9.457 |
+
+**Un pedido de Dropi no tiene comercial hasta que se entrega.** Lo reciente siempre se verá
+como «Orgánicas»; no es un fallo del tablero ni del importador.

@@ -278,6 +278,20 @@ function registrarMuestraGetOrder(cuenta: string, texto: string) {
     console.log(`[dropi] muestra de get_order (${cuenta}) — campos de nivel orden:\n${cabecera.slice(0, 1800)}`);
 }
 
+// Lee las claims públicas de un access_token JWT sin verificar la firma: solo para
+// diagnóstico, nunca para decidir nada. Si no es un JWT, lo dice y ya.
+function describirToken(token?: string): string {
+    if (!token) return 'sin access_token';
+    const partes = token.split('.');
+    if (partes.length !== 3) return `access_token opaco (no JWT, ${token.length} chars)`;
+    try {
+        const c = JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8'));
+        return `token emitido por iss=${c.iss} · aud=${JSON.stringify(c.aud)} · scope=${c.scope ?? '—'}`;
+    } catch {
+        return 'access_token JWT no legible';
+    }
+}
+
 function safeId(s: string): string {
     return String(s || '').replace(/[\/\\.#$\[\]]/g, '_').replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'X';
 }
@@ -328,7 +342,18 @@ export async function fetchDropiOrders(
         await saveDropiAccount(account.id, account.label, tokens, account.bodega, account.pais);
     }
     const access = tokens.access_token;
-    const init = await mcpInit(access);
+    let init;
+    try {
+        init = await mcpInit(access);
+    } catch (e) {
+        // Las 7 cuentas de fuera de Colombia fallan aquí con "invalid issuer": el canje del
+        // refresh_token SÍ funciona (si no, el error vendría de tokenRequest), pero
+        // mcp.dropi.co rechaza el access_token. Volcar el emisor que trae dentro dice si
+        // Dropi lo emite por país — y entonces el MCP solo sirve para Colombia — o si es
+        // otra cosa. No cuesta ninguna petición: el token ya está en la mano.
+        console.error(`  ↳ ${account.label}: ${describirToken(access)}`);
+        throw e;
+    }
     const sid = init.sessionId;
 
     // 1) Paginar list_orders (nivel orden). Dropi limita el rango a <=90 días Y da 504
