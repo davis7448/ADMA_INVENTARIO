@@ -49,6 +49,7 @@ export const ESTADOS_DESPACHADOS = new Set([
     'ASIGNADO A SUCURSAL DESTINO',
     'EN PUNTO DROOP',                       // esperando al cliente en punto de recogida
     'EN ESPERA DE CITA',                    // esperando cita de entrega
+    'CITA PROGRAMADA',                      // cita de entrega ya fijada; detectado 2026-08-24
     'EN ESPERA DE RX',
     'EN PROCESO DE INSPECCION ADUANERA',
     'NOVEDAD SOLUCIONADA',
