@@ -169,7 +169,54 @@ function splitCsv(line: string): string[] {
     return out.map(s => s.trim());
 }
 // list_orders → lista YAML de órdenes (nivel orden)
-function parseListOrders(text: string): Record<string, string>[] {
+export function parseListOrders(text: string): Record<string, string>[] {
+    // Dropi devuelve DOS formatos y hay que entender los dos: el antiguo tipo YAML
+    // (`- order_id: "..."` y pares clave:valor debajo) y el nuevo CSV con cabecera
+    // (`items[100]{order_id,status,...}:` y una fila por orden). El cambio se activó de
+    // forma progresiva —una cuenta seguía con el viejo mientras otra ya recibía el
+    // nuevo—, y como el parser solo reconocía el antiguo, la cuenta migrada devolvía
+    // "0 órdenes" durante diez días sin que nada fallara visiblemente.
+    const csv = parseFormatoCsv(text);
+    if (csv.length) return csv;
+    return parseFormatoYaml(text);
+}
+
+// items[N]{col1,col2,...}:  seguido de filas CSV indentadas
+function parseFormatoCsv(text: string): Record<string, string>[] {
+    const cab = text.match(/^\s*items\[\d+\]\{([^}]+)\}\s*:\s*$/m);
+    if (!cab) return [];
+    const columnas = cab[1].split(',').map(c => c.trim());
+    const filas: Record<string, string>[] = [];
+    const lineas = text.split('\n');
+    const desde = lineas.findIndex(l => /^\s*items\[\d+\]\{/.test(l)) + 1;
+    for (let i = desde; i < lineas.length; i++) {
+        const linea = lineas[i];
+        if (!linea.trim()) continue;
+        if (/^\s*items\[\d+\]\{/.test(linea)) break;   // empieza otro bloque
+        const valores = partirCsv(linea.trim());
+        if (valores.length < 2) continue;
+        const o: Record<string, string> = {};
+        columnas.forEach((c, j) => { o[c] = (valores[j] ?? '').trim(); });
+        if (o.order_id) filas.push(o);
+    }
+    return filas;
+}
+
+// CSV con comillas: "86892858",PENDIENTE,"Nombre, con coma",...
+function partirCsv(linea: string): string[] {
+    const out: string[] = [];
+    let actual = ''; let enComillas = false;
+    for (let i = 0; i < linea.length; i++) {
+        const ch = linea[i];
+        if (ch === '"') { enComillas = !enComillas; continue; }
+        if (ch === ',' && !enComillas) { out.push(actual); actual = ''; continue; }
+        actual += ch;
+    }
+    out.push(actual);
+    return out;
+}
+
+function parseFormatoYaml(text: string): Record<string, string>[] {
     const orders: Record<string, string>[] = [];
     let cur: Record<string, string> | null = null;
     for (const raw of text.split('\n')) {
@@ -182,6 +229,7 @@ function parseListOrders(text: string): Record<string, string>[] {
     }
     return orders;
 }
+
 // get_order → items (bloque `items[N]{cols}:` con filas CSV). product_name puede traer comas.
 function parseGetOrderItems(text: string): Array<{ product_id: string; product_name: string; qty: number; unit_price: number }> {
     const items: Array<{ product_id: string; product_name: string; qty: number; unit_price: number }> = [];
