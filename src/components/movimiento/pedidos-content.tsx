@@ -205,7 +205,7 @@ export function PedidosContent() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <ChartContainer config={configGrafica} className="h-[320px] w-full">
+                            <ChartContainer config={configGrafica} className="aspect-auto h-[320px] w-full">
                                 <ResponsiveContainer>
                                     <LineChart data={serie} margin={{ top: 5, right: 12, left: -12, bottom: 0 }}>
                                         <CartesianGrid vertical={false} strokeDasharray="3 3" />
@@ -233,7 +233,7 @@ export function PedidosContent() {
                                 <CardDescription>Total del periodo</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <ChartContainer config={{ valor: { label: etiquetaMetrica, color: 'hsl(var(--primary))' } }} className="h-[280px] w-full">
+                                <ChartContainer config={{ valor: { label: etiquetaMetrica, color: 'hsl(var(--primary))' } }} className="aspect-auto h-[280px] w-full">
                                     <ResponsiveContainer>
                                         <BarChart data={serieBodegas} layout="vertical" margin={{ left: 8, right: 16 }}>
                                             <CartesianGrid horizontal={false} strokeDasharray="3 3" />
