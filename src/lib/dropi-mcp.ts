@@ -76,6 +76,19 @@ export function exchangeCode(code: string, redirectUri: string, verifier: string
     return tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: DROPI_CLIENT_ID, code_verifier: verifier, resource: RESOURCE });
 }
 
+// Renueva el token Y GUARDA el nuevo. Usar SIEMPRE esto en vez de refreshAccess() suelto:
+// los refresh_token de Dropi son de un solo uso, así que renovar sin persistir el nuevo
+// deja la cuenta con un token muerto. Pasó de verdad: un chequeo de "salud" que solo
+// llamaba a refreshAccess() dejó fuera de servicio tres cuentas que estaban sanas.
+export async function refrescarYGuardar(cuenta: { id: string; label: string; refreshToken?: string; bodega?: string; pais?: string }) {
+    if (!cuenta.refreshToken) throw new Error(`Cuenta ${cuenta.label} sin refresh_token`);
+    const tokens = await refreshAccess(cuenta.refreshToken);
+    if (tokens.refresh_token && tokens.refresh_token !== cuenta.refreshToken) {
+        await saveDropiAccount(cuenta.id, cuenta.label, tokens, cuenta.bodega, cuenta.pais);
+    }
+    return tokens;
+}
+
 export function refreshAccess(refreshToken: string) {
     return tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: DROPI_CLIENT_ID, resource: RESOURCE });
 }
@@ -260,6 +273,13 @@ export async function fetchDropiOrders(
         while (true) {
             const t = await mcpToolText(access, 'list_orders', { from, until, result_number: pageSize, start }, sid, onProgress);
             const page = parseListOrders(t);
+            // Si Dropi devuelve texto pero el parser no reconoce ninguna orden, es que
+            // cambió el formato de respuesta: hay que verlo, no seguir como si no hubiera
+            // ventas. Antes esto se traducía en un silencioso "0 órdenes" que ocultó nueve
+            // días de sincronización rota.
+            if (page.length === 0 && t.trim().length > 40 && start === 0) {
+                console.error(`[dropi] ${'list_orders'} devolvió texto que el parser no entiende (${from}..${until}). Muestra:\n${t.slice(0, 600)}`);
+            }
             for (const o of page) { const id = String(o.order_id); if (id && !seen.has(id)) { seen.add(id); summaries.push(o); } }
             onProgress?.(`Dropi ${account.label}: ${summaries.length} órdenes…`);
             if (page.length < pageSize) break;
