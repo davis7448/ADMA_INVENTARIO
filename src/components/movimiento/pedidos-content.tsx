@@ -19,10 +19,10 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { getPedidosPorPais, type PedidosPorPais, type CuboPedidos } from '@/app/actions/pedidos-por-pais';
+import { getPedidosPorPais, recalcularPedidos, type PedidosPorPais, type CuboPedidos } from '@/app/actions/pedidos-por-pais';
 import type { Granularidad } from '@/lib/periodos';
 import { etiquetaPais } from '@/lib/paises';
-import { Download, Info, TriangleAlert } from 'lucide-react';
+import { Download, Info, TriangleAlert, RefreshCw, Upload } from 'lucide-react';
 
 const VISTAS: { v: Granularidad; l: string }[] = [
     { v: 'dia', l: 'Por día' },
@@ -67,6 +67,8 @@ export function PedidosContent() {
     const [pais, setPais] = useState('todos');
     const [bodega, setBodega] = useState('todas');
     const [metrica, setMetrica] = useState<Metrica>('salidos');
+    const [recalculando, setRecalculando] = useState(false);
+    const [recargar, setRecargar] = useState(0);
 
     // Al cambiar de vista, el rango anterior puede no existir en la nueva lista.
     const cambiarVista = (v: Granularidad) => { setVista(v); setRango(RANGO_POR_DEFECTO[v]); };
@@ -79,7 +81,24 @@ export function PedidosContent() {
             .catch(() => toast({ title: 'Error', description: 'No se pudieron cargar los pedidos.', variant: 'destructive' }))
             .finally(() => { if (vigente) setCargando(false); });
         return () => { vigente = false; };
-    }, [rango, vista, pais, bodega, toast]);
+    }, [rango, vista, pais, bodega, recargar, toast]);
+
+    // El cron recalcula una vez al día. Tras subir el archivo de pedidos de un país en
+    // Ventas Plataformas hay que rehacer el agregado para verlo aquí sin esperar.
+    const actualizar = async () => {
+        setRecalculando(true);
+        try {
+            const r = await recalcularPedidos(Number(rango));
+            toast({
+                title: r.ok ? 'Datos actualizados' : 'No se pudo actualizar',
+                description: r.mensaje,
+                variant: r.ok ? undefined : 'destructive',
+            });
+            if (r.ok) setRecargar(n => n + 1);
+        } finally {
+            setRecalculando(false);
+        }
+    };
 
     const etiquetaMetrica = METRICAS.find(m => m.v === metrica)?.l ?? '';
 
@@ -164,6 +183,11 @@ export function PedidosContent() {
                     más recientes la cifra se queda corta, porque parte de esos pedidos todavía no ha salido.
                     Esta vista cuenta <strong>solo pedidos de Dropi</strong>: las ventas de HOKO, EFFI y
                     Venndelo —incluidas las bodegas de fulfillment— no aparecen aquí.
+                    <br /><br />
+                    <strong>Colombia</strong> se sincroniza sola cada mañana. Los demás países entran
+                    subiendo su archivo de pedidos en <strong>Ventas Plataformas</strong> —eligiendo su
+                    país y bodega—, porque el MCP de Dropi todavía no acepta las cuentas de fuera de
+                    Colombia. Después de subirlo, pulsa <strong>Actualizar datos</strong> para verlo aquí.
                 </AlertDescription>
             </Alert>
 
@@ -177,9 +201,16 @@ export function PedidosContent() {
                     opciones={[{ v: 'todos', l: 'Todos' }, ...datos.paisesDisponibles.map(p => ({ v: p, l: etiquetaPais(p) }))]} />
                 <Filtro label="Bodega" value={bodega} onChange={setBodega} ancho="w-56"
                     opciones={[{ v: 'todas', l: 'Todas' }, ...datos.bodegasDisponibles.map(b => ({ v: b, l: b }))]} />
-                <div className="flex items-end">
+                <div className="flex items-end gap-2">
                     <Button onClick={descargar} disabled={sinDatos} className="cursor-pointer">
                         <Download className="mr-2 h-4 w-4" /> Descargar Excel
+                    </Button>
+                    <Button variant="outline" onClick={actualizar} disabled={recalculando} className="cursor-pointer">
+                        <RefreshCw className={`mr-2 h-4 w-4 ${recalculando ? 'animate-spin' : ''}`} />
+                        {recalculando ? 'Actualizando…' : 'Actualizar datos'}
+                    </Button>
+                    <Button variant="outline" asChild className="cursor-pointer">
+                        <a href="/ventas-plataformas"><Upload className="mr-2 h-4 w-4" /> Subir pedidos</a>
                     </Button>
                 </div>
             </div>

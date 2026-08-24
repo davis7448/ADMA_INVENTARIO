@@ -119,7 +119,28 @@ no pueden contradecirse.
 
 ---
 
-## 5. Operación
+## 5. De dónde salen los datos de cada país
+
+| País | Vía | Quién lo hace |
+|---|---|---|
+| Colombia | Sync automático por MCP | Cron a las 7:15 |
+| Ecuador, Panamá, Guatemala, México | **Archivo subido a mano** | Una persona, en Ventas Plataformas |
+
+El MCP de Dropi solo acepta cuentas colombianas (ver
+`docs/integraciones/dropi-mcp.md §7`). Para los demás países, el archivo de pedidos que
+exporta el panel de Dropi de cada país se sube en **Ventas Plataformas**, eligiendo ahí su
+país y su bodega. El importador ya existía; no hubo que construir nada nuevo.
+
+**Ventaja añadida:** el Excel de Dropi trae las columnas de tienda y comercial, que la API
+por MCP no expone. Así que los países que entran por archivo tienen *mejor* atribución
+comercial que Colombia, donde un pedido no tiene comercial hasta que se entrega.
+
+Tras subir un archivo hay que pulsar **«Actualizar datos»** en el tablero: recalcula el
+agregado del periodo visible en el acto, sin esperar al cron de la mañana siguiente. El
+botón usa la misma función que el script (`src/lib/agregar-pedidos.ts`), así que no pueden
+contar distinto.
+
+## 6. Operación
 
 ```bash
 # Recalcular los últimos 30 días (lo que hace el cron, 7:45 hora Bogotá)

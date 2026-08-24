@@ -16,14 +16,9 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { getApp } from '@/lib/firebase-admin';
 import { claveDePeriodo, etiquetaDePeriodo, type Granularidad } from '@/lib/periodos';
+import { agregarPedidos, cuboVacio, type CuboPedidos } from '@/lib/agregar-pedidos';
 
-export type CuboPedidos = {
-    creados: number;
-    salidos: number;
-    entregados: number;
-    unidades: number;
-    ingreso: number;
-};
+export type { CuboPedidos };
 
 export type Periodo = { clave: string; etiqueta: string };
 
@@ -45,7 +40,7 @@ export type PedidosPorPais = {
     sinAgregado: boolean;                                      // el cron nunca corrió
 };
 
-const vacio = (): CuboPedidos => ({ creados: 0, salidos: 0, entregados: 0, unidades: 0, ingreso: 0 });
+const vacio = cuboVacio;
 
 function sumar(destino: CuboPedidos, origen: CuboPedidos) {
     destino.creados += origen.creados;
@@ -151,5 +146,35 @@ export async function getPedidosPorPais(opciones: {
     } catch (error) {
         console.error('[pedidos-por-pais] error:', error);
         return base;
+    }
+}
+
+// Recalcula el agregado bajo demanda, desde el botón «Actualizar» del tablero.
+//
+// Hace falta porque el cron solo corre una vez al día: cuando alguien sube el archivo de
+// pedidos de un país en Ventas Plataformas, el tablero no lo reflejaría hasta la mañana
+// siguiente. Y para los países cuyo MCP no funciona, ese archivo es la única vía de
+// entrada (ver docs/integraciones/dropi-mcp.md §7).
+//
+// La ventana se acota a 400 días: recalcular más sería leer cientos de miles de documentos
+// dentro de una petición web. Para reconstruir todo el histórico está el script con
+// --backfill.
+export async function recalcularPedidos(dias: number): Promise<{ ok: boolean; mensaje: string }> {
+    const ventana = Math.min(Math.max(Math.round(dias) || 30, 1), 400);
+    try {
+        const fs = getFirestore(await getApp());
+        const r = await agregarPedidos({ fs, desdeMs: Date.now() - ventana * 86400000 });
+
+        const nuevos = Object.keys(r.estadosDesconocidos);
+        const aviso = nuevos.length
+            ? ` · ⚠️ ${nuevos.length} estado(s) de Dropi sin clasificar: ${nuevos.slice(0, 3).join(', ')}`
+            : '';
+        return {
+            ok: true,
+            mensaje: `${r.diasEscritos} día(s) recalculados sobre ${r.ventasLeidas.toLocaleString('es-CO')} ventas${aviso}`,
+        };
+    } catch (error) {
+        console.error('[pedidos-por-pais] recalcular falló:', error);
+        return { ok: false, mensaje: error instanceof Error ? error.message : 'Error desconocido' };
     }
 }
