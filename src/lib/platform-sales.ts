@@ -4,11 +4,11 @@
 // los items públicos no se atribuyen a un cliente (van al producto y al comercial).
 import { db } from '@/lib/firebase';
 import {
-    collection, deleteField, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, startAt, where, writeBatch,
+    collection, deleteField, doc, endAt, getCountFromServer, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, startAt, where, writeBatch,
 } from '@/lib/fs';
 import type { Modificacion } from '@/app/actions/modificaciones';
 import {
-    monedaDePais, sumarImporte, sumarImportes, leerImportes,
+    monedaDePais, sumarImporte, sumarImportes, leerImportes, MONEDA_POR_DEFECTO,
     type Importes,
 } from '@/lib/paises';
 
@@ -179,9 +179,27 @@ async function fetchAllSales(filter?: (s: PlatformSale) => boolean, platform?: s
         }
         if (salioDelPrefijo) break;
         last = snap.docs[snap.docs.length - 1];
-        if (snap.size < 5000) break;
+        // OJO: aquí había un `if (snap.size < 5000) break;`. Daba por terminada la
+        // colección en cuanto una página venía corta, y una página puede venir corta
+        // por otros motivos (tope de tamaño de respuesta, presión de memoria en el
+        // navegador). El 25/8/2026 la lectura se cortó a la mitad en una importación
+        // desde el navegador y los agregados se reescribieron con ~43% de las ventas:
+        // el reporte perdió 107.000 entregadas. El corte real es `snap.empty` (o salir
+        // del prefijo); cuesta una consulta extra al final y no se equivoca.
     }
     return all;
+}
+
+// Cuántas ventas hay REALMENTE para la plataforma, según el servidor. Se usa para
+// comprobar que el histórico se leyó entero antes de reescribir los resúmenes.
+async function contarVentasDePlataforma(platform: string): Promise<number> {
+    const prefix = `${platform}_`;
+    const q = query(
+        collection(db, 'platformSales'),
+        orderBy('__name__'), startAt(prefix), endAt(`${prefix}\uf8ff`),
+    );
+    const snap = await getCountFromServer(q);
+    return snap.data().count;
 }
 
 // --- Parser del reporte de Dropi (por nombre de columna, robusto al orden) ---
@@ -923,6 +941,22 @@ export async function importPlatformSales(
 
     // 7. Cierre de meses + PRE-AGREGADOS por mes (se calculan una vez al importar
     // y la página los lee directo → carga rápida sin escanear todas las ventas).
+    //
+    // Antes de reescribirlos: comprobar que el histórico se leyó ENTERO. Los resúmenes
+    // se sobrescriben (no se suman), así que agregarlos sobre una lectura parcial borra
+    // ventas del reporte sin que nada falle. Pasó el 25/8/2026: una importación desde el
+    // navegador leyó el 43% del histórico y el reporte pasó de 189.222 entregadas a
+    // 81.794. Ante la duda no se escribe: los datos crudos ya están guardados (paso 6) y
+    // los resúmenes se rehacen con scripts/reaggregate.ts.
+    progress('Verificando que el histórico esté completo…');
+    const esperadas = await contarVentasDePlataforma(platform);
+    if (prevSales.size < esperadas) {
+        throw new Error(
+            `Histórico incompleto: se leyeron ${prevSales.size.toLocaleString('es-CO')} de ${esperadas.toLocaleString('es-CO')} ventas de ${platform}. ` +
+            `Las ${sales.length.toLocaleString('es-CO')} órdenes del archivo SÍ se guardaron, pero los resúmenes por mes no se tocaron para no borrar ventas. ` +
+            `Vuelve a importar marcando "Archivo grande (procesar en servidor)", que no depende de la memoria del navegador.`
+        );
+    }
     progress('Calculando resúmenes por mes…');
     const aliases = await loadCommercialAliases();
     const agg = new Map<string, {
@@ -988,12 +1022,22 @@ export async function importPlatformSales(
     for (const [month, m] of agg) {
         const pending = m.total - m.final;
         if (pending > 0) summary.mesesAbiertos.push(month);
+        // Se escriben TAMBIÉN los campos del formato viejo (`ingresoTotal`, `total`),
+        // con el importe en COP. Mientras el front desplegado no tenga el código de
+        // divisas, sigue leyendo esos campos: sin ellos mostraría 0 en todos los
+        // importes. Se pueden quitar cuando el deploy con `totales` esté en producción.
+        const soloCop = (i: Importes) => i[MONEDA_POR_DEFECTO] || 0;
+        const conLegado = <T extends { totales: Importes }>(r: Record<string, T>) =>
+            Object.fromEntries(Object.entries(r).map(([k, v]) => [k, { ...v, total: soloCop(v.totales) }]));
         mb.set(doc(db, 'platformReportMonths', `${platform}_${month}`), {
             platform, month, totalOrders: m.total, finalOrders: m.final,
-            pendingOrders: pending, entregadas: m.entregadas, ingresosPorMoneda: m.ingresos,
+            pendingOrders: pending, entregadas: m.entregadas,
+            ingresosPorMoneda: m.ingresos, ingresoTotal: soloCop(m.ingresos),
             closed: pending === 0, lastImportAt: now,
-            porComercial: m.porComercial, porBodega: m.porBodega, porPais: m.porPais,
-            porBodegaComercial: m.porBodegaComercial,
+            porComercial: conLegado(m.porComercial), porBodega: conLegado(m.porBodega), porPais: conLegado(m.porPais),
+            porBodegaComercial: Object.fromEntries(
+                Object.entries(m.porBodegaComercial).map(([bod, coms]) => [bod, conLegado(coms)])
+            ),
             pendientesPorComercial: m.pendComercial, pendientesPorPais: m.pendPais,
             pendientesPorBodega: m.pendBodega, pendientesPorEstado: m.pendEstado,
         });
