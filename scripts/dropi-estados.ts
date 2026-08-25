@@ -9,7 +9,7 @@
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy, startAt, startAfter, limit, writeBatch, doc } from '@/lib/fs';
 import { listDropiAccounts, fetchDropiOrders } from '@/lib/dropi-mcp';
-import { importPlatformSales, FINAL_STATES } from '@/lib/platform-sales';
+import { importPlatformSales, esEstadoFinal } from '@/lib/platform-sales';
 
 async function main() {
     const dias = Number(process.argv[2]) || 20;
@@ -50,7 +50,7 @@ async function main() {
             if (previo === row.estado) continue;          // sin cambio
             batch.update(doc(db, 'platformSales', id), {
                 estado: row.estado,
-                esFinal: FINAL_STATES.includes(row.estado),
+                esFinal: esEstadoFinal(row.estado),
                 esEntregado: row.estado === 'ENTREGADO',
             });
             cambios++;

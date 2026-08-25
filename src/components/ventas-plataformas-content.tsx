@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -18,7 +19,7 @@ import {
     getSalesByMonthAndCommercial, getAssignmentConsumption, saveManualMapping,
     getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown, getBaseUnitConsumption, getUnlinkedSkuItems,
     getDistinctCommercials, saveCommercialAlias,
-    type ImportSummary, type ReportMonth,
+    type ImportSummary, type ReportMonth, type PendingBreakdown,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
 import { parseEffiFiles } from '@/lib/effi';
@@ -42,8 +43,13 @@ export function VentasPlataformasContent() {
     const { user } = useAuth();
     const { toast } = useToast();
     const [platform, setPlatform] = useState('DROPI');
-    const [bodega, setBodega] = useState('INGENIO');
+    // Sin valor por defecto a propósito: el export de Dropi no trae columna BODEGA, así
+    // que este selector es el único origen del dato. Con un default, un archivo subido sin
+    // tocarlo entraba entero a esa bodega (pasó el 24/8/2026: enero y marzo a INGENIO).
+    const [bodega, setBodega] = useState('');
     const [bodegaOtra, setBodegaOtra] = useState('');
+    // EFFI fija su bodega en el propio flujo; el resto exige elegirla (y nombrarla si es OTRA).
+    const bodegaValida = platform === 'EFFI' || (!!bodega && (bodega !== 'OTRA' || !!bodegaOtra.trim()));
     const [pais, setPais] = useState('COLOMBIA');
     const [file, setFile] = useState<File | null>(null);
     // EFFI necesita dos archivos: alistamiento (.xls HTML) y guías (.xlsx)
@@ -63,6 +69,8 @@ export function VentasPlataformasContent() {
     const [byBodega, setByBodega] = useState<Breakdown>(new Map());
     const [byPais, setByPais] = useState<Breakdown>(new Map());
     const [byBodegaComercial, setByBodegaComercial] = useState<Map<string, Map<string, Map<string, { ventas: number; total: number }>>>>(new Map());
+    // Desglose de las órdenes abiertas por mes (comercial/país/bodega/estado)
+    const [pendientes, setPendientes] = useState<Map<string, PendingBreakdown>>(new Map());
     const [baseUnits, setBaseUnits] = useState<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>>([]);
     const [unlinkedSku, setUnlinkedSku] = useState<Array<{ itemId: string; sku?: string; productName?: string; entregadas: number }>>([]);
     const [comerciales, setComerciales] = useState<Array<{ raw: string; canonical: string; ventas: number }>>([]);
@@ -93,6 +101,7 @@ export function VentasPlataformasContent() {
             ]);
             setMonths(m); setByMonthCommercial(s);
             setByBodega(b.byBodega); setByPais(b.byPais); setByBodegaComercial(b.byBodegaComercial);
+            setPendientes(b.pendientes);
         } catch (error) {
             console.error(error);
         } finally {
@@ -196,6 +205,10 @@ export function VentasPlataformasContent() {
 
         if (!file) {
             toast({ title: 'Error', description: 'Selecciona el archivo del reporte de despachos.', variant: 'destructive' });
+            return;
+        }
+        if (!bodegaValida) {
+            toast({ title: 'Falta la bodega', description: 'Elige la bodega del reporte antes de importar.', variant: 'destructive' });
             return;
         }
         // Archivo grande: se sube a Storage y lo procesa el servidor (no se parsea en el navegador).
@@ -403,7 +416,7 @@ export function VentasPlataformasContent() {
                                 <div>
                                     <Label>Bodega del reporte</Label>
                                     <Select value={bodega} onValueChange={setBodega}>
-                                        <SelectTrigger className="w-40 mt-1"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="w-40 mt-1"><SelectValue placeholder="Elegir bodega…" /></SelectTrigger>
                                         <SelectContent>
                                             {BODEGAS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                                         </SelectContent>
@@ -443,7 +456,7 @@ export function VentasPlataformasContent() {
                                     </label>
                                 </div>
                             )}
-                            <Button onClick={handleImport} disabled={isImporting || (platform === 'EFFI' ? (!effiAlist || !effiGuias) : !file)}>
+                            <Button onClick={handleImport} disabled={isImporting || (platform === 'EFFI' ? (!effiAlist || !effiGuias) : (!file || !bodegaValida))}>
                                 <Upload className="h-4 w-4 mr-2" />{isImporting ? (progressMsg || 'Importando…') : 'Importar'}
                             </Button>
                         </div>
@@ -524,6 +537,7 @@ export function VentasPlataformasContent() {
                             pais={byPais.get(month)}
                             bodega={byBodega.get(month)}
                             bodegaComercial={byBodegaComercial.get(month)}
+                            pendientes={pendientes.get(month)}
                         />
                     ))}
                 </div>
@@ -953,10 +967,65 @@ function BodegaComercialBreakdown({ bodega, bodegaComercial }: {
     );
 }
 
+// Badge de órdenes abiertas con su desglose. Antes solo se veía el número y no había
+// forma de saber de qué comercial, país o estado eran esos pendientes.
+function PendientesBadge({ n, detalle }: { n: number; detalle?: PendingBreakdown }) {
+    const top = (m: Map<string, number> | undefined, max: number) =>
+        Array.from(m?.entries() || []).sort((a, b) => b[1] - a[1]).slice(0, max);
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button type="button" aria-label={`Ver desglose de ${n} órdenes pendientes`}>
+                    <Badge variant="destructive" className="cursor-pointer hover:opacity-90">{n} pendientes ▾</Badge>
+                </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 max-h-[70vh] overflow-y-auto space-y-4">
+                <div>
+                    <p className="text-sm font-semibold">{n} órdenes sin estado final</p>
+                    <p className="text-xs text-muted-foreground">Todavía no son venta: no suman ni al ingreso ni al comercial.</p>
+                </div>
+                {!detalle ? (
+                    <p className="text-xs text-muted-foreground">
+                        Este mes se agregó antes de que existiera el desglose. Vuelve a importar la plataforma
+                        (o corre <code>scripts/reaggregate.ts</code>) para verlo.
+                    </p>
+                ) : (
+                    <>
+                        <PendList titulo="Por comercial" rows={top(detalle.porComercial, 6)} />
+                        <PendList titulo="Por país" rows={top(detalle.porPais, 6)} />
+                        <PendList titulo="Por bodega" rows={top(detalle.porBodega, 6)} />
+                        <PendList titulo="Por estado" rows={top(detalle.porEstado, 10)} />
+                    </>
+                )}
+            </PopoverContent>
+        </Popover>
+    );
+}
+
+function PendList({ titulo, rows }: { titulo: string; rows: Array<[string, number]> }) {
+    if (rows.length === 0) return null;
+    return (
+        <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{titulo}</h4>
+            <table className="w-full text-sm">
+                <tbody>
+                    {rows.map(([label, n]) => (
+                        <tr key={label} className="border-b border-border/40 last:border-0">
+                            <td className="py-0.5 pr-2 capitalize">{label.toLowerCase()}</td>
+                            <td className="py-0.5 text-right tabular-nums whitespace-nowrap">{n}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
 // Tarjeta de un mes: cabecera con el TOTAL y tres columnas de desglose
-function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega, bodegaComercial }: {
+function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega, bodegaComercial, pendientes }: {
     month: string;
     total?: { ventas: number; total: number; pendingOrders: number; closed: boolean };
+    pendientes?: PendingBreakdown;
     plataforma?: Map<string, { ventas: number; total: number }>;
     comercial?: Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
     pais?: Map<string, { ventas: number; total: number }>;
@@ -983,7 +1052,7 @@ function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega, b
                         <Badge variant="default" className="text-sm px-2.5 py-1">${(total?.total ?? 0).toLocaleString('es-CO')}</Badge>
                         {total && (total.closed
                             ? <Badge variant="outline">Cerrado</Badge>
-                            : <Badge variant="destructive">{total.pendingOrders} pendientes</Badge>)}
+                            : <PendientesBadge n={total.pendingOrders} detalle={pendientes} />)}
                     </div>
                 </div>
             </CardHeader>

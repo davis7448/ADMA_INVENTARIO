@@ -8,7 +8,42 @@ import {
 } from '@/lib/fs';
 import type { Modificacion } from '@/app/actions/modificaciones';
 
-export const FINAL_STATES = ['ENTREGADO', 'DEVOLUCION', 'CANCELADO', 'RECHAZADO'];
+// Estados que CIERRAN una orden: ya no van a cambiar más. Un mes se da por cerrado
+// cuando todas sus órdenes están en uno de ellos.
+//
+// Ojo: cerrar ≠ vender. La venta sigue siendo solo ENTREGADO (`esEntregado`), así que
+// ampliar esta lista NO mueve ventas ni ingresos — solo deja de contar como "pendiente"
+// lo que nunca se va a mover.
+//
+// Los cuatro primeros son los estados canónicos del motor (a ellos mapean Venndelo,
+// Hoko y el MCP de Dropi). El resto son estados crudos del Excel de Dropi, que se
+// importa sin traducir: son callejones sin salida (la guía se anuló, el paquete se
+// perdió y se indemnizó, la mercancía se destruyó o ya volvió a bodega). Sin ellos,
+// enero–junio de 2026 quedaban abiertos para siempre por 847 órdenes muertas y el
+// aviso pedía re-subir un reporte que nunca las iba a cambiar.
+export const FINAL_STATES = [
+    'ENTREGADO', 'DEVOLUCION', 'CANCELADO', 'RECHAZADO', 'RECHAZADA',
+    // Anulaciones: la guía murió antes de salir
+    'ANULADO', 'ANULADA', 'GUIA_ANULADA', 'GUIA ANULADA',
+    // Devoluciones ya consumadas o en curso (terminan en DEVOLUCION, nunca en venta)
+    'DEVOLUCION EN BODEGA', 'EN PROCESO DE DEVOLUCION', 'TRANSITO A DEVOLUCION PROVEEDOR',
+    // Pérdida del paquete: se indemniza o se destruye. No hay entrega posible.
+    'SINIESTRO', 'LOST', 'INDEMNIZADA', 'INDEMNIZADA POR DROPI', 'EN PROCESO DE INDEMNIZACION',
+    'DESTRUCCION - SALVAMENTO - DONACION',
+];
+const FINAL_SET = new Set(FINAL_STATES);
+
+// Los estados llegan de fuentes distintas (Excel de Dropi, MCP, EFFI, Venndelo, Hoko):
+// se comparan sin tildes, sin espacios dobles y en mayúsculas.
+export function normalizarEstadoVenta(estado?: unknown): string {
+    return String(estado ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+export function esEstadoFinal(estado?: unknown): boolean {
+    return FINAL_SET.has(normalizarEstadoVenta(estado));
+}
 
 // Clientes que NO cuentan para los comerciales (aunque tengan solicitudes/cupo):
 // sus ventas se agrupan como orgánicas. Ej: el que mueve BELLA SKIN/BELLA MUJER.
@@ -87,6 +122,11 @@ export type ReportMonth = {
     porComercial?: Record<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
     porBodega?: Record<string, { ventas: number; total: number }>;
     porPais?: Record<string, { ventas: number; total: number }>;
+    // Desglose de las órdenes que siguen abiertas (conteo, no ingreso: aún no son venta)
+    pendientesPorComercial?: Record<string, number>;
+    pendientesPorPais?: Record<string, number>;
+    pendientesPorBodega?: Record<string, number>;
+    pendientesPorEstado?: Record<string, number>;
 };
 
 export type ParsedRow = {
@@ -696,7 +736,7 @@ export async function importPlatformSales(
     for (const row of parsed) {
         const orderDate = parseDate(row.fecha);
         const month = orderDate ? new Date(orderDate).toISOString().slice(0, 7) : null;
-        const esFinal = FINAL_STATES.includes(row.estado);
+        const esFinal = esEstadoFinal(row.estado);
         const esEntregado = row.estado === 'ENTREGADO';
         const docId = `${platform}_${row.guia}`;
 
@@ -884,16 +924,34 @@ export async function importPlatformSales(
         porBodega: Record<string, { ventas: number; total: number }>;
         porPais: Record<string, { ventas: number; total: number }>;
         porBodegaComercial: Record<string, Record<string, { ventas: number; total: number }>>;
+        // Desglose de lo que queda ABIERTO: sin esto el mes solo mostraba un número de
+        // pendientes y no había forma de saber de qué comercial, país o estado eran.
+        pendComercial: Record<string, number>;
+        pendPais: Record<string, number>;
+        pendBodega: Record<string, number>;
+        pendEstado: Record<string, number>;
         ingresoTotal: number;
     }>();
     const getM = (mo: string) => {
-        if (!agg.has(mo)) agg.set(mo, { total: 0, final: 0, entregadas: 0, porComercial: {}, porBodega: {}, porPais: {}, porBodegaComercial: {}, ingresoTotal: 0 });
+        if (!agg.has(mo)) agg.set(mo, { total: 0, final: 0, entregadas: 0, porComercial: {}, porBodega: {}, porPais: {}, porBodegaComercial: {}, pendComercial: {}, pendPais: {}, pendBodega: {}, pendEstado: {}, ingresoTotal: 0 });
         return agg.get(mo)!;
     };
+    const sumar = (r: Record<string, number>, k: string) => { r[k] = (r[k] || 0) + 1; };
     for (const sale of prevSales.values()) {
         if (!sale.month) continue;
         const m = getM(sale.month);
-        m.total++; if (sale.esFinal) m.final++;
+        m.total++;
+        // El estado manda sobre el `esFinal` guardado: así, al ampliar FINAL_STATES,
+        // re-agregar basta para cerrar los meses sin reescribir 300k documentos.
+        const final = esEstadoFinal(sale.estado);
+        if (final) m.final++;
+        if (!final) {
+            const excluidoP = EXCLUDED_COMMERCIAL_CLIENTS.has((sale.clientEmail || '').toLowerCase());
+            sumar(m.pendComercial, excluidoP ? SIN_COMERCIAL : canonicalCommercial(sale.commercialName, aliases));
+            sumar(m.pendPais, sale.pais || '(sin país)');
+            sumar(m.pendBodega, sale.bodega || '(sin bodega)');
+            sumar(m.pendEstado, normalizarEstadoVenta(sale.estado) || '(sin estado)');
+        }
         if (!sale.esEntregado) continue;
         m.entregadas++;
         m.ingresoTotal += sale.total || 0;
@@ -925,6 +983,8 @@ export async function importPlatformSales(
             closed: pending === 0, lastImportAt: now,
             porComercial: m.porComercial, porBodega: m.porBodega, porPais: m.porPais,
             porBodegaComercial: m.porBodegaComercial,
+            pendientesPorComercial: m.pendComercial, pendientesPorPais: m.pendPais,
+            pendientesPorBodega: m.pendBodega, pendientesPorEstado: m.pendEstado,
         });
         mbn++;
         if (mbn >= 400) { await mb.commit(); mb = writeBatch(db); mbn = 0; }
@@ -1089,16 +1149,26 @@ export async function getSalesByMonthAndCommercial(months?: string[]): Promise<M
     return result;
 }
 
-// Desglose por bodega y país desde los pre-agregados por mes
+// Desglose por bodega y país desde los pre-agregados por mes.
+// `pendientes` responde a "¿de qué comercial/país son las órdenes que no cierran?":
+// son conteos de órdenes abiertas, no ventas (todavía no hay ingreso que sumar).
+export type PendingBreakdown = {
+    porComercial: Map<string, number>;
+    porPais: Map<string, number>;
+    porBodega: Map<string, number>;
+    porEstado: Map<string, number>;
+};
 export async function getSalesBreakdown(months?: string[]): Promise<{
     byBodega: Map<string, Map<string, { ventas: number; total: number }>>;
     byPais: Map<string, Map<string, { ventas: number; total: number }>>;
     byBodegaComercial: Map<string, Map<string, Map<string, { ventas: number; total: number }>>>;
+    pendientes: Map<string, PendingBreakdown>;
 }> {
     const [reportMonths, aliases] = await Promise.all([getReportMonths(), loadCommercialAliases()]);
     const byBodega = new Map<string, Map<string, { ventas: number; total: number }>>();
     const byPais = new Map<string, Map<string, { ventas: number; total: number }>>();
     const byBodegaComercial = new Map<string, Map<string, Map<string, { ventas: number; total: number }>>>();
+    const pendientes = new Map<string, PendingBreakdown>();
     for (const rm of reportMonths) {
         if (months && !months.includes(rm.month)) continue;
         for (const [target, field] of [[byBodega, 'porBodega'], [byPais, 'porPais']] as const) {
@@ -1131,8 +1201,23 @@ export async function getSalesBreakdown(months?: string[]): Promise<{
             }
             byBodegaComercial.set(rm.month, monthMap);
         }
+        // Pendientes del mes (se acumulan across plataformas, igual que el resto).
+        // El comercial se re-canoniza en la lectura por si el alias cambió después
+        // del import (mismo criterio que porComercial).
+        const pend = pendientes.get(rm.month) || { porComercial: new Map(), porPais: new Map(), porBodega: new Map(), porEstado: new Map() };
+        const acumular = (target: Map<string, number>, data: Record<string, number> | undefined, canon?: (k: string) => string) => {
+            for (const [k, v] of Object.entries(data || {})) {
+                const key = canon ? canon(k) : k;
+                target.set(key, (target.get(key) || 0) + (Number(v) || 0));
+            }
+        };
+        acumular(pend.porComercial, rm.pendientesPorComercial, k => canonicalCommercial(k, aliases));
+        acumular(pend.porPais, rm.pendientesPorPais);
+        acumular(pend.porBodega, rm.pendientesPorBodega);
+        acumular(pend.porEstado, rm.pendientesPorEstado);
+        if (pend.porComercial.size || pend.porPais.size || pend.porBodega.size || pend.porEstado.size) pendientes.set(rm.month, pend);
     }
-    return { byBodega, byPais, byBodegaComercial };
+    return { byBodega, byPais, byBodegaComercial, pendientes };
 }
 
 // Consumo real de inventario en UNIDADES BASE por producto: cada orden entregada
