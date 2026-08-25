@@ -18,7 +18,9 @@ import * as fsn from 'fs';
 const APPLY = process.argv.includes('--apply');
 const PAIS = 'PANAMA';
 const BODEGA_DESTINO = 'IMPORTACIONES';
-const BACKUP = '/opt/workspaces/ADMA_INVENTARIO/logs/fix-panama-backup.json';
+// Con nombre fijo, una segunda corrida pisaba el backup de la primera y se perdía
+// el estado previo de lo ya corregido. Un archivo por corrida.
+const BACKUP = `/opt/workspaces/ADMA_INVENTARIO/logs/fix-panama-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
 
 type Afectado = { id: string; bodegaPrevia?: string; monedaPrevia?: string };
 
