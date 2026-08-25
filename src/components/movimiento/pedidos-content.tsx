@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { getPedidosPorPais, recalcularPedidos, type PedidosPorPais, type CuboPedidos } from '@/app/actions/pedidos-por-pais';
+import { getPedidosPorPais, recalcularPedidos, type PedidosPorPais, type CuboAgregado } from '@/app/actions/pedidos-por-pais';
 import type { Granularidad } from '@/lib/periodos';
 import { etiquetaPais } from '@/lib/paises';
 import { Download, Info, TriangleAlert, RefreshCw, Upload } from 'lucide-react';
@@ -135,12 +135,16 @@ export function PedidosContent() {
             }))
         ), `${etiquetaMetrica} por periodo`);
 
+        // Una columna de ingreso POR MONEDA: cada país factura en la suya y sumarlas
+        // en una sola columna daría un número sin significado.
+        const monedas = Object.keys(datos.total.ingresos).sort();
         const filasDetalle: Record<string, string | number>[] = [];
         for (const pa of datos.paises) {
             for (const [bo, c] of Object.entries(datos.porPaisBodega[pa] || {})) {
                 filasDetalle.push({
                     País: pa, Bodega: bo, Despachados: c.salidos, Creados: c.creados,
-                    Entregados: c.entregados, Ingreso: Math.round(c.ingreso),
+                    Entregados: c.entregados,
+                    ...Object.fromEntries(monedas.map(mo => [`Ingreso ${mo}`, Math.round(c.ingresos?.[mo] || 0)])),
                     // Dropi solo entrega cantidad en ~30% de los pedidos; se marca para que
                     // nadie sume esta columna creyendo que es el total.
                     'Unidades (dato parcial)': c.unidades,
@@ -314,7 +318,7 @@ export function PedidosContent() {
     );
 }
 
-function FilasPais({ pais, bodegas, total }: { pais: string; bodegas: Record<string, CuboPedidos>; total: CuboPedidos }) {
+function FilasPais({ pais, bodegas, total }: { pais: string; bodegas: Record<string, CuboAgregado>; total: CuboAgregado }) {
     const filas = Object.entries(bodegas).sort((a, b) => b[1].salidos - a[1].salidos);
     return (
         <>

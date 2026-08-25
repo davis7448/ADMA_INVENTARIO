@@ -7,6 +7,10 @@ import {
     collection, deleteField, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter, startAt, where, writeBatch,
 } from '@/lib/fs';
 import type { Modificacion } from '@/app/actions/modificaciones';
+import {
+    monedaDePais, sumarImporte, sumarImportes, leerImportes,
+    type Importes,
+} from '@/lib/paises';
 
 // Estados que CIERRAN una orden: ya no van a cambiar más. Un mes se da por cerrado
 // cuando todas sus órdenes están en uno de ellos.
@@ -64,6 +68,7 @@ export type PlatformSale = {
     esEntregado: boolean;
     itemIds: string[];
     total: number; // INGRESO ADMA (precio proveedor × cantidad); fallback: total orden
+    moneda?: string; // divisa del importe, derivada del país. Sin ella se lee como COP
     totalClienteFinal?: number; // lo que paga el comprador final (referencia)
     comision?: number; // comisión de la plataforma (referencia para margen neto)
     flete?: number;
@@ -115,13 +120,14 @@ export type ReportMonth = {
     finalOrders: number;
     pendingOrders: number;
     entregadas: number;
-    ingresoTotal?: number;
+    ingresosPorMoneda?: Importes;
     closed: boolean;
     lastImportAt: number;
     // Pre-agregados calculados al importar (evitan escanear todas las ventas)
-    porComercial?: Record<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
-    porBodega?: Record<string, { ventas: number; total: number }>;
-    porPais?: Record<string, { ventas: number; total: number }>;
+    porComercial?: Record<string, { ventas: number; totales: Importes; activaciones: number; reactivaciones: number; publicas: number }>;
+    porBodega?: Record<string, { ventas: number; totales: Importes }>;
+    porPais?: Record<string, { ventas: number; totales: Importes }>;
+    porBodegaComercial?: Record<string, Record<string, { ventas: number; totales: Importes }>>;
     // Desglose de las órdenes que siguen abiertas (conteo, no ingreso: aún no son venta)
     pendientesPorComercial?: Record<string, number>;
     pendientesPorPais?: Record<string, number>;
@@ -752,6 +758,7 @@ export async function importPlatformSales(
             clientName: row.clientName,
             bodega: row.bodega || context?.bodega,
             pais: context?.pais,
+            moneda: monedaDePais(context?.pais),
             importedAt: now,
         };
 
@@ -920,20 +927,20 @@ export async function importPlatformSales(
     const aliases = await loadCommercialAliases();
     const agg = new Map<string, {
         total: number; final: number; entregadas: number;
-        porComercial: Record<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
-        porBodega: Record<string, { ventas: number; total: number }>;
-        porPais: Record<string, { ventas: number; total: number }>;
-        porBodegaComercial: Record<string, Record<string, { ventas: number; total: number }>>;
+        porComercial: Record<string, { ventas: number; totales: Importes; activaciones: number; reactivaciones: number; publicas: number }>;
+        porBodega: Record<string, { ventas: number; totales: Importes }>;
+        porPais: Record<string, { ventas: number; totales: Importes }>;
+        porBodegaComercial: Record<string, Record<string, { ventas: number; totales: Importes }>>;
         // Desglose de lo que queda ABIERTO: sin esto el mes solo mostraba un número de
         // pendientes y no había forma de saber de qué comercial, país o estado eran.
         pendComercial: Record<string, number>;
         pendPais: Record<string, number>;
         pendBodega: Record<string, number>;
         pendEstado: Record<string, number>;
-        ingresoTotal: number;
+        ingresos: Importes;
     }>();
     const getM = (mo: string) => {
-        if (!agg.has(mo)) agg.set(mo, { total: 0, final: 0, entregadas: 0, porComercial: {}, porBodega: {}, porPais: {}, porBodegaComercial: {}, pendComercial: {}, pendPais: {}, pendBodega: {}, pendEstado: {}, ingresoTotal: 0 });
+        if (!agg.has(mo)) agg.set(mo, { total: 0, final: 0, entregadas: 0, porComercial: {}, porBodega: {}, porPais: {}, porBodegaComercial: {}, pendComercial: {}, pendPais: {}, pendBodega: {}, pendEstado: {}, ingresos: {} });
         return agg.get(mo)!;
     };
     const sumar = (r: Record<string, number>, k: string) => { r[k] = (r[k] || 0) + 1; };
@@ -954,24 +961,28 @@ export async function importPlatformSales(
         }
         if (!sale.esEntregado) continue;
         m.entregadas++;
-        m.ingresoTotal += sale.total || 0;
+        // El importe va a la bolsa de SU moneda: un comercial que vende en Colombia
+        // y Panamá acumula {COP: …, USD: …}, nunca una suma de ambas.
+        const moneda = sale.moneda || monedaDePais(sale.pais);
+        const monto = sale.total || 0;
+        sumarImporte(m.ingresos, moneda, monto);
         // Cliente excluido (ej. BELLA SKIN/MUJER) → no cuenta para el comercial
         const excluido = EXCLUDED_COMMERCIAL_CLIENTS.has((sale.clientEmail || '').toLowerCase());
         const com = excluido ? SIN_COMERCIAL : canonicalCommercial(sale.commercialName, aliases);
-        const c = m.porComercial[com] || { ventas: 0, total: 0, activaciones: 0, reactivaciones: 0, publicas: 0 };
-        c.ventas++; c.total += sale.total || 0;
+        const c = m.porComercial[com] || { ventas: 0, totales: {}, activaciones: 0, reactivaciones: 0, publicas: 0 };
+        c.ventas++; sumarImporte(c.totales, moneda, monto);
         if (sale.classification === 'activacion') c.activaciones++;
         if (sale.classification === 'reactivacion') c.reactivaciones++;
         if (sale.classification === 'publica') c.publicas++;
         m.porComercial[com] = c;
         const bod = sale.bodega || '(sin bodega)';
-        const b = m.porBodega[bod] || { ventas: 0, total: 0 }; b.ventas++; b.total += sale.total || 0; m.porBodega[bod] = b;
+        const b = m.porBodega[bod] || { ventas: 0, totales: {} }; b.ventas++; sumarImporte(b.totales, moneda, monto); m.porBodega[bod] = b;
         const pa = sale.pais || '(sin país)';
-        const p = m.porPais[pa] || { ventas: 0, total: 0 }; p.ventas++; p.total += sale.total || 0; m.porPais[pa] = p;
+        const p = m.porPais[pa] || { ventas: 0, totales: {} }; p.ventas++; sumarImporte(p.totales, moneda, monto); m.porPais[pa] = p;
         // Cruce bodega × comercial
         if (!m.porBodegaComercial[bod]) m.porBodegaComercial[bod] = {};
-        const bc = m.porBodegaComercial[bod][com] || { ventas: 0, total: 0 };
-        bc.ventas++; bc.total += sale.total || 0; m.porBodegaComercial[bod][com] = bc;
+        const bc = m.porBodegaComercial[bod][com] || { ventas: 0, totales: {} };
+        bc.ventas++; sumarImporte(bc.totales, moneda, monto); m.porBodegaComercial[bod][com] = bc;
     }
     let mb = writeBatch(db); let mbn = 0;
     for (const [month, m] of agg) {
@@ -979,7 +990,7 @@ export async function importPlatformSales(
         if (pending > 0) summary.mesesAbiertos.push(month);
         mb.set(doc(db, 'platformReportMonths', `${platform}_${month}`), {
             platform, month, totalOrders: m.total, finalOrders: m.final,
-            pendingOrders: pending, entregadas: m.entregadas, ingresoTotal: m.ingresoTotal,
+            pendingOrders: pending, entregadas: m.entregadas, ingresosPorMoneda: m.ingresos,
             closed: pending === 0, lastImportAt: now,
             porComercial: m.porComercial, porBodega: m.porBodega, porPais: m.porPais,
             porBodegaComercial: m.porBodegaComercial,
@@ -1127,20 +1138,23 @@ export async function getDistinctCommercials(): Promise<Array<{ raw: string; can
 
 // Lee los PRE-AGREGADOS por mes (rápido). El filtro `months` acota el periodo;
 // re-aplica los alias de comercial por si cambiaron después del import.
-export async function getSalesByMonthAndCommercial(months?: string[]): Promise<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>> {
+export type CeldaComercial = { ventas: number; totales: Importes; activaciones: number; reactivaciones: number; publicas: number };
+
+export async function getSalesByMonthAndCommercial(months?: string[]): Promise<Map<string, Map<string, CeldaComercial>>> {
     const [reportMonths, aliases] = await Promise.all([getReportMonths(), loadCommercialAliases()]);
-    const result = new Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>();
+    const result = new Map<string, Map<string, CeldaComercial>>();
     for (const rm of reportMonths) {
         if (months && !months.includes(rm.month)) continue;
         // Un mes puede tener VARIOS docs (uno por plataforma: DROPI, VENNDELO…).
         // Acumular sobre el mapa del mes en vez de sobrescribirlo.
-        const byCom = result.get(rm.month) || new Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>();
+        const byCom = result.get(rm.month) || new Map<string, CeldaComercial>();
         for (const [raw, v] of Object.entries((rm as any).porComercial || {})) {
             // Re-canonizar (por si el nombre guardado ya era canónico o cambió el alias)
             const com = canonicalCommercial(raw, aliases);
-            const e = byCom.get(com) || { ventas: 0, total: 0, activaciones: 0, reactivaciones: 0, publicas: 0 };
+            const e = byCom.get(com) || { ventas: 0, totales: {}, activaciones: 0, reactivaciones: 0, publicas: 0 };
             const val = v as any;
-            e.ventas += val.ventas || 0; e.total += val.total || 0;
+            e.ventas += val.ventas || 0;
+            sumarImportes(e.totales, leerImportes(val));
             e.activaciones += val.activaciones || 0; e.reactivaciones += val.reactivaciones || 0; e.publicas += val.publicas || 0;
             byCom.set(com, e);
         }
@@ -1158,16 +1172,18 @@ export type PendingBreakdown = {
     porBodega: Map<string, number>;
     porEstado: Map<string, number>;
 };
+export type Celda = { ventas: number; totales: Importes };
+
 export async function getSalesBreakdown(months?: string[]): Promise<{
-    byBodega: Map<string, Map<string, { ventas: number; total: number }>>;
-    byPais: Map<string, Map<string, { ventas: number; total: number }>>;
-    byBodegaComercial: Map<string, Map<string, Map<string, { ventas: number; total: number }>>>;
+    byBodega: Map<string, Map<string, Celda>>;
+    byPais: Map<string, Map<string, Celda>>;
+    byBodegaComercial: Map<string, Map<string, Map<string, Celda>>>;
     pendientes: Map<string, PendingBreakdown>;
 }> {
     const [reportMonths, aliases] = await Promise.all([getReportMonths(), loadCommercialAliases()]);
-    const byBodega = new Map<string, Map<string, { ventas: number; total: number }>>();
-    const byPais = new Map<string, Map<string, { ventas: number; total: number }>>();
-    const byBodegaComercial = new Map<string, Map<string, Map<string, { ventas: number; total: number }>>>();
+    const byBodega = new Map<string, Map<string, Celda>>();
+    const byPais = new Map<string, Map<string, Celda>>();
+    const byBodegaComercial = new Map<string, Map<string, Map<string, Celda>>>();
     const pendientes = new Map<string, PendingBreakdown>();
     for (const rm of reportMonths) {
         if (months && !months.includes(rm.month)) continue;
@@ -1175,11 +1191,12 @@ export async function getSalesBreakdown(months?: string[]): Promise<{
             const data = (rm as any)[field] || {};
             if (Object.keys(data).length === 0) continue;
             // Acumular por mes across plataformas (no sobrescribir el doc anterior).
-            const monthMap = target.get(rm.month) || new Map<string, { ventas: number; total: number }>();
+            const monthMap = target.get(rm.month) || new Map<string, Celda>();
             for (const [k, v] of Object.entries(data)) {
-                const val = v as { ventas?: number; total?: number };
-                const e = monthMap.get(k) || { ventas: 0, total: 0 };
-                e.ventas += val.ventas || 0; e.total += val.total || 0;
+                const val = v as any;
+                const e = monthMap.get(k) || { ventas: 0, totales: {} };
+                e.ventas += val.ventas || 0;
+                sumarImportes(e.totales, leerImportes(val));
                 monthMap.set(k, e);
             }
             target.set(rm.month, monthMap);
@@ -1187,14 +1204,15 @@ export async function getSalesBreakdown(months?: string[]): Promise<{
         // Cruce bodega × comercial (re-canoniza el comercial por si cambió el alias)
         const bcData = (rm as any).porBodegaComercial || {};
         if (Object.keys(bcData).length > 0) {
-            const monthMap = byBodegaComercial.get(rm.month) || new Map<string, Map<string, { ventas: number; total: number }>>();
+            const monthMap = byBodegaComercial.get(rm.month) || new Map<string, Map<string, Celda>>();
             for (const [bod, coms] of Object.entries(bcData)) {
-                const bodMap = monthMap.get(bod) || new Map<string, { ventas: number; total: number }>();
+                const bodMap = monthMap.get(bod) || new Map<string, Celda>();
                 for (const [rawCom, v] of Object.entries(coms as any)) {
                     const com = canonicalCommercial(rawCom, aliases);
-                    const val = v as { ventas?: number; total?: number };
-                    const e = bodMap.get(com) || { ventas: 0, total: 0 };
-                    e.ventas += val.ventas || 0; e.total += val.total || 0;
+                    const val = v as any;
+                    const e = bodMap.get(com) || { ventas: 0, totales: {} };
+                    e.ventas += val.ventas || 0;
+                    sumarImportes(e.totales, leerImportes(val));
                     bodMap.set(com, e);
                 }
                 monthMap.set(bod, bodMap);

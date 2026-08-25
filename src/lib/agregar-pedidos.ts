@@ -14,6 +14,10 @@ import { yaSalioDeBodega, estadoDesconocido, normalizarEstado } from './estados-
 // mientras el MCP de Dropi no acepte sus tokens — ver docs/integraciones/dropi-mcp.md §7).
 export const PLATAFORMA_AGREGADA = 'DROPI';
 
+// `ingreso` es un número suelto a propósito: cada cubo pertenece a UN país (la clave
+// es `país|bodega`), así que su moneda es inequívoca — la da monedaDePais(). Lo que no
+// se puede hacer es sumar cubos de países distintos en un escalar; quien los agrega
+// (pedidos-por-pais.ts) los acumula por moneda. Ver la nota en src/lib/paises.ts.
 export type CuboPedidos = { creados: number; salidos: number; entregados: number; unidades: number; ingreso: number };
 export const cuboVacio = (): CuboPedidos => ({ creados: 0, salidos: 0, entregados: 0, unidades: 0, ingreso: 0 });
 

@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { getMovimientoDiario, type MovimientoDiario, type CeldaMovimiento } from '@/app/actions/movimiento-diario';
-import { etiquetaPais } from '@/lib/paises';
+import { etiquetaPais, formatearImporte, type Importes } from '@/lib/paises';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PedidosContent } from './pedidos-content';
 import { Download } from 'lucide-react';
@@ -45,16 +45,36 @@ const RANGOS = [
 
 // Qué se cuenta en cada celda. "Ventas" son órdenes; "entregadas" son las que
 // efectivamente llegaron, que es lo que se factura.
-const METRICAS = [
+//
+// El ingreso NO es una métrica sola: cada país factura en su moneda, así que se
+// ofrece una métrica por divisa presente ("Ingreso COP", "Ingreso USD"). Sumarlas
+// en una sola columna daría un número sin significado.
+const METRICAS_BASE = [
     { v: 'ventas', l: 'Órdenes' },
     { v: 'entregadas', l: 'Entregadas' },
     { v: 'unidades', l: 'Unidades' },
-    { v: 'ingreso', l: 'Ingreso' },
 ] as const;
-type Metrica = (typeof METRICAS)[number]['v'];
+type Metrica = string; // 'ventas' | 'entregadas' | 'unidades' | `ingreso:${moneda}`
+
+const monedaDeMetrica = (m: Metrica) => m.startsWith('ingreso:') ? m.slice(8) : null;
+
+// Monedas presentes en el periodo, de mayor a menor volumen.
+const monedasDe = (i?: Importes) =>
+    Object.entries(i || {}).sort((a, b) => b[1] - a[1]).map(([m]) => m);
 
 const dia = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
-const num = (n: number, m: Metrica) => m === 'ingreso' ? `$${Math.round(n).toLocaleString('es-CO')}` : n.toLocaleString('es-CO');
+const num = (n: number, m: Metrica) => {
+    const moneda = monedaDeMetrica(m);
+    return moneda ? formatearImporte(Math.round(n), moneda) : n.toLocaleString('es-CO');
+};
+
+// Valor de una celda para la métrica activa.
+const celda = (c: CeldaMovimiento | undefined, m: Metrica): number => {
+    if (!c) return 0;
+    const moneda = monedaDeMetrica(m);
+    if (moneda) return c.ingresos?.[moneda] || 0;
+    return (c as any)[m] || 0;
+};
 
 function VistaComerciales() {
     const { toast } = useToast();
@@ -75,7 +95,20 @@ function VistaComerciales() {
         return () => { vigente = false; };
     }, [rango, pais, plataforma, toast]);
 
-    const valor = (c?: CeldaMovimiento) => c ? c[metrica] : 0;
+    const valor = (c?: CeldaMovimiento) => celda(c, metrica);
+
+    // Las divisas dependen de los datos cargados, así que la lista de métricas se
+    // arma después de la consulta. Si la métrica activa era de una moneda que ya no
+    // está en el periodo filtrado, se vuelve a "Órdenes".
+    const monedas = useMemo(() => monedasDe(datos?.total.ingresos), [datos]);
+    const metricas = useMemo(() => [
+        ...METRICAS_BASE.map(m => ({ v: m.v as Metrica, l: m.l })),
+        ...monedas.map(mo => ({ v: `ingreso:${mo}`, l: `Ingreso ${mo}` })),
+    ], [monedas]);
+    useEffect(() => {
+        const moneda = monedaDeMetrica(metrica);
+        if (moneda && datos && !monedas.includes(moneda)) setMetrica('ventas');
+    }, [monedas, metrica, datos]);
 
     // Los días se muestran del más reciente al más antiguo: lo de hoy es lo que se mira.
     const diasVista = useMemo(() => (datos?.dias || []).slice().reverse(), [datos]);
@@ -89,11 +122,14 @@ function VistaComerciales() {
         }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Por comercial');
+        // Una columna de ingreso POR MONEDA, nunca una sola sumando todo.
+        const ingresoCols = (c: CeldaMovimiento) =>
+            Object.fromEntries(monedas.map(mo => [`Ingreso ${mo}`, c.ingresos?.[mo] || 0]));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-            Object.entries(datos.porPais).map(([p, c]) => ({ País: p, Órdenes: c.ventas, Entregadas: c.entregadas, Unidades: c.unidades, Ingreso: c.ingreso }))
+            Object.entries(datos.porPais).map(([p, c]) => ({ País: p, Órdenes: c.ventas, Entregadas: c.entregadas, Unidades: c.unidades, ...ingresoCols(c) }))
         ), 'Por país');
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-            Object.entries(datos.porPlataforma).map(([p, c]) => ({ Plataforma: p, Órdenes: c.ventas, Entregadas: c.entregadas, Unidades: c.unidades, Ingreso: c.ingreso }))
+            Object.entries(datos.porPlataforma).map(([p, c]) => ({ Plataforma: p, Órdenes: c.ventas, Entregadas: c.entregadas, Unidades: c.unidades, ...ingresoCols(c) }))
         ), 'Por plataforma');
         XLSX.writeFile(wb, `movimiento-diario_${new Date().toISOString().slice(0, 10)}.xlsx`);
     };
@@ -106,7 +142,7 @@ function VistaComerciales() {
         <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
                 <Filtro label="Periodo" value={rango} onChange={setRango} opciones={RANGOS.map(r => ({ v: r.v, l: r.l }))} ancho="w-44" />
-                <Filtro label="Métrica" value={metrica} onChange={v => setMetrica(v as Metrica)} opciones={METRICAS.map(m => ({ v: m.v, l: m.l }))} ancho="w-40" />
+                <Filtro label="Métrica" value={metrica} onChange={v => setMetrica(v as Metrica)} opciones={metricas} ancho="w-44" />
                 <Filtro label="País" value={pais} onChange={setPais} ancho="w-48"
                     opciones={[{ v: 'todos', l: 'Todos' }, ...datos.paisesDisponibles.map(p => ({ v: p, l: etiquetaPais(p) }))]} />
                 <Filtro label="Plataforma" value={plataforma} onChange={setPlataforma} ancho="w-44"
@@ -122,14 +158,18 @@ function VistaComerciales() {
                 <Kpi l="Órdenes" v={datos.total.ventas.toLocaleString('es-CO')} />
                 <Kpi l="Entregadas" v={datos.total.entregadas.toLocaleString('es-CO')} />
                 <Kpi l="Unidades" v={datos.total.unidades.toLocaleString('es-CO')} />
-                <Kpi l="Ingreso" v={`$${Math.round(datos.total.ingreso).toLocaleString('es-CO')}`} />
+                {monedas.length === 0
+                    ? <Kpi l="Ingreso" v="0" />
+                    : monedas.map(mo => (
+                        <Kpi key={mo} l={`Ingreso ${mo}`} v={formatearImporte(Math.round(datos.total.ingresos[mo] || 0), mo)} />
+                    ))}
             </div>
 
             <Card>
                 <CardHeader>
                     <CardTitle>Por comercial y día</CardTitle>
                     <CardDescription>
-                        {METRICAS.find(m => m.v === metrica)?.l} · {datos.comerciales.length} comercial(es) · {datos.dias.length} día(s)
+                        {metricas.find(m => m.v === metrica)?.l} · {datos.comerciales.length} comercial(es) · {datos.dias.length} día(s)
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
@@ -195,7 +235,7 @@ function Kpi({ l, v }: { l: string; v: string }) {
 function Resumen({ titulo, datos, metrica, etiqueta }: {
     titulo: string; datos: Record<string, CeldaMovimiento>; metrica: Metrica; etiqueta?: (s: string) => string;
 }) {
-    const filas = Object.entries(datos).sort((a, b) => b[1][metrica] - a[1][metrica]);
+    const filas = Object.entries(datos).sort((a, b) => celda(b[1], metrica) - celda(a[1], metrica));
     return (
         <Card>
             <CardHeader><CardTitle className="text-base">{titulo}</CardTitle></CardHeader>
@@ -205,7 +245,7 @@ function Resumen({ titulo, datos, metrica, etiqueta }: {
                         {filas.map(([k, c]) => (
                             <TableRow key={k}>
                                 <TableCell>{etiqueta ? etiqueta(k) : k}</TableCell>
-                                <TableCell className="text-right font-medium">{num(c[metrica], metrica)}</TableCell>
+                                <TableCell className="text-right font-medium">{num(celda(c, metrica), metrica)}</TableCell>
                             </TableRow>
                         ))}
                         {!filas.length && <TableRow><TableCell className="text-muted-foreground text-sm">Sin datos.</TableCell></TableRow>}

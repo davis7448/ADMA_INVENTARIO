@@ -16,9 +16,17 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { getApp } from '@/lib/firebase-admin';
 import { claveDePeriodo, etiquetaDePeriodo, type Granularidad } from '@/lib/periodos';
-import { agregarPedidos, cuboVacio, type CuboPedidos } from '@/lib/agregar-pedidos';
+import { agregarPedidos, type CuboPedidos } from '@/lib/agregar-pedidos';
+import { monedaDePais, sumarImporte, type Importes } from '@/lib/paises';
 
 export type { CuboPedidos };
+
+// Al agrupar cubos de varios países el ingreso deja de ser un número: se acumula
+// por moneda. Los conteos (creados/salidos/entregados/unidades) sí se suman.
+export type CuboAgregado = {
+    creados: number; salidos: number; entregados: number; unidades: number;
+    ingresos: Importes;
+};
 
 export type Periodo = { clave: string; etiqueta: string };
 
@@ -26,13 +34,13 @@ export type PedidosPorPais = {
     periodos: Periodo[];                                       // ascendente
     paises: string[];                                          // presentes tras filtrar, por volumen
     bodegas: string[];
-    porPeriodoPais: Record<string, Record<string, CuboPedidos>>;
-    porPeriodoBodega: Record<string, Record<string, CuboPedidos>>;
-    porPaisBodega: Record<string, Record<string, CuboPedidos>>; // país → bodega → cubo
-    totalPorPais: Record<string, CuboPedidos>;
-    totalPorBodega: Record<string, CuboPedidos>;
-    totalPorPeriodo: Record<string, CuboPedidos>;
-    total: CuboPedidos;
+    porPeriodoPais: Record<string, Record<string, CuboAgregado>>;
+    porPeriodoBodega: Record<string, Record<string, CuboAgregado>>;
+    porPaisBodega: Record<string, Record<string, CuboAgregado>>; // país → bodega → cubo
+    totalPorPais: Record<string, CuboAgregado>;
+    totalPorBodega: Record<string, CuboAgregado>;
+    totalPorPeriodo: Record<string, CuboAgregado>;
+    total: CuboAgregado;
     paisesDisponibles: string[];                               // sin filtrar, para los selectores
     bodegasDisponibles: string[];
     diasConDatos: number;
@@ -40,21 +48,23 @@ export type PedidosPorPais = {
     sinAgregado: boolean;                                      // el cron nunca corrió
 };
 
-const vacio = cuboVacio;
+const vacio = (): CuboAgregado => ({ creados: 0, salidos: 0, entregados: 0, unidades: 0, ingresos: {} });
 
-function sumar(destino: CuboPedidos, origen: CuboPedidos) {
-    destino.creados += origen.creados;
-    destino.salidos += origen.salidos;
-    destino.entregados += origen.entregados;
-    destino.unidades += origen.unidades;
-    destino.ingreso += origen.ingreso;
+// `moneda` es la del cubo de origen (la de su país), no la del destino: así un total
+// que agrupa Colombia y Panamá queda como {COP: …, USD: …}.
+function sumar(destino: CuboAgregado, origen: CuboPedidos, moneda: string) {
+    destino.creados += origen.creados || 0;
+    destino.salidos += origen.salidos || 0;
+    destino.entregados += origen.entregados || 0;
+    destino.unidades += origen.unidades || 0;
+    sumarImporte(destino.ingresos, moneda, origen.ingreso || 0);
 }
 
-function asegurar(mapa: Record<string, CuboPedidos>, clave: string): CuboPedidos {
+function asegurar(mapa: Record<string, CuboAgregado>, clave: string): CuboAgregado {
     return (mapa[clave] ||= vacio());
 }
 
-function asegurarAnidado(mapa: Record<string, Record<string, CuboPedidos>>, a: string, b: string): CuboPedidos {
+function asegurarAnidado(mapa: Record<string, Record<string, CuboAgregado>>, a: string, b: string): CuboAgregado {
     const nivel = (mapa[a] ||= {});
     return (nivel[b] ||= vacio());
 }
@@ -123,13 +133,14 @@ export async function getPedidosPorPais(opciones: {
 
                 periodos.set(clavePeriodo, etiquetaDePeriodo(clavePeriodo, granularidad));
 
-                sumar(asegurarAnidado(res.porPeriodoPais, clavePeriodo, paisDoc), cubo);
-                sumar(asegurarAnidado(res.porPeriodoBodega, clavePeriodo, bodegaDoc), cubo);
-                sumar(asegurarAnidado(res.porPaisBodega, paisDoc, bodegaDoc), cubo);
-                sumar(asegurar(res.totalPorPais, paisDoc), cubo);
-                sumar(asegurar(res.totalPorBodega, bodegaDoc), cubo);
-                sumar(asegurar(res.totalPorPeriodo, clavePeriodo), cubo);
-                sumar(res.total, cubo);
+                const moneda = monedaDePais(paisDoc);
+                sumar(asegurarAnidado(res.porPeriodoPais, clavePeriodo, paisDoc), cubo, moneda);
+                sumar(asegurarAnidado(res.porPeriodoBodega, clavePeriodo, bodegaDoc), cubo, moneda);
+                sumar(asegurarAnidado(res.porPaisBodega, paisDoc, bodegaDoc), cubo, moneda);
+                sumar(asegurar(res.totalPorPais, paisDoc), cubo, moneda);
+                sumar(asegurar(res.totalPorBodega, bodegaDoc), cubo, moneda);
+                sumar(asegurar(res.totalPorPeriodo, clavePeriodo), cubo, moneda);
+                sumar(res.total, cubo, moneda);
             }
         }
 

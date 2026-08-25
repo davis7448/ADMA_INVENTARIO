@@ -14,10 +14,14 @@ import { getApp } from '@/lib/firebase-admin';
 // mismo comercial sale repetido ("MARCELA" y "marcela" son dos filas distintas) y los
 // números del tablero no cuadrarían con los de Ventas de Plataformas.
 import { canonicalCommercial } from '@/lib/platform-sales';
+import { monedaDePais, sumarImporte, type Importes } from '@/lib/paises';
 
 const SIN_COMERCIAL = 'Orgánicas';
 
-export type CeldaMovimiento = { ventas: number; unidades: number; ingreso: number; entregadas: number };
+// `ingresos` va por moneda ({COP: …, USD: …}) porque una celda puede agrupar
+// varios países: el ingreso de un comercial que vende en Colombia y Panamá no es
+// un número, son dos. Ver la nota de divisas en src/lib/paises.ts.
+export type CeldaMovimiento = { ventas: number; unidades: number; ingresos: Importes; entregadas: number };
 
 export type MovimientoDiario = {
     dias: string[];                                   // YYYY-MM-DD, ascendente
@@ -32,12 +36,12 @@ export type MovimientoDiario = {
     plataformasDisponibles: string[];
 };
 
-const vacia = (): CeldaMovimiento => ({ ventas: 0, unidades: 0, ingreso: 0, entregadas: 0 });
+const vacia = (): CeldaMovimiento => ({ ventas: 0, unidades: 0, ingresos: {}, entregadas: 0 });
 
-function acumular(c: CeldaMovimiento, unidades: number, ingreso: number, entregada: boolean) {
+function acumular(c: CeldaMovimiento, unidades: number, ingreso: number, moneda: string, entregada: boolean) {
     c.ventas += 1;
     c.unidades += unidades;
-    c.ingreso += ingreso;
+    sumarImporte(c.ingresos, moneda, ingreso);
     if (entregada) c.entregadas += 1;
 }
 
@@ -68,7 +72,7 @@ export async function getMovimientoDiario(opciones: {
 
         const snap = await fs.collection('platformSales')
             .where('orderDate', '>=', desde)
-            .select('orderDate', 'commercialName', 'pais', 'platform', 'total', 'esEntregado', 'quantity')
+            .select('orderDate', 'commercialName', 'pais', 'platform', 'total', 'moneda', 'esEntregado', 'quantity')
             .get();
 
         const res: MovimientoDiario = { ...vacio, porComercialDia: {}, totalPorComercial: {}, totalPorDia: {}, porPais: {}, porPlataforma: {}, total: vacia() };
@@ -90,6 +94,8 @@ export async function getMovimientoDiario(opciones: {
             const comercial = canonicalCommercial(d.get('commercialName'), alias);
             const unidades = Number(d.get('quantity')) || 0;
             const ingreso = Number(d.get('total')) || 0;
+            // Las ventas viejas no tienen `moneda`: son todas de Colombia → COP.
+            const moneda = String(d.get('moneda') || '') || monedaDePais(paisDoc);
             const entregada = !!d.get('esEntregado');
 
             diasSet.add(fecha);
@@ -100,12 +106,12 @@ export async function getMovimientoDiario(opciones: {
             res.porPais[paisDoc] ||= vacia();
             res.porPlataforma[platDoc] ||= vacia();
 
-            acumular(res.porComercialDia[comercial][fecha], unidades, ingreso, entregada);
-            acumular(res.totalPorComercial[comercial], unidades, ingreso, entregada);
-            acumular(res.totalPorDia[fecha], unidades, ingreso, entregada);
-            acumular(res.porPais[paisDoc], unidades, ingreso, entregada);
-            acumular(res.porPlataforma[platDoc], unidades, ingreso, entregada);
-            acumular(res.total, unidades, ingreso, entregada);
+            acumular(res.porComercialDia[comercial][fecha], unidades, ingreso, moneda, entregada);
+            acumular(res.totalPorComercial[comercial], unidades, ingreso, moneda, entregada);
+            acumular(res.totalPorDia[fecha], unidades, ingreso, moneda, entregada);
+            acumular(res.porPais[paisDoc], unidades, ingreso, moneda, entregada);
+            acumular(res.porPlataforma[platDoc], unidades, ingreso, moneda, entregada);
+            acumular(res.total, unidades, ingreso, moneda, entregada);
         }
 
         res.dias = [...diasSet].sort();

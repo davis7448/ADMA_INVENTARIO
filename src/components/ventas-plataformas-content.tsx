@@ -19,12 +19,14 @@ import {
     getSalesByMonthAndCommercial, getAssignmentConsumption, saveManualMapping,
     getUnmappedTiendas, saveTiendaMapping, getSalesBreakdown, getBaseUnitConsumption, getUnlinkedSkuItems,
     getDistinctCommercials, saveCommercialAlias,
-    type ImportSummary, type ReportMonth, type PendingBreakdown,
+    type ImportSummary, type ReportMonth, type PendingBreakdown, type Celda, type CeldaComercial,
 } from '@/lib/platform-sales';
 import { loadCrmConfig } from '@/lib/client-volume';
 import { parseEffiFiles } from '@/lib/effi';
 import { queueLargeImport } from '@/lib/large-import';
-import { PAISES } from '@/lib/paises';
+import {
+    PAISES, formatearImporte, formatearImportes, leerImportes, sumarImportes, type Importes,
+} from '@/lib/paises';
 import { syncVenndeloAction } from '@/app/actions/venndelo';
 import { ProductSearchPicker } from '@/components/product-search-picker';
 import { AlertTriangle, FileUp, Link2, Upload } from 'lucide-react';
@@ -37,7 +39,7 @@ const PLATFORMS = [
 ];
 const BODEGAS = ['INGENIO', 'LABORATORIO', 'IMPORTACIONES', 'OTRA'];
 const PAISES_VENTA = PAISES; // lista compartida (src/lib/paises.ts)
-type Breakdown = Map<string, Map<string, { ventas: number; total: number }>>;
+type Breakdown = Map<string, Map<string, Celda>>;
 
 export function VentasPlataformasContent() {
     const { user } = useAuth();
@@ -60,7 +62,7 @@ export function VentasPlataformasContent() {
     const [summary, setSummary] = useState<ImportSummary | null>(null);
 
     const [months, setMonths] = useState<ReportMonth[]>([]);
-    const [byMonthCommercial, setByMonthCommercial] = useState<Map<string, Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>>>(new Map());
+    const [byMonthCommercial, setByMonthCommercial] = useState<Map<string, Map<string, CeldaComercial>>>(new Map());
     const [unmapped, setUnmapped] = useState<Array<{ itemId: string; ventas: number; entregadas: number; productName?: string; variantName?: string; motivo: 'sin_mapeo' | 'sin_cliente' }>>([]);
     const [consumption, setConsumption] = useState<Array<{ itemId: string; productName?: string; clientEmail?: string; assignedQty: number; soldQty: number; pct: number }>>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +70,7 @@ export function VentasPlataformasContent() {
     const [unmappedTiendas, setUnmappedTiendas] = useState<Array<{ tienda: string; ventas: number }>>([]);
     const [byBodega, setByBodega] = useState<Breakdown>(new Map());
     const [byPais, setByPais] = useState<Breakdown>(new Map());
-    const [byBodegaComercial, setByBodegaComercial] = useState<Map<string, Map<string, Map<string, { ventas: number; total: number }>>>>(new Map());
+    const [byBodegaComercial, setByBodegaComercial] = useState<Map<string, Map<string, Map<string, Celda>>>>(new Map());
     // Desglose de las órdenes abiertas por mes (comercial/país/bodega/estado)
     const [pendientes, setPendientes] = useState<Map<string, PendingBreakdown>>(new Map());
     const [baseUnits, setBaseUnits] = useState<Array<{ productName: string; ordenes: number; unidadesBase: number; tieneCombo: boolean }>>([]);
@@ -266,21 +268,24 @@ export function VentasPlataformasContent() {
     // Un mes puede tener varios docs (uno por plataforma). Fusionar por mes para:
     // el TOTAL del mes, el desglose por plataforma, el selector y el badge de cierre.
     const { mesesResumen, totalByMonth, byMonthPlatform } = useMemo(() => {
-        const totalMap = new Map<string, { ventas: number; total: number; pendingOrders: number; closed: boolean }>();
-        const platformMap = new Map<string, Map<string, { ventas: number; total: number }>>();
+        const totalMap = new Map<string, { ventas: number; totales: Importes; pendingOrders: number; closed: boolean }>();
+        const platformMap = new Map<string, Map<string, Celda>>();
         for (const m of months) {
-            const t = totalMap.get(m.month) || { ventas: 0, total: 0, pendingOrders: 0, closed: true };
+            // `ingresosPorMoneda` es el formato nuevo; los meses agregados antes
+            // traen `ingresoTotal` suelto, que siempre fue COP.
+            const ingresos = leerImportes({ totales: (m as any).ingresosPorMoneda, total: (m as any).ingresoTotal });
+            const t = totalMap.get(m.month) || { ventas: 0, totales: {}, pendingOrders: 0, closed: true };
             t.ventas += m.entregadas || 0;
-            t.total += m.ingresoTotal || 0;
+            sumarImportes(t.totales, ingresos);
             t.pendingOrders += m.pendingOrders || 0;
             t.closed = t.closed && m.closed;
             totalMap.set(m.month, t);
 
             if (!platformMap.has(m.month)) platformMap.set(m.month, new Map());
             const pm = platformMap.get(m.month)!;
-            const e = pm.get(m.platform) || { ventas: 0, total: 0 };
+            const e = pm.get(m.platform) || { ventas: 0, totales: {} };
             e.ventas += m.entregadas || 0;
-            e.total += m.ingresoTotal || 0;
+            sumarImportes(e.totales, ingresos);
             pm.set(m.platform, e);
         }
         const lista = Array.from(totalMap.entries())
@@ -898,7 +903,7 @@ function ClasifDots({ v }: { v: { activaciones?: number; reactivaciones?: number
 // Mini-tabla de un desglose (plataforma / comercial / país) dentro de la tarjeta de mes
 function MiniBreakdown({ titulo, rows }: {
     titulo: string;
-    rows: Array<{ label: string; ventas: number; total: number; clasif?: { activaciones?: number; reactivaciones?: number; publicas?: number } }>;
+    rows: Array<{ label: string; ventas: number; totales: Importes; clasif?: { activaciones?: number; reactivaciones?: number; publicas?: number } }>;
 }) {
     return (
         <div>
@@ -915,7 +920,7 @@ function MiniBreakdown({ titulo, rows }: {
                                     {r.clasif && <ClasifDots v={r.clasif} />}
                                 </td>
                                 <td className="py-1 text-right tabular-nums whitespace-nowrap align-top">{r.ventas}</td>
-                                <td className="py-1 pl-3 text-right tabular-nums whitespace-nowrap text-muted-foreground align-top">${r.total.toLocaleString('es-CO')}</td>
+                                <td className="py-1 pl-3 text-right tabular-nums whitespace-nowrap text-muted-foreground align-top">{formatearImportes(r.totales)}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -927,8 +932,8 @@ function MiniBreakdown({ titulo, rows }: {
 
 // Desglose por bodega, y dentro de cada bodega, por comercial.
 function BodegaComercialBreakdown({ bodega, bodegaComercial }: {
-    bodega?: Map<string, { ventas: number; total: number }>;
-    bodegaComercial?: Map<string, Map<string, { ventas: number; total: number }>>;
+    bodega?: Map<string, Celda>;
+    bodegaComercial?: Map<string, Map<string, Celda>>;
 }) {
     const bodegas = Array.from(bodega?.entries() || []).sort((a, b) => b[1].ventas - a[1].ventas);
     if (bodegas.length === 0) return null;
@@ -938,13 +943,13 @@ function BodegaComercialBreakdown({ bodega, bodegaComercial }: {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                 {bodegas.map(([bod, v]) => {
                     const coms = Array.from(bodegaComercial?.get(bod)?.entries() || [])
-                        .map(([label, x]) => ({ label, ventas: x.ventas, total: x.total }))
+                        .map(([label, x]) => ({ label, ventas: x.ventas, totales: x.totales }))
                         .sort((a, b) => b.ventas - a.ventas);
                     return (
                         <div key={bod}>
                             <div className="flex items-center justify-between border-b pb-1 mb-1">
                                 <span className="font-semibold text-sm">{bod}</span>
-                                <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{v.ventas.toLocaleString('es-CO')} · ${v.total.toLocaleString('es-CO')}</span>
+                                <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{v.ventas.toLocaleString('es-CO')} · {formatearImportes(v.totales)}</span>
                             </div>
                             {coms.length === 0 ? <p className="text-xs text-muted-foreground">—</p> : (
                                 <table className="w-full text-sm">
@@ -953,7 +958,7 @@ function BodegaComercialBreakdown({ bodega, bodegaComercial }: {
                                             <tr key={r.label} className="border-b border-border/30 last:border-0">
                                                 <td className="py-0.5 pr-2">{r.label}</td>
                                                 <td className="py-0.5 text-right tabular-nums whitespace-nowrap">{r.ventas}</td>
-                                                <td className="py-0.5 pl-3 text-right tabular-nums whitespace-nowrap text-muted-foreground">${r.total.toLocaleString('es-CO')}</td>
+                                                <td className="py-0.5 pl-3 text-right tabular-nums whitespace-nowrap text-muted-foreground">{formatearImportes(r.totales)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -1024,22 +1029,22 @@ function PendList({ titulo, rows }: { titulo: string; rows: Array<[string, numbe
 // Tarjeta de un mes: cabecera con el TOTAL y tres columnas de desglose
 function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega, bodegaComercial, pendientes }: {
     month: string;
-    total?: { ventas: number; total: number; pendingOrders: number; closed: boolean };
+    total?: { ventas: number; totales: Importes; pendingOrders: number; closed: boolean };
     pendientes?: PendingBreakdown;
-    plataforma?: Map<string, { ventas: number; total: number }>;
-    comercial?: Map<string, { ventas: number; total: number; activaciones: number; reactivaciones: number; publicas: number }>;
-    pais?: Map<string, { ventas: number; total: number }>;
-    bodega?: Map<string, { ventas: number; total: number }>;
-    bodegaComercial?: Map<string, Map<string, { ventas: number; total: number }>>;
+    plataforma?: Map<string, Celda>;
+    comercial?: Map<string, CeldaComercial>;
+    pais?: Map<string, Celda>;
+    bodega?: Map<string, Celda>;
+    bodegaComercial?: Map<string, Map<string, Celda>>;
 }) {
     const platRows = Array.from(plataforma?.entries() || [])
-        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
+        .map(([label, v]) => ({ label, ventas: v.ventas, totales: v.totales }))
         .sort((a, b) => b.ventas - a.ventas);
     const comRows = Array.from(comercial?.entries() || [])
-        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total, clasif: { activaciones: v.activaciones, reactivaciones: v.reactivaciones, publicas: v.publicas } }))
+        .map(([label, v]) => ({ label, ventas: v.ventas, totales: v.totales, clasif: { activaciones: v.activaciones, reactivaciones: v.reactivaciones, publicas: v.publicas } }))
         .sort((a, b) => b.ventas - a.ventas);
     const paisRows = Array.from(pais?.entries() || [])
-        .map(([label, v]) => ({ label, ventas: v.ventas, total: v.total }))
+        .map(([label, v]) => ({ label, ventas: v.ventas, totales: v.totales }))
         .sort((a, b) => b.ventas - a.ventas);
 
     return (
@@ -1049,7 +1054,10 @@ function MonthSummaryCard({ month, total, plataforma, comercial, pais, bodega, b
                     <CardTitle className="text-lg capitalize">{formatMonthLabel(month)}</CardTitle>
                     <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-sm px-2.5 py-1">{(total?.ventas ?? 0).toLocaleString('es-CO')} ventas</Badge>
-                        <Badge variant="default" className="text-sm px-2.5 py-1">${(total?.total ?? 0).toLocaleString('es-CO')}</Badge>
+                        {/* Un badge POR MONEDA: sumar pesos con dólares daba una cifra sin significado. */}
+                        {Object.entries(total?.totales || {}).sort((a, b) => b[1] - a[1]).map(([moneda, valor]) => (
+                            <Badge key={moneda} variant="default" className="text-sm px-2.5 py-1">{formatearImporte(valor, moneda)}</Badge>
+                        ))}
                         {total && (total.closed
                             ? <Badge variant="outline">Cerrado</Badge>
                             : <PendientesBadge n={total.pendingOrders} detalle={pendientes} />)}
@@ -1083,7 +1091,7 @@ function BreakdownCard({ titulo, data }: { titulo: string; data: Breakdown }) {
                             <TableHead>Mes</TableHead>
                             <TableHead>Origen</TableHead>
                             <TableHead className="text-right">Ventas</TableHead>
-                            <TableHead className="text-right">Total (COP)</TableHead>
+                            <TableHead className="text-right">Total</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1094,7 +1102,7 @@ function BreakdownCard({ titulo, data }: { titulo: string; data: Breakdown }) {
                                     <TableCell className="font-medium">{i === 0 ? mes : ''}</TableCell>
                                     <TableCell>{origen}</TableCell>
                                     <TableCell className="text-right">{v.ventas}</TableCell>
-                                    <TableCell className="text-right">${v.total.toLocaleString('es-CO')}</TableCell>
+                                    <TableCell className="text-right">{formatearImportes(v.totales)}</TableCell>
                                 </TableRow>
                             ));
                         })}
