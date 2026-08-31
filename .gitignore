@@ -56,3 +56,7 @@ next-env.d.ts
 # Volcados generados por scripts/ (contienen datos personales)
 scripts/output/users-respaldo-*.json
 scripts/output/fusion-usuarios-*.tsv
+
+# Reportes de importación de clientes (traen datos personales)
+logs/import-clientes-*.csv
+logs/conflictos-asignacion-comercial.csv
