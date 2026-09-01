@@ -4,7 +4,7 @@
 // correo `invalido` habilitaba el envío. Aquí las reglas se declaran una vez y el servidor
 // las vuelve a aplicar sobre lo que llega, que es donde cuentan.
 import { z } from 'zod';
-import { CANTIDAD, CATEGORIAS, CATEGORIAS_CON_TABLA_NUTRICIONAL, FORMAS, RUTAS_REGULATORIAS, type CategoriaId } from './cotizador-catalogo';
+import { CANTIDAD, CATEGORIAS, CATEGORIAS_CON_TABLA_NUTRICIONAL, FORMAS, PAISES, RUTAS_REGULATORIAS, type CategoriaId } from './cotizador-catalogo';
 
 const texto = (max: number) => z.string().trim().max(max);
 const ids = CATEGORIAS.map(c => c.id) as [CategoriaId, ...CategoriaId[]];
@@ -34,6 +34,10 @@ export const CotizacionSchema = z.object({
     rutaRegulatoria: texto(60).optional(),
     tablaNutricional: z.boolean().optional(),
     presentacion: texto(120).min(1, 'Indica la presentación, peso o volumen'),
+    // Enlace a un producto de referencia. Es como trabaja el equipo —hay tareas cuya
+    // observación entera es "tal cual el link"— y hasta ahora no se pedía.
+    // La cadena vacía se acepta para no obligar a limpiar el campo antes de enviar.
+    enlaceReferencia: z.union([z.literal(''), z.string().trim().url('El enlace no es válido').max(500)]).optional(),
     cantidad: z.number().int().min(CANTIDAD.min).max(CANTIDAD.max),
     canalesVenta: z.array(texto(40)).default([]),
     origenLead: texto(40).optional(),
@@ -43,6 +47,9 @@ export const CotizacionSchema = z.object({
     email: z.string().trim().toLowerCase().email('Correo inválido'),
     telefono: texto(30).optional(),
     ciudad: texto(80).min(2, 'Indica la ciudad de entrega'),
+    // Separado de la ciudad: ClickUp tiene un dropdown de país y la ciudad sola no basta
+    // para llenarlo.
+    pais: texto(40).optional(),
     mensaje: texto(1500).optional(),
     confidencialidad: z.boolean().default(true),
     pilotoSolicitado: z.boolean().default(true),
@@ -74,6 +81,9 @@ export const CotizacionSchema = z.object({
         }
         if (d.tablaNutricional !== undefined && !CATEGORIAS_CON_TABLA_NUTRICIONAL.includes(d.categoria)) {
             ctx.addIssue({ code: 'custom', path: ['tablaNutricional'], message: 'La tabla nutricional no aplica a esta categoría' });
+        }
+        if (d.pais && !PAISES.includes(d.pais)) {
+            ctx.addIssue({ code: 'custom', path: ['pais'], message: 'Ese país no está en la lista' });
         }
         if (d.cantidad % CANTIDAD.paso !== 0) {
             ctx.addIssue({ code: 'custom', path: ['cantidad'], message: `La cantidad debe ir de ${CANTIDAD.paso} en ${CANTIDAD.paso}` });

@@ -290,6 +290,7 @@ export function CotizacionesContent() {
                                 taskId={abierta.clickupTaskId}
                                 url={abierta.clickupUrl}
                                 actor={user?.name || user?.email || 'interno'}
+                                comercialAsignado={abierta.comercialAsignado}
                                 // Tras crear la tarea hay que releer: `abierta` es la copia
                                 // vieja y todavía no tiene el clickupTaskId.
                                 onSincronizada={async () => {

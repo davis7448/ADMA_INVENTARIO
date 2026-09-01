@@ -13,7 +13,8 @@
 // `quoteRequests` sin escritura desde el navegador (firestore.rules).
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getApp } from '@/lib/firebase-admin';
-import { clickupFetch, getListFieldMap, fieldValue } from '@/lib/clickup';
+import { clickupFetch, getListFieldMap, fieldValue, uploadAttachmentsToTask } from '@/lib/clickup';
+import { leerReferencias, borrarReferencias, type Referencia } from '@/lib/cotizacion-referencias';
 import type { EstadoCotizacion } from '@/lib/cotizaciones-estados';
 
 export const LISTA_COTIZACIONES = '901314590474';
@@ -122,11 +123,13 @@ export async function crearTareaCotizacion(cotizacionId: string): Promise<Result
             categoria ? fieldValue(map, 'CATEGORIA', categoria) : null,
             fieldValue(map, 'PRESENTACION', q.presentacion),
             fieldValue(map, 'OBSERVACIONES', q.mensaje),
+            fieldValue(map, 'ENLACE DE REFERENCIA', q.enlaceReferencia),
+            fieldValue(map, 'PAIS', q.pais),
         ].filter((f): f is { id: string; value: unknown } => f !== null);
 
-        // PAIS y COMERCIAL se dejan vacíos a propósito: el formulario público pide ciudad,
-        // no país, y un lead entrante todavía no tiene comercial asignado. Adivinarlos
-        // ensucia el tablero — los pone quien clasifica.
+        // COMERCIAL sigue vacío a propósito: un lead entrante todavía no tiene comercial
+        // asignado, y adivinarlo ensucia el tablero. Lo pone quien clasifica, desde la
+        // bandeja (asignarComercial).
         const nombreTarea = `${q.presentacion || 'Producto'} · ${q.empresa || q.nombre}`.slice(0, 120);
         const tarea = await clickupFetch(`/list/${LISTA_COTIZACIONES}/task`, {
             method: 'POST',
@@ -138,19 +141,42 @@ export async function crearTareaCotizacion(cotizacionId: string): Promise<Result
             }),
         });
 
+        // Las imágenes que subió el cliente pasan del buzón de Storage a la tarea y se
+        // borran del bucket: ClickUp es su sitio definitivo. Un fallo aquí no tumba la
+        // sincronización — la tarea ya existe y los ficheros siguen en Storage.
+        const referencias = (q.referencias || []) as Referencia[];
+        let adjuntadas = 0;
+        if (referencias.length) {
+            try {
+                const archivos = await leerReferencias(referencias);
+                const r = await uploadAttachmentsToTask(tarea.id, archivos);
+                adjuntadas = r.uploaded;
+                if (r.errors.length) console.error('[cotizaciones/clickup] adjuntos con error:', r.errors);
+                if (adjuntadas === referencias.length) await borrarReferencias(referencias);
+            } catch (e) {
+                console.error('[cotizaciones/clickup] no se pudieron pasar las referencias:', e);
+            }
+        }
+
         // Las etapas NO se crean aquí: la automatización de la lista las añade sola en
         // cuanto aparece la tarea.
         await ref.update({
             clickupTaskId: tarea.id,
             clickupUrl: tarea.url || null,
             clickupSync: 'synced',
+            // Se vacía solo si todas viajaron: si quedó alguna, el registro sigue apuntando
+            // al fichero de Storage para poder reintentarlo.
+            ...(referencias.length && adjuntadas === referencias.length ? { referencias: [] } : {}),
             updatedAt: Timestamp.now(),
         });
         await ref.collection('history').add({
             // Sin estado anterior: no es un cambio de estado, es una anotación. Así el
             // historial no muestra un "Recibida → Recibida" que no significa nada.
             estadoAnterior: null, estadoNuevo: q.estado,
-            actor: 'ADMA', motivo: 'Sincronizada con ClickUp',
+            actor: 'ADMA',
+            motivo: referencias.length
+                ? `Sincronizada con ClickUp (${adjuntadas}/${referencias.length} referencias adjuntadas)`
+                : 'Sincronizada con ClickUp',
             fecha: Timestamp.now(),
         });
 
@@ -204,5 +230,28 @@ export async function agregarObservacion(taskId: string, texto: string, actor: s
         // El autor va en el texto: el token es el de ADMA, así que ClickUp atribuiría
         // todos los comentarios a la misma cuenta y se perdería quién negoció.
         body: JSON.stringify({ comment_text: `[${actor}] ${texto}`, notify_all: false }),
+    });
+}
+
+// --- Asignar comercial ---
+//
+// Las opciones se leen en vivo del dropdown de ClickUp en vez de tener una lista propia:
+// el equipo cambia de comerciales sin avisar, y una copia en el código quedaría vieja.
+// Tampoco se cruza contra `users` de ADMA a propósito — ahí hay correos con dos
+// documentos y la atribución de comercial ya se rompió una vez por eso.
+export async function comercialesDisponibles(): Promise<string[]> {
+    const map = await getListFieldMap(LISTA_COTIZACIONES);
+    const campo = map['COMERCIAL'];
+    if (!campo) return [];
+    return Object.keys(campo.options).sort();
+}
+
+export async function asignarComercial(taskId: string, comercial: string): Promise<void> {
+    const map = await getListFieldMap(LISTA_COTIZACIONES);
+    const valor = fieldValue(map, 'COMERCIAL', comercial);
+    if (!valor) throw new Error(`"${comercial}" no está entre los comerciales de la lista.`);
+    await clickupFetch(`/task/${taskId}/field/${valor.id}`, {
+        method: 'POST',
+        body: JSON.stringify({ value: valor.value }),
     });
 }

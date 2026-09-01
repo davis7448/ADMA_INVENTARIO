@@ -13,6 +13,7 @@ import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizac
 import { getTaskAttachments, uploadAttachmentsToTask, clickupFetch, type ClickUpAttachment } from '@/lib/clickup';
 import {
     crearTareaCotizacion, listarObservaciones, agregarObservacion,
+    comercialesDisponibles, asignarComercial,
     ESTADO_CLICKUP, type Observacion,
 } from '@/lib/clickup-cotizaciones';
 
@@ -39,6 +40,9 @@ export type CotizacionListada = {
     ingredientesEvitar: string[];
     clickupTaskId?: string;
     clickupUrl?: string;
+    comercialAsignado?: string;
+    enlaceReferencia?: string;
+    pais?: string;
 };
 
 export async function listarCotizaciones(): Promise<CotizacionListada[]> {
@@ -70,6 +74,9 @@ export async function listarCotizaciones(): Promise<CotizacionListada[]> {
                 ingredientesEvitar: v.ingredientesEvitar || [],
                 clickupTaskId: v.clickupTaskId,
                 clickupUrl: v.clickupUrl,
+                comercialAsignado: v.comercialAsignado,
+                enlaceReferencia: v.enlaceReferencia,
+                pais: v.pais,
             } as CotizacionListada;
         });
     } catch (error) {
@@ -287,5 +294,34 @@ export async function agregarObservacionCotizacion(
     } catch (error) {
         console.error('[cotizaciones] error escribiendo la observación:', error);
         return { success: false, error: 'No se pudo guardar la observación.' };
+    }
+}
+
+export async function comercialesCotizaciones(): Promise<string[]> {
+    try {
+        return await comercialesDisponibles();
+    } catch (error) {
+        console.error('[cotizaciones] error leyendo los comerciales:', error);
+        return [];
+    }
+}
+
+export async function asignarComercialCotizacion(
+    cotizacionId: string,
+    comercial: string,
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const taskId = await taskIdDe(cotizacionId);
+        if (!taskId) return { success: false, error: 'La cotización todavía no está en ClickUp.' };
+        await asignarComercial(taskId, comercial);
+
+        const fs = getFirestore(await getApp());
+        await fs.collection('quoteRequests').doc(cotizacionId).update({
+            comercialAsignado: comercial, updatedAt: Timestamp.now(),
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('[cotizaciones] error asignando el comercial:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'No se pudo asignar.' };
     }
 }

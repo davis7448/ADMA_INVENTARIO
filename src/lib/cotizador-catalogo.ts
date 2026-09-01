@@ -61,3 +61,8 @@ export const ORIGENES_LEAD = ['Google', 'Instagram', 'Referido', 'Feria', 'Ya so
 
 // Límites de cantidad. El servidor los valida también: no basta con el control deslizante.
 export const CANTIDAD = { min: 1000, max: 50000, paso: 500, inicial: 5000 };
+
+// Países tal como los escribe el dropdown PAIS de ClickUp. Se copian literales a
+// propósito: si aquí dijera "México" y allá "MEXICO", el emparejado del campo fallaría y
+// la tarea llegaría sin país.
+export const PAISES = ['COLOMBIA', 'MEXICO', 'ECUADOR', 'PARAGUAY', 'ARGENTINA', 'GUATEMALA', 'CHILE', 'PANAMA'];

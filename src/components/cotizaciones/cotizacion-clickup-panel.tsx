@@ -9,7 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import {
     sincronizarCotizacionClickUp, adjuntosCotizacion, subirAdjuntosCotizacion,
     observacionesCotizacion, agregarObservacionCotizacion,
+    comercialesCotizaciones, asignarComercialCotizacion,
 } from '@/app/actions/cotizaciones';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ClickUpAttachment } from '@/lib/clickup';
 import type { Observacion } from '@/lib/clickup-cotizaciones';
 import { ExternalLink, Loader2, Paperclip, Send, Upload } from 'lucide-react';
@@ -20,10 +22,11 @@ import { ExternalLink, Loader2, Paperclip, Send, Upload } from 'lucide-react';
 // los adjuntos tienen control de acceso real. Aquí se leen en vivo y se escriben a través
 // del servidor, que es quien tiene el token — los comerciales no tienen permiso de
 // edición en ClickUp.
-export function CotizacionClickUpPanel({ cotizacionId, taskId, url, actor, onSincronizada }: {
+export function CotizacionClickUpPanel({ cotizacionId, taskId, url, actor, comercialAsignado, onSincronizada }: {
     cotizacionId: string;
     taskId?: string;
     url?: string;
+    comercialAsignado?: string;
     // Quién escribe. El token de ClickUp es el de ADMA, así que sin esto todas las
     // observaciones quedarían atribuidas a la misma cuenta.
     actor: string;
@@ -37,6 +40,8 @@ export function CotizacionClickUpPanel({ cotizacionId, taskId, url, actor, onSin
     const [subiendo, setSubiendo] = useState(false);
     const [texto, setTexto] = useState('');
     const [enviando, setEnviando] = useState(false);
+    const [comerciales, setComerciales] = useState<string[]>([]);
+    const [asignando, setAsignando] = useState(false);
 
     const cargar = useCallback(async () => {
         if (!taskId) return;
@@ -48,6 +53,8 @@ export function CotizacionClickUpPanel({ cotizacionId, taskId, url, actor, onSin
         if (a.success) setAdjuntos(a.adjuntos || []);
         if (o.success) setObservaciones(o.observaciones || []);
         setCargando(false);
+        // Las opciones se leen del propio dropdown de ClickUp, no de una lista local.
+        setComerciales(await comercialesCotizaciones());
     }, [cotizacionId, taskId]);
 
     useEffect(() => { cargar(); }, [cargar]);
@@ -83,6 +90,25 @@ export function CotizacionClickUpPanel({ cotizacionId, taskId, url, actor, onSin
 
     return (
         <>
+            <div className="border-t pt-3 space-y-2">
+                <Label className="text-sm">Comercial</Label>
+                <div className="flex items-center gap-2">
+                    <Select value={comercialAsignado || ''} disabled={asignando} onValueChange={async v => {
+                        setAsignando(true);
+                        const r = await asignarComercialCotizacion(cotizacionId, v);
+                        setAsignando(false);
+                        if (r.success) { toast({ title: 'Comercial asignado', description: v }); onSincronizada(); }
+                        else toast({ title: 'No se pudo asignar', description: r.error, variant: 'destructive' });
+                    }}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                        <SelectContent>
+                            {comerciales.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    {asignando && <Loader2 className="h-4 w-4 animate-spin" />}
+                </div>
+            </div>
+
             <div className="border-t pt-3 space-y-2">
                 <div className="flex items-center justify-between">
                     <Label className="text-sm">Anexos</Label>

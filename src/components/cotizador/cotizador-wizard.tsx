@@ -22,11 +22,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import {
     CANALES_VENTA, CANTIDAD, CATEGORIAS, CATEGORIAS_CON_TABLA_NUTRICIONAL, FORMAS, FRAGANCIAS,
-    INCLUIDOS_FULL, APORTES_CLIENTE, MODALIDADES, ORIGENES_LEAD, RUTAS_FORMULACION,
+    INCLUIDOS_FULL, APORTES_CLIENTE, MODALIDADES, ORIGENES_LEAD, PAISES, RUTAS_FORMULACION,
     RUTAS_REGULATORIAS, type CategoriaId,
 } from '@/lib/cotizador-catalogo';
 import { normalizarIngrediente, type CotizacionInput } from '@/lib/cotizador-schema';
-import { crearCotizacion } from '@/app/actions/cotizador';
+import { crearCotizacion, subirReferenciasCotizacion } from '@/app/actions/cotizador';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 
 const PASOS = ['Categoría', 'Forma', 'Maquila', 'Formulación', 'Detalles', 'Contacto'];
@@ -45,6 +45,9 @@ export function CotizadorWizard() {
     const [enviando, setEnviando] = useState(false);
     const [errores, setErrores] = useState<Record<string, string>>({});
     const [hecho, setHecho] = useState<{ referencia: string } | null>(null);
+    // Los ficheros no caben en el estado del formulario (no son serializables): viajan
+    // aparte, en una segunda llamada, una vez la cotización ya tiene id.
+    const [referencias, setReferencias] = useState<File[]>([]);
     // Se genera una vez por formulario: un doble clic no debe crear dos cotizaciones.
     const [clave] = useState(() => crypto.randomUUID());
 
@@ -112,7 +115,23 @@ export function CotizadorWizard() {
         setEnviando(true); setErrores({});
         try {
             const r = await crearCotizacion(d as CotizacionInput, clave);
-            if (r.success) setHecho({ referencia: r.referencia });
+            if (r.success) {
+                // Los ficheros van en una segunda llamada: la cotización ya está guardada,
+                // así que si la subida falla no se pierde el lead — solo las imágenes.
+                if (referencias.length) {
+                    const fd = new FormData();
+                    for (const f of referencias) fd.append('referencias', f);
+                    const sub = await subirReferenciasCotizacion(r.id, fd);
+                    if (!sub.success) {
+                        toast({
+                            title: 'Cotización recibida, pero sin las imágenes',
+                            description: `${sub.error} Puedes enviárnoslas por correo.`,
+                            variant: 'destructive',
+                        });
+                    }
+                }
+                setHecho({ referencia: r.referencia });
+            }
             else {
                 setErrores(r.campos || {});
                 toast({ title: 'Revisa el formulario', description: r.error, variant: 'destructive' });
@@ -135,7 +154,7 @@ export function CotizadorWizard() {
                     <p className="text-sm text-muted-foreground">
                         Nuestro equipo la revisa y te contacta a <strong>{d.email}</strong>.
                     </p>
-                    <Button variant="outline" onClick={() => { setD(INICIAL); setPaso(0); setHecho(null); }}>
+                    <Button variant="outline" onClick={() => { setD(INICIAL); setPaso(0); setHecho(null); setReferencias([]); }}>
                         Crear otra cotización
                     </Button>
                 </CardContent>
@@ -306,6 +325,27 @@ export function CotizadorWizard() {
                                 <Input id="pres" placeholder="Ej: 120 ml, 60 cápsulas" value={d.presentacion || ''} onChange={e => set('presentacion', e.target.value)} className="mt-1" />
                             </div>
                             <div>
+                                <Label htmlFor="enlace">Enlace de un producto de referencia</Label>
+                                <Input id="enlace" type="url" placeholder="https://…" value={d.enlaceReferencia || ''}
+                                    onChange={e => set('enlaceReferencia', e.target.value)} className="mt-1" />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Si has visto algo parecido a lo que buscas, pégalo aquí. Es lo que más
+                                    ayuda a cotizar.
+                                </p>
+                                {errores.enlaceReferencia && <p className="text-xs text-destructive mt-1">{errores.enlaceReferencia}</p>}
+                            </div>
+                            <div>
+                                <Label htmlFor="refs">Imágenes de referencia</Label>
+                                <Input id="refs" type="file" multiple accept="image/*,application/pdf" className="mt-1"
+                                    onChange={e => setReferencias(Array.from(e.target.files || []).slice(0, 5))} />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Hasta 5 archivos, 8 MB cada uno. Fotos del producto, la etiqueta o el envase.
+                                </p>
+                                {referencias.length > 0 && (
+                                    <p className="text-xs mt-1">{referencias.length} archivo(s): {referencias.map(f => f.name).join(', ')}</p>
+                                )}
+                            </div>
+                            <div>
                                 <Label>Cantidad estimada: <strong>{(d.cantidad || 0).toLocaleString('es-CO')}</strong> unidades</Label>
                                 <input type="range" min={CANTIDAD.min} max={CANTIDAD.max} step={CANTIDAD.paso}
                                     value={d.cantidad} onChange={e => set('cantidad', Number(e.target.value))} className="w-full mt-2" />
@@ -359,9 +399,18 @@ export function CotizadorWizard() {
                                     <Label htmlFor="tel">WhatsApp</Label>
                                     <Input id="tel" value={d.telefono || ''} onChange={e => set('telefono', e.target.value)} className="mt-1" />
                                 </div>
-                                <div className="col-span-2">
+                                <div>
                                     <Label htmlFor="ciu">Ciudad de entrega *</Label>
                                     <Input id="ciu" value={d.ciudad || ''} onChange={e => set('ciudad', e.target.value)} className="mt-1" />
+                                </div>
+                                <div>
+                                    <Label>País</Label>
+                                    <Select value={d.pais || ''} onValueChange={v => set('pais', v)}>
+                                        <SelectTrigger className="mt-1"><SelectValue placeholder="Selecciona…" /></SelectTrigger>
+                                        <SelectContent>
+                                            {PAISES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
                             <Textarea placeholder="¿Algo más que debamos saber? (opcional)" value={d.mensaje || ''} onChange={e => set('mensaje', e.target.value)} className="resize-none h-20" />
