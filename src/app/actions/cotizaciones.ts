@@ -7,34 +7,9 @@
 // que un cambio de estado no puede hacerse a mano desde la consola del navegador.
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getApp } from '@/lib/firebase-admin';
-
-export type EstadoCotizacion =
-    | 'recibida' | 'triage' | 'esperando_cliente' | 'revision_tecnica'
-    | 'cotizada' | 'aceptada' | 'rechazada' | 'cancelada';
-
-export const ESTADO_LABEL: Record<EstadoCotizacion, string> = {
-    recibida: 'Recibida',
-    triage: 'En clasificación',
-    esperando_cliente: 'Esperando al cliente',
-    revision_tecnica: 'Revisión técnica',
-    cotizada: 'Cotizada',
-    aceptada: 'Aceptada',
-    rechazada: 'Rechazada',
-    cancelada: 'Cancelada',
-};
-
-// Qué transiciones son válidas. Sin esto, un estado puede saltar a cualquier otro y el
-// historial deja de contar una historia coherente.
-export const TRANSICIONES: Record<EstadoCotizacion, EstadoCotizacion[]> = {
-    recibida: ['triage', 'cancelada'],
-    triage: ['esperando_cliente', 'revision_tecnica', 'cotizada', 'cancelada'],
-    esperando_cliente: ['triage', 'cancelada'],
-    revision_tecnica: ['cotizada', 'esperando_cliente', 'cancelada'],
-    cotizada: ['aceptada', 'rechazada', 'esperando_cliente'],
-    aceptada: [],
-    rechazada: [],
-    cancelada: [],
-};
+// Estados y transiciones viven en un módulo normal: este fichero es "use server" y
+// Next solo deja exportar funciones async desde aquí.
+import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizaciones-estados';
 
 export type CotizacionListada = {
     id: string;

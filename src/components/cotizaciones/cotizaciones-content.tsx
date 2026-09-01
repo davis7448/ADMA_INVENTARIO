@@ -16,9 +16,9 @@ import { useToast } from '@/hooks/use-toast';
 import {
     listarCotizaciones, historialCotizacion, cambiarEstadoCotizacion,
     obtenerDestinatarios, guardarDestinatarios,
-    ESTADO_LABEL, TRANSICIONES,
-    type CotizacionListada, type EstadoCotizacion, type EventoHistorial,
+    type CotizacionListada, type EventoHistorial,
 } from '@/app/actions/cotizaciones';
+import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizaciones-estados';
 import { CATEGORIAS } from '@/lib/cotizador-catalogo';
 import { Download, Loader2, Mail } from 'lucide-react';
 
