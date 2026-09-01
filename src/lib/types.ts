@@ -277,6 +277,10 @@ export interface DispatchOrder {
   trackingNumbers: string[];
   exceptions: DispatchException[];
   cancelledExceptions?: DispatchException[];
+  // Copia plana de las guías que están en exceptions/cancelledExceptions. Firestore no
+  // sabe consultar dentro de arrays de objetos, y sin este campo buscar una guía en
+  // excepción obligaba a leer la colección entera. Lo mantiene src/lib/api.ts.
+  exceptionTrackingNumbers?: string[];
   createdBy?: {
     id: string;
     name: string;

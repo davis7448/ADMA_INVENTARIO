@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateApiToken, checkRateLimit, updateTokenUsage } from '@/lib/api-tokens';
-import { getDispatchOrders } from '@/lib/api';
+import { searchDispatchGuides, getPlatforms, getCarriers } from '@/lib/api';
 import { corsHeaders, handleCors } from '@/lib/cors';
 
 // CORS configuration
@@ -19,23 +19,6 @@ interface GuideResult {
   date: string | null;
   platformName: string | null;
   carrierName: string | null;
-}
-
-// Normalize tracking number for different carriers
-function normalizeTrackingNumber(trackingNumber: string): string {
-  const cleaned = trackingNumber.trim();
-  
-  // Interrapidisimo/Envía: If starts with '24' and has 11 digits, add '0' at the beginning
-  if (cleaned.startsWith('24') && cleaned.length === 11) {
-    return '0' + cleaned;
-  }
-  
-  // Servientrega: If starts with '3' and has 11 digits, prepend '7' and append '001'
-  if (cleaned.startsWith('3') && cleaned.length === 11) {
-    return '7' + cleaned + '001';
-  }
-  
-  return cleaned;
 }
 
 export async function POST(request: NextRequest) {
@@ -121,58 +104,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch all dispatch orders
-    const { orders: allOrders } = await getDispatchOrders({ fetchAll: true });
+    // Búsqueda por guía. Antes esta ruta leía la colección completa de despachos
+    // (~30.000 órdenes, ~26 MB) en CADA llamada, lo que agotaba la memoria de la
+    // instancia y devolvía 503. searchDispatchGuides consulta solo las guías pedidas.
+    const [matches, platforms, carriers] = await Promise.all([
+      searchDispatchGuides(trackingNumbers),
+      getPlatforms(),
+      getCarriers(),
+    ]);
 
-    // Create lookup maps for platforms and carriers
-    // Note: In a production environment, you might want to cache these
-    const platformNames: Record<string, string> = {};
-    const carrierNames: Record<string, string> = {};
+    // Los nombres se sacan de sus catálogos: el documento de despacho solo guarda ids,
+    // así que el mapa que se armaba a partir de las órdenes devolvía siempre 'Unknown'.
+    const platformNames: Record<string, string> = Object.fromEntries(platforms.map(p => [p.id, p.name]));
+    const carrierNames: Record<string, string> = Object.fromEntries(carriers.map(c => [c.id, c.name]));
 
-    // Build lookup maps from orders
-    allOrders.forEach(order => {
-      if (order.platformId && !platformNames[order.platformId]) {
-        platformNames[order.platformId] = order.platformName || 'Unknown';
-      }
-      if (order.carrierId && !carrierNames[order.carrierId]) {
-        carrierNames[order.carrierId] = order.carrierName || 'Unknown';
-      }
-    });
-
-    // Process each tracking number
     const results: GuideResult[] = [];
     let found = 0;
     let notFound = 0;
 
     for (const originalTrackingNumber of trackingNumbers) {
-      const normalizedTrackingNumber = normalizeTrackingNumber(originalTrackingNumber);
-      
-      const foundOrder = allOrders.find(order =>
-        order.trackingNumbers?.includes(normalizedTrackingNumber) ||
-        order.exceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber) ||
-        order.cancelledExceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)
-      );
+      const match = matches[originalTrackingNumber];
 
-      if (foundOrder) {
-        let status: string;
-        
-        if (foundOrder.trackingNumbers?.includes(normalizedTrackingNumber)) {
-          status = foundOrder.status;
-        } else if (foundOrder.exceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)) {
-          status = 'Pendiente/Excepción';
-        } else if (foundOrder.cancelledExceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)) {
-          status = 'Anulada';
-        } else {
-          status = 'Desconocido';
-        }
-
+      if (match) {
         results.push({
           trackingNumber: originalTrackingNumber,
-          status,
-          dispatchId: foundOrder.dispatchId,
-          date: foundOrder.date?.toISOString?.() || foundOrder.date || null,
-          platformName: platformNames[foundOrder.platformId] || foundOrder.platformName || null,
-          carrierName: carrierNames[foundOrder.carrierId] || foundOrder.carrierName || null
+          status: match.status,
+          dispatchId: match.dispatchId,
+          date: match.date,
+          platformName: platformNames[match.platformId] || null,
+          carrierName: carrierNames[match.carrierId] || null
         });
         found++;
       } else {

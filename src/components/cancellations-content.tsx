@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
-import { getCancellationRequests, createCancellationRequests, updateCancellationRequestStatus, getDispatchOrders, cancelPendingDispatchItems,annulDispatchedGuideItems, getProducts } from '@/lib/api';
+import { getCancellationRequests, createCancellationRequests, updateCancellationRequestStatus, findDispatchOrderByTracking, cancelPendingDispatchItems,annulDispatchedGuideItems, getProducts } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatToTimeZone } from '@/lib/utils';
@@ -153,13 +153,17 @@ export function CancellationsContent() {
 
     const handleOpenCancelDialog = async (request: CancellationRequest) => {
         setRequestToUpdate(request);
-        const { orders: allOrders } = await getDispatchOrders({ fetchAll: true, filters: { warehouseId: currentWarehouse?.id } });
-        
-        // A guide can be in `trackingNumbers` (dispatched) or `exceptions` (not dispatched)
-        const targetOrder = allOrders.find(order => 
-            order.trackingNumbers?.includes(request.trackingNumber) || 
-            order.exceptions?.some(ex => ex.trackingNumber === request.trackingNumber)
-        );
+        // Antes se traía la colección entera de despachos (~30.000 órdenes) para localizar
+        // UNA guía: el server action se quedaba sin memoria y devolvía 503. Ahora la busca
+        // Firestore por índice.
+        const foundOrder = await findDispatchOrderByTracking(request.trackingNumber, currentWarehouse?.id);
+
+        // A guide can be in `trackingNumbers` (dispatched) or `exceptions` (not dispatched).
+        // Una guía que ya está en cancelledExceptions no se vuelve a anular.
+        const targetOrder = foundOrder && (
+            foundOrder.trackingNumbers?.includes(request.trackingNumber) ||
+            foundOrder.exceptions?.some(ex => ex.trackingNumber === request.trackingNumber)
+        ) ? foundOrder : null;
 
         if (!targetOrder) {
             toast({

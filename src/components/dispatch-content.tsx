@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import Image from 'next/image';
-import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders, getDispatchOrders } from '@/lib/api';
+import { getPendingDispatchOrders, getProducts, getPlatforms, getCarriers, getPartialDispatchOrders, searchDispatchGuides } from '@/lib/api';
 import type { DispatchOrder, Product, Platform, Carrier } from '@/lib/types';
 import {
   Card,
@@ -39,8 +39,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import * as XLSX from 'xlsx';
+
+// Guías por llamada al servidor. Suficientemente grande para que un pistoleo normal
+// entre en una o dos llamadas, y lo bastante chico para ir mostrando avance.
+const SEARCH_BATCH_SIZE = 300;
 
 interface GroupedPendingProduct {
     product: Product;
@@ -69,6 +74,7 @@ export function DispatchContent({
      initialCarriers
  }: DispatchContentProps) {
    const { currentWarehouse } = useAuth();
+  const { toast } = useToast();
    const [pendingOrders, setPendingOrders] = useState<DispatchOrder[]>(initialPendingOrders);
    const [partialOrders, setPartialOrders] = useState<DispatchOrder[]>(initialPartialOrders);
    const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -176,60 +182,9 @@ export function DispatchContent({
     fetchData(); // Refresh both lists after an order is processed
   }
 
-  const normalizeTrackingNumber = (trackingNumber: string): string => {
-    // If starts with '24' and has 11 digits, add '0' at the beginning (Interrapidisimo/Envía)
-    if (trackingNumber.startsWith('24') && trackingNumber.length === 11) {
-      return '0' + trackingNumber;
-    }
-    // If starts with '3' and has 11 digits, prepend '7' and append '001' (for 15-digit guides starting with 7)
-    if (trackingNumber.startsWith('3') && trackingNumber.length === 11) {
-      return '7' + trackingNumber + '001';
-    }
-    return trackingNumber;
-  };
-
-  const processTrackingBatch = (batch: string[], allOrders: any[]): any[] => {
-    return batch.map(originalTrackingNumber => {
-      const normalizedTrackingNumber = normalizeTrackingNumber(originalTrackingNumber);
-      const foundOrder = allOrders.find(order =>
-        order.trackingNumbers?.includes(normalizedTrackingNumber) ||
-        order.exceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber) ||
-        order.cancelledExceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)
-      );
-
-      if (foundOrder) {
-        let status: string;
-        if (foundOrder.trackingNumbers?.includes(normalizedTrackingNumber)) {
-          status = foundOrder.status;
-        } else if (foundOrder.exceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)) {
-          status = 'Pendiente/Excepción';
-        } else if (foundOrder.cancelledExceptions?.some((ex: any) => ex.trackingNumber === normalizedTrackingNumber)) {
-          status = 'Anulada';
-        } else {
-          status = 'Desconocido';
-        }
-
-        return {
-          trackingNumber: originalTrackingNumber,
-          status,
-          dispatchId: foundOrder.dispatchId,
-          date: foundOrder.date.toISOString(),
-          platformName: platformNames[foundOrder.platformId],
-          carrierName: carrierNames[foundOrder.carrierId],
-        };
-      } else {
-        return {
-          trackingNumber: originalTrackingNumber,
-          status: 'No despachada',
-          dispatchId: null,
-          date: null,
-          platformName: null,
-          carrierName: null,
-        };
-      }
-    });
-  };
-
+  // El cruce de guías lo hace el servidor (searchDispatchGuides). Antes se pedía la
+  // colección entera de despachos —~30.000 órdenes, ~26 MB— para cruzarla aquí, y el
+  // server action se caía con 503 antes de contestar. Ahora solo viaja lo pistoleado.
   const handleSearchTrackingNumbers = async () => {
     const trackingList = searchTrackingNumbers.split('\n').map(t => t.trim()).filter(Boolean);
     if (trackingList.length === 0) return;
@@ -240,31 +195,47 @@ export function DispatchContent({
 
     try {
       const warehouseId = currentWarehouse?.id;
-      const { orders: allOrders } = await getDispatchOrders({ fetchAll: true, filters: { warehouseId } });
-
-      const BATCH_SIZE = 100;
-      const batches = [];
-      for (let i = 0; i < trackingList.length; i += BATCH_SIZE) {
-        batches.push(trackingList.slice(i, i + BATCH_SIZE));
-      }
-
       let allResults: any[] = [];
 
-      for (let i = 0; i < batches.length; i++) {
-        const batch = batches[i];
-        const batchResults = processTrackingBatch(batch, allOrders);
-        allResults = [...allResults, ...batchResults];
+      for (let i = 0; i < trackingList.length; i += SEARCH_BATCH_SIZE) {
+        const batch = trackingList.slice(i, i + SEARCH_BATCH_SIZE);
+        const matches = await searchDispatchGuides(batch, warehouseId);
 
-        setSearchProgress({ current: Math.min((i + 1) * BATCH_SIZE, trackingList.length), total: trackingList.length });
+        allResults = [...allResults, ...batch.map(trackingNumber => {
+          const match = matches[trackingNumber];
+          if (!match) {
+            return {
+              trackingNumber,
+              status: 'No despachada',
+              dispatchId: null,
+              date: null,
+              platformName: null,
+              carrierName: null,
+            };
+          }
+          return {
+            trackingNumber,
+            status: match.status,
+            dispatchId: match.dispatchId,
+            date: match.date,
+            platformName: platformNames[match.platformId] || null,
+            carrierName: carrierNames[match.carrierId] || null,
+          };
+        })];
+
+        setSearchProgress({ current: Math.min(i + SEARCH_BATCH_SIZE, trackingList.length), total: trackingList.length });
         setSearchResults([...allResults]);
-
-        // Small delay to prevent UI blocking
-        await new Promise(resolve => setTimeout(resolve, 10));
       }
-
     } catch (error) {
+      // Sin aviso, el operario veía la tabla vacía y no distinguía "ninguna despachada"
+      // de "la búsqueda falló".
       console.error('Error searching tracking numbers:', error);
       setSearchResults([]);
+      toast({
+        variant: 'destructive',
+        title: 'No se pudo completar la búsqueda',
+        description: error instanceof Error ? error.message : 'Revisa la conexión e inténtalo de nuevo.',
+      });
     } finally {
       setIsSearching(false);
       setSearchProgress({ current: 0, total: 0 });
@@ -289,10 +260,16 @@ export function DispatchContent({
     XLSX.writeFile(wb, `resultados_guia_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`);
   };
 
-  const getStatusBadge = (status: 'Pendiente' | 'Despachada' | 'Parcial' | 'Anulada') => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Pendiente':
         return <Badge variant="destructive">Pendiente</Badge>;
+      // La búsqueda de guías devuelve dos estados que no son de la orden sino de la guía:
+      // sin estos casos caían en el default y se mostraban como "Desconocido".
+      case 'No despachada':
+        return <Badge variant="destructive">No despachada</Badge>;
+      case 'Pendiente/Excepción':
+        return <Badge variant="secondary">Pendiente/Excepción</Badge>;
       case 'Despachada':
         return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">Despachada</Badge>;
       case 'Parcial':
@@ -699,7 +676,7 @@ export function DispatchContent({
                         </div>
                         {isSearching && (
                             <div className="mt-2 text-sm text-muted-foreground">
-                                Procesando lote {Math.ceil(searchProgress.current / 100)} de {Math.ceil(searchProgress.total / 100)}...
+                                Procesando lote {Math.ceil(searchProgress.current / SEARCH_BATCH_SIZE)} de {Math.ceil(searchProgress.total / SEARCH_BATCH_SIZE)}...
                             </div>
                         )}
                         {searchResults.length > 0 && (

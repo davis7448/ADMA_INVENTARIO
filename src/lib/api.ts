@@ -10,6 +10,7 @@ import { DEFAULT_IMPORT_TARIFF_PER_CBM } from './types';
 import {v4 as uuidv4} from 'uuid';
 import { startOfDay, endOfDay, subDays, format } from 'date-fns';
 import { computeDashboardData, type DashboardRawData } from './dashboard-utils';
+import { normalizarGuia, type DispatchGuideMatch } from './guias';
 
 const storage = getStorage();
 // Google Cloud Storage - use credentials from environment (App Hosting) or ADC
@@ -904,6 +905,7 @@ export const createDispatchOrder = async ({ platformId, carrierId, products, cre
             trackingNumbers: [],
             exceptions: [],
             cancelledExceptions: [],
+            exceptionTrackingNumbers: [],
             createdBy,
             warehouseId: warehouseId || DEFAULT_WAREHOUSE_ID,
         };
@@ -958,6 +960,18 @@ const parseFirestoreDate = (dateValue: any): Date => {
     }
     console.warn("Unexpected date format from Firestore, using current date as fallback:", dateValue);
     return new Date();
+  };
+
+  // Guías planas de las excepciones, para poder consultarlas con array-contains.
+  // Ver searchDispatchGuides y DispatchOrder.exceptionTrackingNumbers.
+  const guiasDeExcepcion = (...listas: (DispatchException[] | undefined)[]): string[] =>
+    [...new Set(listas.flatMap(l => (l || []).map(ex => ex.trackingNumber)).filter(Boolean))];
+
+  // Las órdenes viejas se guardaron sin bodega; el resto del módulo las cuenta como Bogotá.
+  const perteneceALaBodega = (ordenWarehouseId: string | null | undefined, warehouseId?: string): boolean => {
+    if (!warehouseId || warehouseId === 'all') return true;
+    if (warehouseId === DEFAULT_WAREHOUSE_ID && !ordenWarehouseId) return true;
+    return ordenWarehouseId === warehouseId;
   };
 
   export const getDispatchOrders = async ({ page = 1, limit: itemsPerPage = 10, fetchAll = false, filters = {} }: { page?: number, limit?: number, fetchAll?: boolean, filters?: any } = {}): Promise<{ orders: DispatchOrder[], totalPages: number }> => {
@@ -1034,6 +1048,138 @@ const parseFirestoreDate = (dateValue: any): Date => {
     return { orders: paginatedOrders, totalPages };
 };
 
+
+// Búsqueda de guías de despacho SIN traerse la colección entera.
+//
+// La pestaña "Buscar Guías" pedía getDispatchOrders({ fetchAll: true }) y cruzaba en el
+// navegador. Eso obligaba al servidor a cargar las ~30.000 órdenes de dispatchOrders
+// (~26 MB de JSON) y a serializarlas hacia el cliente en CADA pistoleo: la instancia se
+// quedaba sin memoria/tiempo, Cloud Run respondía 503 y el navegador reventaba al
+// desestructurar `orders` de un resultado vacío ("Cannot destructure property 'orders'").
+//
+// Ahora la consulta va al revés, de las guías pedidas a las órdenes, con dos consultas
+// `array-contains-any` de a 30 guías (el máximo que admite Firestore): una sobre
+// trackingNumbers (guías despachadas) y otra sobre exceptionTrackingNumbers (guías en
+// excepción o anuladas). Ambos son índices de array automáticos: no hace falta ninguno
+// compuesto, y por eso la bodega se filtra en memoria.
+//
+// exceptionTrackingNumbers existe porque las excepciones se guardan como array de OBJETOS
+// y Firestore no sabe consultar dentro de ellos. Filtrarlas por estado no sirve: 64 de las
+// órdenes con excepciones están en estado "Despachada", así que quedarían fuera.
+// Se mantiene en processDispatch, cancelPendingDispatchItems y annulDispatchedGuideItems.
+//
+// Una misma guía puede aparecer en varias órdenes (excepción en una y despachada semanas
+// después en otra). Se responde con la MÁS RECIENTE, que es lo que hacía la búsqueda
+// anterior al ordenar por fecha descendente antes de buscar.
+const LOTE_GUIAS = 30; // máximo de valores en un array-contains-any de Firestore
+
+export const searchDispatchGuides = async (
+    trackingNumbers: string[],
+    warehouseId?: string
+): Promise<Record<string, DispatchGuideMatch>> => {
+    if (!Array.isArray(trackingNumbers) || trackingNumbers.length === 0) return {};
+
+    // guía normalizada → guías originales que la piden (dos originales distintas pueden
+    // normalizar a la misma, y hay que responderle a las dos).
+    const porNormalizada = new Map<string, string[]>();
+    for (const original of trackingNumbers) {
+        const normalizada = normalizarGuia(original);
+        if (!normalizada) continue;
+        const existentes = porNormalizada.get(normalizada);
+        if (existentes) existentes.push(original);
+        else porNormalizada.set(normalizada, [original]);
+    }
+    const normalizadas = [...porNormalizada.keys()];
+    if (normalizadas.length === 0) return {};
+
+    const mejores = new Map<string, { match: DispatchGuideMatch; fecha: Date }>();
+    const registrar = (normalizada: string, orden: any, status: string) => {
+        if (!porNormalizada.has(normalizada)) return;
+        const fecha = parseFirestoreDate(orden.date);
+        const actual = mejores.get(normalizada);
+        if (actual && actual.fecha.getTime() >= fecha.getTime()) return;
+        mejores.set(normalizada, {
+            fecha,
+            match: {
+                status,
+                dispatchId: orden.dispatchId,
+                date: fecha.toISOString(),
+                platformId: orden.platformId,
+                carrierId: orden.carrierId,
+                warehouseId: orden.warehouseId ?? null,
+            },
+        });
+    };
+
+    // Secuencial a propósito: en paralelo, un pistoleo largo abre decenas de streams de
+    // Firestore a la vez y la conexión se cae.
+    for (let i = 0; i < normalizadas.length; i += LOTE_GUIAS) {
+        const lote = normalizadas.slice(i, i + LOTE_GUIAS);
+
+        const despachadas = await getDocs(query(
+            collection(db, 'dispatchOrders'),
+            where('trackingNumbers', 'array-contains-any', lote)
+        ));
+        for (const docSnap of despachadas.docs) {
+            const orden = docSnap.data();
+            if (!perteneceALaBodega(orden.warehouseId, warehouseId)) continue;
+            for (const guia of (orden.trackingNumbers || [])) {
+                registrar(guia, orden, orden.status);
+            }
+        }
+
+        const conExcepcion = await getDocs(query(
+            collection(db, 'dispatchOrders'),
+            where('exceptionTrackingNumbers', 'array-contains-any', lote)
+        ));
+        for (const docSnap of conExcepcion.docs) {
+            const orden = docSnap.data();
+            if (!perteneceALaBodega(orden.warehouseId, warehouseId)) continue;
+            for (const ex of (orden.exceptions || [])) {
+                registrar(ex.trackingNumber, orden, 'Pendiente/Excepción');
+            }
+            for (const ex of (orden.cancelledExceptions || [])) {
+                registrar(ex.trackingNumber, orden, 'Anulada');
+            }
+        }
+    }
+
+    const resultados: Record<string, DispatchGuideMatch> = {};
+    for (const [normalizada, { match }] of mejores) {
+        for (const original of porNormalizada.get(normalizada) || []) {
+            resultados[original] = match;
+        }
+    }
+    return resultados;
+};
+
+// Devuelve la orden de despacho completa a la que pertenece una guía, sin recorrer la
+// colección. La usa la anulación, que necesita los productos de la orden.
+export const findDispatchOrderByTracking = async (
+    trackingNumber: string,
+    warehouseId?: string
+): Promise<DispatchOrder | null> => {
+    const normalizada = normalizarGuia(trackingNumber);
+    if (!normalizada) return null;
+
+    const [despachadas, conExcepcion] = [
+        await getDocs(query(
+            collection(db, 'dispatchOrders'),
+            where('trackingNumbers', 'array-contains', normalizada)
+        )),
+        await getDocs(query(
+            collection(db, 'dispatchOrders'),
+            where('exceptionTrackingNumbers', 'array-contains', normalizada)
+        )),
+    ];
+
+    const candidatas = [...despachadas.docs, ...conExcepcion.docs]
+        .filter(d => perteneceALaBodega(d.data().warehouseId, warehouseId))
+        .map(d => ({ id: d.id, ...d.data(), date: parseFirestoreDate(d.data().date) } as DispatchOrder))
+        .sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    return candidatas[0] || null;
+};
 
 export const getPendingDispatchOrders = async (warehouseId?: string): Promise<DispatchOrder[]> => {
     let baseQuery: Query = query(collection(db, 'dispatchOrders'), where('status', '==', 'Pendiente'));
@@ -1193,6 +1339,7 @@ export const processDispatch = async (
                 status: finalStatus,
                 trackingNumbers: [...(orderData.trackingNumbers || []), ...trackingNumbers],
                 exceptions: finalExceptions,
+                exceptionTrackingNumbers: guiasDeExcepcion(finalExceptions, orderData.cancelledExceptions),
             });
         });
         return { success: true };
@@ -1286,6 +1433,7 @@ export const cancelPendingDispatchItems = async (
         const updatePayload: Record<string, any> = {
             exceptions: updatedExceptions,
             cancelledExceptions: updatedCancelledExceptions,
+            exceptionTrackingNumbers: guiasDeExcepcion(updatedExceptions, updatedCancelledExceptions),
         };
 
         const allOriginalProductsInExceptions = (orderData.exceptions || []).flatMap(ex => ex.products);
@@ -1383,7 +1531,8 @@ export const annulDispatchedGuideItems = async (
 
         transaction.update(orderRef, {
             trackingNumbers: updatedTrackingNumbers,
-            cancelledExceptions: updatedCancelledExceptions
+            cancelledExceptions: updatedCancelledExceptions,
+            exceptionTrackingNumbers: guiasDeExcepcion(orderData.exceptions, updatedCancelledExceptions),
         });
         
         transaction.update(cancellationRequestRef, {
