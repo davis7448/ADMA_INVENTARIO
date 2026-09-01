@@ -10,6 +10,11 @@ import { getApp } from '@/lib/firebase-admin';
 // Estados y transiciones viven en un módulo normal: este fichero es "use server" y
 // Next solo deja exportar funciones async desde aquí.
 import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizaciones-estados';
+import { getTaskAttachments, uploadAttachmentsToTask, clickupFetch, type ClickUpAttachment } from '@/lib/clickup';
+import {
+    crearTareaCotizacion, listarObservaciones, agregarObservacion,
+    ESTADO_CLICKUP, type Observacion,
+} from '@/lib/clickup-cotizaciones';
 
 export type CotizacionListada = {
     id: string;
@@ -32,6 +37,8 @@ export type CotizacionListada = {
     mensaje?: string;
     ingredientesIncluir: string[];
     ingredientesEvitar: string[];
+    clickupTaskId?: string;
+    clickupUrl?: string;
 };
 
 export async function listarCotizaciones(): Promise<CotizacionListada[]> {
@@ -61,6 +68,8 @@ export async function listarCotizaciones(): Promise<CotizacionListada[]> {
                 mensaje: v.mensaje,
                 ingredientesIncluir: v.ingredientesIncluir || [],
                 ingredientesEvitar: v.ingredientesEvitar || [],
+                clickupTaskId: v.clickupTaskId,
+                clickupUrl: v.clickupUrl,
             } as CotizacionListada;
         });
     } catch (error) {
@@ -116,8 +125,24 @@ export async function cambiarEstadoCotizacion(
                 estadoAnterior: actualRaw, estadoNuevo: nuevo,
                 actor, motivo: motivo || 'Sin motivo', fecha: Timestamp.now(),
             });
-            return { ok: true as const };
+            return { ok: true as const, taskId: snap.get('clickupTaskId') as string | undefined };
         });
+
+        // Espejo hacia ClickUp. Va fuera de la transacción y con su propio catch: el
+        // estado en ADMA ya está guardado y una caída de la API no debe deshacerlo.
+        if (resultado.ok && resultado.taskId) {
+            const statusClickUp = ESTADO_CLICKUP[nuevo];
+            if (statusClickUp) {
+                try {
+                    await clickupFetch(`/task/${resultado.taskId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ status: statusClickUp }),
+                    });
+                } catch (e) {
+                    console.error('[cotizaciones] estado cambiado en ADMA pero no en ClickUp:', e);
+                }
+            }
+        }
 
         return resultado.ok ? { success: true } : { success: false, error: resultado.error };
     } catch (error) {
@@ -173,5 +198,94 @@ export async function guardarDestinatarios(
     } catch (error) {
         console.error('[cotizaciones] error guardando destinatarios:', error);
         return { success: false, error: 'No se pudieron guardar los destinatarios.' };
+    }
+}
+
+// --- Puente con ClickUp -------------------------------------------------------
+//
+// ClickUp es la fuente de verdad del trabajo: aquí solo se abre la vía para crear la
+// tarea espejo y para leer/escribir lo que el equipo va anexando allí. Los adjuntos y
+// los comentarios NO se copian a Firestore, se consultan en vivo — el mismo criterio que
+// ya rige en el puente de solicitudes, y que además evita meter fórmulas de clientes en
+// un bucket de Storage que hoy es de lectura pública.
+
+async function taskIdDe(cotizacionId: string): Promise<string | null> {
+    const fs = getFirestore(await getApp());
+    const snap = await fs.collection('quoteRequests').doc(cotizacionId).get();
+    return snap.exists ? (snap.get('clickupTaskId') || null) : null;
+}
+
+export async function sincronizarCotizacionClickUp(
+    cotizacionId: string,
+): Promise<{ success: boolean; taskId?: string; url?: string; error?: string }> {
+    return crearTareaCotizacion(cotizacionId);
+}
+
+export async function adjuntosCotizacion(
+    cotizacionId: string,
+): Promise<{ success: boolean; adjuntos?: ClickUpAttachment[]; error?: string }> {
+    try {
+        const taskId = await taskIdDe(cotizacionId);
+        if (!taskId) return { success: false, error: 'La cotización todavía no está en ClickUp.' };
+        return { success: true, adjuntos: await getTaskAttachments(taskId) };
+    } catch (error) {
+        console.error('[cotizaciones] error leyendo adjuntos:', error);
+        return { success: false, error: 'No se pudieron leer los adjuntos.' };
+    }
+}
+
+// Los archivos viajan del navegador a ClickUp pasando por el servidor, que es quien
+// tiene el token. El límite de cuerpo de las server actions ya está subido a 25 MB en
+// next.config.js: con el de 1 MB por defecto las fotos de móvil fallaban en silencio.
+export async function subirAdjuntosCotizacion(
+    cotizacionId: string,
+    formData: FormData,
+): Promise<{ success: boolean; subidos?: number; error?: string }> {
+    try {
+        const taskId = await taskIdDe(cotizacionId);
+        if (!taskId) return { success: false, error: 'La cotización todavía no está en ClickUp.' };
+        const archivos = formData.getAll('archivos').filter((f): f is File => f instanceof File && f.size > 0);
+        if (!archivos.length) return { success: true, subidos: 0 };
+        const r = await uploadAttachmentsToTask(taskId, archivos);
+        return {
+            success: r.errors.length === 0,
+            subidos: r.uploaded,
+            error: r.errors.length ? r.errors.join('; ') : undefined,
+        };
+    } catch (error) {
+        console.error('[cotizaciones] error subiendo adjuntos:', error);
+        return { success: false, error: 'No se pudieron subir los archivos.' };
+    }
+}
+
+export async function observacionesCotizacion(
+    cotizacionId: string,
+): Promise<{ success: boolean; observaciones?: Observacion[]; error?: string }> {
+    try {
+        const taskId = await taskIdDe(cotizacionId);
+        if (!taskId) return { success: false, error: 'La cotización todavía no está en ClickUp.' };
+        return { success: true, observaciones: await listarObservaciones(taskId) };
+    } catch (error) {
+        console.error('[cotizaciones] error leyendo observaciones:', error);
+        return { success: false, error: 'No se pudieron leer las observaciones.' };
+    }
+}
+
+export async function agregarObservacionCotizacion(
+    cotizacionId: string,
+    texto: string,
+    actor: string,
+): Promise<{ success: boolean; error?: string }> {
+    const limpio = texto.trim();
+    if (!limpio) return { success: false, error: 'La observación está vacía.' };
+    if (limpio.length > 4000) return { success: false, error: 'La observación es demasiado larga.' };
+    try {
+        const taskId = await taskIdDe(cotizacionId);
+        if (!taskId) return { success: false, error: 'La cotización todavía no está en ClickUp.' };
+        await agregarObservacion(taskId, limpio, actor);
+        return { success: true };
+    } catch (error) {
+        console.error('[cotizaciones] error escribiendo la observación:', error);
+        return { success: false, error: 'No se pudo guardar la observación.' };
     }
 }

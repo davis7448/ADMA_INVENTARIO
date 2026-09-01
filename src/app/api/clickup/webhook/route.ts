@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { applyClickUpStatusToSolicitud } from '@/lib/clickup';
+import { aplicarEstadoClickUp } from '@/lib/clickup-cotizaciones';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,8 +42,23 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: true, message: 'Sin cambio de estado en el payload' });
         }
 
-        const result = await applyClickUpStatusToSolicitud(String(payload.task_id), String(newStatus));
-        return NextResponse.json(result);
+        // La misma ruta atiende dos listas: solicitudes y cotizaciones de maquila. Se
+        // prueba primero la solicitud y, si la tarea no está vinculada a ninguna, se
+        // intenta como cotización. No se puede decidir por el list_id porque el payload
+        // de ClickUp no siempre lo trae.
+        const taskId = String(payload.task_id);
+        const enSolicitudes = await applyClickUpStatusToSolicitud(taskId, String(newStatus));
+        if (enSolicitudes.success) return NextResponse.json(enSolicitudes);
+
+        const enCotizaciones = await aplicarEstadoClickUp(taskId, String(newStatus));
+        if (enCotizaciones.success) return NextResponse.json(enCotizaciones);
+
+        // Ninguna de las dos la reconoce: no es un error del webhook, la tarea
+        // simplemente no tiene espejo en ADMA.
+        return NextResponse.json({
+            success: true,
+            message: `Tarea ${taskId} sin vínculo en ADMA (${enSolicitudes.error}; ${enCotizaciones.error})`,
+        });
     } catch (error) {
         console.error('Error procesando webhook de ClickUp:', error);
         return NextResponse.json({ success: false, message: 'Error interno' }, { status: 500 });

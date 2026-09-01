@@ -20,6 +20,7 @@ import {
 } from '@/app/actions/cotizaciones';
 import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizaciones-estados';
 import { CATEGORIAS } from '@/lib/cotizador-catalogo';
+import { CotizacionClickUpPanel } from '@/components/cotizaciones/cotizacion-clickup-panel';
 import { Download, Loader2, Mail } from 'lucide-react';
 
 const COLOR: Record<EstadoCotizacion, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -283,6 +284,24 @@ export function CotizacionesContent() {
                                     </>
                                 )}
                             </div>
+
+                            <CotizacionClickUpPanel
+                                cotizacionId={abierta.id}
+                                taskId={abierta.clickupTaskId}
+                                url={abierta.clickupUrl}
+                                actor={user?.name || user?.email || 'interno'}
+                                // Tras crear la tarea hay que releer: `abierta` es la copia
+                                // vieja y todavía no tiene el clickupTaskId.
+                                onSincronizada={async () => {
+                                    const frescas = await listarCotizaciones();
+                                    setDatos(frescas);
+                                    const actualizada = frescas.find(c => c.id === abierta.id);
+                                    if (actualizada) {
+                                        setAbierta(actualizada);
+                                        setHistorial(await historialCotizacion(actualizada.id));
+                                    }
+                                }}
+                            />
 
                             <div className="border-t pt-3">
                                 <Label className="text-sm">Historial</Label>

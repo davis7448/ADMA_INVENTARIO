@@ -24,7 +24,7 @@ function getToken(): string {
     return token;
 }
 
-async function clickupFetch(path: string, init?: RequestInit): Promise<any> {
+export async function clickupFetch(path: string, init?: RequestInit): Promise<any> {
     const response = await fetch(`${CLICKUP_API}${path}`, {
         ...init,
         headers: {
@@ -40,7 +40,7 @@ async function clickupFetch(path: string, init?: RequestInit): Promise<any> {
     return response.json();
 }
 
-type FieldMap = Record<string, { id: string; type: string; options: Record<string, string> }>;
+export type FieldMap = Record<string, { id: string; type: string; options: Record<string, string> }>;
 
 // Normaliza para empatar opciones de dropdown: mayúsculas, sin tildes,
 // espacios colapsados ("José  David" ≡ "JOSE DAVID").
@@ -56,8 +56,8 @@ function normalizeLabel(value: string): string {
 // Mapa de custom fields de la lista, indexado por nombre (mayúsculas).
 // Se consulta en cada sync (~84/semana, muy por debajo del rate limit) para
 // resistir cambios de opciones en ClickUp sin redeploy.
-async function getListFieldMap(): Promise<FieldMap> {
-    const data = await clickupFetch(`/list/${CLICKUP_LIST_ID}/field`);
+export async function getListFieldMap(listId: string = CLICKUP_LIST_ID): Promise<FieldMap> {
+    const data = await clickupFetch(`/list/${listId}/field`);
     const map: FieldMap = {};
     for (const field of data.fields || []) {
         const options: Record<string, string> = {};
@@ -73,7 +73,7 @@ async function getListFieldMap(): Promise<FieldMap> {
 // `qualifier` desambigua cuando ClickUp abre una opción por cada combinación:
 // p.ej. PLATAFORMA "DROPI" con opciones "DROPI INGENIO" / "DROPI LABORATORIO" →
 // se pasa la BODEGA como qualifier para elegir la correcta.
-function fieldValue(map: FieldMap, name: string, rawValue: unknown, qualifier?: unknown): { id: string; value: unknown } | null {
+export function fieldValue(map: FieldMap, name: string, rawValue: unknown, qualifier?: unknown): { id: string; value: unknown } | null {
     const field = map[normalizeLabel(name)];
     if (!field || rawValue === undefined || rawValue === null || rawValue === '') return null;
     if (field.type === 'drop_down') {
