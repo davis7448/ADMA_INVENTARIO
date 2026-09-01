@@ -56,7 +56,12 @@ Y el problema se extiende al resto de la infraestructura de tokens:
    Por eso `validateApiToken()` de `src/lib/api-tokens.ts` siempre responde inválido, `createApiToken()`
    falla en silencio y **la colección estaba vacía: nunca se creó un token**.
 5. Consecuencia: `POST /api/dispatch/search-guides`, que usa ese módulo, responde 401 a todo el mundo.
-   (No está en el alcance de este manual, pero se arregla igual que lo de abajo: leyendo con el Admin SDK.)
+   **Sigue así**: no entraba en el alcance. Se arregla igual que lo demás, validando con
+   `src/lib/api-tokens-admin.ts` en vez de con `src/lib/api-tokens.ts`.
+
+`/api/admin/api-tokens` y `/api/privatizaciones` ya no dependen de nada de esto: identifican a quien
+llama y leen y escriben con el Admin SDK, que no pasa por las reglas. **No hace falta desplegar
+`firestore.rules`.** `src/lib/api-tokens.ts` queda muerto salvo por `search-guides`.
 
 → Para consultar a mano: Firestore directamente y autenticado (§3).
 → Para integrar un sistema: `GET /api/privatizaciones` (§6), que ya resuelve todo esto.
@@ -271,15 +276,43 @@ cliente se quedó el ID después, deja de aparecer aunque este lo tuviera antes.
 
 ### Crear un token
 
-`src/lib/api-tokens.ts` y la UI de `/api/admin/api-tokens` no pueden crear tokens (§2, punto 4).
-Mientras eso no se arregle, se crean con el script.
+Cuatro vías, de la más cómoda a la de último recurso.
 
-**Dónde ejecutarlo:** en el VPS, desde `/opt/workspaces/ADMA_INVENTARIO`, donde está el `.env.local` con
-`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` y `FIREBASE_PRIVATE_KEY`. Sin esas tres variables el script
-no arranca. No hace falta que la app esté corriendo: escribe directo en Firestore.
+#### a) Desde la app — lo normal
 
-**Un token sirve para los dos entornos.** Staging (rama `test`) y producción (rama `main`) comparten la
-misma base de Firestore, así que el token creado vale en ambos. No hay que crear uno por entorno.
+**Configuración → Tokens de API**, visible solo con rol `admin`. Formulario, listado con el uso de
+cada token y botón de revocar. No hay contraseñas que escribir ni variables que configurar: vale la
+sesión con la que ya estás dentro.
+
+#### b) Desde un script, con correo y contraseña
+
+La contraseña se cambia por un `idToken` contra Identity Toolkit —es decir, **va a Google, no a este
+servidor**— y ese `idToken` es lo que viaja en la petición:
+
+```bash
+KEY=AIzaSyAFrZ4jvO5fIF9koe0cMUUwO1r_b5fdBRk
+
+ID_TOKEN=$(curl -s -X POST \
+  "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$KEY" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$ADMA_EMAIL\",\"password\":\"$ADMA_PASSWORD\",\"returnSecureToken\":true}" \
+  | jq -r .idToken)
+
+curl -s -X POST "$BASE_URL/api/admin/api-tokens" \
+  -H "Authorization: Bearer $ID_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"clientName":"SISTEMA X","clientId":"sistema-x","rateLimitPerMinute":60,"allowedOrigins":[]}'
+```
+
+La respuesta trae el token en `token`. `GET` sobre la misma ruta lista, y
+`DELETE ...?token=tk_adma_xxx` revoca. **La cuenta tiene que tener rol `admin` en `users`**; con
+cualquier otro rol la ruta responde 403.
+
+#### c) Con el script, en el VPS
+
+Útil para un alta puntual sin levantar nada. Se ejecuta desde `/opt/workspaces/ADMA_INVENTARIO`, donde
+está el `.env.local` con `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` y `FIREBASE_PRIVATE_KEY`; sin
+esas tres variables no arranca. No hace falta que la app esté corriendo.
 
 ```bash
 # crear: nombre, id de cliente, límite por minuto, orígenes permitidos
@@ -292,20 +325,13 @@ npx tsx scripts/crear-api-token.ts --listar
 npx tsx scripts/crear-api-token.ts --revocar tk_adma_xxxxx
 ```
 
-El tercer argumento es el límite por minuto (60 por defecto) y el cuarto la lista de orígenes permitidos
-separados por coma. **Sin orígenes no se restringe por `Origin`**, que es lo que hace falta para llamadas
-servidor a servidor y desde curl: esas no mandan cabecera `Origin`. La lista solo tiene sentido si quien
-consume es una página web.
+Corre en cualquier máquina con el repo y esas variables, no solo en el VPS — pero copiar
+`FIREBASE_PRIVATE_KEY` a otro equipo reparte una credencial que hoy vive en un solo sitio.
 
-**El token se muestra una sola vez.** No se puede recuperar después: `--listar` enseña solo el prefijo.
-Si se pierde, se crea otro y se revoca el anterior.
+#### d) A mano, en la consola de Firebase
 
-#### Sin acceso al VPS
-
-El script no está atado a esa máquina: corre en cualquier sitio con el repo, Node y esas tres variables.
-Pero copiar `FIREBASE_PRIVATE_KEY` a otro equipo reparte una credencial que hoy vive en un solo sitio, así
-que para un alta puntual es preferible crear el documento a mano en la **consola de Firebase**
-(Firestore → colección `api_tokens`). Un token no es más que un documento:
+Último recurso, si no hay acceso ni a la app ni al VPS. Un token no es más que un documento en
+`api_tokens`:
 
 | Campo | Valor |
 |---|---|
@@ -317,14 +343,20 @@ que para un alta puntual es preferible crear el documento a mano en la **consola
 | `allowedOrigins` | array de strings; si falta o está vacío, no se restringe por `Origin` |
 
 `createdAt`, `lastUsedAt` y `totalRequests` son opcionales: los rellena la API al usarse.
-
-Para generar un valor de token decente sin el script:
+Revocar desde la consola es poner `isActive` en `false`.
 
 ```bash
+# generar un valor de token decente sin el script
 echo "tk_adma_$(openssl rand -base64 24 | tr '+/' '_-' | tr -d '=')"
 ```
 
-Revocar desde la consola es poner `isActive` en `false`.
+#### En cualquier caso
+
+- **El valor completo se muestra al crearlo.** El listado de la app sí lo enseña (es admin-only), pero el
+  script no: si lo pierdes ahí, crea otro y revoca el anterior.
+- **Sin orígenes no se restringe por `Origin`**, que es lo que hace falta para llamadas servidor a servidor
+  y desde curl: esas no mandan esa cabecera. La lista solo tiene sentido si quien consume es una página web.
+- **Revocar no borra:** marca `isActive: false` y deja el rastro de quién lo emitió y cuánto se usó.
 
 ### Implementación
 
@@ -334,7 +366,10 @@ Revocar desde la consola es poner `isActive` en `false`.
 | `src/lib/privatizaciones.ts` | Las seis reglas de §5 y la consulta a Firestore |
 | `src/lib/api-tokens-admin.ts` | Validación de token y cupo por minuto, con Admin SDK |
 | `src/lib/__tests__/privatizaciones.test.ts` | 19 tests de la lógica de resolución |
-| `scripts/crear-api-token.ts` | Alta, listado y revocación de tokens |
+| `scripts/crear-api-token.ts` | Alta, listado y revocación desde consola |
+| `src/app/api/admin/api-tokens/route.ts` | Alta, listado y revocación por HTTP (sesión o Bearer) |
+| `src/lib/admin-auth.ts` | Identifica al admin: cookie `__session` o Bearer idToken, + rol |
+| `src/components/admin/api-token-manager.tsx` | La UI, montada en Configuración |
 
 La colección `modificaciones` se trae entera (~6.700 documentos) y se cachea 5 minutos en memoria del
 proceso: es la única forma de aplicar las reglas 1 y 2, porque Firestore no sabe buscar "contiene" y una

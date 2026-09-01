@@ -8,6 +8,7 @@
 // El Admin SDK no pasa por las reglas, así que esto funciona sin tocarlas ni exponer los
 // tokens a ningún usuario del navegador.
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { randomBytes } from 'node:crypto';
 import { getApp } from '@/lib/firebase-admin';
 
 export const COLECCION_TOKENS = 'api_tokens';
@@ -36,6 +37,17 @@ export type Cupo = {
 
 async function fs() {
     return getFirestore(await getApp());
+}
+
+/**
+ * Genera el valor de un token nuevo.
+ *
+ * randomBytes y no Math.random(): un token es una credencial, y Math.random() no es
+ * criptográficamente seguro — era como se generaban en src/lib/api-tokens.ts.
+ * 24 bytes en base64url dan ~32 caracteres dentro del formato que admite validarToken().
+ */
+export function generarToken(): string {
+    return 'tk_adma_' + randomBytes(24).toString('base64url');
 }
 
 /** Lee el token y comprueba que exista y esté activo. */

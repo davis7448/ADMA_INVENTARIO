@@ -12,7 +12,7 @@
 import { config } from 'dotenv'; config({ path: '.env.local' });
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { randomBytes } from 'node:crypto';
+import { generarToken } from '../src/lib/api-tokens-admin';
 
 if (!getApps().length) initializeApp({
     credential: cert({
@@ -23,10 +23,6 @@ if (!getApps().length) initializeApp({
 });
 const db = getFirestore();
 const COLECCION = 'api_tokens';
-
-// randomBytes en vez de Math.random(): un token es una credencial, y Math.random() no es
-// criptográficamente seguro. 24 bytes en base64url ≈ 32 caracteres.
-const generarToken = () => 'tk_adma_' + randomBytes(24).toString('base64url');
 
 async function listar() {
     const snap = await db.collection(COLECCION).get();

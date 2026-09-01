@@ -26,6 +26,7 @@ import { WarehouseManagement } from './warehouse-management';
 import { LocationManagement } from './location-management';
 import { ImportTariffManagement } from './import-tariff-management';
 import { CrmConfigManagement } from './crm-config-management';
+import { ApiTokenManager } from './admin/api-token-manager';
 import { reconcileCancelledExceptions } from '@/app/actions/data-reconciliation';
 
 interface SettingsContentProps {
@@ -222,6 +223,10 @@ export function SettingsContent({ initialRotationCategories, initialUsers, initi
 
           {(isAdmin || user?.role === 'commercial_director') && (
             <CrmConfigManagement canEdit={isAdmin || user?.role === 'commercial_director'} />
+          )}
+
+          {isAdmin && (
+            <ApiTokenManager />
           )}
 
           <Card>
