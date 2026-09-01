@@ -272,17 +272,33 @@ cliente se quedó el ID después, deja de aparecer aunque este lo tuviera antes.
 ### Crear un token
 
 `src/lib/api-tokens.ts` y la UI de `/api/admin/api-tokens` no pueden crear tokens (§2, punto 4).
-Mientras eso no se arregle, se crean con el script:
+Mientras eso no se arregle, se crean con el script.
+
+**Dónde ejecutarlo:** en el VPS, desde `/opt/workspaces/ADMA_INVENTARIO`, donde está el `.env.local` con
+`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` y `FIREBASE_PRIVATE_KEY`. Sin esas tres variables el script
+no arranca. No hace falta que la app esté corriendo: escribe directo en Firestore.
+
+**Un token sirve para los dos entornos.** Staging (rama `test`) y producción (rama `main`) comparten la
+misma base de Firestore, así que el token creado vale en ambos. No hay que crear uno por entorno.
 
 ```bash
+# crear: nombre, id de cliente, límite por minuto, orígenes permitidos
 npx tsx scripts/crear-api-token.ts "NOMBRE CLIENTE" cliente-id 60 "https://mi-app.web.app"
+
+# ver los que hay (muestra solo el prefijo del token, nunca el valor completo)
 npx tsx scripts/crear-api-token.ts --listar
+
+# dar de baja uno
 npx tsx scripts/crear-api-token.ts --revocar tk_adma_xxxxx
 ```
 
-El tercer argumento es el límite por minuto (por defecto 60) y el cuarto la lista de orígenes permitidos
-separados por coma; sin orígenes, no se restringe por `Origin` (las llamadas servidor a servidor no lo mandan).
-El token se muestra **una sola vez**.
+El tercer argumento es el límite por minuto (60 por defecto) y el cuarto la lista de orígenes permitidos
+separados por coma. **Sin orígenes no se restringe por `Origin`**, que es lo que hace falta para llamadas
+servidor a servidor y desde curl: esas no mandan cabecera `Origin`. La lista solo tiene sentido si quien
+consume es una página web.
+
+**El token se muestra una sola vez.** No se puede recuperar después: `--listar` enseña solo el prefijo.
+Si se pierde, se crea otro y se revoca el anterior.
 
 ### Implementación
 
