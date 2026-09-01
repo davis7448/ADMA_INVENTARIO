@@ -212,17 +212,27 @@ async function fs() {
     return getFirestore(await getApp());
 }
 
-// La colección entera son ~6.700 documentos (medido el 1/9/2026), así que traerla cuesta
-// poco y es la única forma de aplicar las reglas 1 y 2: Firestore no sabe buscar "contiene",
-// y una igualdad sobre CORREO_CODIGO se deja fuera las filas con varios correos o con
-// mayúsculas. La caché evita repetir el barrido en ráfagas de peticiones.
+// La colección entera son ~6.700 documentos (medido el 1/9/2026) y hay que barrerla: es la
+// única forma de aplicar las reglas 1 y 2, porque Firestore no sabe buscar "contiene" y una
+// igualdad sobre CORREO_CODIGO se deja fuera las filas con varios correos o con mayúsculas.
+//
+// Pero se traen SOLO los campos que se leen. Sin proyección son 4,8 MB de JSON y ~60 MB de
+// heap retenidos por la caché; con ella, 1,9 MB y ~30 MB. Importa porque la instancia de
+// App Hosting tiene 512 MiB y en este repo ya hubo 503 por agotarla leyendo colecciones
+// enteras (ver el comentario de search-guides sobre los ~26 MB de despachos).
+const CAMPOS = [
+    'ID', 'CORREO_CODIGO', 'customerEmail', 'PRIVADO_PUBLICO', 'ACCION_PRIVATIZACION',
+    'estadoSolicitud', 'FECHA', 'PLATAFORMA', 'PRODUCTO', 'VARIABLE', 'SKU ', 'SKU',
+    'CANTIDAD SOLICITADA', 'COMERCIAL', 'solicitadoPor', 'tipoModificacion',
+] as const;
+
 const CACHE_MS = 5 * 60 * 1000;
 let cache: { ts: number; mods: ModRegistro[] } | null = null;
 
 export async function cargarModificaciones(forzar = false): Promise<ModRegistro[]> {
     if (!forzar && cache && Date.now() - cache.ts < CACHE_MS) return cache.mods;
 
-    const snap = await (await fs()).collection('modificaciones').get();
+    const snap = await (await fs()).collection('modificaciones').select(...CAMPOS).get();
     const mods = snap.docs.map(d => ({ id: d.id, ...d.data() }) as ModRegistro);
     cache = { ts: Date.now(), mods };
     return mods;

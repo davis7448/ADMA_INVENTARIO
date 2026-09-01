@@ -371,9 +371,14 @@ echo "tk_adma_$(openssl rand -base64 24 | tr '+/' '_-' | tr -d '=')"
 | `src/lib/admin-auth.ts` | Identifica al admin: cookie `__session` o Bearer idToken, + rol |
 | `src/components/admin/api-token-manager.tsx` | La UI, montada en Configuración |
 
-La colección `modificaciones` se trae entera (~6.700 documentos) y se cachea 5 minutos en memoria del
+La colección `modificaciones` se barre entera (~6.700 documentos) y se cachea 5 minutos en memoria del
 proceso: es la única forma de aplicar las reglas 1 y 2, porque Firestore no sabe buscar "contiene" y una
 igualdad sobre `CORREO_CODIGO` se deja fuera las filas con varios correos o con mayúsculas.
+
+Se traen **solo los campos que se leen** (`.select()`). Sin proyección son 4,8 MB de JSON y ~60 MB de heap
+retenidos por la caché; con ella, 1,9 MB y ~30 MB. Importa porque la instancia de App Hosting tiene 512 MiB
+y en este repo ya hubo 503 por agotarla leyendo colecciones enteras (ver el comentario de `search-guides`
+sobre los ~26 MB de despachos). Si `modificaciones` crece mucho, esto es lo primero que hay que revisar.
 
 ## 7. Seguridad — pendientes
 
