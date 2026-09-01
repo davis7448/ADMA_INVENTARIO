@@ -4,9 +4,10 @@
 // los comerciales no tienen permiso de edición, así que escribe el servidor de ADMA con
 // su propio token, igual que en el puente de solicitudes.
 //
-// Estructura que replica la convención observada en la lista (16 de 17 tareas la siguen):
-// la tarea PADRE es el producto cotizado y lleva los custom fields; las SUBTAREAS son las
-// etapas por las que avanza. Es justo el "irlo anexando" del flujo real.
+// La tarea PADRE es el producto cotizado y lleva los custom fields. Las SUBTAREAS —las
+// etapas por las que avanza— las crea SOLA una automatización de la lista al aparecer una
+// tarea nueva; verificado creando una tarea vacía y viendo salir las cinco. Por eso aquí
+// NO se crean: hacerlo dejaba diez subtareas duplicadas.
 //
 // Firestore se toca con el ADMIN SDK, no con el de cliente: las reglas dejan
 // `quoteRequests` sin escritura desde el navegador (firestore.rules).
@@ -17,7 +18,8 @@ import type { EstadoCotizacion } from '@/lib/cotizaciones-estados';
 
 export const LISTA_COTIZACIONES = '901314590474';
 
-// Las cinco etapas, en el orden en que las crea el equipo hoy.
+// Las cinco etapas que la automatización de ClickUp añade a cada tarea. Se listan aquí
+// solo para poder nombrarlas en la interfaz; ADMA no las crea.
 export const ETAPAS = [
     'COTIZAR ENVASE',
     'FORMULACION',
@@ -136,33 +138,19 @@ export async function crearTareaCotizacion(cotizacionId: string): Promise<Result
             }),
         });
 
-        // Las etapas. Si alguna falla no se tumba la sincronización: la tarea padre ya
-        // existe y las que falten se pueden crear a mano.
-        const etapasCreadas: string[] = [];
-        for (const etapa of ETAPAS) {
-            try {
-                await clickupFetch(`/list/${LISTA_COTIZACIONES}/task`, {
-                    method: 'POST',
-                    body: JSON.stringify({ name: etapa, parent: tarea.id, status: 'pendiente' }),
-                });
-                etapasCreadas.push(etapa);
-            } catch (e) {
-                console.error(`[cotizaciones/clickup] no se pudo crear la etapa ${etapa}:`, e);
-            }
-        }
-
+        // Las etapas NO se crean aquí: la automatización de la lista las añade sola en
+        // cuanto aparece la tarea.
         await ref.update({
             clickupTaskId: tarea.id,
             clickupUrl: tarea.url || null,
-            clickupSync: etapasCreadas.length === ETAPAS.length ? 'synced' : 'parcial',
-            clickupEtapas: etapasCreadas,
+            clickupSync: 'synced',
             updatedAt: Timestamp.now(),
         });
         await ref.collection('history').add({
             // Sin estado anterior: no es un cambio de estado, es una anotación. Así el
             // historial no muestra un "Recibida → Recibida" que no significa nada.
             estadoAnterior: null, estadoNuevo: q.estado,
-            actor: 'ADMA', motivo: `Sincronizada con ClickUp (${etapasCreadas.length}/${ETAPAS.length} etapas)`,
+            actor: 'ADMA', motivo: 'Sincronizada con ClickUp',
             fecha: Timestamp.now(),
         });
 

@@ -57,7 +57,7 @@ export function CotizacionClickUpPanel({ cotizacionId, taskId, url, actor, onSin
         const r = await sincronizarCotizacionClickUp(cotizacionId);
         setSincronizando(false);
         if (r.success) {
-            toast({ title: 'Enviada a ClickUp', description: 'Se creó la tarea con sus cinco etapas.' });
+            toast({ title: 'Enviada a ClickUp', description: 'Se creó la tarea; ClickUp añade sus etapas.' });
             onSincronizada();
         } else {
             toast({ title: 'No se pudo enviar', description: r.error, variant: 'destructive' });
@@ -69,9 +69,9 @@ export function CotizacionClickUpPanel({ cotizacionId, taskId, url, actor, onSin
             <div className="border-t pt-3 space-y-2">
                 <Label className="text-sm">ClickUp</Label>
                 <p className="text-xs text-muted-foreground">
-                    Todavía no tiene tarea. Al enviarla se crea en la lista <em>Cotizaciones</em> con
-                    las etapas de Cotizar envase, Formulación, Diseño de etiqueta, Cotización de
-                    etiqueta y Costo de fabricación.
+                    Todavía no tiene tarea. Al enviarla se crea en la lista <em>Cotizaciones</em>,
+                    y ClickUp le añade solo sus cinco etapas: Cotizar envase, Formulación, Diseño
+                    de etiqueta, Cotización de etiqueta y Costo de fabricación.
                 </p>
                 <Button size="sm" disabled={sincronizando} onClick={sincronizar}>
                     {sincronizando ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Send className="mr-2 h-3 w-3" />}
