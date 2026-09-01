@@ -300,6 +300,32 @@ consume es una página web.
 **El token se muestra una sola vez.** No se puede recuperar después: `--listar` enseña solo el prefijo.
 Si se pierde, se crea otro y se revoca el anterior.
 
+#### Sin acceso al VPS
+
+El script no está atado a esa máquina: corre en cualquier sitio con el repo, Node y esas tres variables.
+Pero copiar `FIREBASE_PRIVATE_KEY` a otro equipo reparte una credencial que hoy vive en un solo sitio, así
+que para un alta puntual es preferible crear el documento a mano en la **consola de Firebase**
+(Firestore → colección `api_tokens`). Un token no es más que un documento:
+
+| Campo | Valor |
+|---|---|
+| **Id del documento** | El token. Solo letras, números, `_` y `-`, entre 8 y 128 caracteres — sin puntos ni barras. |
+| `isActive` | `true` (boolean). Es lo único que decide si el token sirve. |
+| `clientName` | string, sale en la respuesta de la API |
+| `clientId` | string |
+| `rateLimitPerMinute` | number; si falta, se aplican 60 |
+| `allowedOrigins` | array de strings; si falta o está vacío, no se restringe por `Origin` |
+
+`createdAt`, `lastUsedAt` y `totalRequests` son opcionales: los rellena la API al usarse.
+
+Para generar un valor de token decente sin el script:
+
+```bash
+echo "tk_adma_$(openssl rand -base64 24 | tr '+/' '_-' | tr -d '=')"
+```
+
+Revocar desde la consola es poner `isActive` en `false`.
+
 ### Implementación
 
 | Archivo | Qué hace |
