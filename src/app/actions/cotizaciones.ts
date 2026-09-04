@@ -53,6 +53,7 @@ export type CotizacionListada = {
     variantesColor?: string;
     envase?: string;
     nso?: string;
+    chatwootConversationId?: number;
 };
 
 // Una línea con el bloque NSO, para la tabla y el Excel.
@@ -106,6 +107,7 @@ export async function listarCotizaciones(): Promise<CotizacionListada[]> {
                 variantesColor: v.variantesColor,
                 envase: [v.envaseMaterial, v.envaseTipo, v.envaseDetalle].filter(Boolean).join(' / ') || undefined,
                 nso: resumenNso(v),
+                chatwootConversationId: v.chatwootConversationId,
             } as CotizacionListada;
         });
     } catch (error) {

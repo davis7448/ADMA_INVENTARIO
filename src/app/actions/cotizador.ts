@@ -12,6 +12,7 @@ import { CotizacionSchema, type CotizacionInput } from '@/lib/cotizador-schema';
 import {
     guardarReferencias, MAX_ARCHIVOS, MAX_BYTES, TIPOS_OK,
 } from '@/lib/cotizacion-referencias';
+import { registrarCotizacionEnChatwoot } from '@/lib/chatwoot-cotizaciones';
 
 export type ResultadoCotizacion =
     | { success: true; id: string; referencia: string }
@@ -92,6 +93,16 @@ export async function crearCotizacion(
         if (idempotencyKey) {
             await fs.collection('quoteIdempotency').doc(idempotencyKey)
                 .set({ quoteId: ref.id, referencia, createdAt: Timestamp.now() });
+        }
+
+        // WhatsApp del laboratorio: nota privada en la conversación del cliente en
+        // Chatwoot, para que comercial la vea donde atiende. Un fallo aquí no tumba el
+        // alta: la cotización ya está guardada y avisada por correo.
+        try {
+            const cw = await registrarCotizacionEnChatwoot(ref.id, d, referencia);
+            if (cw.omitida) console.warn(`[cotizador] ${referencia} sin Chatwoot: ${cw.omitida}`);
+        } catch (e) {
+            console.error('[cotizador] la cotización se guardó pero no se pudo registrar en Chatwoot:', e);
         }
 
         return { success: true, id: ref.id, referencia };

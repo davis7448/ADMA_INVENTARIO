@@ -18,6 +18,7 @@ import { leerReferencias, borrarReferencias, type Referencia } from '@/lib/cotiz
 import type { EstadoCotizacion } from '@/lib/cotizaciones-estados';
 import { ESTUDIOS_ESTABILIDAD, NSO_ADICIONAR, NSO_TITULARIDAD, NSO_TRAMITE, ROLES_FABRICACION } from '@/lib/cotizador-catalogo';
 import { nombreFuncionCosing } from '@/lib/cosing-funciones';
+import { anotarEnChatwoot } from '@/lib/chatwoot-cotizaciones';
 
 export const LISTA_COTIZACIONES = '901314590474';
 
@@ -200,6 +201,12 @@ export async function crearTareaCotizacion(cotizacionId: string): Promise<Result
                 : 'Sincronizada con ClickUp',
             fecha: Timestamp.now(),
         });
+
+        // Si la cotización ya tiene conversación en Chatwoot, los agentes ven ahí la tarea.
+        if (q.chatwootConversationId && tarea.url) {
+            await anotarEnChatwoot(q.chatwootConversationId, `🔗 Tarea en ClickUp para ${q.referencia}: ${tarea.url}`)
+                .catch(e => console.error('[cotizaciones/clickup] no se pudo anotar la tarea en Chatwoot:', e));
+        }
 
         return { success: true, taskId: tarea.id, url: tarea.url };
     } catch (error) {

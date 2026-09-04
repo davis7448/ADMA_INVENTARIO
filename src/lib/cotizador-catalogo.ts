@@ -116,11 +116,13 @@ export const NSO_TRAMITE = [
 ] as const;
 
 // Datos de contacto que muestra el cotizador (botones de WhatsApp y correo de la
-// confirmación, dirección para muestras). Vacíos a propósito hasta que el laboratorio
-// confirme los reales: el prototipo traía un número y una dirección de ejemplo y no se
-// copian. Con el valor vacío, el botón o el bloque no se muestra.
+// confirmación, dirección para muestras). Con el valor vacío, el botón o el bloque no
+// se muestra. El WhatsApp es el del buzón "Lab Proyectos" de Chatwoot: la cotización
+// deja una nota privada ahí (chatwoot-cotizaciones.ts) y, cuando el cliente escribe por
+// este enlace, su mensaje cae en esa misma conversación. Correo y dirección siguen
+// vacíos hasta que el laboratorio confirme los reales.
 export const CONTACTO_COTIZADOR = {
-    whatsapp: '',            // solo dígitos con indicativo, ej. 573001234567
+    whatsapp: '573128736234', // solo dígitos con indicativo; +57 312 8736234 = Lab Proyectos
     correoComercial: '',     // ej. comercial@admalab.com
     direccionMuestras: '',   // ej. Cra 32 # 10-24, Acopi Yumbo
     atencionMuestras: '',    // ej. Cotizaciones ADMA

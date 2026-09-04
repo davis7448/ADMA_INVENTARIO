@@ -55,6 +55,13 @@ env:
      availability:
        - RUNTIME
 
+   # Token de Chatwoot (crm.admacompany.com) para dejar las cotizaciones de maquila
+   # como nota en el buzón de WhatsApp de Lab. Ver src/lib/chatwoot-cotizaciones.ts
+   - variable: CHATWOOT_API_TOKEN
+     secret: CHATWOOT_API_TOKEN
+     availability:
+       - RUNTIME
+
    # Cuenta con la que el SERVIDOR se autentica contra Firestore. Sin ella, las server
    # actions y las rutas de API consultan sin sesión y dependen de que la regla
    # isAdminAccess() deje pasar a los no autenticados — el agujero que hay que cerrar.

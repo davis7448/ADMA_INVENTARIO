@@ -21,6 +21,7 @@ import {
 import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizaciones-estados';
 import { CATEGORIAS, ROLES_FABRICACION } from '@/lib/cotizador-catalogo';
 import { nombreFuncionCosing } from '@/lib/cosing-funciones';
+import { urlConversacionChatwoot } from '@/lib/chatwoot-cotizaciones';
 import { CotizacionClickUpPanel } from '@/components/cotizaciones/cotizacion-clickup-panel';
 import { Download, Loader2, Mail } from 'lucide-react';
 
@@ -267,6 +268,9 @@ export function CotizacionesContent() {
                                 {abierta.envase && <Dato k="Envase" v={abierta.envase} />}
                                 {abierta.variantesColor && <Dato k="Variantes de color" v={abierta.variantesColor} />}
                                 {abierta.nso && <Dato k="NSO" v={abierta.nso} />}
+                                {abierta.chatwootConversationId && (
+                                    <Dato k="WhatsApp (Chatwoot)" v={<a className="underline" href={urlConversacionChatwoot(abierta.chatwootConversationId)} target="_blank" rel="noopener">Abrir conversación #{abierta.chatwootConversationId}</a>} />
+                                )}
                             </div>
                             {(abierta.funcionesCosing.length > 0 || abierta.proclamas.length > 0) && (
                                 <div className="text-sm space-y-1">
@@ -342,6 +346,6 @@ export function CotizacionesContent() {
     );
 }
 
-function Dato({ k, v }: { k: string; v: string }) {
+function Dato({ k, v }: { k: string; v: React.ReactNode }) {
     return <p><span className="text-muted-foreground">{k}:</span> {v}</p>;
 }

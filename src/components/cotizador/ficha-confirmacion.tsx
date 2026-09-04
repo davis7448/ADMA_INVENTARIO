@@ -19,7 +19,7 @@ export function FichaConfirmacion({ d, referencia, onNueva }: { d: Datos; refere
     const forma = `${(d.formas || []).join(', ')}${d.esAerosol ? ` · Aerosol${d.aerosolDetalle ? `: ${d.aerosolDetalle}` : ''}` : ''}`;
     const resumen = `Cotización ${referencia} · ${categoria} · ${forma} · ${(d.cantidad || 0).toLocaleString('es-CO')} unds · ${d.presentacion}`;
     const whatsapp = CONTACTO_COTIZADOR.whatsapp
-        ? `https://wa.me/${CONTACTO_COTIZADOR.whatsapp}?text=${encodeURIComponent(`Hola ADMA Laboratorio, soy ${d.nombre}${d.empresa ? ` de ${d.empresa}` : ''}. ${resumen}. Quisiera continuar con mi cotización.`)}`
+        ? `https://wa.me/${CONTACTO_COTIZADOR.whatsapp}?text=${encodeURIComponent(`Hola ADMA Laboratorio, soy ${d.nombre}${d.empresa ? ` de ${d.empresa}` : ''}. Tengo pendiente la cotización ${referencia} (${categoria} · ${forma} · ${(d.cantidad || 0).toLocaleString('es-CO')} unds) y quiero continuar el proceso por aquí.`)}`
         : null;
     const correo = CONTACTO_COTIZADOR.correoComercial
         ? `mailto:${CONTACTO_COTIZADOR.correoComercial}?subject=${encodeURIComponent(`Cotización ${referencia}`)}&body=${encodeURIComponent(resumen)}`
@@ -45,6 +45,12 @@ export function FichaConfirmacion({ d, referencia, onNueva }: { d: Datos; refere
                         <div className="px-6 py-3 rounded-full bg-[#111] text-white sora font-bold text-[18px] tracking-wide">{referencia}</div>
                         <div className="mt-3 text-[13px] font-medium text-black/50">Consecutivo único de tu proyecto</div>
                         <div className="mt-6 text-[14px] font-semibold bg-white border border-black/5 rounded-full px-4 py-2">Te enviamos tu cotización personalizada en menos de 24h hábiles</div>
+                        {whatsapp && (
+                            <a href={whatsapp} target="_blank" rel="noopener"
+                                className="mt-4 inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#25D366] text-white text-[14px] font-bold hover:brightness-95">
+                                Escribir por WhatsApp con mi referencia
+                            </a>
+                        )}
                     </div>
                     <div className="mt-10 grid grid-cols-3 gap-3 text-left">
                         {[{ k: 'Hoy', t: 'Análisis', d: 'Revisamos tu ficha técnica inicial' }, { k: '24h', t: 'Cotización', d: 'Propuesta comercial + tiempos' }, { k: 'Juntos', t: 'Inicio', d: 'Muestra piloto y producción' }].map(c => (

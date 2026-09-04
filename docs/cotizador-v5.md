@@ -29,11 +29,32 @@ Los campos anteriores no cambian de nombre: las cotizaciones guardadas antes sig
 - Archivos (fórmula, estabilidad, inspiración, referencias) viajan por Storage a ClickUp con el
   prefijo del grupo en el nombre (`FORMULA__`, `ESTABILIDAD__`, `INSPIRACION__`, `REFERENCIA__`).
 
+## WhatsApp del laboratorio (Chatwoot)
+
+Además de ClickUp, cada cotización llega al WhatsApp de Lab a través de Chatwoot
+(`src/lib/chatwoot-cotizaciones.ts`), sin gastar plantillas de Meta:
+
+1. Al guardarse, el servidor busca o crea el contacto del cliente (por teléfono, luego por
+   correo) en el buzón 5 **WhatsApp Adma Company Lab Proyectos** (+57 312 8736234), abre o
+   reutiliza su conversación y deja una **nota privada** con el resumen y el enlace a la
+   bandeja. Los agentes del buzón (Juliana, Isabella) la ven como una conversación más; al
+   cliente no le llega nada todavía.
+2. La confirmación del formulario muestra el botón **"Escribir por WhatsApp con mi
+   referencia"**: un enlace `wa.me` al mismo número con la referencia en el texto. Cuando el
+   cliente escribe, su mensaje cae en esa misma conversación y abre la ventana de 24 h.
+3. Al sincronizar con ClickUp se añade otra nota con la URL de la tarea.
+4. La bandeja interna muestra el enlace a la conversación de Chatwoot.
+
+Sin teléfono del cliente no hay conversación (WhatsApp lo exige); queda el aviso por correo.
+Token: secreto `CHATWOOT_API_TOKEN` en Secret Manager (App Hosting lo pinnea por revisión:
+un token nuevo exige redesplegar). Flujo esperado: comercial revisa → aprueba si pasa a
+pruebas o a cotización real → responde al cliente por la conversación.
+
 ## Pendiente de configuración
 
-`CONTACTO_COTIZADOR` en el catálogo está vacío a propósito: el prototipo traía un número de
-WhatsApp, un correo y una dirección de ejemplo. Al rellenarlo aparecen los botones "Enviar por
-WhatsApp" / "Enviar por Email" de la confirmación y la dirección para muestras.
+En `CONTACTO_COTIZADOR` siguen vacíos el correo comercial y la dirección para muestras: el
+prototipo traía valores de ejemplo y no se copiaron. Al rellenarlos aparecen el botón "Enviar
+por Email" y la dirección en el paso de muestra.
 
 ## Fuentes
 
