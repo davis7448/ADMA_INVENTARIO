@@ -5,6 +5,7 @@
 // armazón del prototipo aprobado por el equipo.
 import type { ReactNode } from 'react';
 import { Check, Clock3 } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 import { PASOS } from './cotizador-estado';
 
 export function Cabecera() {
@@ -34,8 +35,10 @@ export function Cabecera() {
 }
 
 export function Ruta({ paso }: { paso: number }) {
+    // Con sesión iniciada no hay cabecera propia, así que la ruta se pega más arriba.
+    const { user } = useAuth();
     return (
-        <aside className="w-full md:w-[280px] md:sticky md:top-[88px] shrink-0">
+        <aside className={`w-full md:w-[280px] md:sticky shrink-0 ${user ? 'md:top-6' : 'md:top-[88px]'}`}>
             <div className="rounded-[20px] bg-white border border-[#F0EDE8] shadow-[0_8px_30px_rgba(0,0,0,0.04)] p-5 md:p-6">
                 <div className="sora font-bold text-[14px]">Ruta de cotización</div>
                 <div className="text-[12px] text-black/40 mt-1">{PASOS.length} pasos · ~3 minutos</div>
@@ -90,10 +93,14 @@ export function Pie() {
     );
 }
 
+// Con un usuario del equipo dentro de la app ya está la barra de navegación principal;
+// pintar además la del cotizador ponía dos barras, una encima de la otra. La cabecera
+// propia queda solo para el visitante anónimo, que es a quien va dirigido el formulario.
 export function Marco({ children }: { children: ReactNode }) {
+    const { user } = useAuth();
     return (
         <div className="cotizador-v5 min-h-screen bg-[#FAFAF8] text-[#111] selection:bg-[#FFDE00]">
-            <Cabecera />
+            {!user && <Cabecera />}
             {children}
         </div>
     );
