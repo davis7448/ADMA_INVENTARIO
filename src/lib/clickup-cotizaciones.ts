@@ -16,6 +16,8 @@ import { getApp } from '@/lib/firebase-admin';
 import { clickupFetch, getListFieldMap, fieldValue, uploadAttachmentsToTask } from '@/lib/clickup';
 import { leerReferencias, borrarReferencias, type Referencia } from '@/lib/cotizacion-referencias';
 import type { EstadoCotizacion } from '@/lib/cotizaciones-estados';
+import { ESTUDIOS_ESTABILIDAD, NSO_ADICIONAR, NSO_TITULARIDAD, NSO_TRAMITE, ROLES_FABRICACION } from '@/lib/cotizador-catalogo';
+import { nombreFuncionCosing } from '@/lib/cosing-funciones';
 
 export const LISTA_COTIZACIONES = '901314590474';
 
@@ -70,6 +72,8 @@ const SI_NO = (v: unknown) => (v ? 'Sí' : 'No');
 // llegaría sin la parte técnica —formulación, ingredientes, ruta regulatoria—, que es
 // justo lo que necesita quien cotiza.
 export function descripcionCotizacion(q: any, referencia: string): string {
+    const nombre = (lista: readonly { id: string; nombre: string }[], id?: string) => lista.find(x => x.id === id)?.nombre || id || '—';
+    const lista = (v: unknown) => (Array.isArray(v) && v.length ? v.join(', ') : null);
     const lineas = [
         `**Cotización de maquila ${referencia}** · capturada en ADMA Inventario`,
         '',
@@ -77,28 +81,44 @@ export function descripcionCotizacion(q: any, referencia: string): string {
         q.formaOtroDetalle ? `Detalle de "Otro": ${q.formaOtroDetalle}` : null,
         q.esAerosol ? `Aerosol: sí${q.aerosolDetalle ? ` — ${q.aerosolDetalle}` : ''}` : null,
         `**Presentación:** ${q.presentacion} · **Cantidad:** ${Number(q.cantidad || 0).toLocaleString('es-CO')} unidades`,
+        q.marca ? `**Marca:** ${q.marca}` : null,
+        q.variantesColor ? `Variantes de color: ${q.variantesColor}` : null,
+        (q.envaseMaterial || q.envaseTipo || q.envaseDetalle)
+            ? `Envase: ${[q.envaseMaterial, q.envaseTipo, q.envaseDetalle].filter(Boolean).join(' / ')}` : null,
         '',
-        `**Modalidad:** ${q.modalidad === 'full_service' ? 'Full Service' : 'Mixta'}`,
-        (q.incluidos || []).length ? `Incluye: ${q.incluidos.join(', ')}` : null,
-        (q.aportaCliente || []).length ? `Aporta el cliente: ${q.aportaCliente.join(', ')}` : null,
+        `**Rol de ADMA:** ${nombre(ROLES_FABRICACION, q.rolFabricacion)} · **Modalidad:** ${q.modalidad === 'full_service' ? 'Full Service' : 'Mixta'}`,
+        lista(q.incluidos) ? `Incluye: ${lista(q.incluidos)}` : null,
+        lista(q.aportaCliente) ? `Aporta el cliente: ${lista(q.aportaCliente)}` : null,
+        q.descripcionProducto ? `Producto final: ${q.descripcionProducto}` : null,
         '',
         `**Ruta de formulación:** ${q.rutaFormulacion}`,
+        q.estudiosEstabilidad ? `Estudios de estabilidad: ${nombre(ESTUDIOS_ESTABILIDAD, q.estudiosEstabilidad)}` : null,
+        lista(q.funcionesCosing) ? `Funciones CoSIng: ${(q.funcionesCosing as string[]).map(f => `${nombreFuncionCosing(f)} (${f})`).join(', ')}` : null,
         q.ideaFormulacion ? `Idea: ${q.ideaFormulacion}` : null,
         q.solicitaMejora ? 'Pide mejora de la fórmula: sí' : null,
-        (q.ingredientesIncluir || []).length ? `Ingredientes a incluir: ${q.ingredientesIncluir.join(', ')}` : null,
-        (q.ingredientesEvitar || []).length ? `Ingredientes a evitar: ${q.ingredientesEvitar.join(', ')}` : null,
+        lista(q.ingredientesIncluir) ? `Ingredientes a incluir (INCI): ${lista(q.ingredientesIncluir)}` : null,
+        lista(q.ingredientesEvitar) ? `Ingredientes a evitar (INCI): ${lista(q.ingredientesEvitar)}` : null,
+        lista(q.proclamas) ? `Proclamas: ${lista(q.proclamas)}${q.proclamaOtra ? ` — otra: ${q.proclamaOtra}` : ''}` : null,
         q.fragancia ? `Fragancia: ${q.fragancia}${q.fraganciaDetalle ? ` — ${q.fraganciaDetalle}` : ''}` : null,
+        q.aceptaEstabilidad === false ? '⚠️ El cliente desmarcó el aviso del proceso de estabilidad y microbiología.' : null,
         '',
         `**Marca blanca:** ${SI_NO(q.marcaBlanca)}`,
         q.rutaRegulatoria ? `Ruta regulatoria: ${q.rutaRegulatoria}` : null,
         q.tablaNutricional !== undefined ? `Tabla nutricional: ${SI_NO(q.tablaNutricional)}` : null,
-        (q.canalesVenta || []).length ? `Canales de venta: ${q.canalesVenta.join(', ')}` : null,
+        q.tieneRegistro
+            ? `**NSO:** ${q.nsoNumero || '—'} · ${q.nsoVigente ? 'vigente' : 'NO vigente'} · ${nombre(NSO_TITULARIDAD, q.nsoTitularidad)}`
+            + (q.nsoAdicionar && q.nsoAdicionar !== 'no'
+                ? ` · adicionar a ADMA ${nombre(NSO_ADICIONAR, q.nsoAdicionar).toLowerCase()} · trámite: ${nombre(NSO_TRAMITE, q.nsoTramite)}`
+                : ' · sin adicionar a ADMA')
+            : (q.tieneRegistro === false ? 'NSO: no tiene' : null),
+        lista(q.canalesVenta) ? `Canales de venta: ${lista(q.canalesVenta)}` : null,
         '',
         `**Contacto:** ${q.nombre}${q.empresa ? ` · ${q.empresa}` : ''}`,
-        `${q.email}${q.telefono ? ` · ${q.telefono}` : ''} · ${q.ciudad}`,
+        `${q.email}${q.telefono ? ` · ${q.telefono}` : ''} · ${q.ciudad}${q.pais ? ` · ${q.pais}` : ''}`,
         q.origenLead ? `Origen del lead: ${q.origenLead}` : null,
         q.mensaje ? `\n**Mensaje del cliente:**\n${q.mensaje}` : null,
         q.confidencialidad ? '\n_El cliente pidió confidencialidad._' : null,
+        q.pilotoSolicitado ? '_Solicita muestra piloto._' : null,
     ];
     return lineas.filter(l => l !== null).join('\n');
 }
@@ -119,7 +139,8 @@ export async function crearTareaCotizacion(cotizacionId: string): Promise<Result
         const map = await getListFieldMap(LISTA_COTIZACIONES);
         const categoria = CATEGORIA_CLICKUP[q.categoria];
         const customFields = [
-            fieldValue(map, 'CLIENTE', q.empresa || q.nombre),
+            // La marca es lo que el equipo escribe en CLIENTE; si no la dio, la empresa o el nombre.
+            fieldValue(map, 'CLIENTE', q.marca || q.empresa || q.nombre),
             categoria ? fieldValue(map, 'CATEGORIA', categoria) : null,
             fieldValue(map, 'PRESENTACION', q.presentacion),
             fieldValue(map, 'OBSERVACIONES', q.mensaje),
@@ -130,7 +151,7 @@ export async function crearTareaCotizacion(cotizacionId: string): Promise<Result
         // COMERCIAL sigue vacío a propósito: un lead entrante todavía no tiene comercial
         // asignado, y adivinarlo ensucia el tablero. Lo pone quien clasifica, desde la
         // bandeja (asignarComercial).
-        const nombreTarea = `${q.presentacion || 'Producto'} · ${q.empresa || q.nombre}`.slice(0, 120);
+        const nombreTarea = `${q.presentacion || 'Producto'} · ${q.marca || q.empresa || q.nombre}`.slice(0, 120);
         const tarea = await clickupFetch(`/list/${LISTA_COTIZACIONES}/task`, {
             method: 'POST',
             body: JSON.stringify({

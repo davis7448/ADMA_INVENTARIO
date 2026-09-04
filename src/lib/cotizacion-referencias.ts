@@ -14,9 +14,15 @@ const BUCKET = 'studio-9748962172-82b35.firebasestorage.app';
 const PREFIJO = 'quoteReferences';
 
 // Límites: la ruta es pública y sin sesión, así que no puede aceptar lo que sea.
-export const MAX_ARCHIVOS = 5;
+// Ocho porque ahora viajan por aquí, además de las imágenes de referencia, el archivo de
+// fórmula, los estudios de estabilidad y la imagen de inspiración del formulario V5.
+export const MAX_ARCHIVOS = 8;
 export const MAX_BYTES = 8 * 1024 * 1024;
-export const TIPOS_OK = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf'];
+export const TIPOS_OK = [
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf',
+    // Fórmulas y estudios suelen llegar en Word.
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
 
 export type Referencia = { path: string; nombre: string; tipo: string };
 

@@ -5,15 +5,15 @@ export const dynamic = 'force-dynamic';
 // Ruta pública: no lleva AuthProviderWrapper. La Fase 0 del plan añade el rol `cliente`
 // y la verificación de correo; hasta entonces se puede cotizar sin cuenta, y la escritura
 // la hace el servidor con el admin SDK, no el navegador.
+//
+// El formulario V5 trae su propia cabecera y fondo, así que anula el padding del
+// layout general con márgenes negativos y carga la fuente Sora de los títulos, que es
+// la del prototipo aprobado (el resto de la app usa Poppins).
 export default function CotizadorPage() {
     return (
-        <div className="min-h-screen bg-muted/20 py-8 px-4">
-            <div className="max-w-2xl mx-auto mb-6 text-center">
-                <h1 className="text-3xl font-bold font-headline tracking-tight">Cotiza tu maquila</h1>
-                <p className="text-muted-foreground mt-1">
-                    Cuéntanos qué quieres fabricar y te respondemos con una propuesta.
-                </p>
-            </div>
+        <div className="-m-4 md:-m-6 lg:-m-8">
+            <link rel="stylesheet" precedence="default" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&display=swap" />
+            <style>{`.cotizador-v5 .sora, .cotizador-v5 h1, .cotizador-v5 h2, .cotizador-v5 h3 { font-family: 'Sora', 'Poppins', sans-serif; }`}</style>
             <CotizadorWizard />
         </div>
     );

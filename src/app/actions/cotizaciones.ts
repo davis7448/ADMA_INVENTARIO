@@ -43,7 +43,27 @@ export type CotizacionListada = {
     comercialAsignado?: string;
     enlaceReferencia?: string;
     pais?: string;
+    // Campos del formulario V5 (2026-09-04).
+    marca?: string;
+    rolFabricacion?: string;
+    estudiosEstabilidad?: string;
+    funcionesCosing: string[];
+    proclamas: string[];
+    proclamaOtra?: string;
+    variantesColor?: string;
+    envase?: string;
+    nso?: string;
 };
+
+// Una línea con el bloque NSO, para la tabla y el Excel.
+function resumenNso(v: FirebaseFirestore.DocumentData): string | undefined {
+    if (v.tieneRegistro === undefined) return undefined;
+    if (!v.tieneRegistro) return 'No tiene';
+    const partes = [v.nsoNumero || '—', v.nsoVigente ? 'vigente' : 'no vigente',
+        v.nsoTitularidad === 'otro_laboratorio' ? 'de otro laboratorio' : 'propia'];
+    if (v.nsoAdicionar && v.nsoAdicionar !== 'no') partes.push(`adicionar como ${v.nsoAdicionar}`, `trámite: ${v.nsoTramite === 'adma' ? 'ADMA' : 'cliente'}`);
+    return partes.join(' · ');
+}
 
 export async function listarCotizaciones(): Promise<CotizacionListada[]> {
     try {
@@ -77,6 +97,15 @@ export async function listarCotizaciones(): Promise<CotizacionListada[]> {
                 comercialAsignado: v.comercialAsignado,
                 enlaceReferencia: v.enlaceReferencia,
                 pais: v.pais,
+                marca: v.marca,
+                rolFabricacion: v.rolFabricacion,
+                estudiosEstabilidad: v.estudiosEstabilidad,
+                funcionesCosing: v.funcionesCosing || [],
+                proclamas: v.proclamas || [],
+                proclamaOtra: v.proclamaOtra,
+                variantesColor: v.variantesColor,
+                envase: [v.envaseMaterial, v.envaseTipo, v.envaseDetalle].filter(Boolean).join(' / ') || undefined,
+                nso: resumenNso(v),
             } as CotizacionListada;
         });
     } catch (error) {

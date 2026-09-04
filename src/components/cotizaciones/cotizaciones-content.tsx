@@ -19,7 +19,8 @@ import {
     type CotizacionListada, type EventoHistorial,
 } from '@/app/actions/cotizaciones';
 import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizaciones-estados';
-import { CATEGORIAS } from '@/lib/cotizador-catalogo';
+import { CATEGORIAS, ROLES_FABRICACION } from '@/lib/cotizador-catalogo';
+import { nombreFuncionCosing } from '@/lib/cosing-funciones';
 import { CotizacionClickUpPanel } from '@/components/cotizaciones/cotizacion-clickup-panel';
 import { Download, Loader2, Mail } from 'lucide-react';
 
@@ -89,8 +90,13 @@ export function CotizacionesContent() {
             Referencia: c.referencia, Estado: ESTADO_LABEL[c.estado], Recibida: fecha(c.creada),
             Categoría: nombreCategoria(c.categoria), Formas: c.formas.join(', '),
             Modalidad: c.modalidad, Formulación: c.rutaFormulacion,
+            'Rol ADMA': c.rolFabricacion || '', Marca: c.marca || '',
             Presentación: c.presentacion, Cantidad: c.cantidad, 'Marca blanca': c.marcaBlanca ? 'Sí' : 'No',
-            'Ruta regulatoria': c.rutaRegulatoria || '', Contacto: c.nombre, Empresa: c.empresa || '',
+            'Ruta regulatoria': c.rutaRegulatoria || '', NSO: c.nso || '', Envase: c.envase || '',
+            'Variantes de color': c.variantesColor || '', 'Funciones CoSIng': c.funcionesCosing.map(nombreFuncionCosing).join(', '),
+            Proclamas: [...c.proclamas, c.proclamaOtra].filter(Boolean).join(', '),
+            'Estudios de estabilidad': c.estudiosEstabilidad || '',
+            Contacto: c.nombre, Empresa: c.empresa || '',
             Correo: c.email, Teléfono: c.telefono || '', Ciudad: c.ciudad, Mensaje: c.mensaje || '',
         })));
         ws['!cols'] = Object.keys(filtradas[0] || {}).map(() => ({ wch: 18 }));
@@ -255,7 +261,19 @@ export function CotizacionesContent() {
                                 <Dato k="Ruta regulatoria" v={abierta.rutaRegulatoria || '—'} />
                                 <Dato k="Ciudad" v={abierta.ciudad} />
                                 {abierta.empresa && <Dato k="Empresa" v={abierta.empresa} />}
+                                {abierta.marca && <Dato k="Marca" v={abierta.marca} />}
+                                {abierta.rolFabricacion && <Dato k="Rol de ADMA" v={ROLES_FABRICACION.find(r => r.id === abierta.rolFabricacion)?.nombre || abierta.rolFabricacion} />}
+                                {abierta.estudiosEstabilidad && <Dato k="Estudios de estabilidad" v={abierta.estudiosEstabilidad === 'tengo' ? 'Los aporta' : 'No tiene (costo adicional)'} />}
+                                {abierta.envase && <Dato k="Envase" v={abierta.envase} />}
+                                {abierta.variantesColor && <Dato k="Variantes de color" v={abierta.variantesColor} />}
+                                {abierta.nso && <Dato k="NSO" v={abierta.nso} />}
                             </div>
+                            {(abierta.funcionesCosing.length > 0 || abierta.proclamas.length > 0) && (
+                                <div className="text-sm space-y-1">
+                                    {abierta.funcionesCosing.length > 0 && <p><span className="text-muted-foreground">Funciones CoSIng:</span> {abierta.funcionesCosing.map(nombreFuncionCosing).join(', ')}</p>}
+                                    {abierta.proclamas.length > 0 && <p><span className="text-muted-foreground">Proclamas:</span> {[...abierta.proclamas, abierta.proclamaOtra].filter(Boolean).join(', ')}</p>}
+                                </div>
+                            )}
                             {(abierta.ingredientesIncluir.length > 0 || abierta.ingredientesEvitar.length > 0) && (
                                 <div className="text-sm space-y-1">
                                     {abierta.ingredientesIncluir.length > 0 && <p><span className="text-muted-foreground">Incluir:</span> {abierta.ingredientesIncluir.join(', ')}</p>}
