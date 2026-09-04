@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { telefonoE164, notaCotizacion, urlConversacionChatwoot } from '../chatwoot-cotizaciones';
+import { telefonoE164, notaCotizacion } from '../chatwoot-cotizaciones';
+import { urlConversacionChatwoot } from '../chatwoot-config';
 
 describe('teléfono a E.164', () => {
     it('celular colombiano de diez dígitos', () => {

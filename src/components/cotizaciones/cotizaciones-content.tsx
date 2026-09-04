@@ -21,7 +21,7 @@ import {
 import { ESTADO_LABEL, TRANSICIONES, type EstadoCotizacion } from '@/lib/cotizaciones-estados';
 import { CATEGORIAS, ROLES_FABRICACION } from '@/lib/cotizador-catalogo';
 import { nombreFuncionCosing } from '@/lib/cosing-funciones';
-import { urlConversacionChatwoot } from '@/lib/chatwoot-cotizaciones';
+import { urlConversacionChatwoot } from '@/lib/chatwoot-config';
 import { CotizacionClickUpPanel } from '@/components/cotizaciones/cotizacion-clickup-panel';
 import { Download, Loader2, Mail } from 'lucide-react';
 

@@ -20,17 +20,9 @@
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getApp } from '@/lib/firebase-admin';
 import { CATEGORIAS, MODALIDADES, ROLES_FABRICACION, RUTAS_FORMULACION } from '@/lib/cotizador-catalogo';
+import { CHATWOOT_CUENTA, CHATWOOT_INBOX_LAB, CHATWOOT_URL, URL_BANDEJA_COTIZACIONES } from '@/lib/chatwoot-config';
 
-export const CHATWOOT_URL = 'https://crm.admacompany.com';
-export const CHATWOOT_CUENTA = 1;
-// Buzón "WhatsApp Adma Company Lab Proyectos" (+57 312 8736234). El otro número de Lab
-// (buzón 4, ...6235) es la línea comercial de dropshippers; las maquilas son proyectos.
-export const CHATWOOT_INBOX_LAB = 5;
-export const URL_BANDEJA_COTIZACIONES = 'https://inv.admacompany.com/cotizaciones';
-
-export function urlConversacionChatwoot(conversationId: number): string {
-    return `${CHATWOOT_URL}/app/accounts/${CHATWOOT_CUENTA}/conversations/${conversationId}`;
-}
+export { CHATWOOT_URL, CHATWOOT_CUENTA, CHATWOOT_INBOX_LAB, URL_BANDEJA_COTIZACIONES, urlConversacionChatwoot } from '@/lib/chatwoot-config';
 
 function token(): string | null {
     return process.env.CHATWOOT_API_TOKEN || null;
