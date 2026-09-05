@@ -66,6 +66,11 @@ export default function CrmKanbanBoard({ clients, onDragEnd }: CrmKanbanBoardPro
                                                                     <div className="flex flex-wrap gap-1 mt-2">
                                                                         <Badge variant="outline" className="text-[10px] h-5">{client.category}</Badge>
                                                                         <Badge variant="outline" className="text-[10px] h-5">{client.type}</Badge>
+                                                                        {client.community_name && (
+                                                                            <Badge variant="secondary" className="text-[10px] h-5 max-w-[140px] truncate" title={client.community_name}>
+                                                                                {client.community_name}
+                                                                            </Badge>
+                                                                        )}
                                                                         {(() => {
                                                                             const volume = getClientVolume(client, crmConfig);
                                                                             const days = daysSinceLastContact(client);

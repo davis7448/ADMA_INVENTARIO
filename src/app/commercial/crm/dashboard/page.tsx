@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CommercialClient } from '@/types/commercial';
 import { getAllClients, updateClient, addClientEvent } from '@/lib/commercial-api';
 import { etiquetaPais } from '@/lib/paises';
+import { coincideBusquedaCliente } from '@/lib/crm-filtros';
 import { useAuth } from '@/hooks/use-auth';
 import { DropResult } from '@hello-pangea/dnd';
 import CrmKanbanBoard from '@/components/commercial/crm-kanban-board';
@@ -30,9 +31,11 @@ export default function CrmDashboardPage() {
     const [clients, setClients] = useState<CommercialClient[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    // Filtros del tablero: dueño de la cartera y país del cliente
+    // Filtros del tablero: dueño de la cartera, país y comunidad del cliente.
+    // 'sin' en comunidad son las fichas todavía sin comunidad asignada.
     const [verSolo, setVerSolo] = useState<'todos' | 'mios'>('todos');
     const [paisFiltro, setPaisFiltro] = useState<string>('todos');
+    const [comunidadFiltro, setComunidadFiltro] = useState<string>('todos');
 
     const isDirector = user?.role === 'commercial_director' || user?.role === 'admin';
 
@@ -88,20 +91,31 @@ export default function CrmDashboardPage() {
     };
 
     const filteredClients = useMemo(() => {
-        const q = search.trim().toLowerCase();
         return clients.filter(c => {
             if (verSolo === 'mios' && c.assigned_commercial_id !== user?.id) return false;
             if (paisFiltro !== 'todos' && (c.country || '') !== paisFiltro) return false;
-            if (!q) return true;
-            return c.name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q);
+            if (comunidadFiltro === 'sin' && c.community_id) return false;
+            if (comunidadFiltro !== 'todos' && comunidadFiltro !== 'sin' && c.community_id !== comunidadFiltro) return false;
+            return coincideBusquedaCliente(c, search);
         });
-    }, [clients, search, verSolo, paisFiltro, user?.id]);
+    }, [clients, search, verSolo, paisFiltro, comunidadFiltro, user?.id]);
 
     // Países presentes en la cartera (para no ofrecer filtros vacíos)
     const paisesEnCartera = useMemo(
         () => Array.from(new Set(clients.map(c => c.country).filter(Boolean))).sort() as string[],
         [clients]
     );
+
+    // Comunidades presentes en la cartera, por el mismo motivo que los países. Se leen de
+    // las fichas (nombre denormalizado) y no del catálogo: así el filtro no ofrece
+    // comunidades que todavía no tienen a nadie.
+    const comunidadesEnCartera = useMemo(() => {
+        const porId = new Map<string, string>();
+        for (const c of clients) {
+            if (c.community_id) porId.set(c.community_id, c.community_name || 'Sin nombre');
+        }
+        return [...porId.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    }, [clients]);
 
     if (loading) {
         return (
@@ -153,7 +167,7 @@ export default function CrmDashboardPage() {
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
                                 type="search"
-                                placeholder="Buscar cliente..."
+                                placeholder="Buscar por nombre, correo o teléfono..."
                                 className="pl-8 bg-background/50 backdrop-blur-sm"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
@@ -174,6 +188,18 @@ export default function CrmDashboardPage() {
                                     <SelectItem value="todos">Todos los países</SelectItem>
                                     {paisesEnCartera.map(p => (
                                         <SelectItem key={p} value={p}>{etiquetaPais(p)}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                        {comunidadesEnCartera.length > 0 && (
+                            <Select value={comunidadFiltro} onValueChange={setComunidadFiltro}>
+                                <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="todos">Todas las comunidades</SelectItem>
+                                    <SelectItem value="sin">Sin comunidad</SelectItem>
+                                    {comunidadesEnCartera.map(([id, nombre]) => (
+                                        <SelectItem key={id} value={id}>{nombre}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>

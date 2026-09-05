@@ -22,6 +22,7 @@ import {
 import { checkClientExists, createClient, getAllClients } from '@/lib/commercial-api';
 import { PAISES, etiquetaPais } from '@/lib/paises';
 import type { CommercialClient } from '@/types/commercial';
+import { coincideBusquedaCliente } from '@/lib/crm-filtros';
 import { ProductSearchPicker, type ProductPick } from '@/components/product-search-picker';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -162,11 +163,8 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
     };
 
     const filteredClients = useMemo(() => {
-        const term = clientSearch.trim().toLowerCase();
-        if (!term) return clients.slice(0, 50);
-        return clients.filter(c =>
-            c.name?.toLowerCase().includes(term) || c.email?.toLowerCase().includes(term)
-        ).slice(0, 50);
+        if (!clientSearch.trim()) return clients.slice(0, 50);
+        return clients.filter(c => coincideBusquedaCliente(c, clientSearch)).slice(0, 50);
     }, [clients, clientSearch]);
 
     const selectedCount = Object.values(selected).filter(Boolean).length;
@@ -356,7 +354,7 @@ function PromotionFormDialog({ onCreated }: { onCreated: () => void }) {
                             </Button>
                         </div>
                     )}
-                    <Input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Buscar cliente por nombre o correo…" className="mt-1 mb-2" />
+                    <Input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Buscar cliente por nombre, correo o teléfono…" className="mt-1 mb-2" />
                     <div className="border rounded-md max-h-48 overflow-y-auto divide-y">
                         {filteredClients.map(client => (
                             <label key={client.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/40">

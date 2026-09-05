@@ -29,6 +29,7 @@ import type {
     TaskPointsHistory
 } from "../types/commercial";
 import type { Product } from '@/lib/types';
+import type { Community } from '@/types/communities';
 import { claveTelefono, clavesTelefono } from './telefono';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -1136,6 +1137,68 @@ export const getAllAreas = async (): Promise<Area[]> => {
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Area);
     } catch (error) {
         console.error("Error getting areas:", error);
+        return [];
+    }
+};
+
+// ============================================
+// COMUNIDADES
+// ============================================
+//
+// Catálogo de comunidades del CRM. Reutiliza la colección `communities` que ya existía
+// para el módulo /communities (líderes con cuenta propia, códigos de invitación,
+// ranking). Las comunidades que se crean aquí llevan `leader_client_id` — una ficha de
+// `clients` — y no escriben `inviteCode`, así que el flujo antiguo, que busca por
+// inviteCode, nunca las encuentra y sigue funcionando igual.
+
+const COMMUNITIES_COLLECTION = 'communities';
+
+export type NuevaComunidad = Pick<Community, 'name'> &
+    Partial<Pick<Community, 'description' | 'leader_client_id' | 'leader_client_name'>>;
+
+export const createCommunity = async (comunidad: NuevaComunidad): Promise<string> => {
+    try {
+        const now = Timestamp.now();
+        const docRef = await addDoc(collection(db, COMMUNITIES_COLLECTION), {
+            ...comunidad,
+            createdAt: now,
+            updatedAt: now
+        });
+        return docRef.id;
+    } catch (error) {
+        console.error("Error creating community:", error);
+        throw error;
+    }
+};
+
+export const updateCommunity = async (communityId: string, updates: Partial<Community>): Promise<void> => {
+    try {
+        await updateDoc(doc(db, COMMUNITIES_COLLECTION, communityId), {
+            ...updates,
+            updatedAt: Timestamp.now()
+        });
+    } catch (error) {
+        console.error("Error updating community:", error);
+        throw error;
+    }
+};
+
+export const deleteCommunity = async (communityId: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, COMMUNITIES_COLLECTION, communityId));
+    } catch (error) {
+        console.error("Error deleting community:", error);
+        throw error;
+    }
+};
+
+export const getAllCommunities = async (): Promise<Community[]> => {
+    try {
+        const q = query(collection(db, COMMUNITIES_COLLECTION), orderBy('name'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as Community);
+    } catch (error) {
+        console.error("Error getting communities:", error);
         return [];
     }
 };

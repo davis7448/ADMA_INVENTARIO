@@ -69,6 +69,11 @@ export interface CommercialClient {
   avg_sales: number;
   city: string;
   country?: string; // País del cliente (COLOMBIA, ECUADOR…). Opcional: los clientes antiguos no lo tienen.
+  // Comunidad a la que pertenece el contacto (colección `communities`). Opcional por la
+  // misma razón que `country`: las fichas anteriores a la función no la tienen. El nombre
+  // va denormalizado para pintarlo y filtrar sin una segunda consulta.
+  community_id?: string;
+  community_name?: string;
   status: ClientStatus;
   assigned_commercial_id: string; 
   assigned_commercial_name?: string; // Nombre del comercial para mostrar

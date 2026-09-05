@@ -14,7 +14,8 @@ import {
     Menu,
     ClipboardList,
     Megaphone,
-    BookOpen
+    BookOpen,
+    Network
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +28,7 @@ import { useState } from 'react';
 const sidebarItems = [
     { href: '/commercial/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/commercial/crm/dashboard', label: 'CRM / Clientes', icon: Users },
+    { href: '/commercial/crm/comunidades', label: 'Comunidades', icon: Network },
     { href: '/commercial/difusion', label: 'Difusión', icon: Megaphone },
     { href: '/commercial/catalog', label: 'Catálogo', icon: ShoppingBag },
     { href: '/commercial/solicitudes', label: 'Solicitudes', icon: ClipboardList },

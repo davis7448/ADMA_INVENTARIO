@@ -13,9 +13,17 @@
 // aún más corta y con más riesgo de chocar con otro cliente.
 const LONGITUD_CLAVE = 9;
 
-export function claveTelefono(valor?: string | null): string {
+// Los dígitos del número, sin prefijos, espacios ni guiones. Es la base de la clave, y
+// también lo que usa la búsqueda del CRM para comparar por subcadena (ver
+// src/lib/crm-filtros.ts): la clave no sirve ahí porque se queda con los últimos 9
+// dígitos y no encontraría una búsqueda parcial como "317".
+export function soloDigitos(valor?: string | null): string {
     if (!valor) return '';
-    const digitos = String(valor).replace(/\D/g, '');
+    return String(valor).replace(/\D/g, '');
+}
+
+export function claveTelefono(valor?: string | null): string {
+    const digitos = soloDigitos(valor);
     if (!digitos) return '';
     return digitos.slice(-LONGITUD_CLAVE);
 }

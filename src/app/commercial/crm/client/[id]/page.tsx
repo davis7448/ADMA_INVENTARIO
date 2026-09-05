@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Pencil, TestTube, FileText, Trash2, Check, ChevronsUpDown, Megaphone, History } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Plus, Pencil, TestTube, FileText, Trash2, Check, ChevronsUpDown, Megaphone, History, Users } from 'lucide-react';
 import { ClientOffersTab } from '@/components/commercial/client-offers-tab';
+import { CommunitySelect } from '@/components/commercial/community-select';
 import Link from 'next/link';
 import { getClientById, updateClient, addNoteToClient, addOrderToClient, addTestToClient, getProductsWithStock, getClientEvents, addClientEvent, type ProductForOrder, type ClientEvent } from '@/lib/commercial-api';
 import { useAuth } from '@/hooks/use-auth';
@@ -48,6 +49,8 @@ export default function ClientDetailPage() {
             type: client.type,
             avg_sales: client.avg_sales,
             country: client.country || 'COLOMBIA',
+            community_id: client.community_id || '',
+            community_name: client.community_name || '',
             birthday: client.birthday
                 ? new Date(client.birthday).toISOString().split('T')[0]
                 : '',
@@ -413,6 +416,15 @@ export default function ClientDetailPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                <div className="space-y-1.5">
+                                    <Label>Comunidad</Label>
+                                    <CommunitySelect
+                                        value={editForm.community_id}
+                                        onChange={(community_id, community_name) =>
+                                            setEditForm(p => ({ ...p, community_id, community_name }))
+                                        }
+                                    />
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
@@ -509,6 +521,12 @@ export default function ClientDetailPage() {
                             <MapPin className="h-4 w-4 text-muted-foreground" />
                             <span>{client.city}</span>
                         </div>
+                        {client.community_name && (
+                            <div className="flex items-center gap-3">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                <span>{client.community_name}</span>
+                            </div>
+                        )}
                         <div className="flex items-center gap-3">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             <span>Cumpleaños: {client.birthday ? new Date(client.birthday).toLocaleDateString() : 'N/A'}</span>

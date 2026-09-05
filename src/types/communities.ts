@@ -7,12 +7,20 @@ import { Timestamp } from 'firebase/firestore';
 export interface Community {
   id: string;
   name: string;
-  leaderId: string;
   description?: string;
-  inviteCode: string;
-  memberCount: number;
-  totalSales: number;
-  totalCommission: number;
+  // Líder de la comunidad: una ficha del CRM (colección `clients`). El nombre va
+  // denormalizado para listar comunidades sin resolver cada ficha — mismo patrón que
+  // assigned_commercial_name en CommercialClient.
+  leader_client_id?: string;
+  leader_client_name?: string;
+  // Campos del flujo antiguo de /communities (líderes con cuenta de Firebase Auth,
+  // códigos de invitación y ranking de comisiones). Las comunidades que crea el CRM no
+  // los escriben, por eso son opcionales.
+  leaderId?: string;
+  inviteCode?: string;
+  memberCount?: number;
+  totalSales?: number;
+  totalCommission?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

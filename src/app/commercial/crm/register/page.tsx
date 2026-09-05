@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { PAISES, etiquetaPais } from '@/lib/paises';
+import { CommunitySelect } from '@/components/commercial/community-select';
 import { useAuth } from '@/hooks/use-auth';
 import { createClient, checkClientExists, getUserById, addNoteToClient, vincularFichasDeCliente } from '@/lib/commercial-api';
 import { getUsers } from '@/lib/api';
@@ -448,6 +449,16 @@ export default function RegisterClientPage() {
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="community">Comunidad</Label>
+                                <CommunitySelect
+                                    id="community"
+                                    value={formData.community_id}
+                                    onChange={(community_id, community_name) =>
+                                        setFormData(prev => ({ ...prev, community_id, community_name }))
+                                    }
+                                />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="category">Categoría</Label>
